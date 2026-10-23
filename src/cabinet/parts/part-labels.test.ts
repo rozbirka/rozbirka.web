@@ -21,6 +21,34 @@ it('translates all current part history event names', () => {
   expect(historyLabel('added')).toBe('Додано')
 })
 
+it('shows the immutable released shelf path in sale history without exposing ids', () => {
+  const raw = JSON.stringify({
+    quantity: 1,
+    released_placements: [
+      {
+        warehouse_name: 'Main',
+        zone_name: 'Body',
+        section_name: 'B',
+        shelf_name: 'B1',
+        shelf_id: 'private-id',
+      },
+    ],
+  })
+  expect(historyDetails(raw)).toEqual([
+    'кількість 1',
+    'Звільнено місце: Main → Body → B → B1',
+  ])
+  expect(historyDetails(raw, 'en-GB')).toEqual([
+    'quantity 1',
+    'Location released: Main → Body → B → B1',
+  ])
+  expect(historyDetails(raw, 'pl')).toEqual([
+    'ilość 1',
+    'Zwolniono miejsce: Main → Body → B → B1',
+  ])
+  expect(historyDetails('{"released_placements":[null,3,{}]}')).toEqual([])
+})
+
 it('translates filter vocabulary regardless of server casing', () => {
   expect(conditionLabel('Good')).toBe('Хороший')
   expect(conditionLabel('Fair')).toBe('Задовільний')

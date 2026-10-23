@@ -188,7 +188,7 @@ export const historyDetails = (
     return [trimmed]
   }
   if (typeof parsed !== 'object' || parsed === null) return [trimmed]
-  return Object.entries(parsed as Record<string, unknown>)
+  const details = Object.entries(parsed as Record<string, unknown>)
     .filter(
       ([key, value]) =>
         value !== null &&
@@ -198,6 +198,22 @@ export const historyDetails = (
         key !== 'order_number',
     )
     .map(([key, value]) => `${fieldLabel(key, locale)} ${String(value)}`)
+  const placements = (parsed as Record<string, unknown>)['released_placements']
+  if (Array.isArray(placements)) {
+    for (const placement of placements) {
+      if (typeof placement !== 'object' || placement === null) continue
+      const entry = placement as Record<string, unknown>
+      const path = ['warehouse_name', 'zone_name', 'section_name', 'shelf_name']
+        .map((key) => entry[key])
+        .filter(
+          (value): value is string =>
+            typeof value === 'string' && value.trim().length > 0,
+        )
+        .join(' → ')
+      if (path) details.push(`${label(locale, 'locationReleased')}: ${path}`)
+    }
+  }
+  return details
 }
 
 /**

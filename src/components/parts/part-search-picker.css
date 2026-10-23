@@ -1,0 +1,48 @@
+/* The order drawer's result-only menu uses the shared SearchPickerOption. */
+.part-search-picker__option {
+  min-height: 52px;
+  padding: 8px 12px;
+}
+.part-search-picker__name {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.part-search-picker__meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--rz-text-dim);
+  font-family: var(--rz-font-mono);
+  font-size: var(--rz-fs-micro);
+  overflow-wrap: anywhere;
+}
+.part-search-picker__aside {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.part-search-picker__stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.part-search-picker__quantity {
+  font-size: var(--rz-fs-caption);
+}
+.part-search-picker__price {
+  min-width: 80px;
+  white-space: nowrap;
+}
+@media (max-width: 639px) {
+  .part-search-picker__aside {
+    display: grid;
+    justify-items: end;
+    gap: 2px;
+  }
+  .part-search-picker__price {
+    grid-row: 1;
+  }
+  .part-search-picker__stock {
+    grid-row: 2;
+  }
+}

@@ -1,6 +1,8 @@
+import { CabinetLoadingContent } from '../loading-screen'
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -17,6 +19,7 @@ import {
   SearchX,
   Trash2,
   UserPlus,
+  UserRoundCog,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -29,8 +32,6 @@ import {
   Notice,
   Pagination,
   SearchInput,
-  SelectInput,
-  Skeleton,
   SkeletonRows,
   StatusPill,
   useOperation,
@@ -41,9 +42,12 @@ import {
 import { commonMessages, translate, useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { roleLabel, teamMessages } from './messages'
+import { RoleSearchPicker } from './RoleSearchPicker'
+import { TeamInvitationDrawer } from './TeamInvitationDrawer'
+import { permissionMessages } from './permission-messages'
 import { activityDayDifference } from './activity-day'
 import { Crumbs, RedesignShell } from '../redesign-shell'
-import { ALL_PERMISSIONS } from '../access-types'
+import { ALL_PERMISSIONS, type Permission } from '../access-types'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { tenantRequestScope } from '../tenant-request-scope'
@@ -98,7 +102,7 @@ const permissionGroupTitles: Record<string, TeamKey> = {
 }
 
 const permissionGroups = ALL_PERMISSIONS.reduce<
-  { prefix: string; title: TeamKey | null; permissions: string[] }[]
+  { prefix: string; title: TeamKey | null; permissions: Permission[] }[]
 >((groups, permission) => {
   const prefix = permission.split('.')[0] ?? permission
   const group = groups.find((candidate) => candidate.prefix === prefix)
@@ -170,10 +174,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const [invitationHistoryOpen, setInvitationHistoryOpen] = useState(false)
   const accessRefreshRequiredRef = useRef(false)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
-  const roleAssignmentRef = useRef<{
+  const [roleEdit, setRoleEdit] = useState<{
     memberId: string
     roleId: string
+    tenantId: string | null
+    generation: number | null
   } | null>(null)
+  const memberActionRefs = useRef(new Map<string, HTMLButtonElement>())
   const tenantId = cabinet.snapshot?.tenantId ?? null
   const generation = cabinet.snapshot?.generation ?? null
   const canView = cabinet.snapshot?.permissions.has('team.view') === true
@@ -280,18 +287,50 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     [availableRoles],
   )
 
+  const roleMember =
+    roleEdit?.tenantId === tenantId && roleEdit?.generation === generation
+      ? teamData?.members.find((member) => member.id === roleEdit.memberId)
+      : undefined
+  const roleChoiceValid =
+    roleMember !== undefined &&
+    roleMember.userId !== cabinet.snapshot?.userId &&
+    !isOwnerRole(roleMember.role) &&
+    roleEdit !== null &&
+    roleEdit.roleId !== roleMember.role.id &&
+    assignableRoles.some((role) => role.id === roleEdit.roleId)
+
   const roleAssignment = useOperation(
     async () => {
-      const target = roleAssignmentRef.current
-      if (target === null) return false
+      if (!roleChoiceValid || roleEdit === null || roleMember === undefined)
+        return false
       return mutate(t('roleUpdated'), (signal) =>
-        teamApi.changeRole(target.memberId, target.roleId, { signal }),
+        teamApi.changeRole(roleMember.id, roleEdit.roleId, { signal }),
       )
     },
     {
       errorMessage: () => t('roleUpdateFailed'),
+      onSuccess: (updated) => {
+        if (updated) setRoleEdit(null)
+      },
     },
   )
+
+  const openRoleEditor = (member: TeamMemberDto) => {
+    if (
+      !canManage() ||
+      member.userId === cabinet.snapshot?.userId ||
+      isOwnerRole(member.role)
+    )
+      return
+    roleAssignment.reset()
+    setError(null)
+    setRoleEdit({
+      memberId: member.id,
+      roleId: member.role.id,
+      tenantId,
+      generation,
+    })
+  }
 
   const memberPermissions = useOperation(
     async () => {
@@ -420,7 +459,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     )
   }
 
-  const pageError = error ?? roleAssignment.error
+  const pageError = roleMember === undefined ? error : null
   const members = teamData?.members ?? []
   const activeMembers = members.filter((one) => one.isActive).length
   const offMembers = members.length - activeMembers
@@ -520,7 +559,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
           </Notice>
         )}
         {loading && teamData === null && (
-          <SkeletonRows columns={4} label={t('loading')} rows={6} />
+          <CabinetLoadingContent
+            module="team"
+            heading={false}
+            label={t('loading')}
+          />
         )}
         {loadFailed && (
           <ErrorState
@@ -541,22 +584,18 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 placeholder={t('searchPlaceholder')}
                 value={query}
               />
-              <SelectInput
-                aria-label={t('roleFilter')}
-                className="w-auto min-w-40"
+              <RoleSearchPicker
+                label={t('roleFilter')}
+                className="w-full shrink-0 sm:w-44"
+                compact
                 value={selectedRole}
-                onChange={(event) => {
-                  setRoleFilter(event.target.value)
+                roles={availableRoles}
+                allLabel={t('allRoles')}
+                onSelect={(value) => {
+                  setRoleFilter(value)
                   setPage(1)
                 }}
-              >
-                <option value="">{t('allRoles')}</option>
-                {availableRoles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {roleLabel(role, locale)}
-                  </option>
-                ))}
-              </SelectInput>
+              />
               <div
                 aria-label={t('memberState')}
                 className="rz-seg"
@@ -648,31 +687,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                             </span>
                           </th>
                           <td className="py-1.5" data-label={t('columnRole')}>
-                            {canManageAccess &&
-                            member.userId !== myUserId &&
-                            !isOwnerRole(member.role) ? (
-                              <SelectInput
-                                aria-busy={roleAssignment.pending}
-                                aria-label={t('roleFor', { name: member.name })}
-                                className="min-w-40"
-                                onChange={(event) => {
-                                  roleAssignmentRef.current = {
-                                    memberId: member.id,
-                                    roleId: event.target.value,
-                                  }
-                                  roleAssignment.run()
-                                }}
-                                value={member.role.id}
-                              >
-                                {assignableRoles.map((role) => (
-                                  <option key={role.id} value={role.id}>
-                                    {roleLabel(role, locale)}
-                                  </option>
-                                ))}
-                              </SelectInput>
-                            ) : (
-                              <span>{roleLabel(member.role, locale)}</span>
-                            )}
+                            <span>{roleLabel(member.role, locale)}</span>
                           </td>
                           <td
                             className="py-1.5"
@@ -702,7 +717,32 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                               <span className="flex justify-end">
                                 {!isOwnerRole(member.role) ? (
                                   <ActionMenu
+                                    triggerRef={(node) => {
+                                      if (node)
+                                        memberActionRefs.current.set(
+                                          member.id,
+                                          node,
+                                        )
+                                      else
+                                        memberActionRefs.current.delete(
+                                          member.id,
+                                        )
+                                    }}
                                     actions={[
+                                      ...(member.userId === myUserId
+                                        ? []
+                                        : [
+                                            {
+                                              key: 'role',
+                                              label: t('changeRole'),
+                                              icon: (
+                                                <UserRoundCog aria-hidden />
+                                              ),
+                                              disabled: roleAssignment.pending,
+                                              onSelect: () =>
+                                                openRoleEditor(member),
+                                            },
+                                          ]),
                                       {
                                         key: 'permissions',
                                         label: t('permissions'),
@@ -955,88 +995,54 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       </RedesignShell>
 
       {invitationDrawerOpen && (
-        <Sheet
-          description={t('newInvitationDescription')}
-          footer={
-            <>
-              <Button
-                disabled={invitationCreation.pending}
-                onClick={() => setInvitationDrawerOpen(false)}
-                size="lg"
-                type="button"
-              >
-                {tc('cancel')}
-              </Button>
-              <Button
-                aria-busy={invitationCreation.pending}
-                disabled={
-                  invitationCreation.pending ||
-                  !canManageAccess ||
-                  !invitationRoleId
-                }
-                form={INVITATION_FORM}
-                size="lg"
-                type="submit"
-                variant="primary"
-              >
-                {t('createInvitation')}
-              </Button>
-            </>
+        <TeamInvitationDrawer
+          roles={assignableRoles}
+          roleId={invitationRoleId}
+          onRoleChange={setInvitationRoleId}
+          onSubmit={invitationCreation.run}
+          onClose={() => setInvitationDrawerOpen(false)}
+          pending={invitationCreation.pending}
+          error={invitationCreation.error}
+          canManage={canManageAccess}
+        />
+      )}
+
+      {roleMember !== undefined && roleEdit !== null && (
+        <ConfirmDialog
+          title={t('changeRole')}
+          consequence={t('changeRoleDescription', { name: roleMember.name })}
+          confirmLabel={tc('save')}
+          confirmDisabled={!canManageAccess || !roleChoiceValid}
+          destructive={false}
+          error={
+            roleAssignment.error ??
+            (!roleAssignment.pending && !canManageAccess
+              ? accessLostMessage
+              : null)
           }
-          onOpenChange={(open) => {
-            if (!open && !invitationCreation.pending)
-              setInvitationDrawerOpen(false)
-          }}
           open
-          title={t('newInvitation')}
+          pending={roleAssignment.pending}
+          onConfirm={roleAssignment.run}
+          onOpenChange={(open) => {
+            if (!open && !roleAssignment.pending) setRoleEdit(null)
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            memberActionRefs.current.get(roleEdit.memberId)?.focus()
+          }}
         >
-          <form
-            aria-busy={invitationCreation.pending}
-            className="grid content-start gap-4"
-            id={INVITATION_FORM}
-            onSubmit={(event) => {
-              event.preventDefault()
-              invitationCreation.run()
-            }}
-          >
-            {invitationCreation.error !== null && (
-              <Notice tone="danger">{invitationCreation.error}</Notice>
-            )}
-            <fieldset
-              aria-describedby="team-invitation-role-hint"
-              className="m-0 grid min-w-0 gap-1.5 border-0 p-0"
-            >
-              <legend className="rz-label mb-1.5 p-0">
-                {t('invitationRole')}
-                <span aria-hidden className="rz-req">
-                  *
-                </span>
-              </legend>
-              <div className="border-app-line bg-app-sheet-field overflow-hidden rounded-rz-sm border">
-                {assignableRoles.map((role) => (
-                  <ItemRow checked={invitationRoleId === role.id} key={role.id}>
-                    <input
-                      checked={invitationRoleId === role.id}
-                      className="rz-radio shrink-0"
-                      name="team-invitation-role"
-                      onChange={() => setInvitationRoleId(role.id)}
-                      required
-                      type="radio"
-                      value={role.id}
-                    />
-                    <span className="rz-strong font-semibold">
-                      {roleLabel(role, locale)}
-                    </span>
-                  </ItemRow>
-                ))}
-              </div>
-              <p className="rz-hint m-0" id="team-invitation-role-hint">
-                {t('invitationRoleHint')}
-              </p>
-            </fieldset>
-            <Notice>{t('noEmailInvite')}</Notice>
-          </form>
-        </Sheet>
+          <RoleSearchPicker
+            label={t('roleFor', { name: roleMember.name })}
+            showLabel
+            busy={roleAssignment.pending}
+            disabled={!canManageAccess}
+            roles={assignableRoles}
+            value={roleEdit.roleId}
+            onSelect={(roleId) =>
+              setRoleEdit((current) => current && { ...current, roleId })
+            }
+          />
+        </ConfirmDialog>
       )}
 
       {permissionMember !== null && (
@@ -1096,16 +1102,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             {permissionsLoad === 'failed' ? (
               <Notice tone="danger">{t('permissionsLoadFailed')}</Notice>
             ) : permissionsLoad === 'loading' ? (
-              <div className="grid gap-1.5">
-                <p className="rz-label m-0" role="status">
-                  {t('loading')}
-                </p>
-                <div className="border-app-line bg-app-sheet-field grid gap-2 rounded-rz-sm border p-3">
-                  <Skeleton className="h-[30px]" />
-                  <Skeleton className="h-[30px]" />
-                  <Skeleton className="h-[30px]" />
-                </div>
-              </div>
+              <SkeletonRows label={t('loading')} rows={4} />
             ) : (
               <PermissionChecklist
                 legend={t('userPermissions')}
@@ -1172,6 +1169,8 @@ function PermissionChecklist({
   legend?: string
 }) {
   const t = useT(teamMessages)
+  const tp = useT(permissionMessages)
+  const id = useId()
   return (
     <fieldset className="m-0 grid min-w-0 gap-4 border-0 p-0">
       <legend className="rz-label mb-1 p-0">
@@ -1187,23 +1186,38 @@ function PermissionChecklist({
           className="m-0 grid min-w-0 gap-2.5 border-0 p-0"
           key={group.prefix}
         >
-          <legend className="rz-h-card mb-2.5 p-0">
-            {t('selectedCount', {
-              legend: group.title === null ? group.prefix : t(group.title),
-              selected: group.permissions.filter((item) =>
-                selected.includes(item),
-              ).length,
-              total: group.permissions.length,
-            })}
+          <legend className="mb-2.5 w-full p-0">
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span className="rz-h-card">
+                {group.title === null ? group.prefix : t(group.title)}
+              </span>
+              <span className="bg-app-raised text-app-muted rounded-full px-2 py-0.5 font-mono text-caption tabular-nums">
+                {t('permissionFraction', {
+                  selected: group.permissions.filter((item) =>
+                    selected.includes(item),
+                  ).length,
+                  total: group.permissions.length,
+                })}
+              </span>
+            </span>
           </legend>
           <div className="border-app-line bg-app-sheet-field overflow-hidden rounded-rz-sm border">
             {group.permissions.map((permission) => (
               <ItemRow checked={false} key={permission}>
-                <span className="rz-mono rz-strong min-w-0 flex-1 truncate">
-                  {permission}
+                <span className="grid min-w-0 flex-1 gap-0.5 py-0.5">
+                  <span className="rz-strong break-words font-medium">
+                    {tp(permission)}
+                  </span>
+                  <span
+                    className="text-app-muted break-words text-caption"
+                    id={`${id}-${permission}-hint`}
+                  >
+                    {tp(`${permission}.hint`)}
+                  </span>
                 </span>
                 <input
-                  aria-label={permission}
+                  aria-label={tp(permission)}
+                  aria-describedby={`${id}-${permission}-hint`}
                   checked={selected.includes(permission)}
                   className="rz-check shrink-0"
                   onChange={() => onToggle(permission)}
@@ -1219,4 +1233,3 @@ function PermissionChecklist({
 }
 
 const MEMBER_PERMISSIONS_FORM = 'team-member-permissions-form'
-const INVITATION_FORM = 'team-invitation-form'

@@ -126,6 +126,7 @@ export interface PartSearchRequest {
   query?: string | null
   statuses?: string[]
   carIds?: string[]
+  intakeIds?: string[]
   warehouseIds?: string[]
   zoneIds?: string[]
   sectionIds?: string[]
@@ -288,6 +289,8 @@ export interface CreatePartRequest {
 }
 export interface UpdatePartRequest {
   name?: string | null
+  /** Omit to preserve, null to clear the manufacturer’s code. */
+  oemCode?: string | null
   condition?: string | null
   notes?: string | null
   quantity?: number | null

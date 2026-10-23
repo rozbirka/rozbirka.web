@@ -31,7 +31,7 @@ describe('normalizeApiProblem', () => {
       kind: 'validation',
       status: 422,
       code: 'INVALID',
-      message: 'Invalid request',
+      message: 'Перевірте правильність введених даних.',
     })
   })
 
@@ -47,7 +47,7 @@ describe('normalizeApiProblem', () => {
     ).toMatchObject({
       kind: 'forbidden',
       code: 'FORBIDDEN',
-      fieldErrors: { name: ['Required'] },
+      fieldErrors: { name: ['Це поле обов’язкове.'] },
     })
   })
 
@@ -64,7 +64,9 @@ describe('normalizeApiProblem', () => {
       ),
     ).toMatchObject({
       status: 400,
-      fieldErrors: { desiredSalePrice: ['Завелика сума'] },
+      fieldErrors: {
+        desiredSalePrice: ['Перевірте правильність введених даних.'],
+      },
     })
   })
 
@@ -162,10 +164,10 @@ describe('fallback messages follow the request locale', () => {
     )
   })
 
-  it('keeps the server message as received', () => {
+  it('replaces unknown server text with an interface-language fallback', () => {
     requestLocale.set('en-GB')
     expect(
       normalizeApiProblem(axiosFailure(409, { message: 'Вже існує' })).message,
-    ).toBe('Вже існує')
+    ).toBe('Couldn’t complete the action because of a data conflict.')
   })
 })

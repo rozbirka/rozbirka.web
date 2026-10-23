@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
-import { LocaleProvider } from '@/i18n'
+import { LocaleProvider, type Locale } from '@/i18n'
+import { ALL_PERMISSIONS } from '../access-types'
 import {
   teamApi,
   type InvitationDto,
@@ -140,6 +141,37 @@ const openMemberMenu = async (
   return within(await screen.findByRole('menu'))
 }
 
+const chooseRole = async (
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  roleName: string,
+) => {
+  await user.click(await screen.findByRole('button', { name: label }))
+  await user.click(screen.getByRole('option', { name: roleName }))
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+}
+
+const openRoleEditor = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name = 'Олена',
+) => {
+  await user.click(
+    (await openMemberMenu(user, name)).getByRole('menuitem', {
+      name: 'Змінити роль',
+    }),
+  )
+  return within(await screen.findByRole('dialog', { name: 'Змінити роль' }))
+}
+
+const assignRole = async (
+  user: ReturnType<typeof userEvent.setup>,
+  roleName: string,
+) => {
+  const editor = await openRoleEditor(user)
+  await chooseRole(user, 'Роль для Олена', roleName)
+  await user.click(editor.getByRole('button', { name: 'Зберегти' }))
+}
+
 const openInvitationMenu = async (
   user: ReturnType<typeof userEvent.setup>,
   code = 'INVITE-1',
@@ -246,11 +278,13 @@ it('loads the member, role, and invitation lifecycle with tenant cancellation', 
     await screen.findByRole('heading', { name: 'Команда' }),
   ).toBeInTheDocument()
   expect(await screen.findByText('Олена')).toBeInTheDocument()
+  const memberRow = screen
+    .getByRole('rowheader', { name: /Олена/ })
+    .closest('tr')!
+  expect(within(memberRow).getByText('Механік')).toBeVisible()
   expect(
-    within(
-      screen.getByRole('combobox', { name: 'Роль для Олена' }),
-    ).queryByRole('option', { name: 'Власник' }),
-  ).toBeNull()
+    within(memberRow).queryByRole('button', { name: 'Роль для Олена' }),
+  ).not.toBeInTheDocument()
   expect(screen.getByText('Активне')).toBeInTheDocument()
   expect(teamApi.listMembers).toHaveBeenCalledWith({
     signal: tenantRequestScope.signal,
@@ -356,17 +390,11 @@ it('paginates members and resets the page when filtering by role or search', asy
     within(pager).getByRole('button', { name: 'Наступна сторінка' }),
   )
   expect(screen.getByText('Учасник 21')).toBeVisible()
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Фільтр за роллю' }),
-    managerRole.id,
-  )
+  await chooseRole(user, 'Фільтр за роллю', 'Менеджер')
   expect(screen.getByText('Учасник 25')).toBeVisible()
   expect(screen.queryByText('Учасник 21')).not.toBeInTheDocument()
   expect(within(pager).getByText('1–1 з 1')).toBeVisible()
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Фільтр за роллю' }),
-    '',
-  )
+  await chooseRole(user, 'Фільтр за роллю', 'Усі ролі')
   await user.type(
     screen.getByRole('searchbox', { name: 'Пошук учасників' }),
     'Учасник 25',
@@ -472,10 +500,7 @@ it('confirms and completes member, role, permission, and invitation mutations', 
   renderScreen()
 
   await screen.findByText('Олена')
-  await user.selectOptions(
-    screen.getByLabelText('Роль для Олена'),
-    'role-manager',
-  )
+  await assignRole(user, 'Менеджер')
   await waitFor(() =>
     expect(teamApi.changeRole).toHaveBeenCalledWith(
       'member-1',
@@ -568,10 +593,7 @@ it('refreshes authoritative cabinet access after an access-changing direct mutat
   const user = userEvent.setup()
   renderScreen()
 
-  await user.selectOptions(
-    await screen.findByLabelText('Роль для Олена'),
-    'role-manager',
-  )
+  await assignRole(user, 'Менеджер')
 
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
   expect(screen.getByRole('status')).toHaveTextContent(
@@ -587,10 +609,7 @@ it('does not read team data before an access-changing mutation retry settles', a
   const user = userEvent.setup()
   renderScreen()
 
-  await user.selectOptions(
-    await screen.findByLabelText('Роль для Олена'),
-    'role-manager',
-  )
+  await assignRole(user, 'Менеджер')
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
 
   const readsBeforeAccessSettles = [
@@ -685,10 +704,7 @@ it('keeps mutation controls fail-closed when authoritative access retry fails', 
   const user = userEvent.setup()
   renderScreen()
 
-  await user.selectOptions(
-    await screen.findByLabelText('Роль для Олена'),
-    'role-manager',
-  )
+  await assignRole(user, 'Менеджер')
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
   accessRetry.reject(new Error('offline'))
 
@@ -717,10 +733,7 @@ it('refreshes access before the access-warning retry starts any team reads', asy
   const user = userEvent.setup()
   renderScreen()
 
-  await user.selectOptions(
-    await screen.findByLabelText('Роль для Олена'),
-    'role-manager',
-  )
+  await assignRole(user, 'Менеджер')
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
   failedAccessRetry.reject(new Error('offline'))
   const retryAccess = await screen.findByRole('button', {
@@ -886,11 +899,7 @@ it('creates an invitation and refreshes the visible invitation lifecycle', async
   ).toBeInTheDocument()
   expect(teamApi.createInvitation).not.toHaveBeenCalled()
 
-  await user.click(
-    within(
-      screen.getByRole('group', { name: /Роль для запрошення/ }),
-    ).getByRole('radio', { name: 'Механік' }),
-  )
+  await chooseRole(user, 'Роль для запрошення', 'Механік')
   await user.click(screen.getByRole('button', { name: 'Створити запрошення' }))
 
   await waitFor(() =>
@@ -903,6 +912,42 @@ it('creates an invitation and refreshes the visible invitation lifecycle', async
   expect(screen.getByRole('status')).toHaveTextContent('Запрошення створено.')
   expect(screen.getAllByText('Активне')).toHaveLength(2)
   expect(currentCabinet.retry).toHaveBeenCalledOnce()
+})
+
+it('preserves the invitation role after failure and blocks dismissal while creating', async () => {
+  const user = userEvent.setup()
+  const creation = deferred<InvitationDto>()
+  vi.mocked(teamApi.createInvitation).mockReturnValueOnce(creation.promise)
+  renderScreen()
+  await user.click(await screen.findByRole('button', { name: 'Запросити' }))
+  await chooseRole(user, 'Роль для запрошення', 'Менеджер')
+  const submit = screen.getByRole('button', { name: 'Створити запрошення' })
+  await user.click(submit)
+  expect(submit).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Роль для запрошення' }),
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Скасувати' })).toBeDisabled()
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: 'Закрити' }))
+  expect(screen.getByRole('dialog', { name: 'Нове запрошення' })).toBeVisible()
+  creation.reject(new Error('offline'))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Не вдалося створити запрошення.',
+  )
+  expect(
+    screen.getByRole('button', { name: 'Роль для запрошення' }),
+  ).toHaveTextContent('Менеджер')
+  await user.click(submit)
+  await waitFor(() => expect(teamApi.createInvitation).toHaveBeenCalledTimes(2))
+  expect(teamApi.createInvitation).toHaveBeenLastCalledWith('role-manager', {
+    signal: tenantRequestScope.signal,
+  })
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: 'Нове запрошення' }),
+    ).toBeNull(),
+  )
 })
 
 it('keeps the owner role read-only and excludes Owner from role assignment and invitations', async () => {
@@ -928,22 +973,25 @@ it('keeps the owner role read-only and excludes Owner from role assignment and i
     screen.getByRole('button', { name: 'Дії з учасником Олена' }),
   ).toBeInTheDocument()
   expect(screen.getByText('Власник', { selector: 'span' })).toBeInTheDocument()
-  expect(
-    within(screen.getByLabelText('Роль для Олена')).queryByRole('option', {
-      name: 'Власник',
-    }),
-  ).toBeNull()
+  await openRoleEditor(user)
+  await user.click(screen.getByRole('button', { name: 'Роль для Олена' }))
+  expect(screen.queryByRole('option', { name: 'Власник' })).toBeNull()
+  expect(screen.getByRole('option', { name: 'Менеджер' })).toBeVisible()
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: 'Скасувати' }))
 
   await user.click(screen.getByRole('button', { name: 'Запросити' }))
-  const inviteRole = screen.getByRole('group', {
-    name: /Роль для запрошення/,
-  })
-  expect(
-    within(inviteRole).getByRole('radio', { name: 'Механік' }),
-  ).toBeChecked()
-  expect(
-    within(inviteRole).queryByRole('radio', { name: 'Власник' }),
-  ).toBeNull()
+  const inviteRole = screen.getByRole('button', { name: 'Роль для запрошення' })
+  expect(inviteRole).toHaveTextContent('Механік')
+  await user.click(inviteRole)
+  expect(screen.getByRole('option', { name: 'Механік' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  expect(screen.queryByRole('option', { name: 'Власник' })).toBeNull()
+  await user.keyboard('{Escape}')
+  expect(screen.getByRole('dialog', { name: 'Нове запрошення' })).toBeVisible()
+  expect(inviteRole).toHaveFocus()
   expect(teamApi.changeRole).not.toHaveBeenCalled()
   expect(teamApi.createInvitation).not.toHaveBeenCalled()
 })
@@ -1111,16 +1159,13 @@ it('renders the team in English (UK)', async () => {
   expect(screen.getByText('Showing 2 of 2 members')).toBeInTheDocument()
   expect(screen.getByText('you')).toBeInTheDocument()
   // System role translated, custom role name as the business gave it.
+  const row = screen.getByRole('rowheader', { name: /Олена/ }).closest('tr')!
+  expect(within(row).getByText('Механік')).toBeVisible()
   expect(
-    within(
-      screen.getByRole('combobox', { name: 'Role for Олена' }),
-    ).queryByRole('option', { name: 'Owner' }),
-  ).toBeNull()
+    screen.queryByRole('button', { name: 'Role for Олена' }),
+  ).not.toBeInTheDocument()
   expect(screen.queryByLabelText('Role for Ivan')).toBeNull()
   expect(screen.getByText('Owner', { selector: 'span' })).toBeInTheDocument()
-  expect(
-    screen.getAllByRole('option', { name: 'Механік' }).length,
-  ).toBeGreaterThan(0)
   expect(
     screen.getAllByTitle('No activity recorded yet.')[0],
   ).toHaveTextContent('—')
@@ -1132,4 +1177,300 @@ it('renders the team in English (UK)', async () => {
     screen.getByRole('button', { name: 'Actions for Олена' }),
   ).toBeVisible()
   expect(screen.getByRole('button', { name: 'Invite' })).toBeVisible()
+})
+
+it.each([
+  {
+    locale: 'uk',
+    menu: 'Дії з учасником Олена',
+    action: 'Права',
+    title: 'Права: Олена',
+    cars: 'Перегляд автомобілів',
+    zones: 'Керування складами й розміщенням',
+    hint: 'Список автомобілів та їхні картки.',
+  },
+  {
+    locale: 'en-GB',
+    menu: 'Actions for Олена',
+    action: 'Permissions',
+    title: 'Permissions: Олена',
+    cars: 'View vehicles',
+    zones: 'Manage warehouses and locations',
+    hint: 'View the vehicle list and vehicle details.',
+  },
+  {
+    locale: 'pl',
+    menu: 'Działania: Олена',
+    action: 'Uprawnienia',
+    title: 'Uprawnienia: Олена',
+    cars: 'Przeglądanie aut',
+    zones: 'Zarządzanie magazynami i rozmieszczeniem',
+    hint: 'Lista aut i ich karty.',
+  },
+] satisfies {
+  locale: Locale
+  menu: string
+  action: string
+  title: string
+  cars: string
+  zones: string
+  hint: string
+}[])(
+  'localises every permission and its accessible explanation in $locale',
+  async ({ locale, menu, action, title, cars, zones, hint }) => {
+    const user = userEvent.setup()
+    render(
+      <LocaleProvider locale={locale} syncDocumentLang={false}>
+        {teamScreen()}
+      </LocaleProvider>,
+    )
+    await user.click(await screen.findByRole('button', { name: menu }))
+    await user.click(screen.getByRole('menuitem', { name: action }))
+    const dialog = within(await screen.findByRole('dialog', { name: title }))
+    const viewCars = await dialog.findByRole('checkbox', {
+      name: cars,
+    })
+    expect(viewCars).toHaveAccessibleDescription(hint)
+    expect(dialog.getByRole('checkbox', { name: zones })).toBeInTheDocument()
+    const checks = dialog.getAllByRole('checkbox')
+    expect(checks).toHaveLength(ALL_PERMISSIONS.length)
+    for (const check of checks) {
+      expect(check).toHaveAccessibleName()
+      expect(check).toHaveAccessibleDescription()
+      expect(ALL_PERMISSIONS).not.toContain(check.getAttribute('aria-label'))
+    }
+    for (const permission of ALL_PERMISSIONS)
+      expect(
+        dialog.queryByText(permission, { exact: true }),
+      ).not.toBeInTheDocument()
+  },
+)
+
+it('keeps canonical permission codes and unknown permissions when saving localised choices', async () => {
+  const user = userEvent.setup()
+  vi.mocked(teamApi.getUserPermissions).mockResolvedValue({
+    userId: 'user-1',
+    roleName: 'Механік',
+    permissions: ['parts.view', 'future.permission'],
+  })
+  renderScreen()
+  await user.click(
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Права',
+    }),
+  )
+  const dialog = within(
+    await screen.findByRole('dialog', { name: 'Права: Олена' }),
+  )
+  const cars = await dialog.findByRole('checkbox', {
+    name: 'Перегляд автомобілів',
+  })
+  expect(
+    dialog.getByRole('checkbox', { name: 'Перегляд запчастин' }),
+  ).toBeChecked()
+  await user.click(cars)
+  await user.click(dialog.getByRole('checkbox', { name: 'Перегляд запчастин' }))
+  const zones = dialog.getByRole('checkbox', {
+    name: 'Керування складами й розміщенням',
+  })
+  zones.focus()
+  await user.keyboard(' ')
+  expect(zones).toBeChecked()
+  expect(dialog.getByText('Права користувача — обрано 2 з 24')).toBeVisible()
+  await user.click(dialog.getByRole('button', { name: 'Зберегти права' }))
+  await waitFor(() =>
+    expect(teamApi.updateUserPermissions).toHaveBeenCalledWith(
+      'user-1',
+      ['future.permission', 'cars.view', 'inventory.zones.manage'],
+      { signal: tenantRequestScope.signal },
+    ),
+  )
+})
+
+it('uses compact role choices without search and preserves keyboard assignment', async () => {
+  const user = userEvent.setup()
+  vi.mocked(teamApi.listMembers).mockResolvedValue([
+    member,
+    {
+      ...member,
+      id: 'member-2',
+      userId: 'user-2',
+      name: 'Микола',
+      role: managerRole,
+    },
+  ])
+  renderScreen()
+  const filter = await screen.findByRole('button', {
+    name: 'Фільтр за роллю',
+  })
+  expect(filter).toHaveTextContent('Усі ролі')
+  expect(
+    screen.queryByRole('searchbox', { name: 'Пошук ролі' }),
+  ).not.toBeInTheDocument()
+  await user.click(filter)
+  expect(
+    screen.queryByRole('searchbox', { name: 'Пошук ролі' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByText('Олена')).toBeVisible()
+  await user.click(screen.getByRole('option', { name: 'Менеджер' }))
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  expect(screen.queryByText('Олена')).not.toBeInTheDocument()
+  expect(screen.getByText('Микола')).toBeVisible()
+  await user.click(filter)
+  await user.click(screen.getByRole('option', { name: 'Усі ролі' }))
+  const editor = await openRoleEditor(user)
+  const assignment = editor.getByRole('button', { name: 'Роль для Олена' })
+  await user.click(assignment)
+  expect(
+    screen
+      .getByRole('dialog', { name: 'Доступні ролі' })
+      .closest('.rz-table-wrap'),
+  ).toBeNull()
+  expect(
+    screen.queryByRole('option', { name: 'Власник' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('searchbox', { name: 'Пошук ролі' }),
+  ).not.toBeInTheDocument()
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
+  await user.keyboard('{ArrowDown}{Escape}')
+  expect(assignment).toHaveTextContent('Механік')
+  expect(assignment).toHaveFocus()
+  await user.click(assignment)
+  await user.click(assignment)
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  await user.click(assignment)
+  expect(
+    screen.queryByRole('searchbox', { name: 'Пошук ролі' }),
+  ).not.toBeInTheDocument()
+  await user.keyboard('{ArrowDown}{Enter}')
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
+  await user.click(editor.getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() =>
+    expect(teamApi.changeRole).toHaveBeenCalledWith(
+      'member-1',
+      'role-manager',
+      { signal: tenantRequestScope.signal },
+    ),
+  )
+})
+
+it('does not reassign the current role and prevents duplicate saves or dismissal while saving', async () => {
+  const user = userEvent.setup()
+  const update = deferred<TeamMemberDto>()
+  vi.mocked(teamApi.changeRole).mockReturnValueOnce(update.promise)
+  renderScreen()
+  const editor = await openRoleEditor(user)
+  await chooseRole(user, 'Роль для Олена', 'Механік')
+  const save = editor.getByRole('button', { name: 'Зберегти' })
+  expect(save).toBeDisabled()
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
+  await chooseRole(user, 'Роль для Олена', 'Менеджер')
+  await user.click(save)
+  expect(save).toBeDisabled()
+  expect(editor.getByRole('button', { name: 'Роль для Олена' })).toBeDisabled()
+  expect(editor.getByRole('button', { name: 'Скасувати' })).toBeDisabled()
+  await user.click(save)
+  await user.keyboard('{Escape}')
+  expect(screen.getByRole('dialog', { name: 'Змінити роль' })).toBeVisible()
+  expect(teamApi.changeRole).toHaveBeenCalledOnce()
+  update.resolve({ ...member, role: managerRole })
+  await waitFor(() => expect(teamApi.listMembers).toHaveBeenCalledTimes(2))
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: 'Змінити роль' }),
+    ).not.toBeInTheDocument(),
+  )
+})
+
+it('cancels a changed role without submitting and restores the row action focus', async () => {
+  const user = userEvent.setup()
+  renderScreen()
+  const editor = await openRoleEditor(user)
+  await chooseRole(user, 'Роль для Олена', 'Менеджер')
+  await user.click(editor.getByRole('button', { name: 'Скасувати' }))
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Дії з учасником Олена' }),
+  ).toHaveFocus()
+  await openRoleEditor(user)
+  expect(
+    screen.getByRole('button', { name: 'Роль для Олена' }),
+  ).toHaveTextContent('Механік')
+})
+
+it('keeps role assignment errors in the editor and retries the chosen role', async () => {
+  const user = userEvent.setup()
+  vi.mocked(teamApi.changeRole).mockRejectedValueOnce(new Error('offline'))
+  renderScreen()
+  await assignRole(user, 'Менеджер')
+  const editor = within(screen.getByRole('dialog', { name: 'Змінити роль' }))
+  expect(await editor.findByRole('alert')).toHaveTextContent(
+    'Не вдалося змінити роль',
+  )
+  expect(screen.getAllByRole('alert')).toHaveLength(1)
+  expect(
+    editor.getByRole('button', { name: 'Роль для Олена' }),
+  ).toHaveTextContent('Менеджер')
+  await user.click(editor.getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() => expect(teamApi.changeRole).toHaveBeenCalledTimes(2))
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: 'Змінити роль' }),
+    ).not.toBeInTheDocument(),
+  )
+})
+
+it('rechecks team.manage when a role editor is already open', async () => {
+  const currentCabinet = cabinet()
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  const user = userEvent.setup()
+  renderScreen()
+  const editor = await openRoleEditor(user)
+  await chooseRole(user, 'Роль для Олена', 'Менеджер')
+  currentCabinet.snapshot.permissions.delete('team.manage')
+  await user.click(editor.getByRole('button', { name: 'Зберегти' }))
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Право керувати командою було змінено',
+  )
+})
+
+it('does not offer role assignment for the current member', async () => {
+  vi.mocked(teamApi.listMembers).mockResolvedValue([
+    { ...member, userId: 'user-owner' },
+  ])
+  const user = userEvent.setup()
+  renderScreen()
+  const menu = await openMemberMenu(user, 'Олена')
+  expect(
+    menu.queryByRole('menuitem', { name: 'Змінити роль' }),
+  ).not.toBeInTheDocument()
+})
+
+it('closes the role editor when switching tenant identity without submitting its draft', async () => {
+  const currentCabinet = cabinet()
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  const user = userEvent.setup()
+  const view = renderScreen()
+  await openRoleEditor(user)
+  await chooseRole(user, 'Роль для Олена', 'Менеджер')
+  currentCabinet.snapshot = {
+    ...currentCabinet.snapshot,
+    tenantId: 'tenant-2',
+    generation: 2,
+  }
+  currentCabinet.targetTenant = {
+    ...currentCabinet.targetTenant,
+    id: 'tenant-2',
+  }
+  tenantRequestScope.rotate()
+  view.rerender(teamScreen())
+  expect(
+    screen.queryByRole('dialog', { name: 'Змінити роль' }),
+  ).not.toBeInTheDocument()
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
+  await screen.findByText('Олена')
 })

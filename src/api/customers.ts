@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type { Page, RequestOptions } from './contracts'
+import { localizeApiError } from './error-localization'
 
 /**
  * Optional customer address (REQ-LOCALIZATION AC-34/AC-35). Core adds these
@@ -202,7 +203,10 @@ export const readCustomerPhoneConflict = (
     customerId: conflict['customerId'],
     customerName: conflict['customerName'],
     isActive: conflict['isActive'],
-    message: conflict['message'],
+    message: localizeApiError({
+      code: 'CUSTOMER_PHONE_EXISTS',
+      kind: 'conflict',
+    }),
   }
 }
 

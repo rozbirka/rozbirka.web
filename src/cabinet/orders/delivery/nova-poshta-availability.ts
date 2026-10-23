@@ -1,4 +1,5 @@
 import { isProblemCode, normalizeApiProblem } from '@/api/errors'
+import { localizeApiError } from '@/api/error-localization'
 import type { BusinessCountry } from '@/api/tenant-settings'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { translate, type Locale } from '@/i18n'
@@ -35,8 +36,8 @@ export function useNovaPoshtaAvailability(): NovaPoshtaAvailability {
 }
 
 /**
- * A delivery API failure said to a person. Core's own message is shown as it
- * came, except for the country refusal, which gets the cabinet's wording.
+ * A delivery API failure in the interface language, with the cabinet's wording
+ * for a country refusal.
  */
 export function deliveryProblemMessage(
   problem: unknown,
@@ -44,5 +45,5 @@ export function deliveryProblemMessage(
 ): string {
   if (isProblemCode(problem, INTEGRATION_COUNTRY_UNAVAILABLE))
     return translate(deliveryMessages, locale, 'countryUnavailable')
-  return normalizeApiProblem(problem).message
+  return localizeApiError(normalizeApiProblem(problem), locale)
 }

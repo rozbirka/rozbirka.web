@@ -1,4 +1,4 @@
-import { Button, Notice } from '@/components/app'
+import { Button, Notice, SkeletonRows } from '@/components/app'
 import { useT } from '@/i18n'
 import { inventoryMessages } from './messages'
 import type { useInventoryTeam } from './use-inventory-team'
@@ -11,11 +11,7 @@ export function InventoryTeamStatus({
   const t = useT(inventoryMessages)
   if (!team.allowed) return null
   if (team.state.kind === 'loading') {
-    return (
-      <p role="status" className="text-app-muted text-sm">
-        {t('teamLoading')}
-      </p>
-    )
+    return <SkeletonRows embedded label={t('teamLoading')} rows={1} />
   }
   const stale = team.state.kind === 'ready' && team.state.refreshError
   if (team.state.kind !== 'error' && !stale) return null

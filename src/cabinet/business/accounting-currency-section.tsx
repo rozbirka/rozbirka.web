@@ -5,7 +5,7 @@ import {
   Button,
   Field,
   Notice,
-  Skeleton,
+  SkeletonFields,
   useOptionalToast,
 } from '@/components/app'
 import { businessApi } from '@/api/business'
@@ -274,13 +274,7 @@ export function AccountingCurrencySection() {
 
   let body
   if (load === 'loading') {
-    body = (
-      <div aria-busy className="grid gap-2" role="status">
-        <span className="sr-only">{t('loading')}</span>
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-4 w-full" />
-      </div>
-    )
+    body = <SkeletonFields count={1} label={t('loading')} />
   } else if (load === 'error' || view === 'unknown') {
     body = (
       <Notice

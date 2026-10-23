@@ -8,6 +8,7 @@ import {
   DataTable,
   DateValue,
   Notice,
+  SkeletonRows,
   StatusPill,
   useOperation,
   useToast,
@@ -601,7 +602,7 @@ function SubscriptionPanel({
               title={t('history')}
             >
               {history === null ? (
-                <p className="rz-dim m-0">{tb('loadingPayments')}</p>
+                <SkeletonRows embedded label={tb('loadingPayments')} rows={3} />
               ) : history.length === 0 ? (
                 <p className="rz-muted m-0">{tb('noPayments')}</p>
               ) : (

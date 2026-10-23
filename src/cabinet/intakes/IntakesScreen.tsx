@@ -1,3 +1,4 @@
+import { CabinetLoadingContent } from '../loading-screen'
 import {
   useEffect,
   useId,
@@ -14,6 +15,7 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
+import { PartsStockCard } from '../parts/PartsStockCard'
 import { useFeatureFlag } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
@@ -30,7 +32,6 @@ import {
   SearchX,
   Trash2,
   Upload,
-  X,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -40,15 +41,13 @@ import {
   DataTable,
   ErrorState,
   Field,
+  NotesCard,
   Notice,
   Pagination,
-  PillGroup,
   QuantityStepper,
   SearchInput,
   SectionPanel,
   Sheet,
-  Skeleton,
-  SkeletonRows,
   StateScreen,
   StatusPill,
   type StatusTone,
@@ -66,10 +65,7 @@ import {
 } from '@/api/intakes'
 import { inventoryApi } from '@/api/inventory'
 import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
-import {
-  emptyPartPlacement,
-  type PartPlacement,
-} from '../inventory/part-placement-state'
+import { emptyPartPlacement } from '../inventory/part-placement-state'
 import { usePlacementOptions } from '../inventory/usePlacementOptions'
 import { placementMessages } from '../inventory/part-placement-messages'
 import { partsApi } from '@/api/parts'
@@ -145,15 +141,6 @@ const unitLabel = (
   t: Translate<(typeof intakesMessages)['uk']>,
   unit: string,
 ) => (unit === PIECES ? t('pcs') : unit)
-
-/** Two initials for the avatar chip; a single word gives one. */
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?'
 
 function useIntakeAccess() {
   const cabinet = useCabinet()
@@ -286,17 +273,6 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   const tenant = params.tenant ?? cabinet.targetTenant?.slug ?? ''
   const base = `/app/${tenant}/intakes`
   const intakeId = params.intakeId
-  if (location.pathname.endsWith('/parts/batch')) {
-    if (manageDecision.kind !== 'allowed')
-      return <Denied decision={manageDecision} />
-    if (partCreateDecision.kind !== 'allowed')
-      return <Denied decision={partCreateDecision} />
-    return intakeId ? (
-      <BatchPartsForm canManageFinance={financeManage} intakeId={intakeId} />
-    ) : (
-      <Denied decision={{ kind: 'permission-denied' }} />
-    )
-  }
   if (location.pathname.endsWith('/parts/new')) {
     if (manageDecision.kind !== 'allowed')
       return <Denied decision={manageDecision} />
@@ -304,7 +280,7 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
       return <Denied decision={partCreateDecision} />
     return intakeId ? (
       <>
-        <IntakeDetail base={base} intakeId={intakeId} />
+        <IntakeDetail base={base} intakeId={intakeId} key={intakeId} />
         <PartForm canUploadMedia={partsMediaManage} intakeId={intakeId} />
       </>
     ) : (
@@ -336,7 +312,8 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
       />
     )
   }
-  if (intakeId) return <IntakeDetail base={base} intakeId={intakeId} />
+  if (intakeId)
+    return <IntakeDetail base={base} intakeId={intakeId} key={intakeId} />
   return <IntakesList base={base} />
 }
 
@@ -504,7 +481,11 @@ function IntakesList({ base }: { base: string }) {
           }}
         />
       ) : state.page === null ? (
-        <SkeletonRows label={t('listLabel')} rows={6} />
+        <CabinetLoadingContent
+          module="intakes"
+          heading={false}
+          label={t('listLabel')}
+        />
       ) : (
         <section aria-label={t('listLabel')} className="min-w-0">
           {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
@@ -517,15 +498,10 @@ function IntakesList({ base }: { base: string }) {
                 variant: 'primary',
                 cell: (intake) => (
                   <Link
-                    className="grid min-w-0 gap-0.5"
+                    className="rz-strong block min-w-0 truncate"
                     to={`${base}/${intake.id}`}
                   >
-                    <span className="rz-strong truncate">
-                      {intake.name ?? t('untitled')}
-                    </span>
-                    <span className="rz-caption font-normal">
-                      {intake.createdBy.displayName}
-                    </span>
+                    {intake.name ?? t('untitled')}
                   </Link>
                 ),
               },
@@ -628,26 +604,6 @@ function ListFooter({
   )
 }
 
-/** The three ways a yard looks at the positions of one batch. */
-const INTAKE_PART_FILTERS = [
-  { value: 'all', label: 'partFilterAll' },
-  { value: 'available', label: 'partFilterAvailable' },
-  { value: 'sold', label: 'partFilterSold' },
-] as const
-
-type IntakePartFilter = (typeof INTAKE_PART_FILTERS)[number]['value']
-
-/** Known statuses in the reader's language; an unknown one is shown as sent. */
-const partStatusPill = (
-  t: Translate<(typeof intakesMessages)['uk']>,
-  status: string,
-): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: t('partAvailable'), tone: 'ok' }
-  if (status === 'reserved') return { label: t('partReserved'), tone: 'warn' }
-  if (status === 'sold') return { label: t('partSold'), tone: 'danger' }
-  return { label: status, tone: 'neutral' }
-}
-
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   const { pathname } = useLocation()
   const money = useWholeMoney(useAccountingCurrency().currency)
@@ -667,8 +623,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   const [problem, setProblem] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [filter, setFilter] = useState<IntakePartFilter>('all')
-  const [partsPage, setPartsPage] = useState(1)
   const [attempt, setAttempt] = useState(0)
   const importEnabled = useFeatureFlag(FEATURE_FLAGS.partsBulkImport)
   const canPrintStickers = allowedToView(cabinetModules.stickers, cabinet)
@@ -755,40 +709,11 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   if (!intake)
     return (
       <RedesignShell crumb={crumb} width="record">
-        <div className="grid gap-3">
-          <p className="sr-only" role="status">
-            {t('loading')}
-          </p>
-          <Skeleton className="h-[22px] w-[36%]" />
-          <Skeleton className="w-[52%]" />
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <Skeleton className="h-[300px]" />
-            <Skeleton className="h-[200px]" />
-          </div>
-        </div>
+        <CabinetLoadingContent module="intakes" label={t('loading')} />
       </RedesignShell>
     )
 
   const units = intake.parts.reduce((total, part) => total + part.quantity, 0)
-  const sold = intake.parts.filter((part) => part.status === 'sold')
-  const available = intake.parts.filter((part) => part.status !== 'sold')
-  const counts: Record<IntakePartFilter, number> = {
-    all: intake.parts.length,
-    available: available.length,
-    sold: sold.length,
-  }
-  const filteredRows =
-    filter === 'all' ? intake.parts : filter === 'sold' ? sold : available
-  const partsPageSize = 20
-  const partsTotalPages = Math.max(
-    1,
-    Math.ceil(filteredRows.length / partsPageSize),
-  )
-  const currentPartsPage = Math.min(partsPage, partsTotalPages)
-  const rows = filteredRows.slice(
-    (currentPartsPage - 1) * partsPageSize,
-    currentPartsPage * partsPageSize,
-  )
   const partsBase = base.replace(/\/intakes$/, '/parts')
   const profit = intake.profitability ?? null
   const saleState = intakeSaleState(intake)
@@ -970,127 +895,17 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
           <div className="flex flex-wrap items-start gap-4">
             <div className="grid min-w-0 flex-[1_1_480px] gap-4">
               {partsView ? (
-                <section aria-label={t('positionsTitle')} className="rz-card">
-                  <div className="rz-card__head py-2">
-                    <h2 className="rz-h-card">{t('positionsTitle')}</h2>
-                    <div
-                      aria-label={t('partFiltersLabel')}
-                      className="rz-seg flex-wrap"
-                      role="radiogroup"
-                    >
-                      {INTAKE_PART_FILTERS.map((option) => {
-                        const active = option.value === filter
-                        return (
-                          <button
-                            aria-checked={active}
-                            key={option.value}
-                            onClick={() => {
-                              setFilter(option.value)
-                              setPartsPage(1)
-                            }}
-                            role="radio"
-                            type="button"
-                          >
-                            {t(option.label)}
-                            <span className="rz-count">
-                              {counts[option.value]}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  <DataTable
-                    caption={t('positionsTitle')}
-                    columns={[
-                      {
-                        key: 'qr',
-                        label: t('columnCode'),
-                        cell: (part) => (
-                          <span className="rz-mono">{part.qrCode}</span>
-                        ),
-                      },
-                      {
-                        key: 'name',
-                        label: t('columnName'),
-                        variant: 'primary',
-                        cell: (part) => (
-                          <Link
-                            className="grid min-w-0 gap-0.5"
-                            to={`${partsBase}/${part.id}`}
-                          >
-                            <span className="rz-strong truncate">
-                              {part.name}
-                            </span>
-                            <span className="rz-caption font-mono font-normal">
-                              {part.partType ?? t('noType')}
-                            </span>
-                          </Link>
-                        ),
-                      },
-                      {
-                        key: 'quantity',
-                        label: t('columnQuantity'),
-                        align: 'end',
-                        cell: (part) =>
-                          t('quantityWithUnit', {
-                            count: part.quantity,
-                            unit: unitLabel(t, part.unit),
-                          }),
-                      },
-                      {
-                        key: 'status',
-                        label: t('columnState'),
-                        align: 'end',
-                        cell: (part) => {
-                          const pill = partStatusPill(t, part.status)
-                          return (
-                            <StatusPill tone={pill.tone}>
-                              {pill.label}
-                            </StatusPill>
-                          )
-                        },
-                      },
-                    ]}
-                    empty={
-                      <StateScreen
-                        className="rounded-none border-0"
-                        description={
-                          filter === 'all'
-                            ? t('partsEmptyDescription')
-                            : t('partsEmptyFilteredDescription')
-                        }
-                        icon={<Inbox aria-hidden />}
-                        title={
-                          filter === 'all'
-                            ? t('partsEmptyTitle')
-                            : t('partsEmptyFilteredTitle')
-                        }
-                        tone={filter === 'all' ? 'brand' : 'neutral'}
-                      />
-                    }
-                    embedded
-                    footer={
-                      filteredRows.length > partsPageSize ? (
-                        <ListFooter
-                          summary={t('shownOf', {
-                            shown: rows.length,
-                            total: filteredRows.length,
-                          })}
-                        >
-                          <Pagination
-                            label={t('partsPaginationLabel')}
-                            onPage={setPartsPage}
-                            page={currentPartsPage}
-                            totalPages={partsTotalPages}
-                          />
-                        </ListFooter>
-                      ) : null
-                    }
-                    rowKey={(part) => part.id}
-                    rows={rows}
-                  />
-                </section>
+                <PartsStockCard
+                  title={t('positionsTitle')}
+                  description={t('partsFromIntake', {
+                    count: intake.partsCount,
+                  })}
+                  emptyMessage={t('partsEmptyTitle')}
+                  partsHref={`${partsBase}?origin=batch&intake_ids=${encodeURIComponent(intake.id)}`}
+                  partsTotal={intake.partsCount}
+                  partsSold={intake.soldCount}
+                  partsAvailable={intake.partsCount - intake.soldCount}
+                />
               ) : null}
 
               <Card
@@ -1125,13 +940,36 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                 </ol>
               </Card>
 
-              {intake.notes === null ? null : (
-                <Card title={t('notesTitle')}>
-                  <p className="rz-muted m-0 whitespace-pre-line">
-                    {intake.notes}
-                  </p>
-                </Card>
-              )}
+              <NotesCard
+                busy={busy}
+                canEdit={manage}
+                key={intake.id}
+                maxLength={1000}
+                onSave={async (value) => {
+                  const scope = requireLatestMutation({ quota: false })
+                  const updated = await intakesApi.update(
+                    intake.id,
+                    { notes: value },
+                    { signal: scope.signal },
+                  )
+                  requireLatestMutation({ quota: false })
+                  return updated.notes ?? null
+                }}
+                onSaved={(notes) => {
+                  setIntake((current) =>
+                    current?.id === intake.id ? { ...current, notes } : current,
+                  )
+                }}
+                readBack={async () => {
+                  const scope = requireLatestMutation({ quota: false })
+                  const latest = await intakesApi.get(intake.id, {
+                    signal: scope.signal,
+                  })
+                  requireLatestMutation({ quota: false })
+                  return latest.notes ?? null
+                }}
+                value={intake.notes}
+              />
 
               {intake.photos.length > 0 ? (
                 <Card title={t('photosTitle')}>
@@ -1516,7 +1354,7 @@ function IntakeForm({
                 </Field>
               </FormCard>
 
-              <FormCard step="02" title={tf('dateOwnerTitle')}>
+              <FormCard step="02" title={tf('dateTitle')}>
                 <div className="rz-form-grid">
                   <Field label={tf('intakeDate')}>
                     <TextInput
@@ -1527,18 +1365,6 @@ function IntakeForm({
                     />
                   </Field>
                 </div>
-                <Field hint={tf('ownerHint')} label={tf('ownerLabel')}>
-                  {intake ? (
-                    <p className="rz-strong m-0 inline-flex w-fit items-center gap-2">
-                      <span className="rz-avatar rz-avatar--round">
-                        {initials(intake.createdBy.displayName)}
-                      </span>
-                      {intake.createdBy.displayName}
-                    </p>
-                  ) : (
-                    <p className="rz-dim m-0">{tf('ownerOnCreate')}</p>
-                  )}
-                </Field>
               </FormCard>
 
               <FormCard
@@ -1639,13 +1465,6 @@ function IntakeForm({
                         )}
                       >
                         {hasCost && cost !== null ? money(cost) : '—'}
-                      </dd>
-                      <dt className="rz-muted">{tf('summaryExpenses')}</dt>
-                      <dd
-                        className="rz-mono rz-dim m-0"
-                        title={tf('expensesNotStored')}
-                      >
-                        —
                       </dd>
                       <div className="bg-app-line col-span-2 my-1 h-px" />
                       <dt className="rz-strong font-semibold">
@@ -1767,19 +1586,6 @@ function ChecksList({
     </ul>
   )
 }
-
-/** The four states a yard actually sorts parts into, mapped to the server enum. */
-const INTAKE_CONDITIONS = [
-  { value: 'good', label: 'conditionUsed' },
-  { value: 'refurbished', label: 'conditionRefurbished' },
-  { value: 'new', label: 'conditionNew' },
-  { value: 'scrap', label: 'conditionForRebuild' },
-] as const
-const conditionOptions = (tf: Translate<(typeof intakeFormMessages)['uk']>) =>
-  INTAKE_CONDITIONS.map((option) => ({
-    value: option.value,
-    label: tf(option.label),
-  }))
 
 /** A part added in this sitting, kept only for the session's own recap. */
 interface AddedPart {
@@ -2342,581 +2148,6 @@ function NumberedTitle({ number, title }: { number: string; title: string }) {
       <span className="text-app-dim font-mono text-micro">{number}</span>
       {title}
     </span>
-  )
-}
-
-/** One line of the batch sheet, before it becomes a part. */
-interface BatchRow {
-  key: string
-  name: string
-  quantity: string
-  price: string
-  zoneId: string
-  placement?: PartPlacement
-}
-
-let batchRowSeq = 0
-const emptyBatchRow = (): BatchRow => ({
-  key: `row-${String(++batchRowSeq)}`,
-  name: '',
-  quantity: '1',
-  price: '',
-  zoneId: '',
-})
-
-const batchNumber = (value: string) => {
-  const parsed = Number(value.replace(',', '.').replace(/[^\d.]/g, ''))
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-/**
- * A whole delivery typed as a sheet. The server takes one part per call, so the
- * screen sends them in order and says how far it got — a row that fails leaves
- * everything before it booked in, which is what a yard wants when the van is
- * already unloaded.
- */
-function BatchPartsForm({
-  intakeId,
-  canManageFinance,
-}: {
-  intakeId: string
-  canManageFinance: boolean
-}) {
-  const navigate = useNavigate()
-  const cabinet = useCabinet()
-  const t = useT(intakesMessages)
-  const tf = useT(intakeFormMessages)
-  const params = useParams<{ tenant: string }>()
-  const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace =
-    allowedToView(cabinetModules.inventory, cabinet) &&
-    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
-  // The rows typed before leaving for the currency setting come back.
-  const draft = useCurrencyDraft<{
-    rows: BatchRow[]
-    condition: string
-    sharedZoneId: string
-    sharedPlacement?: PartPlacement
-  }>(`intake-batch:${intakeId}`)
-  const [rows, setRows] = useState<BatchRow[]>(
-    () =>
-      // Fresh keys: the stored ones may clash with rows made after a reload.
-      draft.initial?.rows.map((row) => ({
-        ...row,
-        key: emptyBatchRow().key,
-      })) ?? [
-        emptyBatchRow(),
-        emptyBatchRow(),
-        emptyBatchRow(),
-        emptyBatchRow(),
-      ],
-  )
-  const [condition, setCondition] = useState(
-    () => draft.initial?.condition ?? 'good',
-  )
-  const [sharedPlacement, setSharedPlacement] = useState<PartPlacement>(
-    () =>
-      draft.initial?.sharedPlacement ?? {
-        ...emptyPartPlacement,
-        zoneId: draft.initial?.sharedZoneId ?? '',
-      },
-  )
-  const [intake, setIntake] = useState<Intake | null>(null)
-  const placementOptions = usePlacementOptions(
-    canPlace,
-    cabinet.targetTenant?.id,
-  )
-  const pendingCreatedRows = useRef(new Map<string, string>())
-  const [problem, setProblem] = useState<string | null>(null)
-  const [saved, setSaved] = useState(0)
-  const [busy, setBusy] = useState(false)
-  const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
-  const partMutation = useLatestMutationGuard(cabinetModules.parts)
-  const guard = useFirstPriceGuard()
-  const { locale } = useLocale()
-  const money = useWholeMoney(guard.currency)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void intakesApi.get(intakeId, { signal: controller.signal }).then(
-      (next) => {
-        if (!controller.signal.aborted) setIntake(next)
-      },
-      () => undefined,
-    )
-    return () => controller.abort()
-  }, [intakeId])
-
-  const update = (key: string, field: keyof BatchRow, value: string) =>
-    setRows((current) =>
-      current.map((row) =>
-        row.key === key ? { ...row, [field]: value } : row,
-      ),
-    )
-  const filled = rows.filter((row) => row.name.trim() !== '')
-  const units = filled.reduce(
-    (total, row) => total + batchNumber(row.quantity),
-    0,
-  )
-  const priceSum = filled.reduce(
-    (total, row) => total + batchNumber(row.quantity) * batchNumber(row.price),
-    0,
-  )
-  const withoutCell = filled.filter(
-    (row) => !row.placement?.zoneId && !row.zoneId && !sharedPlacement.zoneId,
-  ).length
-  const withoutPrice = filled.filter(
-    (row) => batchNumber(row.price) === 0,
-  ).length
-  // Only positive prices are sent, so only those can lock the currency.
-  const priceSlots = usePriceSlots(guard, {
-    values: filled
-      .filter((row) => batchNumber(row.price) > 0)
-      .map((row) => row.price),
-    onAccept: (accepted) => void save(undefined, accepted),
-    draftKept: true,
-    onLeave: () =>
-      draft.keep({
-        rows,
-        condition,
-        sharedZoneId: sharedPlacement.zoneId,
-        sharedPlacement,
-      }),
-  })
-  const pricing = priceSlots.hasPrice && !priceSlots.disabled
-  const fillDown = () =>
-    setRows((current) => {
-      const source = current.find(
-        (row) => Boolean(row.placement?.zoneId) || Boolean(row.zoneId),
-      )
-      if (!source) return current
-      return current.map((row) =>
-        row.name.trim() !== '' && !row.placement?.zoneId && row.zoneId === ''
-          ? {
-              ...row,
-              zoneId: source.zoneId,
-              ...(source.placement ? { placement: source.placement } : {}),
-            }
-          : row,
-      )
-    })
-
-  const save = async (
-    event?: React.FormEvent,
-    accepted?: SupportedCurrency | null,
-  ) => {
-    event?.preventDefault()
-    if (busy || filled.length === 0) return
-    const rowPrecision = pricing
-      ? (filled
-          .map((row) => batchNumber(row.price))
-          .filter((price) => price > 0)
-          .map((price) => amountPrecisionError(price, guard.currency, locale))
-          .find((message) => message !== null) ?? null)
-      : null
-    if (rowPrecision !== null) {
-      setProblem(rowPrecision)
-      return
-    }
-    setProblem(null)
-    setSaved(0)
-    setBusy(true)
-    if (
-      guard.needsCheck(pricing) &&
-      !(await guard.beforeSave(pricing, accepted))
-    ) {
-      setBusy(false)
-      return
-    }
-    for (const [index, row] of filled.entries()) {
-      const placement = row.placement?.zoneId
-        ? row.placement
-        : row.zoneId
-          ? { ...emptyPartPlacement, zoneId: row.zoneId }
-          : sharedPlacement
-      const price = batchNumber(row.price)
-      const request: AddIntakePartRequest = {
-        name: row.name.trim(),
-        partType: null,
-        condition,
-        quantity: Math.max(1, Math.round(batchNumber(row.quantity)) || 1),
-        unit: PIECES,
-        notes: null,
-        photoKeys: [],
-      }
-      try {
-        const scope = intakeMutation.requireLatestMutation({ quota: false })
-        partMutation.requireLatestMutation({ permission: 'parts.view' })
-        const createdId =
-          pendingCreatedRows.current.get(row.key) ??
-          (
-            await intakesApi.addPart(intakeId, request, {
-              signal: scope.signal,
-            })
-          ).id
-        pendingCreatedRows.current.set(row.key, createdId)
-        if (price > 0 && !priceSlots.disabled) {
-          const priceScope = partMutation.requireLatestMutation({
-            permission: 'parts.manage',
-            quota: false,
-          })
-          await partsApi.update(
-            createdId,
-            { desiredSalePrice: { isSet: true, value: price } },
-            { signal: priceScope.signal },
-          )
-          guard.afterSave(true)
-        }
-        if (canPlace && placement.zoneId)
-          await inventoryApi.replacePartZones(
-            createdId,
-            [placement.zoneId],
-            { signal: scope.signal },
-            placement.shelfId || undefined,
-            placement.sectionId || undefined,
-          )
-        pendingCreatedRows.current.delete(row.key)
-        setSaved(index + 1)
-      } catch (error: unknown) {
-        setProblem(
-          tf('batchFailed', {
-            error: normalizeApiProblem(error).message,
-            done: index,
-            total: filled.length,
-          }),
-        )
-        setRows(filled.slice(index))
-        setBusy(false)
-        return
-      }
-    }
-    void navigate(`${base}/${intakeId}`)
-  }
-
-  const backTo = `${base}/${intakeId}`
-  const ready = filled.length > 0
-  const saveLabel = ready
-    ? tf('acceptPositions', { count: filled.length })
-    : tf('acceptBatch')
-
-  const priceColumn =
-    guard.currency === null
-      ? tf('columnPrice')
-      : tf('columnPriceIn', { code: guard.currency })
-
-  return (
-    <RedesignShell
-      actions={
-        <>
-          <Button disabled title={tf('draftsUnavailable')}>
-            {tf('saveDraft')}
-          </Button>
-          <Button
-            aria-busy={busy}
-            disabled={busy || !ready}
-            form="batch-parts"
-            type="submit"
-            variant="primary"
-          >
-            <Check aria-hidden />
-            {saveLabel}
-          </Button>
-        </>
-      }
-      crumb={
-        <>
-          <BackLink to={backTo}>{tf('backToIntake')}</BackLink>
-          <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
-            <span>{t('title')}</span>
-            <ChevronRight aria-hidden className="size-3" />
-            <span aria-current="page">{tf('batchCrumb')}</span>
-          </span>
-        </>
-      }
-    >
-      <div className="grid max-w-[1240px] gap-4">
-        <div className="grid gap-2">
-          <h1 className="rz-h-page">{tf('batchTitle')}</h1>
-          <p className="rz-muted m-0">
-            {intake?.name ?? tf('untitledIntake')}
-            {intake ? ' · ' : null}
-            {tf('batchSubtitle')}
-          </p>
-        </div>
-
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
-
-        <form
-          aria-busy={busy}
-          className="flex flex-wrap items-start gap-4"
-          id="batch-parts"
-          onSubmit={(event) => void save(event)}
-        >
-          <div className="grid min-w-0 flex-[1_1_560px] gap-4">
-            <section aria-label={tf('batchPositions')} className="rz-card">
-              <div className="rz-card__head py-2">
-                <h2 className="rz-h-card">{tf('batchPositions')}</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rz-eyebrow">
-                    {tf('rowsCount', { count: rows.length })}
-                  </span>
-                  {canPlace ? (
-                    <Button onClick={fillDown} size="sm" type="button">
-                      {tf('fillCellDown')}
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <div
-                aria-hidden
-                className="rz-th-label border-app-line hidden gap-2 border-b px-4 py-2 sm:grid sm:grid-cols-[2.4fr_0.8fr_1fr_var(--rz-control-h)]"
-              >
-                <span>{tf('columnName')}</span>
-                <span className="text-right">{tf('columnQuantity')}</span>
-                <span className="text-right">{priceColumn}</span>
-                <span />
-              </div>
-              <ul className="divide-app-line m-0 grid list-none divide-y p-0">
-                {rows.map((row, index) => (
-                  <li
-                    className="grid items-center gap-2 px-4 py-2 sm:grid-cols-[2.4fr_0.8fr_1fr_var(--rz-control-h)]"
-                    key={row.key}
-                  >
-                    <TextInput
-                      aria-label={tf('rowName', { number: index + 1 })}
-                      autoComplete="off"
-                      onChange={(event) =>
-                        update(row.key, 'name', event.target.value)
-                      }
-                      placeholder={tf('rowNamePlaceholder', {
-                        number: index + 1,
-                      })}
-                      value={row.name}
-                    />
-                    <TextInput
-                      aria-label={tf('rowQuantity', { number: index + 1 })}
-                      inputMode="numeric"
-                      numeric
-                      onChange={(event) =>
-                        update(row.key, 'quantity', event.target.value)
-                      }
-                      value={row.quantity}
-                    />
-                    <TextInput
-                      aria-label={
-                        guard.currency === null
-                          ? tf('rowPrice', { number: index + 1 })
-                          : tf('rowPriceIn', {
-                              number: index + 1,
-                              code: guard.currency,
-                            })
-                      }
-                      disabled={priceSlots.disabled}
-                      inputMode="decimal"
-                      numeric
-                      onChange={(event) =>
-                        update(row.key, 'price', event.target.value)
-                      }
-                      placeholder="—"
-                      value={row.price}
-                    />
-                    <Button
-                      aria-label={tf('removeRow', { number: index + 1 })}
-                      disabled={rows.length <= 1}
-                      onClick={() =>
-                        setRows((current) =>
-                          current.filter((item) => item.key !== row.key),
-                        )
-                      }
-                      size="icon"
-                      type="button"
-                      variant="quiet"
-                    >
-                      <X aria-hidden />
-                    </Button>
-                    {canPlace ? (
-                      <details className="border-app-line min-w-0 border-t pt-2 sm:col-span-4">
-                        <summary className="cursor-pointer font-medium text-app-ink">
-                          {row.placement?.zoneId
-                            ? (placementOptions.zones.find(
-                                (zone) => zone.id === row.placement?.zoneId,
-                              )?.name ?? tf('cell'))
-                            : row.zoneId
-                              ? (placementOptions.zones.find(
-                                  (zone) => zone.id === row.zoneId,
-                                )?.name ?? tf('cell'))
-                              : sharedPlacement.zoneId
-                                ? tf('sameAsBatch')
-                                : tf('noCell')}
-                        </summary>
-                        <div className="mt-2 grid gap-2">
-                          <Button
-                            type="button"
-                            onClick={() =>
-                              setRows((current) =>
-                                current.map((item) => {
-                                  if (item.key !== row.key) return item
-                                  const { placement: _placement, ...rest } =
-                                    item
-                                  return { ...rest, zoneId: '' }
-                                }),
-                              )
-                            }
-                          >
-                            {tf('sameAsBatch')}
-                          </Button>
-                          <PartPlacementPicker
-                            compact
-                            value={
-                              row.placement ??
-                              (row.zoneId
-                                ? { ...emptyPartPlacement, zoneId: row.zoneId }
-                                : emptyPartPlacement)
-                            }
-                            onChange={(placement) =>
-                              setRows((current) =>
-                                current.map((item) =>
-                                  item.key === row.key
-                                    ? {
-                                        ...item,
-                                        zoneId: placement.zoneId,
-                                        placement,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            options={placementOptions}
-                          />
-                        </div>
-                      </details>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-              <div className="rz-card__foot flex-wrap items-center">
-                <Button
-                  onClick={() =>
-                    setRows((current) => [...current, emptyBatchRow()])
-                  }
-                  type="button"
-                >
-                  <Plus aria-hidden />
-                  {tf('addRow')}
-                </Button>
-                <p className="rz-caption m-0">{tf('emptyRowsSkipped')}</p>
-              </div>
-            </section>
-
-            <Card title={tf('sharedTitle')}>
-              <div className="grid gap-3">
-                <p className="rz-muted m-0">{tf('sharedHint')}</p>
-                <PillGroup
-                  className="w-fit"
-                  label={tf('sharedCondition')}
-                  onChange={setCondition}
-                  options={conditionOptions(tf)}
-                  value={condition}
-                />
-                {canPlace ? (
-                  <PartPlacementPicker
-                    value={sharedPlacement}
-                    onChange={setSharedPlacement}
-                    options={placementOptions}
-                  />
-                ) : null}
-              </div>
-            </Card>
-          </div>
-
-          <aside className="grid min-w-0 flex-[1_1_280px] gap-4 lg:sticky lg:top-[calc(var(--rz-topbar-h)+16px)] lg:max-w-[380px]">
-            <Card bodyClassName="grid gap-3" title={tf('batchCard')}>
-              <dl className="rz-facts px-0 py-0">
-                <div>
-                  <dt>{tf('positions')}</dt>
-                  <dd className="rz-mono rz-strong text-right">
-                    {filled.length}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{tf('units')}</dt>
-                  <dd className="rz-mono rz-strong text-right">
-                    {t('quantityWithUnit', { count: units, unit: t('pcs') })}
-                  </dd>
-                </div>
-                {canManageFinance ? (
-                  <div>
-                    <dt>{tf('priceSum')}</dt>
-                    <dd
-                      className={cn(
-                        'rz-mono text-right',
-                        priceSum > 0 ? 'rz-strong' : 'rz-dim',
-                      )}
-                    >
-                      {priceSum > 0 ? money(priceSum) : '—'}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-              <div className="grid gap-2 empty:hidden">
-                {priceSlots.note}
-                {priceSlots.saveNotes}
-              </div>
-              <Button
-                aria-busy={busy}
-                disabled={busy || !ready}
-                size="wide"
-                type="submit"
-                variant="primary"
-              >
-                {saveLabel}
-              </Button>
-              <p className="rz-caption m-0">
-                {busy
-                  ? tf('batchProgress', { saved, total: filled.length })
-                  : ready
-                    ? tf('batchReady')
-                    : tf('batchNotReady')}
-              </p>
-            </Card>
-
-            <Card title={tf('checkTitle')}>
-              <ChecksList
-                items={[
-                  {
-                    state: ready ? 'ok' : 'idle',
-                    label: ready
-                      ? tf('readyPositions', { count: filled.length })
-                      : tf('nothingFilled'),
-                  },
-                  ...(canPlace
-                    ? [
-                        {
-                          state:
-                            withoutCell === 0 && ready
-                              ? ('ok' as const)
-                              : ('warn' as const),
-                          label:
-                            withoutCell === 0 && ready
-                              ? tf('allHaveCell')
-                              : tf('withoutCell', { count: withoutCell }),
-                        },
-                      ]
-                    : []),
-                  {
-                    state: withoutPrice === 0 && ready ? 'ok' : 'warn',
-                    label:
-                      withoutPrice === 0 && ready
-                        ? tf('pricesSet')
-                        : tf('withoutPrice', { count: withoutPrice }),
-                  },
-                ]}
-              />
-            </Card>
-          </aside>
-        </form>
-      </div>
-    </RedesignShell>
   )
 }
 

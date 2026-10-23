@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
-import { Button, ErrorState, Notice, SkeletonRows } from '@/components/app'
+import { Button, ErrorState, Notice } from '@/components/app'
 import { useT } from '@/i18n'
 import { RedesignShell } from '../redesign-shell'
 import { inventoryMessages } from './messages'
 import type { LoadState } from './use-stock-resource'
+import { CabinetLoadingContent, CabinetLoadingScreen } from '../loading-screen'
 
 export function InventoryLoadError({
   message,
@@ -35,7 +36,7 @@ export function Resource<T>({
   errorContent,
   framed = true,
   crumb,
-  layout = 'list',
+  layout,
 }: {
   state: LoadState<T>
   errorContent?: ReactNode
@@ -56,20 +57,21 @@ export function Resource<T>({
     ) : (
       content
     )
-  if (state.kind === 'loading')
+  if (state.kind === 'loading') {
+    if (crumb === undefined && framed)
+      return (
+        <CabinetLoadingScreen
+          label={t('loading')}
+          {...(layout === undefined ? {} : { layout })}
+        />
+      )
     return frame(
-      layout === 'record' ? (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <div className="grid gap-4">
-            <SkeletonRows columns={1} label={t('loading')} rows={6} />
-            <SkeletonRows columns={1} rows={6} />
-          </div>
-          <SkeletonRows columns={1} rows={4} />
-        </div>
-      ) : (
-        <SkeletonRows label={t('loading')} rows={10} columns={1} />
-      ),
+      <CabinetLoadingContent
+        label={t('loading')}
+        {...(layout === undefined ? {} : { layout })}
+      />,
     )
+  }
   if (state.kind === 'error') {
     return frame(
       <>

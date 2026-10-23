@@ -295,7 +295,9 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
   await user.click(
     await screen.findByRole('button', { name: 'Зберегти платіж' }),
   )
-  expect(await screen.findAllByText('Мережа зникла.')).toHaveLength(1)
+  expect(await screen.findAllByText('Немає з’єднання з мережею.')).toHaveLength(
+    1,
+  )
 
   await user.click(screen.getByRole('button', { name: 'Зберегти платіж' }))
   expect(recordPayment).toHaveBeenNthCalledWith(

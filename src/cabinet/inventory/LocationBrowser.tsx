@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router'
+import { Link, useLocation, useSearchParams, useNavigate } from 'react-router'
 import { ChevronRight, Plus, Pencil, Rows3, RotateCcw } from 'lucide-react'
 import {
   ActionMenu,
@@ -15,7 +15,7 @@ import type {
   InventoryShelf,
   InventoryZone,
 } from '@/api/inventory'
-import { useFormat, useT } from '@/i18n'
+import { commonMessages, useFormat, useT } from '@/i18n'
 import { warehouseMessages } from './warehouse-messages'
 import { locationBrowserMessages } from './location-browser-messages'
 import { locationPartsHref } from './location-contents'
@@ -177,6 +177,8 @@ export function LocationBrowser({
   onRestoreSection?: (section: InventorySection) => void
   pending?: boolean
 }) {
+  const navigate = useNavigate()
+  const tc = useT(commonMessages)
   const t = useT(locationBrowserMessages)
   const f = useFormat()
   const countId = useId()
@@ -227,6 +229,27 @@ export function LocationBrowser({
       },
       { replace: true, preventScrollReset: true, state: navigationState },
     )
+
+  const itemHref = (item: InventorySection | InventoryShelf) =>
+    section
+      ? locationPartsHref(partsBase, zone.warehouseId, {
+          kind: 'shelf',
+          zoneId: zone.id,
+          sectionId: section.id,
+          shelfId: item.id,
+          name: item.name,
+          path: [],
+        })
+      : `${base}/sections/${encodeURIComponent(item.id)}`
+  const openItem = (item: InventorySection | InventoryShelf) => {
+    if (section && onEditShelf) onEditShelf(item as InventoryShelf)
+    else if (!section || canViewParts)
+      void navigate(itemHref(item), {
+        state: section
+          ? undefined
+          : { zoneId: zone.id, zoneQuery: params.toString() },
+      })
+  }
 
   return (
     <div
@@ -307,197 +330,161 @@ export function LocationBrowser({
             </div>
           ) : null}
           <div
-            aria-hidden
-            className={`location-browser__columns ${section ? 'location-browser__columns--plain' : 'location-browser__columns--section'}`}
+            key={`${section ? 'shelves' : 'sections'}:${page}:${needle}`}
+            role="group"
+            aria-label={t(section ? 'shelfList' : 'sectionList')}
+            tabIndex={0}
+            className="location-browser__list"
           >
-            <span>{t('name')}</span>
-            {!section ? (
-              <span className="text-right">
-                {archivedOnly ? null : t('shelvesColumn')}
-              </span>
-            ) : null}
-            <span />
-          </div>
-          {section ? (
-            <div
-              key={`shelves:${page}:${needle}`}
-              role="group"
-              aria-label={t('shelfList')}
-              tabIndex={0}
-              className="location-browser__list location-browser__shelves"
-            >
-              <DataTable
-                density="compact"
-                embedded
-                caption={`${t('shelves')}: ${section.name}`}
-                columns={[
-                  {
-                    key: 'name',
-                    label: t('shelfName'),
-                    variant: 'primary',
-                    cell: (shelf) => {
-                      const content = (
-                        <>
-                          <LocationName name={shelf.name} code={shelf.code} />
-                          {onEditShelf ? (
-                            <Pencil
-                              aria-hidden
-                              className="location-browser__arrow text-brand"
-                            />
-                          ) : (
-                            <ChevronRight
-                              aria-hidden
-                              className="location-browser__arrow"
-                            />
-                          )}
-                        </>
-                      )
-                      const rowClassName =
-                        'location-browser__row location-browser__row--plain'
-                      if (onEditShelf)
-                        return (
-                          <Button
-                            variant="quiet"
-                            className={rowClassName}
-                            aria-label={t('editShelfName', {
-                              name: shelf.name,
-                            })}
-                            onClick={() => onEditShelf(shelf)}
-                          >
-                            {content}
-                          </Button>
-                        )
-                      return canViewParts ? (
-                        <Link
-                          to={locationPartsHref(partsBase, zone.warehouseId, {
-                            kind: 'shelf',
-                            zoneId: zone.id,
-                            sectionId: section.id,
-                            shelfId: shelf.id,
-                            name: shelf.name,
-                            path: [],
-                          })}
-                          aria-label={t('shelfOpen', { name: shelf.name })}
-                          className={rowClassName}
+            <DataTable<InventorySection | InventoryShelf>
+              embedded
+              caption={
+                section ? `${t('shelves')}: ${section.name}` : t('sections')
+              }
+              rows={(section ? visibleShelves : visibleSections).slice(
+                (page - 1) * PAGE_SIZE,
+                page * PAGE_SIZE,
+              )}
+              rowKey={(item) => item.id}
+              {...(!archivedOnly && (!section || onEditShelf || canViewParts)
+                ? { onRowClick: openItem }
+                : {})}
+              columns={[
+                {
+                  key: 'name',
+                  label: t(section ? 'shelfName' : 'name'),
+                  variant: 'primary',
+                  cell: (item) => {
+                    const content = (
+                      <LocationName name={item.name} code={item.code} />
+                    )
+                    if (
+                      archivedOnly ||
+                      (section && !onEditShelf && !canViewParts)
+                    )
+                      return content
+                    if (section && onEditShelf)
+                      return (
+                        <Button
+                          variant="quiet"
+                          className="location-browser__link"
+                          aria-label={t('editShelfName', { name: item.name })}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onEditShelf(item as InventoryShelf)
+                          }}
                         >
                           {content}
-                        </Link>
-                      ) : (
-                        <span className={rowClassName}>
-                          <LocationName name={shelf.name} code={shelf.code} />
-                        </span>
-                      )
-                    },
-                  },
-                ]}
-                rows={visibleShelves.slice(
-                  (page - 1) * PAGE_SIZE,
-                  page * PAGE_SIZE,
-                )}
-                rowKey={(shelf) => shelf.id}
-                empty={
-                  <p className="location-browser__empty">
-                    {t(needle ? 'noMatches' : 'noShelves')}
-                  </p>
-                }
-              />
-            </div>
-          ) : (
-            <div
-              key={`sections:${page}:${needle}`}
-              role="group"
-              aria-label={t('sectionList')}
-              tabIndex={0}
-              className="location-browser__list"
-            >
-              {visibleSections.length ? (
-                visibleSections
-                  .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-                  .map((item) => {
-                    const shelfCount = sectionShelfCounts.get(item.id)
-                    const shelfCountId = `${countId}-${item.id}-shelves`
-                    if (archivedOnly)
-                      return (
-                        <div
-                          key={item.id}
-                          role="group"
-                          aria-label={tw('sectionGroup', { name: item.name })}
-                          className="location-browser__section"
-                        >
-                          <div className="location-browser__row location-browser__row--section">
-                            <LocationName name={item.name} code={item.code} />
-                            <span />
-                            {canManage && onRestoreSection ? (
-                              <ActionMenu
-                                label={tw('sectionActionsLabel', {
-                                  name: item.name,
-                                })}
-                                actions={[
-                                  {
-                                    key: 'restore',
-                                    label: tw('restoreLocation'),
-                                    icon: <RotateCcw aria-hidden />,
-                                    disabled: pending,
-                                    onSelect: () => onRestoreSection(item),
-                                  },
-                                ]}
-                              />
-                            ) : (
-                              <span />
-                            )}
-                          </div>
-                        </div>
+                        </Button>
                       )
                     return (
-                      <div
-                        key={item.id}
-                        role="group"
-                        aria-label={tw('sectionGroup', { name: item.name })}
-                        className="location-browser__section"
+                      <Link
+                        className="location-browser__link"
+                        to={itemHref(item)}
+                        state={
+                          section
+                            ? undefined
+                            : { zoneId: zone.id, zoneQuery: params.toString() }
+                        }
+                        aria-label={
+                          section
+                            ? t('shelfOpen', { name: item.name })
+                            : `${item.name}, ${item.code}`
+                        }
+                        aria-describedby={
+                          section ? undefined : `${countId}-${item.id}-shelves`
+                        }
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        <Link
-                          className="location-browser__row location-browser__row--section"
-                          to={`${base}/sections/${encodeURIComponent(item.id)}`}
-                          state={{
-                            zoneId: zone.id,
-                            zoneQuery: params.toString(),
-                          }}
-                          aria-label={`${item.name}, ${item.code}`}
-                          aria-describedby={shelfCountId}
-                        >
-                          <LocationName name={item.name} code={item.code} />
-                          <dl
-                            id={shelfCountId}
-                            className="location-browser__count m-0"
-                          >
-                            <dt className="sr-only max-md:not-sr-only">
-                              {t('shelvesColumn')}:{' '}
-                            </dt>
-                            <dd>
-                              {shelfCount === undefined
-                                ? '—'
-                                : (f.number(shelfCount) ?? String(shelfCount))}
-                            </dd>
-                          </dl>
-                          <ChevronRight
-                            aria-hidden
-                            className="location-browser__arrow"
-                          />
-                        </Link>
-                      </div>
+                        {content}
+                      </Link>
                     )
-                  })
-              ) : (
+                  },
+                },
+                ...(!section && !archivedOnly
+                  ? [
+                      {
+                        key: 'shelves',
+                        label: t('shelvesColumn'),
+                        align: 'end' as const,
+                        cell: (item: InventorySection | InventoryShelf) => {
+                          const count = sectionShelfCounts.get(item.id)
+                          const label =
+                            count === undefined ? '—' : f.number(count)
+                          return (
+                            <>
+                              <span
+                                id={`${countId}-${item.id}-shelves`}
+                                className="sr-only"
+                              >{`${t('shelvesColumn')}: ${label}`}</span>
+                              <span className="rz-mono">{label}</span>
+                            </>
+                          )
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  key: 'open',
+                  label: tc('actions'),
+                  headerHidden: true,
+                  align: 'end',
+                  cell: () =>
+                    archivedOnly ||
+                    (section &&
+                      !onEditShelf &&
+                      !canViewParts) ? null : section && onEditShelf ? (
+                      <Pencil
+                        aria-hidden
+                        className="location-browser__arrow text-brand"
+                      />
+                    ) : (
+                      <ChevronRight
+                        aria-hidden
+                        className="location-browser__arrow"
+                      />
+                    ),
+                },
+                ...(archivedOnly && canManage && onRestoreSection
+                  ? [
+                      {
+                        key: 'actions',
+                        label: tc('actions'),
+                        headerHidden: true,
+                        align: 'end' as const,
+                        cell: (item: InventorySection | InventoryShelf) => (
+                          <span onClick={(event) => event.stopPropagation()}>
+                            <ActionMenu
+                              label={tw('sectionActionsLabel', {
+                                name: item.name,
+                              })}
+                              actions={[
+                                {
+                                  key: 'restore',
+                                  label: tw('restoreLocation'),
+                                  icon: <RotateCcw aria-hidden />,
+                                  disabled: pending,
+                                  onSelect: () => onRestoreSection(item),
+                                },
+                              ]}
+                            />
+                          </span>
+                        ),
+                      },
+                    ]
+                  : []),
+              ]}
+              empty={
                 <p className="location-browser__empty">
                   {needle
                     ? t('noMatches')
                     : archivedOnly
                       ? tw('noArchivedSections')
-                      : t('noSections')}
+                      : t(section ? 'noShelves' : 'noSections')}
                 </p>
-              )}
-            </div>
-          )}
+              }
+            />
+          </div>
           {total > 0 ? (
             <div className="location-browser__pagination">
               <Pagination

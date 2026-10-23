@@ -802,9 +802,11 @@ it('renders reports in English (UK) with UK dates and file sizes', async () => {
   expect(screen.getByText(/PDF · 1.2 KB · available until/)).toBeInTheDocument()
   // Requested at 08:00 UTC is 11:00 in Kyiv, the business time zone.
   expect(screen.getAllByText('28/08/2026, 11:00').length).toBeGreaterThan(0)
-  // The server's reason stays as received.
+  // Unknown server diagnostics use the interface-language error message.
   expect(
-    screen.getByText(/Reason: Service unavailable\. Create a replacement/),
+    screen.getByText(
+      /Reason: A server error occurred\. Please try again later\. Create a replacement/,
+    ),
   ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Download PDF' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Create report' })).toBeVisible()

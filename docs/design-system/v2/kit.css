@@ -108,6 +108,7 @@
 .rz-input:disabled, .rz-select:disabled { opacity: 0.5; cursor: not-allowed; }
 .rz-input[readonly] { background: transparent; border-color: var(--rz-border); color: var(--rz-text-muted); }
 .rz-input--num { font-family: var(--rz-font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.rz-input[inputmode="decimal"] { direction: ltr; text-align: left; }
 .rz-input--sm { height: var(--rz-control-h); }
 .rz-select { appearance: none; padding-right: 30px; cursor: pointer; background-image: none; }
 .rz-select-wrap { position: relative; }
@@ -294,6 +295,9 @@
 :is(.rz-sheet, .rz-dialog, .rz-confirm) :is(.rz-input, .rz-select, .rz-textarea, .rz-input-group, .rz-search) { background: var(--rz-sheet-field); }
 @media (max-width: 639px) { .rz-sheet { top: auto; left: 0; width: 100%; max-height: 92dvh; border-left: 0; border-top: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-lg) var(--rz-r-lg) 0 0; } }
 .rz-menu { min-width: 220px; display: grid; gap: 1px; padding: 4px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-md); background: var(--rz-overlay); box-shadow: var(--rz-shadow-popover); }
+/* Menu focus is shown by the active row, never an orange ring around the popup. */
+.rz-menu:focus-visible { outline: none; box-shadow: var(--rz-shadow-popover); }
+.rz-btn[aria-haspopup="menu"]:focus-visible, .rz-menu__item:focus-visible { outline: none; box-shadow: none; background: var(--rz-fill-active); }
 .rz-menu__item { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px; border: 0; border-radius: var(--rz-r-sm); background: transparent; color: var(--rz-text); text-align: left; cursor: pointer; }
 .rz-menu__item i { font-size:var(--rz-icon); color: var(--rz-text-muted); }
 .rz-menu__item:hover, .rz-menu__item[data-highlighted] { background: var(--rz-fill-active); color: var(--rz-text-strong); }

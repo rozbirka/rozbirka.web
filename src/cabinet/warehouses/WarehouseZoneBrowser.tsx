@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router'
+import { Link, useLocation, useSearchParams, useNavigate } from 'react-router'
 import {
   Archive,
   ChevronRight,
@@ -8,9 +8,15 @@ import {
   Plus,
   RotateCcw,
 } from 'lucide-react'
-import { ActionMenu, Button, EmptyState, Pagination } from '@/components/app'
+import {
+  ActionMenu,
+  Button,
+  DataTable,
+  EmptyState,
+  Pagination,
+} from '@/components/app'
 import type { WarehouseDetail } from '@/api/inventory'
-import { useT } from '@/i18n'
+import { commonMessages, useT } from '@/i18n'
 import {
   LocationBrowserHeader,
   LocationName,
@@ -49,6 +55,8 @@ export function WarehouseZoneBrowser({
   onRestore?: (zone: Zone) => void
   pending?: boolean
 }) {
+  const navigate = useNavigate()
+  const tc = useT(commonMessages)
   const t = useT(warehouseMessages)
   const tb = useT(locationBrowserMessages)
   const [params, setParams] = useSearchParams()
@@ -84,25 +92,18 @@ export function WarehouseZoneBrowser({
       { replace: true, preventScrollReset: true, state: navigationState },
     )
 
-  const zoneContents = (zone: Zone, navigable = true) => {
+  const zoneContents = (zone: Zone) => {
     return (
-      <>
-        <LocationName
-          name={zone.name}
-          code={[
-            zone.code,
-            zone.isSystemUnassigned ? t('systemTag') : null,
-            zone.isActive ? null : t('archivedZoneTag'),
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        />
-        {navigable ? (
-          <ChevronRight aria-hidden className="location-browser__arrow" />
-        ) : (
-          <span aria-hidden />
-        )}
-      </>
+      <LocationName
+        name={zone.name}
+        code={[
+          zone.code,
+          zone.isSystemUnassigned ? t('systemTag') : null,
+          zone.isActive ? null : t('archivedZoneTag'),
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      />
     )
   }
 
@@ -125,13 +126,13 @@ export function WarehouseZoneBrowser({
           : [
               {
                 key: 'edit',
-                label: t('editZone', { name: zone.name }),
+                label: t('editZone'),
                 icon: <Pencil aria-hidden />,
                 onSelect: () => onEdit(zone),
               },
               {
                 key: 'archive',
-                label: t('archiveZoneLabel', { name: zone.name }),
+                label: t('archiveZoneLabel'),
                 icon: <Archive aria-hidden />,
                 destructive: true,
                 onSelect: () => onArchive(zone),
@@ -174,88 +175,103 @@ export function WarehouseZoneBrowser({
           <div className="p-[var(--rz-card-p)]">{printWorkspace}</div>
         ) : (
           <>
-            <div
-              aria-hidden
-              className={`location-browser__columns ${canManage ? 'location-browser__columns--zone-actions' : 'location-browser__columns--plain'}`}
-            >
-              <span>{t('colZone')}</span>
-              <span />
-              {canManage ? <span /> : null}
-            </div>
-            {unassigned.length ? (
-              <div className="location-browser__direct">
-                {unassigned.map((zone) => {
-                  const row = partsBase ? (
-                    <Link
-                      key={zone.id}
-                      aria-label={zone.name}
-                      className="location-browser__row location-browser__row--plain location-browser__row--direct"
-                      to={unassignedHref}
-                    >
-                      {zoneContents(zone)}
-                    </Link>
-                  ) : (
-                    <div
-                      key={zone.id}
-                      className="location-browser__row location-browser__row--plain"
-                    >
-                      {zoneContents(zone, false)}
-                    </div>
-                  )
-                  return canManage ? (
-                    <div
-                      className="location-browser__section location-browser__zone"
-                      key={zone.id}
-                    >
-                      {row}
-                      <span aria-hidden />
-                    </div>
-                  ) : (
-                    row
-                  )
-                })}
-              </div>
-            ) : null}
-            {noZones ? null : (
+            {unassigned.length > 0 || !noZones ? (
               <div
                 role="group"
                 aria-label={tb('zoneList')}
                 tabIndex={0}
                 className="location-browser__list"
               >
-                {visible.length ? (
-                  visible
-                    .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-                    .map((zone) => (
-                      <div
-                        className={`location-browser__section${canManage ? ' location-browser__zone' : ''}`}
-                        key={zone.id}
-                      >
-                        {archivedOnly ? (
-                          <div className="location-browser__row location-browser__row--plain">
-                            {zoneContents(zone, false)}
-                          </div>
+                <DataTable
+                  embedded
+                  caption={t('zonesTitle')}
+                  rows={[
+                    ...unassigned,
+                    ...visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+                  ]}
+                  rowKey={(zone) => zone.id}
+                  {...(!archivedOnly && (unassigned.length === 0 || partsBase)
+                    ? {
+                        onRowClick: (zone: Zone) => {
+                          if (zone.isSystemUnassigned) {
+                            if (partsBase) void navigate(unassignedHref)
+                          } else
+                            void navigate(
+                              `${base}/zones/${encodeURIComponent(zone.id)}`,
+                            )
+                        },
+                      }
+                    : {})}
+                  columns={[
+                    {
+                      key: 'name',
+                      label: t('colZone'),
+                      variant: 'primary',
+                      cell: (zone) =>
+                        archivedOnly ||
+                        (zone.isSystemUnassigned && !partsBase) ? (
+                          zoneContents(zone)
                         ) : (
                           <Link
                             aria-label={zone.name}
-                            className={`location-browser__row location-browser__row--plain${zone.isActive ? '' : ' location-browser__row--muted'}`}
-                            to={`${base}/zones/${encodeURIComponent(zone.id)}`}
+                            className="location-browser__link"
+                            onClick={(event) => event.stopPropagation()}
+                            to={
+                              zone.isSystemUnassigned
+                                ? unassignedHref
+                                : `${base}/zones/${encodeURIComponent(zone.id)}`
+                            }
                           >
                             {zoneContents(zone)}
                           </Link>
-                        )}
-                        {canManage ? zoneMenu(zone) : null}
-                      </div>
-                    ))
-                ) : (
-                  <p className="location-browser__empty">
-                    {needle
-                      ? tb('noMatches')
-                      : t(archivedOnly ? 'noArchivedZones' : 'noZones')}
-                  </p>
-                )}
+                        ),
+                    },
+                    {
+                      key: 'open',
+                      label: tc('actions'),
+                      headerHidden: true,
+                      align: 'end',
+                      cell: (zone) =>
+                        !archivedOnly &&
+                        (!zone.isSystemUnassigned || partsBase) ? (
+                          <ChevronRight
+                            aria-hidden
+                            className="location-browser__arrow"
+                          />
+                        ) : null,
+                    },
+                    ...(canManage
+                      ? [
+                          {
+                            key: 'actions',
+                            label: tc('actions'),
+                            headerHidden: true,
+                            align: 'end' as const,
+                            cell: (zone: Zone) =>
+                              zone.isSystemUnassigned ? null : (
+                                <span
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  {zoneMenu(zone)}
+                                </span>
+                              ),
+                          },
+                        ]
+                      : []),
+                  ]}
+                  empty={
+                    <p className="location-browser__empty">
+                      {needle
+                        ? tb('noMatches')
+                        : t(archivedOnly ? 'noArchivedZones' : 'noZones')}
+                    </p>
+                  }
+                />
+                {needle && visible.length === 0 && unassigned.length > 0 ? (
+                  <p className="location-browser__empty">{tb('noMatches')}</p>
+                ) : null}
               </div>
-            )}
+            ) : null}
             {totalPages > 1 ? (
               <div className="location-browser__pagination">
                 <Pagination

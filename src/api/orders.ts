@@ -91,6 +91,7 @@ const normalizeOrder = (order: OrderDetail): OrderDetail => ({
   ...order,
   customerId: order.customerId ?? null,
   customerName: order.customerName ?? null,
+  notes: order.notes ?? null,
   items: order.items ?? [],
   payments: order.payments ?? [],
   history: order.history ?? [],
@@ -128,10 +129,19 @@ export const ordersApi = {
         .data,
     )
   },
-  async updateNotes(id: string, notes: string | null): Promise<OrderDetail> {
+  async updateNotes(
+    id: string,
+    notes: string | null,
+    options: RequestOptions = {},
+  ): Promise<OrderDetail> {
     return normalizeOrder(
-      (await apiClient.put<OrderDetail>(`${endpoint(id)}/notes`, { notes }))
-        .data,
+      (
+        await apiClient.put<OrderDetail>(
+          `${endpoint(id)}/notes`,
+          { notes },
+          requestConfig(options),
+        )
+      ).data,
     )
   },
   /**

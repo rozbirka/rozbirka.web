@@ -1,20 +1,10 @@
-import { useEffect, useId, useState } from 'react'
-import { Plus } from 'lucide-react'
-import {
-  Button,
-  Field,
-  Notice,
-  Sheet,
-  SkeletonRows,
-  SearchInput,
-  TextInput,
-} from '@/components/app'
-import { cn } from '@/lib/utils'
+import { useState } from 'react'
+import { CustomerSearchPicker } from '@/components/customers/CustomerSearchPicker'
+import { Button, Field, Notice, Sheet, TextInput } from '@/components/app'
 import {
   customersApi,
   readCustomerPhoneConflict,
   type CustomerPhoneConflict,
-  type CustomerSearchItem,
 } from '@/api/customers'
 import { normalizeApiProblem } from '@/api/errors'
 import { useTenantSettings } from '@/auth/useTenantSettings'
@@ -22,27 +12,11 @@ import { commonMessages, useT } from '@/i18n'
 import { isValidContactPhone, phoneExample } from '@/lib/phone'
 import {
   customerPhoneForSave,
-  displayCustomerPhone,
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from '../customers/customer-phone'
 import { customerFormMessages } from '../customers/customer-form-messages'
 import { orderCustomerMessages } from './order-customer-messages'
-
-const SEARCH_DEBOUNCE_MS = 250
-
-/**
- * Two initials for the avatar chip; a single word gives one. Leading quotes
- * and dashes are skipped — «Автосервіс «Вектор»» reads as АВ, not А«.
- */
-const initials = (name: string) =>
-  name
-    .split(/[\s]+/)
-    .map((part) => /\p{L}/u.exec(part)?.[0] ?? '')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((letter) => letter.toUpperCase())
-    .join('') || '?'
 
 /**
  * Who the order is for, chosen or created without leaving the order.
@@ -82,10 +56,7 @@ function OpenOrderCustomerDrawer({
   const tc = useT(commonMessages)
   /** A national number is read in the business country; any country is fine. */
   const country = useTenantSettings().countryCode ?? 'UA'
-  const listId = useId()
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<CustomerSearchItem[] | null>(null)
-  const [searchError, setSearchError] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -94,31 +65,6 @@ function OpenOrderCustomerDrawer({
   const [conflict, setConflict] = useState<CustomerPhoneConflict | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    const controller = new AbortController()
-    const timer = setTimeout(() => {
-      void customersApi
-        .search(query.trim(), { signal: controller.signal })
-        .then((items) => {
-          if (!controller.signal.aborted) {
-            setResults(items)
-            setSearchError(null)
-          }
-        })
-        .catch((reason: unknown) => {
-          if (!controller.signal.aborted) {
-            setResults([])
-            setSearchError(normalizeApiProblem(reason).message)
-          }
-        })
-    }, SEARCH_DEBOUNCE_MS)
-    return () => {
-      controller.abort()
-      clearTimeout(timer)
-    }
-  }, [open, query])
 
   const nameValid = name.trim().length > 1
   const phoneE164 = customerPhoneForSave(phone, country)
@@ -129,8 +75,6 @@ function OpenOrderCustomerDrawer({
 
   const changeQuery = (value: string) => {
     setQuery(value)
-    setResults(null)
-    setSearchError(null)
     setPicked(null)
   }
 
@@ -192,108 +136,27 @@ function OpenOrderCustomerDrawer({
     >
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
-      <Field hiddenLabel label={t('searchLabel')}>
-        <SearchInput
-          aria-controls={listId}
-          autoComplete="off"
-          className="h-control-lg"
-          onChange={(event) => changeQuery(event.target.value)}
-          placeholder={t('searchPlaceholder')}
-          type="text"
-          value={query}
-        />
-      </Field>
-
-      {searchError === null ? null : (
-        <Notice tone="danger">{searchError}</Notice>
-      )}
-
-      <div
-        className="border-app-line min-h-fit overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)"
-        id={listId}
-      >
-        {results === null ? (
-          <div className="p-3">
-            <SkeletonRows label={t('searching')} rows={3} />
-          </div>
-        ) : results.length === 0 ? (
-          <p className="rz-muted border-app-line m-0 border-b px-4 py-4 text-center">
-            {t('notFound')}
-          </p>
-        ) : (
-          <ul aria-label={t('foundLabel')} className="m-0 list-none p-0">
-            {results.map((customer) => {
-              const active = !creating && customer.id === picked
-              const current = customer.id === currentId
-              return (
-                <li key={customer.id}>
-                  <button
-                    className={cn(
-                      'border-app-line flex min-h-11 w-full cursor-pointer items-center gap-3 border-0 border-b bg-transparent px-3 py-2 text-left transition-colors',
-                      active
-                        ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
-                        : 'hover:bg-app-hover',
-                    )}
-                    onClick={() => {
-                      setPicked(customer.id)
-                      setCreating(false)
-                    }}
-                    type="button"
-                  >
-                    <span
-                      aria-hidden
-                      className="rz-avatar rz-avatar--round size-8"
-                    >
-                      {initials(customer.name)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="rz-strong block truncate font-semibold">
-                        {customer.name}
-                      </span>
-                      <span className="rz-dim block font-mono text-caption">
-                        {customer.phone === null
-                          ? t('noPhone')
-                          : displayCustomerPhone(customer.phone)}{' '}
-                        · {t('ordersCount', { count: customer.ordersCount })}
-                      </span>
-                    </span>
-                    {current || active ? (
-                      <span
-                        className={cn(
-                          'shrink-0 text-caption font-semibold whitespace-nowrap',
-                          current ? 'text-app-muted' : 'text-brand-text',
-                        )}
-                      >
-                        {current ? t('currentTag') : t('pickedTag')}
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        <button
-          className={cn(
-            'text-brand-text flex min-h-10 w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 py-2 text-left font-semibold transition-colors',
-            creating
-              ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
-              : 'hover:bg-app-hover',
-          )}
-          onClick={() => {
-            setCreating((was) => !was)
-            setPicked(null)
-            setConflict(null)
-            setCreateError(null)
-            if (!creating && !/\d/.test(query)) setName(query.trim())
-          }}
-          type="button"
-        >
-          <Plus aria-hidden className="size-3.5 shrink-0" />
-          {t('newCustomer')}
-        </button>
-      </div>
-
+      <CustomerSearchPicker
+        createLabel={t('newCustomer')}
+        onCreate={() => {
+          setCreating((was) => !was)
+          setPicked(null)
+          setConflict(null)
+          setCreateError(null)
+          if (!creating && !/\d/.test(query)) setName(query.trim())
+        }}
+        currentId={currentId}
+        disabled={busy || saving}
+        initialOpen
+        onQueryChange={changeQuery}
+        onSelect={(customer) => {
+          setPicked(customer.id)
+          setQuery(customer.name)
+          setCreating(false)
+        }}
+        query={query}
+        selectedId={creating ? null : picked}
+      />
       {creating ? (
         <div className="grid gap-3">
           <Field label={t('name')}>

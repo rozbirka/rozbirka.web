@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi } from '@/api/integrations'
@@ -7,6 +7,9 @@ import type { DeliveryOrder } from '@/api/delivery'
 import { shippingApi, type Shipment } from '@/api/shipping'
 import { LocaleProvider } from '@/i18n'
 import { DeliveryDrawer } from './DeliveryDrawer'
+import { customersApi } from '@/api/customers'
+
+vi.mock('@/api/customers', () => ({ customersApi: { search: vi.fn() } }))
 
 vi.mock('@/api/integrations', () => ({
   integrationsApi: { settlements: vi.fn(), divisions: vi.fn() },
@@ -81,6 +84,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(customersApi.search).mockResolvedValue([])
   vi.mocked(integrationsApi.settlements).mockResolvedValue({
     items: [
       {
@@ -129,9 +133,13 @@ const money = (): DeliveryOrder => ({
   payments: [],
 })
 
-const renderDrawer = (current: Shipment | null) =>
+const renderDrawer = (
+  current: Shipment | null,
+  customerSearchAllowed = false,
+) =>
   render(
     <DeliveryDrawer
+      customerSearchAllowed={customerSearchAllowed}
       customerName="Ірина Олійник"
       customerPhone="+380503381172"
       declaredValue={4280}
@@ -146,6 +154,80 @@ const renderDrawer = (current: Shipment | null) =>
       shipment={current}
     />,
   )
+
+it('fills recipient name and phone from customer search and allows manual edits before saving', async () => {
+  vi.mocked(customersApi.search).mockResolvedValue([
+    {
+      id: 'customer-2',
+      name: 'Олена Коваль',
+      phone: '+380671234567',
+      ordersCount: 2,
+    },
+  ])
+  vi.mocked(shippingApi.saveDraft).mockResolvedValue(shipment())
+  const user = userEvent.setup()
+  renderDrawer(shipment(), true)
+  const name = screen.getByLabelText('Ім’я отримувача')
+  await user.clear(name)
+  await user.type(name, 'Оле')
+  await user.click(
+    await screen.findByRole('option', { name: 'Обрати клієнта Олена Коваль' }),
+  )
+  expect(name).toHaveValue('Олена Коваль')
+  expect(screen.getByLabelText('Телефон')).toHaveValue('+380671234567')
+  expect(
+    screen.queryByRole('dialog', { name: 'Результати пошуку клієнтів' }),
+  ).not.toBeInTheDocument()
+  expect(shippingApi.saveDraft).not.toHaveBeenCalled()
+  await user.clear(name)
+  await user.type(name, 'Інший отримувач')
+  const phone = screen.getByLabelText('Телефон')
+  await user.clear(phone)
+  await user.type(phone, '+380501234567')
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  await waitFor(() => expect(shippingApi.saveDraft).toHaveBeenCalledTimes(1))
+  expect(
+    vi.mocked(shippingApi.saveDraft).mock.calls[0]?.[2].recipient,
+  ).toMatchObject({
+    name: 'Інший отримувач',
+    phone: '+380501234567',
+  })
+})
+
+it('clears a previous phone when the selected customer has none', async () => {
+  vi.mocked(customersApi.search).mockResolvedValue([
+    {
+      id: 'customer-2',
+      name: 'Клієнт без телефону',
+      phone: null,
+      ordersCount: 0,
+    },
+  ])
+  const user = userEvent.setup()
+  renderDrawer(shipment(), true)
+  await user.clear(screen.getByLabelText('Ім’я отримувача'))
+  await user.type(screen.getByLabelText('Ім’я отримувача'), 'Клієнт')
+  await user.click(
+    await screen.findByRole('option', {
+      name: 'Обрати клієнта Клієнт без телефону',
+    }),
+  )
+  expect(screen.getByLabelText('Телефон')).toHaveValue('')
+  expect(
+    screen.getByRole('button', { name: 'Зберегти чернетку' }),
+  ).toBeDisabled()
+})
+
+it('keeps manual recipient entry without requesting customers when customer lookup is not allowed', async () => {
+  const user = userEvent.setup()
+  renderDrawer(shipment())
+  await user.clear(screen.getByLabelText('Ім’я отримувача'))
+  await user.type(screen.getByLabelText('Ім’я отримувача'), 'Новий отримувач')
+  expect(screen.getByLabelText('Ім’я отримувача')).toHaveValue(
+    'Новий отримувач',
+  )
+  expect(customersApi.search).not.toHaveBeenCalled()
+})
 
 it('will not create a waybill before the carrier has quoted the form', async () => {
   renderDrawer(shipment())

@@ -1,3 +1,12 @@
+import { NewOrderItems } from './NewOrderItems'
+import {
+  orderItemPrice,
+  restoreOrderItems,
+  validOrderDraftItem,
+} from './order-draft-items'
+import { CustomerSearchPicker } from '@/components/customers/CustomerSearchPicker'
+import { localizeApiError } from '@/api/error-localization'
+import { CabinetLoadingContent } from '../loading-screen'
 import {
   useCallback,
   useEffect,
@@ -35,9 +44,7 @@ import {
   Field,
   Notice,
   Pagination,
-  QuantityStepper,
   SearchInput,
-  SkeletonRows,
   StatusPill,
   TextArea,
   TextInput,
@@ -60,7 +67,6 @@ import { money, moneyList, orderMoney, refundEffects } from './order-money'
 import { paymentMessages } from './payment-messages'
 import { paymentRecorded } from './payment-policy'
 import { isUnknownOutcome } from '../currency/accounting-currency'
-import { MoneyInput } from '../currency/price-currency'
 import {
   useAccountingCurrency,
   useFirstPriceGuard,
@@ -96,7 +102,6 @@ import {
   customersApi,
   readCustomerPhoneConflict,
   type CustomerPhoneConflict,
-  type CustomerSearchItem,
 } from '@/api/customers'
 import {
   ordersApi,
@@ -104,10 +109,7 @@ import {
   type OrderDetail,
   type OrderListItem,
 } from '@/api/orders'
-import {
-  PartSearchPicker,
-  type PartPickerItem,
-} from '@/components/parts/PartSearchPicker'
+import { type PartPickerItem } from '@/components/parts/PartSearchPicker'
 import { useCabinet } from '../CabinetContext'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -121,7 +123,7 @@ import {
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { isPhoneCountry } from '@/lib/phone'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
-import { SheetGroup, SheetList } from './sheet-group'
+import { SheetGroup } from './sheet-group'
 import { OrderItemDrawer, type OrderItemDraft } from './OrderItemDrawer'
 import { OrderPaymentDrawer, type PaymentOutcome } from './OrderPaymentDrawer'
 
@@ -139,7 +141,7 @@ const orderErrorMessage = (error: unknown, locale: Locale) => {
   if (isProblemCode(error, INTEGRATION_COUNTRY_UNAVAILABLE))
     return translate(deliveryMessages, locale, 'countryUnavailable')
   if (problem.kind === 'conflict') return say('errorConflict')
-  return problem.message
+  return localizeApiError(problem, locale)
 }
 
 /** The order error mapper bound to the current locale. */
@@ -214,6 +216,7 @@ export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
     if (orderId)
       return (
         <OrderDetailScreen
+          key={orderId}
           addingItem
           definition={definition}
           orderId={orderId}
@@ -228,7 +231,7 @@ export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
       </>
     )
   return id ? (
-    <OrderDetailScreen definition={definition} orderId={id} />
+    <OrderDetailScreen key={id} definition={definition} orderId={id} />
   ) : (
     <OrderDirectory definition={definition} />
   )
@@ -303,8 +306,6 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const [totalPages, setTotalPages] = useState(0)
   const [total, setTotal] = useState(0)
   const [pageSize, setPageSize] = useState<number | undefined>(undefined)
-  /** How many orders sit behind each status chip, under the same search. */
-  const [counts, setCounts] = useState<Record<string, number> | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** Bumped by «Спробувати ще раз» to ask for the same page again. */
   const [attempt, setAttempt] = useState(0)
@@ -341,32 +342,6 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     // The message is chosen when the request fails, not re-run per locale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, page, search, status, attempt])
-
-  /* The endpoint reports a total per filter, not a breakdown, so each chip's
-     count is its own one-row request under the current search. */
-  useEffect(() => {
-    const controller = new AbortController()
-    void Promise.all(
-      ORDER_STATUS_FILTERS.map((option) =>
-        ordersApi
-          .list(
-            {
-              ...(search === undefined ? {} : { search }),
-              ...(option === '' ? {} : { status: option }),
-              ...(customerId === undefined ? {} : { customerId }),
-              page: 1,
-              pageSize: 1,
-            },
-            { signal: controller.signal },
-          )
-          .then((result) => [option, result.total] as const),
-      ),
-    ).then(
-      (pairs) => setCounts(Object.fromEntries(pairs)),
-      () => setCounts(null),
-    )
-    return () => controller.abort()
-  }, [customerId, search])
 
   const setParam = (name: string, value: string) => {
     const next = new URLSearchParams(params)
@@ -541,9 +516,6 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                 {option === ''
                   ? t('filterAll')
                   : orderStatusPresentation(option, locale).label}
-                {counts === null ? null : (
-                  <span className="rz-count">{counts[option] ?? 0}</span>
-                )}
               </button>
             ))}
           </div>
@@ -563,7 +535,11 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
             title={t('loadFailed')}
           />
         ) : !loaded ? (
-          <SkeletonRows columns={5} label={t('loading')} rows={8} />
+          <CabinetLoadingContent
+            module="orders"
+            heading={false}
+            label={t('loading')}
+          />
         ) : (
           <DataTable
             caption={t('listLabel')}
@@ -619,16 +595,22 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 
 /** What the order form keeps across the trip to the currency setting. */
 interface OrderFormDraft {
-  partId: string
-  partQuery: string
+  partId?: string
+  partQuery?: string
   customerId: string
   customerQuery: string
   selectedCustomerName: string
-  quantity: string
-  unitPrice: string
+  quantity?: string
+  unitPrice?: string
   notes: string
-  draftItems: { part: PartPickerItem; quantity: number; unitPrice: number }[]
-  selectedPartDraft: PartPickerItem | null
+  draftItems: {
+    part: PartPickerItem
+    quantity: number
+    unitPrice: number | string
+    priceBeforeEdit?: string | undefined
+  }[]
+  selectedPartDraft?: PartPickerItem | null
+  editingPartId?: string | null
 }
 
 export function OrderForm({
@@ -668,7 +650,6 @@ export function OrderForm({
     `order-form:${createContext?.customer.id ?? 'new'}`,
   )
   const restored = draft.initial
-  const [partId, setPartId] = useState(() => restored?.partId ?? '')
   const [partQuery, setPartQuery] = useState(() => restored?.partQuery ?? '')
   const [customerId, setCustomerId] = useState(
     () =>
@@ -683,11 +664,6 @@ export function OrderForm({
   const [selectedCustomerName, setSelectedCustomerName] = useState(
     () => restored?.selectedCustomerName ?? createContext?.customer.name ?? '',
   )
-  const [customerResults, setCustomerResults] = useState<CustomerSearchItem[]>(
-    [],
-  )
-  const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
-  const customerPickerRef = useRef<HTMLDivElement>(null)
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerFormOpen, setNewCustomerFormOpen] = useState(false)
   const [newCustomerPhone, setNewCustomerPhone] = useState(() =>
@@ -696,34 +672,31 @@ export function OrderForm({
   const [customerConflict, setCustomerConflict] =
     useState<CustomerPhoneConflict | null>(null)
   const [customerBusy, setCustomerBusy] = useState(false)
-  const [quantity, setQuantity] = useState(() => restored?.quantity ?? '')
-  const [unitPrice, setUnitPrice] = useState(() => restored?.unitPrice ?? '')
   const [notes, setNotes] = useState(() => restored?.notes ?? '')
   const guard = useFirstPriceGuard()
   const { locale } = useLocale()
-  const [draftItems, setDraftItems] = useState<OrderFormDraft['draftItems']>(
-    () => restored?.draftItems ?? [],
+  const [draftItems, setDraftItems] = useState(() =>
+    restoreOrderItems(restored),
   )
-  const [selectedPartDraft, setSelectedPartDraft] =
-    useState<PartPickerItem | null>(() => restored?.selectedPartDraft ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const draftItemsValid =
+    draftItems.length > 0 &&
+    draftItems.every((item) =>
+      validOrderDraftItem(item, guard.currency, locale),
+    )
   const itemPrices = usePriceSlots(guard, {
-    values: [unitPrice, ...draftItems.map((item) => item.unitPrice)],
+    values: draftItems.map((item) => item.unitPrice),
     onAccept: (accepted) => void submit(undefined, accepted),
     draftKept: true,
     onLeave: () =>
       draft.keep({
-        partId,
         partQuery,
         customerId,
         customerQuery,
         selectedCustomerName,
-        quantity,
-        unitPrice,
         notes,
         draftItems,
-        selectedPartDraft,
       }),
   })
   const closeNewCustomerForm = () => {
@@ -751,69 +724,18 @@ export function OrderForm({
     return () => controller.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
   }, [createContext, customerSearchAllowed, linkedCustomerId])
-  useEffect(() => {
-    const closePickers = (event: PointerEvent) => {
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (!customerPickerRef.current?.contains(target))
-        setCustomerPickerOpen(false)
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setCustomerPickerOpen(false)
-    }
-    document.addEventListener('pointerdown', closePickers)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('pointerdown', closePickers)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [])
-  useEffect(() => {
-    const q = customerQuery.trim()
-    if (!customerSearchAllowed || !q || customerId) return
-    const controller = new AbortController()
-    void customersApi
-      .search(q, { signal: controller.signal })
-      .then((result) => {
-        if (!controller.signal.aborted) setCustomerResults(result)
-      })
-      .catch((requestError) => {
-        if (!controller.signal.aborted) setError(errorMessage(requestError))
-      })
-    return () => controller.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
-  }, [customerId, customerQuery, customerSearchAllowed])
   const submit = async (
     event?: FormEvent,
     accepted?: SupportedCurrency | null,
   ) => {
     event?.preventDefault()
-    const directItem =
-      partId && quantity && unitPrice
-        ? {
-            partId,
-            quantity: Number(quantity),
-            unitPrice: Number(unitPrice),
-          }
-        : null
-    const creationItems =
-      draftItems.length > 0
-        ? draftItems.map((item) => ({
-            partId: item.part.id,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          }))
-        : directItem
-          ? [directItem]
-          : []
-    if (
-      busy ||
-      !dependenciesAllowed ||
-      creationItems.length === 0 ||
-      itemPrices.disabled
-    )
+    if (busy || !dependenciesAllowed || !draftItemsValid || itemPrices.disabled)
       return
+    const creationItems = draftItems.map((item) => ({
+      partId: item.part.id,
+      quantity: item.quantity,
+      unitPrice: orderItemPrice(item.unitPrice)!,
+    }))
     setBusy(true)
     setError(null)
     try {
@@ -868,9 +790,7 @@ export function OrderForm({
       setCustomerId(result.customer.id)
       setSelectedCustomerName(result.customer.name)
       setCustomerQuery(result.customer.name)
-      setCustomerResults([])
       closeNewCustomerForm()
-      setCustomerPickerOpen(false)
     } catch (requestError) {
       const conflict = readCustomerPhoneConflict(requestError)
       if (conflict) setCustomerConflict(conflict)
@@ -884,7 +804,6 @@ export function OrderForm({
     setCustomerId(customerConflict.customerId)
     setSelectedCustomerName(customerConflict.customerName)
     setCustomerQuery(customerConflict.customerName)
-    setCustomerResults([])
     closeNewCustomerForm()
   }
   const reactivateDuplicateCustomer = async () => {
@@ -917,62 +836,12 @@ export function OrderForm({
       setCustomerId(customer.id)
       setSelectedCustomerName(customer.name)
       setCustomerQuery(customer.name)
-      setCustomerResults([])
       closeNewCustomerForm()
     } catch (requestError) {
       setError(errorMessage(requestError))
     } finally {
       setCustomerBusy(false)
     }
-  }
-  const addDraftItem = () => {
-    if (!selectedPartDraft || !quantity || !unitPrice) return
-    const parsedQuantity = Number(quantity)
-    const parsedUnitPrice = Number(unitPrice)
-    if (
-      !Number.isInteger(parsedQuantity) ||
-      parsedQuantity < 1 ||
-      !Number.isFinite(parsedUnitPrice) ||
-      parsedUnitPrice < 0
-    )
-      return
-    const precision = amountPrecisionError(
-      parsedUnitPrice,
-      guard.currency,
-      locale,
-    )
-    if (precision !== null) {
-      setError(precision)
-      return
-    }
-    setDraftItems((current) => {
-      const existing = current.find(
-        (item) => item.part.id === selectedPartDraft.id,
-      )
-      if (!existing)
-        return [
-          ...current,
-          {
-            part: selectedPartDraft,
-            quantity: parsedQuantity,
-            unitPrice: parsedUnitPrice,
-          },
-        ]
-      return current.map((item) =>
-        item.part.id === selectedPartDraft.id
-          ? {
-              ...item,
-              quantity: item.quantity + parsedQuantity,
-              unitPrice: parsedUnitPrice,
-            }
-          : item,
-      )
-    })
-    setPartId('')
-    setSelectedPartDraft(null)
-    setPartQuery('')
-    setQuantity('')
-    setUnitPrice('')
   }
   if (!dependenciesAllowed) {
     return (
@@ -985,8 +854,12 @@ export function OrderForm({
       </div>
     )
   }
+  const draftUnitCount = draftItems.reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  )
   const draftItemsTotal = draftItems.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice,
+    (sum, item) => sum + item.quantity * (orderItemPrice(item.unitPrice) ?? 0),
     0,
   )
   const backPath = createContext?.onClose
@@ -997,186 +870,61 @@ export function OrderForm({
     else void navigate(backPath, { replace: true })
   }
   const submitBlocked =
-    !mutationsAllowed ||
-    busy ||
-    itemPrices.disabled ||
-    (draftItems.length === 0 && (!partId || !quantity || !unitPrice))
+    !mutationsAllowed || busy || itemPrices.disabled || !draftItemsValid
+  const totalsComplete = draftItems.every((item) => {
+    const price = orderItemPrice(item.unitPrice)
+    return price !== null && Number.isFinite(price) && price >= 0
+  })
   const form = (
     <form
-      className="grid gap-5"
+      className="new-order-form grid gap-4"
       id={ORDER_FORM}
       onSubmit={(event) => void submit(event)}
     >
       {error && <Notice tone="danger">{error}</Notice>}
-      <SheetGroup hint={t('itemDescription')} title={t('itemTitle')}>
-        <div className="grid gap-3">
-          {partSearchAllowed && (
-            <PartSearchPicker
-              currency={guard.currency}
-              onClear={() => {
-                setPartId('')
-                setSelectedPartDraft(null)
-              }}
-              onQueryChange={setPartQuery}
-              onSelect={(part) => {
-                setPartId(part.id)
-                setSelectedPartDraft(part)
-                setPartQuery(part.name)
-              }}
-              query={partQuery}
-              value={selectedPartDraft}
-            />
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={t('quantity')}>
-              <QuantityStepper
-                label={t('quantity')}
-                min={0}
-                onChange={(value) => setQuantity(String(value))}
-                value={Number(quantity || '0')}
-              />
-            </Field>
-            <Field hint={itemPrices.hint} label={t('unitPrice')}>
-              <MoneyInput
-                currency={itemPrices.currency}
-                disabled={itemPrices.disabled}
-                inputMode="decimal"
-                numeric
-                onChange={(event) => setUnitPrice(event.target.value)}
-                value={unitPrice}
-              />
-            </Field>
-          </div>
-          {itemPrices.note}
-          <Button
-            className="border-dashed"
-            disabled={
-              !selectedPartDraft ||
-              !quantity ||
-              !unitPrice ||
-              Number(quantity) < 1 ||
-              Number(unitPrice) < 0
-            }
-            onClick={addDraftItem}
-            size="wide"
-          >
-            <Plus aria-hidden />
-            {t('addPart')}
-          </Button>
-        </div>
-      </SheetGroup>
-      {draftItems.length > 0 && (
-        <SheetGroup>
-          <p aria-hidden className="rz-label m-0">
-            {t('orderItems')}
-          </p>
-          <SheetList label={t('orderItems')}>
-            {draftItems.map((item) => (
-              <li key={item.part.id}>
-                <div className="min-w-0 flex-1">
-                  <p className="rz-strong m-0 truncate font-semibold">
-                    {item.part.name}
-                  </p>
-                  <p className="rz-caption rz-mono m-0">
-                    {item.quantity} ×{' '}
-                    {money(item.unitPrice, guard.currency, locale)}
-                  </p>
-                </div>
-                <p className="rz-num rz-strong m-0 whitespace-nowrap">
-                  {money(
-                    item.quantity * item.unitPrice,
-                    guard.currency,
-                    locale,
-                  )}
-                </p>
-                <Button
-                  aria-label={t('removeItem', { name: item.part.name })}
-                  size="icon"
-                  onClick={() =>
-                    setDraftItems((current) =>
-                      current.filter((draft) => draft.part.id !== item.part.id),
-                    )
-                  }
-                  variant="quiet"
-                >
-                  <X aria-hidden />
-                </Button>
-              </li>
-            ))}
-          </SheetList>
-        </SheetGroup>
-      )}
+      <NewOrderItems
+        items={draftItems}
+        onChange={setDraftItems}
+        currency={guard.currency}
+        priceHint={itemPrices.hint}
+        inputCurrency={itemPrices.currency}
+        disabled={busy}
+        pricesDisabled={itemPrices.disabled}
+        query={partQuery}
+        onQueryChange={setPartQuery}
+      />
+      {itemPrices.note}
       {customerSearchAllowed && (
-        <SheetGroup hint={t('customerDescription')} title={t('customerTitle')}>
-          <div className="grid gap-3" ref={customerPickerRef}>
-            <Field
+        <SheetGroup
+          hint={customerId ? undefined : t('customerDescription')}
+          title={t('customerTitle')}
+        >
+          <div className="grid gap-3">
+            <CustomerSearchPicker
+              selectionAppearance="card"
+              createLabel={t('createCustomer')}
+              onCreate={
+                customerMutationAllowed && !customerId && !newCustomerFormOpen
+                  ? () => setNewCustomerFormOpen(true)
+                  : undefined
+              }
+              disabled={busy || customerBusy}
               hint={customerId ? undefined : t('noCustomerChosen')}
-              label={t('searchCustomer')}
-            >
-              {/* A chosen customer is the current selection: the one place
-                  the brand edge is allowed on a field. */}
-              <SearchInput
-                className={
-                  customerId ? 'border-brand bg-brand-soft' : undefined
-                }
-                onChange={(event) => {
-                  const value = event.target.value
-                  if (customerId && value !== selectedCustomerName) {
-                    setCustomerId('')
-                    setSelectedCustomerName('')
-                  }
-                  setCustomerResults([])
-                  setCustomerQuery(value)
-                  setCustomerPickerOpen(true)
-                }}
-                onFocus={() => setCustomerPickerOpen(true)}
-                value={customerQuery}
-              />
-            </Field>
-            {customerPickerOpen &&
-              customerQuery.trim() &&
-              customerResults.length > 0 && (
-                <ul className="m-0 grid list-none gap-1 p-0">
-                  {customerResults.map((customer) => (
-                    <li key={customer.id}>
-                      <Button
-                        size="wide"
-                        aria-label={t('pickCustomer', { name: customer.name })}
-                        className={cn(
-                          'justify-between',
-                          customer.id === customerId &&
-                            'border-brand bg-brand-soft',
-                        )}
-                        onClick={() => {
-                          setCustomerId(customer.id)
-                          setSelectedCustomerName(customer.name)
-                          setCustomerQuery(customer.name)
-                          setCustomerResults([])
-                          setCustomerPickerOpen(false)
-                        }}
-                      >
-                        <span className="min-w-0 truncate">
-                          {customer.name}
-                        </span>
-                        <span className="rz-dim font-mono text-caption">
-                          {customer.phone ?? t('noPhone')}
-                        </span>
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            {customerMutationAllowed && !customerId && !newCustomerFormOpen && (
-              <Button
-                className="w-fit"
-                onClick={() => setNewCustomerFormOpen(true)}
-                size="sm"
-                type="button"
-              >
-                <Plus aria-hidden />
-                {t('createCustomer')}
-              </Button>
-            )}
+              onQueryChange={setCustomerQuery}
+              selectedName={selectedCustomerName}
+              onClear={() => {
+                setCustomerId('')
+                setSelectedCustomerName('')
+                setCustomerQuery('')
+              }}
+              onSelect={(customer) => {
+                setCustomerId(customer.id)
+                setSelectedCustomerName(customer.name)
+                setCustomerQuery(customer.name)
+              }}
+              query={customerQuery}
+              selectedId={customerId || null}
+            />
             {customerMutationAllowed && !customerId && newCustomerFormOpen && (
               <fieldset className="rz-inset m-0 grid gap-3">
                 <legend className="rz-label float-left mb-1 w-full p-0">
@@ -1262,37 +1010,49 @@ export function OrderForm({
         />
       </Field>
 
-      {draftItems.length > 0 && (
-        <SheetGroup title={t('summary')}>
-          <div className="rz-inset grid gap-0 py-1">
-            <div className="flex items-baseline justify-between gap-3 py-1.5">
-              <span className="rz-muted">
-                {t('itemCount', { count: draftItems.length })}
-              </span>
-              <span className="rz-mono">
-                {money(draftItemsTotal, guard.currency, locale)}
-              </span>
-            </div>
-            <div className="border-app-line flex items-baseline justify-between gap-3 border-t py-1.5">
-              <span className="rz-strong font-semibold">{t('orderTotal')}</span>
-              <span className="rz-mono rz-strong font-bold">
-                {money(draftItemsTotal, guard.currency, locale)}
-              </span>
-            </div>
+      <SheetGroup title={t('summary')}>
+        <div className="rz-inset grid gap-0 bg-(--rz-sheet-band) py-1">
+          <div className="flex items-baseline justify-between gap-3 py-1.5">
+            <span className="rz-muted">
+              {t('unitCount', { count: draftUnitCount })}
+            </span>
+            <span className="rz-mono">
+              {totalsComplete
+                ? money(draftItemsTotal, guard.currency, locale)
+                : '—'}
+            </span>
           </div>
-        </SheetGroup>
-      )}
+          <div className="border-app-line flex items-baseline justify-between gap-3 border-t py-1.5">
+            <span className="rz-strong font-semibold">{t('orderTotal')}</span>
+            <span className="rz-mono rz-strong font-bold">
+              {totalsComplete
+                ? money(draftItemsTotal, guard.currency, locale)
+                : '—'}
+            </span>
+          </div>
+        </div>
+      </SheetGroup>
     </form>
   )
   return (
     <Sheet
+      onEscapeKeyDown={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest('[data-order-price-edit]')
+        )
+          event.preventDefault()
+      }}
+      size="lg"
       description={t('sheetDescription')}
       eyebrow={t('sheetEyebrow')}
       footer={
         <div className="flex w-full flex-wrap items-center gap-2">
           <div className="basis-full empty:hidden">{itemPrices.saveNotes}</div>
-          <p className="rz-muted m-0 mr-auto">
-            {t('itemCount', { count: draftItems.length })}
+          <p className="rz-muted rz-mono m-0 mr-auto text-caption">
+            {draftItems.length
+              ? `${t('unitCount', { count: draftUnitCount })} · ${totalsComplete ? money(draftItemsTotal, guard.currency, locale) : '—'}`
+              : t('addFirstItem')}
           </p>
           <div className="rz-btn-row ml-auto">
             <Button disabled={busy} onClick={closeCreate} type="button">
@@ -1358,11 +1118,16 @@ function OrderDetailScreen({
   const deliveryOrder = deliveryMoney !== null
   const ordinaryFinance = financeAllowed && !deliveryOrder
   const [order, setOrder] = useState<OrderDetail | null>(null)
+  const notesResultRef = useRef<Pick<
+    OrderDetail,
+    'id' | 'notes' | 'history'
+  > | null>(null)
   const [itemDrafts, setItemDrafts] = useState<OrderDetail['items']>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [refundReason, setRefundReason] = useState('')
   const [refundOpen, setRefundOpen] = useState(false)
+  const [confirmOrderId, setConfirmOrderId] = useState<string | null>(null)
   const [itemsPage, setItemsPage] = useState(1)
   const [editingItems, setEditingItems] = useState(false)
   const [historyExpanded, setHistoryExpanded] = useState(false)
@@ -1399,6 +1164,7 @@ function OrderDetailScreen({
         .then((detail) => {
           if (!signal?.aborted) {
             acceptOrder(detail)
+            setConfirmOrderId(null)
             setError(null)
           }
         })
@@ -1503,7 +1269,7 @@ function OrderDetailScreen({
   if (!order)
     return (
       <RedesignShell crumb={crumbTrail(t('title'))} width="record">
-        <SkeletonRows label={t('loading')} rows={8} />
+        <CabinetLoadingContent module="orders" label={t('loading')} />
       </RedesignShell>
     )
   const status = orderStatusPresentation(order.status, locale)
@@ -1673,8 +1439,11 @@ function OrderDetailScreen({
     ? historyRows
     : historyRows.slice(0, 3)
   const canConfirm = ordinaryFinance && order.status === 'pending'
+  const confirmOpen =
+    canConfirm && confirmOrderId === order.id && order.id === orderId
   const canRefund = ordinaryFinance && order.status === 'confirmed'
   const confirmOrder = () => {
+    if (busy || !confirmOpen) return
     const input = {
       payments: order.payments.map(({ accountId, amount, currency }) => ({
         accountId,
@@ -1692,8 +1461,58 @@ function OrderDetailScreen({
         payload: { orderId: order.id, input },
       },
       'finance.manage',
-    )
+    ).then((done) => {
+      if (done) setConfirmOrderId(null)
+    })
   }
+  const notesCard = (
+    <OrderNotesCard
+      key={order.id}
+      busy={busy}
+      editable={mutationsAllowed}
+      notes={order.notes}
+      onSave={async (value) => {
+        const scope = requireLatestMutation({ quota: false })
+        notesResultRef.current = null
+        const saved = await ordersApi.updateNotes(order.id, value, {
+          signal: scope.signal,
+        })
+        if (scope.signal.aborted)
+          throw new DOMException('Aborted', 'AbortError')
+        notesResultRef.current = saved
+        return saved.notes
+      }}
+      onSaved={(value) => {
+        const saved = notesResultRef.current
+        notesResultRef.current = null
+        setOrder((current) =>
+          current?.id === order.id
+            ? {
+                ...current,
+                notes: value,
+                // NotesUpdated is server history; preserve unrelated drafts/state.
+                history:
+                  saved?.id === current.id &&
+                  saved.notes === value &&
+                  Array.isArray(saved.history)
+                    ? saved.history
+                    : current.history,
+              }
+            : current,
+        )
+      }}
+      readBack={async () => {
+        const scope = requireLatestMutation({ quota: false })
+        const fresh = await ordersApi.getById(order.id, {
+          signal: scope.signal,
+        })
+        if (scope.signal.aborted)
+          throw new DOMException('Aborted', 'AbortError')
+        notesResultRef.current = fresh
+        return fresh.notes
+      }}
+    />
+  )
   return (
     <RedesignShell
       actions={
@@ -1722,7 +1541,14 @@ function OrderDetailScreen({
               (R-10): it does not wait for a payment and compares nothing
               with the value. */}
           {canConfirm ? (
-            <Button disabled={busy} onClick={confirmOrder} variant="primary">
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setError(null)
+                setConfirmOrderId(order.id)
+              }}
+              variant="primary"
+            >
               <Check aria-hidden />
               {t('confirmOrder')}
             </Button>
@@ -1768,22 +1594,29 @@ function OrderDetailScreen({
       </div>
 
       {deliveryMoney === null ? null : (
-        <DeliveryOrderBody
-          countryCode={novaPoshta.countryCode}
-          accountingCurrency={currency}
-          customerPath={customerPath}
-          delivery={deliveryMoney}
-          financeAllowed={financeAllowed}
-          integrationsPath={integrationsPath}
-          load={deliveryLoad}
-          mutationsAllowed={mutationsAllowed}
-          novaPoshtaAvailable={novaPoshta.available}
-          order={order}
-          partsPath={partsPath}
-        />
+        <>
+          <DeliveryOrderBody
+            customerSearchAllowed={
+              cabinet.status === 'ready' &&
+              cabinet.snapshot?.permissions.has('customers.view') === true
+            }
+            countryCode={novaPoshta.countryCode}
+            accountingCurrency={currency}
+            customerPath={customerPath}
+            delivery={deliveryMoney}
+            financeAllowed={financeAllowed}
+            integrationsPath={integrationsPath}
+            load={deliveryLoad}
+            mutationsAllowed={mutationsAllowed}
+            novaPoshtaAvailable={novaPoshta.available}
+            order={order}
+            partsPath={partsPath}
+          />
+          {notesCard}
+        </>
       )}
 
-      {error && paymentOrderId !== order.id && !refundOpen ? (
+      {error && paymentOrderId !== order.id && !refundOpen && !confirmOpen ? (
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
@@ -2082,17 +1915,26 @@ function OrderDetailScreen({
               />
             ) : null}
 
-            <OrderNotesCard
-              busy={busy}
-              editable={orderEditable}
-              notes={order.notes}
-              onSave={(value) =>
-                void transition(() => ordersApi.updateNotes(order.id, value))
-              }
-            />
+            {notesCard}
           </aside>
         </div>
       )}
+      <ConfirmDialog
+        confirmLabel={t('confirmOrder')}
+        consequence={tp('confirmNote')}
+        destructive={false}
+        error={confirmOpen ? error : null}
+        onConfirm={confirmOrder}
+        onOpenChange={(next) => {
+          if (!next && !busy) {
+            setConfirmOrderId(null)
+            setError(null)
+          }
+        }}
+        open={confirmOpen}
+        pending={busy}
+        title={t('confirmTitle', { number: String(order.number) })}
+      />
       <ConfirmDialog
         confirmLabel={
           summary.paid.length === 0

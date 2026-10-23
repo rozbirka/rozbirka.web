@@ -30,6 +30,7 @@ import { cabinetPath } from '../cabinet-paths'
 import { moduleLabel, navigationGroupLabel } from '../module-messages'
 import { cabinetModules } from '../module-registry'
 import { RedesignShell } from '../redesign-shell'
+import { CabinetLoadingContent } from '../loading-screen'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { DeliveryPreferencesPanel } from './delivery-preferences-panel'
@@ -251,9 +252,7 @@ export function NovaPoshtaScreen() {
         }
       >
         {state.kind === 'loading' ? (
-          <p className="rz-muted m-0" role="status">
-            {t('loading')}
-          </p>
+          <CabinetLoadingContent module="integrations" label={t('loading')} />
         ) : (
           <StateScreen
             actions={

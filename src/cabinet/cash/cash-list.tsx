@@ -1,3 +1,6 @@
+import { useRowNavigation } from '@/components/app/use-row-navigation'
+import { cashOrderHref } from './cash-navigation'
+import { CabinetLoadingContent } from '../loading-screen'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { ArrowRightLeft, ChevronRight, Plus, WalletCards } from 'lucide-react'
@@ -6,7 +9,6 @@ import {
   ErrorState,
   Notice,
   SearchInput,
-  SkeletonRows,
   StatusPill,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
@@ -31,6 +33,8 @@ const SEGMENTS = [
  * the screen says so out loud rather than inventing a rate.
  */
 export function CashList({
+  cashHref = '',
+  ordersPath = null,
   registers,
   summary,
   feed,
@@ -43,6 +47,8 @@ export function CashList({
   loading = false,
   onRetry,
 }: {
+  cashHref?: string
+  ordersPath?: string | null
   registers: readonly CashRegister[]
   summary: CashDailySummary | null
   /** Latest movements merged from each till; the API has no shared feed. */
@@ -60,6 +66,11 @@ export function CashList({
   /** Reloads after a failed first load. */
   onRetry?: () => void
 }) {
+  const navigateRow = useRowNavigation()
+  const registerHref = (id: string) =>
+    `${cashHref ? `${cashHref}/` : ''}${encodeURIComponent(id)}`
+  const entryHref = (entry: CashFeedEntry) =>
+    cashOrderHref(entry, ordersPath) ?? registerHref(entry.registerId)
   const t = useT(cashMessages)
   const {
     count,
@@ -134,7 +145,7 @@ export function CashList({
       </div>
 
       {loading ? (
-        <SkeletonRows rows={10} />
+        <CabinetLoadingContent module="cash" heading={false} />
       ) : error !== null && registers.length === 0 ? (
         // Nothing loaded at all: the failure is the page, with its retry.
         <ErrorState
@@ -231,12 +242,18 @@ export function CashList({
                       0,
                     )
                     return (
-                      <tr key={register.id}>
+                      <tr
+                        className="cursor-pointer"
+                        key={register.id}
+                        onClick={(event) =>
+                          navigateRow(event, registerHref(register.id))
+                        }
+                      >
                         <th className="py-1" scope="row">
                           <span className="rz-cell-main">
                             <Link
                               className="text-app-strong hover:text-brand-text"
-                              to={register.id}
+                              to={registerHref(register.id)}
                             >
                               {register.name}
                             </Link>
@@ -317,22 +334,37 @@ export function CashList({
                 </thead>
                 <tbody>
                   {feed.map((entry) => (
-                    <tr key={entry.id}>
+                    <tr
+                      className="cursor-pointer"
+                      key={entry.id}
+                      onClick={(event) => navigateRow(event, entryHref(entry))}
+                    >
                       <th className="py-1" scope="row">
                         <span className="rz-mono rz-dim font-normal whitespace-nowrap">
                           {moment(entry.createdAt)}
                         </span>
                       </th>
                       <td className="py-1" data-label={t('colPurpose')}>
-                        <span className="text-app-ink block font-medium">
-                          {entry.note ?? movementText(entry.type)}
-                        </span>
+                        {cashOrderHref(entry, ordersPath) === null ? (
+                          <span className="text-app-ink block font-medium">
+                            {entry.note ?? movementText(entry.type)}
+                          </span>
+                        ) : (
+                          <Link
+                            className="text-app-ink block font-medium"
+                            to={cashOrderHref(entry, ordersPath)!}
+                          >
+                            {entry.note ?? movementText(entry.type)}
+                          </Link>
+                        )}
                         <span className="rz-caption block">
                           {entry.createdByName}
                         </span>
                       </td>
                       <td className="py-1" data-label={t('colTill')}>
-                        <Link to={entry.registerId}>{entry.registerName}</Link>
+                        <Link to={registerHref(entry.registerId)}>
+                          {entry.registerName}
+                        </Link>
                       </td>
                       <td
                         className={cn(

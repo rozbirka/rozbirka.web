@@ -11,6 +11,7 @@ import {
   DateValue,
   Field,
   Notice,
+  SkeletonRows,
   StatusPill,
   TextInput,
   useToast,
@@ -248,9 +249,7 @@ export function WebhookPanel({
       )}
 
       {state.kind === 'loading' && (
-        <p className="rz-muted m-0" role="status">
-          {t('queueLoading')}
-        </p>
+        <SkeletonRows label={t('queueLoading')} rows={3} />
       )}
 
       {status !== null && (

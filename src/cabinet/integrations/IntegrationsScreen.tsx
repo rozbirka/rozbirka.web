@@ -6,6 +6,7 @@ import {
   DateValue,
   ErrorState,
   Notice,
+  SkeletonRows,
   StatusPill,
 } from '@/components/app'
 import {
@@ -222,7 +223,9 @@ export function IntegrationsScreen() {
             <p className="rz-caption m-0">{t('connectedHint')}</p>
           </header>
           {state.kind === 'loading' ? (
-            <p className="rz-muted rz-card__body m-0">{t('loading')}</p>
+            <div className="rz-card__body">
+              <SkeletonRows embedded label={t('loading')} rows={3} />
+            </div>
           ) : items.length === 0 ? (
             <p className="rz-muted rz-card__body m-0">{t('noneConnected')}</p>
           ) : (

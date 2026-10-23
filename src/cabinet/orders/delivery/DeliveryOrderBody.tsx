@@ -95,6 +95,7 @@ export function DeliveryOrderBody({
   countryCode = null,
   accountingCurrency = null,
   customerPath,
+  customerSearchAllowed = false,
   delivery,
   financeAllowed,
   integrationsPath,
@@ -109,6 +110,7 @@ export function DeliveryOrderBody({
   /** The order lines' currency; `null` when not chosen or not reported. */
   accountingCurrency?: string | null
   customerPath: string | null
+  customerSearchAllowed?: boolean
   delivery: DeliveryOrder
   financeAllowed: boolean
   integrationsPath: string | null
@@ -447,6 +449,7 @@ export function DeliveryOrderBody({
 
       {drawer?.kind === 'booking' && integrationId !== null && (
         <DeliveryDrawer
+          customerSearchAllowed={customerSearchAllowed}
           customerName={order.customerName}
           countryCode={countryCode}
           customerPhone={state.customerPhone}

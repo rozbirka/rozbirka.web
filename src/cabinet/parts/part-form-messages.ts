@@ -82,7 +82,6 @@ export const partFormMessages = defineMessages({
     name: 'Назва',
     partTypeHint: 'Наприклад: кузов, оптика, двигун',
     partType: 'Тип деталі',
-    oemEditHint: 'OEM-код не змінюється після створення.',
     oemHint: 'Каталожний номер виробника',
     oem: 'OEM-код',
     notesHint: 'Дефекти, комплектність, місце зберігання',
@@ -149,7 +148,6 @@ export const partFormMessages = defineMessages({
     openIntake: 'Відкрити приймання',
     describeEditDescription:
       'Як запчастина виглядає у списку складу та в пошуку.',
-    oemServerHint: 'Редагування OEM поки не приймає сервер',
     quantityInStock: 'Кількість на складі',
     readOnly: 'Лише для читання',
     compatReadOnly:
@@ -254,7 +252,6 @@ export const partFormMessages = defineMessages({
     name: 'Name',
     partTypeHint: 'For example: body, lights, engine',
     partType: 'Part type',
-    oemEditHint: 'The OEM code can’t be changed after creation.',
     oemHint: 'Manufacturer’s catalogue number',
     oem: 'OEM code',
     notesHint: 'Defects, completeness, storage place',
@@ -322,7 +319,6 @@ export const partFormMessages = defineMessages({
     openIntake: 'Open intake',
     describeEditDescription:
       'How the part appears in the warehouse list and in search.',
-    oemServerHint: 'The server doesn’t accept OEM changes yet',
     quantityInStock: 'Quantity in the warehouse',
     readOnly: 'Read-only',
     compatReadOnly:
@@ -426,7 +422,6 @@ export const partFormMessages = defineMessages({
     name: 'Nazwa',
     partTypeHint: 'Na przykład: nadwozie, oświetlenie, silnik',
     partType: 'Typ części',
-    oemEditHint: 'Kodu OEM nie można zmienić po utworzeniu.',
     oemHint: 'Numer katalogowy producenta',
     oem: 'Kod OEM',
     notesHint: 'Wady, kompletność, miejsce przechowywania',
@@ -493,7 +488,6 @@ export const partFormMessages = defineMessages({
     openIntake: 'Otwórz przyjęcie',
     describeEditDescription:
       'Jak część wygląda na liście magazynu i w wyszukiwaniu.',
-    oemServerHint: 'Serwer nie przyjmuje jeszcze zmian kodu OEM',
     quantityInStock: 'Ilość w magazynie',
     readOnly: 'Tylko do odczytu',
     compatReadOnly:

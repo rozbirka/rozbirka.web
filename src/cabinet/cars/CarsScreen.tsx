@@ -16,6 +16,7 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
+import { CabinetLoadingContent } from '../loading-screen'
 import { FeatureGate } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
@@ -59,12 +60,14 @@ import {
   ErrorState,
   Notice,
   Gallery,
+  InlineNotes,
   PhotoFileField,
   Thumbnail,
   PillGroup,
   SearchInput,
-  Skeleton,
-  SkeletonRows,
+  SearchPicker,
+  SearchPickerOptions,
+  SearchPickerOption,
   StateScreen,
   StatusPill,
   TextArea,
@@ -255,7 +258,7 @@ export function CarsScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   if (carId && location.pathname.endsWith('/edit'))
     return <CarForm carId={carId} title={tf('editCar')} />
   return carId ? (
-    <CarDetail base={base} carId={carId} />
+    <CarDetail base={base} carId={carId} key={carId} />
   ) : (
     <CarsList base={base} />
   )
@@ -574,7 +577,7 @@ function CarsList({ base }: { base: string }) {
       </div>
 
       {loading ? (
-        <SkeletonRows columns={4} rows={9} />
+        <CabinetLoadingContent module="cars" heading={false} />
       ) : problem !== null ? (
         <ErrorState
           description={problem}
@@ -705,7 +708,13 @@ const CAR_COLOR_KEYS = [
 const quickColors = (tf: Translate<(typeof carFormMessages)['uk']>) =>
   CAR_COLOR_KEYS.map((key) => {
     const label = tf(key)
-    return { label, swatch: colorSwatch(label) }
+    return {
+      label,
+      swatch: colorSwatch(label),
+      foreground: ['colorWhite', 'colorGrey', 'colorSilver'].includes(key)
+        ? 'var(--rz-on-brand)'
+        : 'var(--rz-on-solid)',
+    }
   })
 
 function CarDetail({ base, carId }: { base: string; carId: string }) {
@@ -807,25 +816,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             title={t('loadFailed')}
           />
         ) : (
-          <div className="grid gap-3">
-            <p className="sr-only" role="status">
-              {t('loading')}
-            </p>
-            <Skeleton className="h-[22px] w-[36%]" />
-            <Skeleton className="w-[52%]" />
-            <div className="grid gap-px sm:grid-cols-4">
-              {[0, 1, 2, 3].map((key) => (
-                <Skeleton className="h-[92px]" key={key} />
-              ))}
-            </div>
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <Skeleton className="h-[300px]" />
-              <Skeleton className="h-[300px]" />
-            </div>
-            <p aria-hidden className="rz-caption m-0">
-              {t('loading')}
-            </p>
-          </div>
+          <CabinetLoadingContent module="cars" label={t('loading')} />
         )}
       </RedesignShell>
     )
@@ -1040,16 +1031,45 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                     photos={photos}
                   />
                 </section>
-                <div className="border-app-line grid gap-1 border-t pt-3">
-                  <h3 className="rz-th-label m-0">{t('notesTitle')}</h3>
-                  {car.notes ? (
-                    <p className="m-0 whitespace-pre-line text-pretty">
-                      {car.notes}
-                    </p>
-                  ) : (
-                    <p className="rz-dim m-0 text-pretty">{t('notesEmpty')}</p>
+                <InlineNotes
+                  busy={busy}
+                  canEdit={manage}
+                  key={car.id}
+                  onSave={async (value) => {
+                    const scope = requireLatestMutation({ quota: false })
+                    const updated = await carsApi.update(
+                      car.id,
+                      { notes: value },
+                      { signal: scope.signal },
+                    )
+                    requireLatestMutation({ quota: false })
+                    return updated.notes ?? null
+                  }}
+                  onSaved={(notes) => {
+                    setCar((current) =>
+                      current?.id === car.id ? { ...current, notes } : current,
+                    )
+                  }}
+                  readBack={async () => {
+                    const scope = requireLatestMutation({ quota: false })
+                    const latest = await carsApi.get(car.id, {
+                      signal: scope.signal,
+                    })
+                    requireLatestMutation({ quota: false })
+                    return latest.notes ?? null
+                  }}
+                  value={car.notes}
+                >
+                  {({ action, content }) => (
+                    <div className="border-app-line grid gap-3 border-t pt-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="rz-th-label m-0">{t('notesTitle')}</h3>
+                        {action}
+                      </div>
+                      {content}
+                    </div>
                   )}
-                </div>
+                </InlineNotes>
               </div>
             </section>
           </div>
@@ -1236,15 +1256,15 @@ function Expenses({
   }
   return (
     <section aria-labelledby={titleId} className="rz-card min-w-0">
-      <header className="rz-card__head py-2.5">
-        <span className="grid min-w-0 gap-0.5">
+      <header className="rz-card__head gap-4 px-4 py-4 sm:px-5">
+        <span className="grid min-w-0 gap-1.5">
           <h2 className="rz-h-card" id={titleId}>
             {t('expensesTitle')}
           </h2>
           <span className="rz-caption text-pretty">{t('expensesIntro')}</span>
         </span>
         {canManage ? (
-          <Button disabled={busy} onClick={() => openForm(null)} size="sm">
+          <Button disabled={busy} onClick={() => openForm(null)}>
             <Plus aria-hidden />
             {t('addExpense')}
           </Button>
@@ -1764,7 +1784,6 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const backTo = carId
     ? `${base}/${carId}`
     : (sourceReturnPath(searchParams, cabinetRoot) ?? base)
-  const vinLength = values.vin.trim().length
   const priceNumber = Number(values.purchasePrice)
   const priceValid = Number.isFinite(priceNumber) && priceNumber > 0
   /* On a new car the expenses are still being typed; on an existing one they
@@ -1817,19 +1836,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   if (loading)
     return (
       <RedesignShell crumb={crumb} width="record">
-        <div className="grid gap-3">
-          <p className="sr-only" role="status">
-            {tf('loadingCar')}
-          </p>
-          <Skeleton className="h-[22px] w-[30%]" />
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <Skeleton className="h-[520px]" />
-            <Skeleton className="h-[260px]" />
-          </div>
-          <p aria-hidden className="rz-caption m-0">
-            {tf('loadingCar')}
-          </p>
-        </div>
+        <CabinetLoadingContent module="cars" label={tf('loadingCar')} />
       </RedesignShell>
     )
 
@@ -1946,18 +1953,6 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                           placeholder="WVWD2468F220158A6"
                         />
                       </Field>
-                      <p
-                        className={cn(
-                          'm-0 text-right font-mono text-micro',
-                          vinLength === 0
-                            ? 'text-app-dim'
-                            : vinLength === 17
-                              ? 'text-state-ok'
-                              : 'text-state-warn',
-                        )}
-                      >
-                        {vinLength} / 17
-                      </p>
                     </div>
                     <div className="sm:col-span-2">
                       <Field
@@ -1983,13 +1978,19 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                           <button
                             aria-pressed={active}
                             className={cn(
-                              'inline-flex h-[26px] cursor-pointer items-center rounded-full border px-2.5 text-caption disabled:pointer-events-none',
-                              active
-                                ? 'border-brand bg-brand-soft text-app-strong'
-                                : 'border-app-line-2 text-app-muted hover:bg-app-hover',
+                              'border-app-line-2 inline-flex h-[26px] cursor-pointer items-center rounded-full border px-2.5 text-caption disabled:pointer-events-none',
+                              !active && 'text-app-muted hover:bg-app-hover',
                             )}
                             disabled={busy}
                             key={option.label}
+                            style={
+                              active
+                                ? {
+                                    backgroundColor: option.swatch,
+                                    color: option.foreground,
+                                  }
+                                : undefined
+                            }
                             onClick={() =>
                               setValues((current) => ({
                                 ...current,
@@ -2032,28 +2033,18 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   {priceLocked ? null : price.note}
                 </CarStep>
 
-                {financeManage ? (
+                {financeManage && !carId ? (
                   <CarStep
-                    hint={
-                      carId ? tf('expensesAffect') : tf('extraExpensesHint')
-                    }
+                    hint={tf('extraExpensesHint')}
                     title={tf('extraExpensesTitle')}
                   >
-                    {carId ? (
-                      <CarFormExpenses
-                        expenses={loaded?.expenses ?? []}
-                        money={money}
-                        to={`${base}/${carId}`}
-                      />
-                    ) : (
-                      <NewCarExpenses
-                        busy={busy}
-                        completed={completedExpenseIds}
-                        expenses={expenses}
-                        onChange={setExpenses}
-                        price={price}
-                      />
-                    )}
+                    <NewCarExpenses
+                      busy={busy}
+                      completed={completedExpenseIds}
+                      expenses={expenses}
+                      onChange={setExpenses}
+                      price={price}
+                    />
                   </CarStep>
                 ) : null}
 
@@ -2343,42 +2334,6 @@ function CarStep({
   )
 }
 
-/** What an existing car has already spent, and where it is managed. */
-function CarFormExpenses({
-  expenses,
-  money,
-  to,
-}: {
-  expenses: readonly CarExpense[]
-  money: (value: number) => string
-  to: string
-}) {
-  const tf = useT(carFormMessages)
-  return (
-    <>
-      {expenses.length === 0 ? (
-        <p className="rz-inset rz-muted m-0">{tf('noExpenses')}</p>
-      ) : (
-        <ul className="divide-app-line border-app-line m-0 grid list-none divide-y rounded-panel border p-0">
-          {expenses.map((expense) => (
-            <li className="flex items-center gap-3 px-3 py-2" key={expense.id}>
-              <span className="rz-strong min-w-0 flex-1 font-medium">
-                {expense.name}
-              </span>
-              <span className="rz-mono rz-strong">{money(expense.amount)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button asChild size="sm">
-          <Link to={to}>{tf('manageExpenses')}</Link>
-        </Button>
-      </div>
-    </>
-  )
-}
-
 /** The expense rows typed while a car is being created. */
 function NewCarExpenses({
   busy,
@@ -2567,6 +2522,7 @@ export function VehicleCatalogPicker({
   value: string
 }) {
   const tf = useT(carFormMessages)
+  const ta = useT(appMessages)
   const [open, setOpen] = useState(false)
   const [options, setOptions] = useState<VehicleOption[]>([])
   const [query, setQuery] = useState('')
@@ -2575,30 +2531,6 @@ export function VehicleCatalogPicker({
   const requestKey =
     type === 'make' ? 'make' : `${String(makeId)}:${makeName ?? ''}`
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
-  const pickerRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const closeOutside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !pickerRef.current?.contains(event.target)
-      ) {
-        setOpen(false)
-        setQuery('')
-      }
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      setOpen(false)
-      setQuery('')
-    }
-    document.addEventListener('pointerdown', closeOutside)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('pointerdown', closeOutside)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [open])
   useEffect(() => {
     if (!open) return
     if (loadedFor === requestKey) return
@@ -2636,76 +2568,83 @@ export function VehicleCatalogPicker({
       cancelled = true
     }
   }, [loadedFor, makeId, makeName, open, requestKey, tf, type])
-  const shown = options.filter((option) =>
+  const currentOptions = loadedFor === requestKey ? options : []
+  const shown = currentOptions.filter((option) =>
     option.name
       .toLocaleLowerCase('uk')
       .includes(query.trim().toLocaleLowerCase('uk')),
   )
-  const togglePicker = () => {
-    if (open) {
-      setOpen(false)
-      return
+  const changeOpen = (next: boolean) => {
+    if (next && !open) {
+      setLoading(loadedFor !== requestKey)
+      setProblem(null)
     }
-    setLoading(loadedFor !== requestKey)
-    setProblem(null)
-    setOpen(true)
+    setOpen(next)
+    if (!next) setQuery('')
   }
   return (
-    <div ref={pickerRef}>
-      <Field className="relative" label={label} required>
-        <span className="rz-select-wrap block">
-          <button
-            aria-expanded={open}
-            aria-haspopup="listbox"
-            aria-label={label}
-            className="rz-select text-left"
-            disabled={disabled}
-            onClick={togglePicker}
-            type="button"
-          >
-            {value || (type === 'make' ? tf('pickMake') : tf('pickModel'))}
-          </button>
-        </span>
-        {open ? (
-          <div
-            aria-label={label}
-            className="rz-menu absolute top-full right-0 left-0 z-40 mt-1 max-h-72 gap-1 overflow-y-auto"
-            role="listbox"
-          >
-            <TextInput
-              aria-label={tf('searchIn', { label })}
-              autoFocus
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={tf('startTyping')}
-              value={query}
-            />
-            {loading ? (
-              <p className="rz-muted m-0 py-4 text-center">
-                {tf('loadingList')}
-              </p>
-            ) : null}
-            {problem ? <Notice tone="danger">{problem}</Notice> : null}
-            {!loading && !problem
-              ? shown.map((option) => (
-                  <button
-                    className="rz-menu__item"
-                    key={option.id}
-                    onClick={() => {
-                      onSelect(option)
-                      setOpen(false)
-                      setQuery('')
-                    }}
-                    role="option"
-                    type="button"
-                  >
-                    {option.name}
-                  </button>
-                ))
-              : null}
-          </div>
-        ) : null}
-      </Field>
-    </div>
+    <SearchPicker
+      label={label}
+      triggerLabel={
+        value || (type === 'make' ? tf('pickMake') : tf('pickModel'))
+      }
+      placeholder={tf('searchIn', { label })}
+      heading={label}
+      resultsLabel={label}
+      count={
+        loading
+          ? '…'
+          : ta('pickerResultsCount', {
+              shown: shown.length,
+              total: currentOptions.length,
+            })
+      }
+      disabled={disabled}
+      open={open}
+      query={query}
+      onOpenChange={changeOpen}
+      onQueryChange={setQuery}
+      showLabel
+      required
+      allowEmptyQuery
+      floating
+    >
+      {loading ? (
+        <p role="status" className="rz-muted m-0 px-4 py-6 text-center">
+          {tf('loadingList')}
+        </p>
+      ) : null}
+      {problem ? <Notice tone="danger">{problem}</Notice> : null}
+      {!loading && !problem ? (
+        <SearchPickerOptions label={label}>
+          {shown.map((option) => (
+            <SearchPickerOption
+              key={option.id}
+              label={option.name}
+              selected={option.name === value}
+              onSelect={() => {
+                onSelect(option)
+                changeOpen(false)
+              }}
+              aside={
+                option.name === value ? (
+                  <Check aria-hidden className="text-app-muted size-4" />
+                ) : null
+              }
+            >
+              <span className="rz-strong block break-words font-medium">
+                {option.name}
+              </span>
+            </SearchPickerOption>
+          ))}
+        </SearchPickerOptions>
+      ) : null}
+      {!loading && !problem && shown.length === 0 ? (
+        <p role="status" className="rz-muted m-0 px-4 py-6 text-center">
+          {ta('noMatchingOptions')}
+        </p>
+      ) : null}
+    </SearchPicker>
   )
 }
 

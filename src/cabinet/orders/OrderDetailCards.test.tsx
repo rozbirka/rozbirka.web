@@ -1,9 +1,10 @@
 import { act, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
 import { ordersApi } from '@/api/orders'
-import { OrderCustomerCard } from './OrderDetailCards'
+import { OrderCustomerCard, OrderItemsCard } from './OrderDetailCards'
 
 const customerMocks = vi.hoisted(() => ({ getById: vi.fn() }))
 
@@ -154,3 +155,96 @@ it('renders an order whose API response omits the unassigned customer', async ()
     get.mockRestore()
   }
 })
+
+function ItemNavigation({ partsPath }: { partsPath: string | null }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <OrderItemsCard
+        addPath={null}
+        currency="USD"
+        editable={false}
+        items={[
+          {
+            id: 'item-1',
+            partId: 'part-1',
+            partName: 'Тестова деталь',
+            partType: null,
+            coverPhotoUrl: null,
+            carBrand: null,
+            carModel: null,
+            carCode: null,
+            quantity: 2,
+            unitPrice: 150,
+            totalPrice: 300,
+          },
+        ]}
+        onEdit={vi.fn()}
+        partsPath={partsPath}
+        total={300}
+      />
+      <p data-testid="current-path">{location.pathname}</p>
+      <button onClick={() => void navigate(-1)}>Повернутися</button>
+    </>
+  )
+}
+function renderItems(partsPath: string | null = '/app/yard/parts') {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/orders/order-1']}>
+      <ItemNavigation partsPath={partsPath} />
+    </MemoryRouter>,
+  )
+}
+
+it('opens the part card from empty space in an order row, leaving the total outside the target', async () => {
+  const user = userEvent.setup()
+  renderItems()
+  await user.click(screen.getByText('Разом'))
+  expect(screen.getByTestId('current-path')).toHaveTextContent(
+    '/app/yard/orders/order-1',
+  )
+  const row = screen
+    .getByRole('rowheader', { name: /Тестова деталь/ })
+    .closest('tr')!
+  await user.click(row)
+  expect(screen.getByTestId('current-path')).toHaveTextContent(
+    '/app/yard/parts/part-1',
+  )
+})
+
+it('does not make an order row navigable without permission to view parts', async () => {
+  const user = userEvent.setup()
+  renderItems(null)
+  const row = screen
+    .getByRole('rowheader', { name: /Тестова деталь/ })
+    .closest('tr')!
+  await user.click(row)
+  expect(
+    screen.queryByRole('link', { name: 'Тестова деталь' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByTestId('current-path')).toHaveTextContent(
+    '/app/yard/orders/order-1',
+  )
+})
+
+it.each(['mouse', 'keyboard'])(
+  'keeps the part link working with %s and creates only one history entry',
+  async (method) => {
+    const user = userEvent.setup()
+    renderItems()
+    const link = screen.getByRole('link', { name: 'Тестова деталь' })
+    if (method === 'mouse') await user.click(link)
+    else {
+      link.focus()
+      await user.keyboard('{Enter}')
+    }
+    expect(screen.getByTestId('current-path')).toHaveTextContent(
+      '/app/yard/parts/part-1',
+    )
+    await user.click(screen.getByRole('button', { name: 'Повернутися' }))
+    expect(screen.getByTestId('current-path')).toHaveTextContent(
+      '/app/yard/orders/order-1',
+    )
+  },
+)

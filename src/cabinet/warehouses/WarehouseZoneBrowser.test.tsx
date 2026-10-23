@@ -58,7 +58,7 @@ function mount(canManage = true, archivedOnly = false) {
   return { onEdit, onArchive, onRestore }
 }
 
-it('searches physical zones by code, resets pagination and keeps unassigned separate', async () => {
+it('searches physical zones by code, resets pagination and keeps unassigned visible', async () => {
   const user = userEvent.setup()
   mount()
   expect(screen.getByRole('heading', { name: 'Зони' })).toHaveTextContent(
@@ -75,7 +75,7 @@ it('searches physical zones by code, resets pagination and keeps unassigned sepa
   expect(screen.queryByText('Заповнення')).toBeNull()
   expect(screen.queryByRole('link', { name: 'Зона 2' })).toBeNull()
   const list = screen.getByRole('group', { name: 'Список зон' })
-  expect(within(list).queryByRole('link', { name: 'Без зони' })).toBeNull()
+  expect(within(list).getAllByRole('link')[0]).toHaveAccessibleName('Без зони')
   expect(screen.getByRole('link', { name: 'Без зони' })).toHaveAttribute(
     'href',
     '/warehouses/wh/unassigned',
@@ -85,20 +85,23 @@ it('searches physical zones by code, resets pagination and keeps unassigned sepa
   ).toBeNull()
   expect(screen.getByTestId('url')).not.toHaveTextContent('locationPage')
   expect(screen.getByTestId('url')).toHaveTextContent('keep=1')
+  await user.clear(screen.getByRole('searchbox', { name: 'Пошук зони' }))
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Пошук зони' }),
+    'missing',
+  )
+  expect(screen.getByText('Місць не знайдено')).toBeVisible()
+  expect(screen.getByRole('link', { name: 'Без зони' })).toBeVisible()
 })
 
 it('keeps edit and archive actions independent of opening a zone', async () => {
   const user = userEvent.setup()
   const { onEdit, onArchive } = mount()
   await user.click(screen.getByRole('button', { name: 'Дії із зоною Зона 11' }))
-  await user.click(
-    screen.getByRole('menuitem', { name: 'Редагувати зону Зона 11' }),
-  )
+  await user.click(screen.getByRole('menuitem', { name: 'Редагувати' }))
   expect(onEdit).toHaveBeenCalledWith(physical[10])
   await user.click(screen.getByRole('button', { name: 'Дії із зоною Зона 11' }))
-  await user.click(
-    screen.getByRole('menuitem', { name: 'Архівувати зону Зона 11' }),
-  )
+  await user.click(screen.getByRole('menuitem', { name: 'Архівувати' }))
   expect(onArchive).toHaveBeenCalledWith(physical[10])
 })
 
@@ -128,7 +131,7 @@ it.each([true, false])(
     if (canManage) {
       await user.click(action!)
       expect(
-        screen.queryByRole('menuitem', { name: /Архівувати зону/ }),
+        screen.queryByRole('menuitem', { name: /^Архівувати$/ }),
       ).not.toBeInTheDocument()
       await user.click(screen.getByRole('menuitem', { name: 'Розархівувати' }))
       expect(onRestore).toHaveBeenCalledWith(

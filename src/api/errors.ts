@@ -1,6 +1,10 @@
 import axios from 'axios'
 import { apiMessage } from './api-messages'
 import type { ApiProblem, ApiProblemKind } from './contracts'
+import {
+  localizeApiError,
+  localizeValidationMessage,
+} from './error-localization'
 
 interface ErrorBody {
   error?:
@@ -19,7 +23,7 @@ const kindForStatus = (status: number | undefined): ApiProblemKind => {
   if (status === 403) return 'forbidden'
   if (status === 404) return 'not-found'
   if (status === 409) return 'conflict'
-  if (status === 422) return 'validation'
+  if (status === 400 || status === 422) return 'validation'
   if (status !== undefined && status >= 500 && status < 600) return 'server'
   return 'unknown'
 }
@@ -59,7 +63,9 @@ const readFieldErrors = (
       ) {
         return []
       }
-      return [[field, messages]]
+      return [
+        [field, messages.map((message) => localizeValidationMessage(message))],
+      ]
     }),
   )
   return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined
@@ -77,7 +83,9 @@ const readErrorDetails = (
       typeof detail['message'] !== 'string'
     )
       continue
-    ;(fieldErrors[detail['field']] ??= []).push(detail['message'])
+    ;(fieldErrors[detail['field']] ??= []).push(
+      localizeValidationMessage(detail['message']),
+    )
   }
   return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined
 }
@@ -95,7 +103,14 @@ const readRetryAfter = (headers: unknown) => {
 }
 
 export const normalizeApiProblem = (error: unknown): ApiProblem => {
-  if (isApiProblem(error)) return error
+  if (isApiProblem(error))
+    return {
+      ...error,
+      message: localizeApiError(error),
+      ...(error.fieldErrors
+        ? { fieldErrors: readFieldErrors(error.fieldErrors) ?? {} }
+        : {}),
+    }
 
   if (axios.isCancel(error)) {
     return {
@@ -106,7 +121,14 @@ export const normalizeApiProblem = (error: unknown): ApiProblem => {
   }
 
   if (!axios.isAxiosError(error)) {
-    return { kind: 'unknown', message: apiMessage('unknown'), cause: error }
+    return {
+      kind: 'unknown',
+      message: localizeApiError({
+        kind: 'unknown',
+        message: error instanceof Error ? error.message : undefined,
+      }),
+      cause: error,
+    }
   }
 
   if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
@@ -143,7 +165,7 @@ export const normalizeApiProblem = (error: unknown): ApiProblem => {
     kind,
     ...(status !== undefined ? { status } : {}),
     ...(code ? { code } : {}),
-    message,
+    message: localizeApiError({ code, message, kind, status }),
     ...(fieldErrors ? { fieldErrors } : {}),
     ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
     cause: error,

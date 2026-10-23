@@ -169,7 +169,7 @@ it('stamps normalized ApiProblem metadata on terminal failures', async () => {
     problem: {
       kind: 'conflict',
       code: 'REQUEST_FAILED',
-      message: 'Request failed',
+      message: 'Не вдалося виконати дію через конфлікт даних.',
       status: 409,
     },
   })

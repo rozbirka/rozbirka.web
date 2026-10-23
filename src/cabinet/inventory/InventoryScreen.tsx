@@ -445,19 +445,11 @@ const SESSION_TYPES = [
     value: 'full' as const,
     label: 'typeFull' as const,
     hint: 'typeFullHint' as const,
-    available: true,
   },
   {
     value: 'zones' as const,
     label: 'typeZones' as const,
     hint: 'typeZonesHint' as const,
-    available: true,
-  },
-  {
-    value: 'sample' as const,
-    label: 'typeSample' as const,
-    hint: 'typeSampleHint' as const,
-    available: false,
   },
 ]
 
@@ -477,8 +469,6 @@ function NewSessionView() {
   const navigate = useNavigate()
   const canManage = usePermission('inventory.manage')
   const canSeeParts = usePermission('parts.view')
-  const team = useInventoryTeam()
-  const { people } = team
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
@@ -583,11 +573,8 @@ function NewSessionView() {
           type === 'full'
             ? inHouse.map((zone) => zone.id)
             : picked.filter((id) => inHouse.some((zone) => zone.id === id))
-        const partsIn = (zoneId: string) => byZone?.get(zoneId) ?? null
-        const partsTotal = selected.reduce(
-          (sum, id) => sum + (partsIn(id) ?? 0),
-          0,
-        )
+        const partsIn = (zoneId: string) =>
+          byZone === null ? null : (byZone.get(zoneId) ?? 0)
         const houseName =
           houses.find((item) => item.id === house)?.name ??
           t('fallbackWarehouse')
@@ -655,19 +642,11 @@ function NewSessionView() {
                             active
                               ? 'border-app-line-2 bg-app-hover'
                               : 'border-app-line bg-transparent',
-                            option.available
-                              ? 'cursor-pointer hover:border-app-line-2'
-                              : 'cursor-not-allowed opacity-55',
+                            'cursor-pointer hover:border-app-line-2',
                           )}
-                          disabled={!option.available}
                           key={option.value}
                           onClick={() => setType(option.value)}
                           role="radio"
-                          title={
-                            option.available
-                              ? undefined
-                              : t('sampleUnavailable')
-                          }
                           type="button"
                         >
                           <span
@@ -777,81 +756,16 @@ function NewSessionView() {
                             </span>
                             {/* Narrow screens give the count its own line
                                   rather than squeezing the zone's name. */}
-                            <span className="text-app-muted w-full pl-8.5 font-mono text-body tabular-nums sm:w-auto sm:pl-0">
-                              {count === null
-                                ? '—'
-                                : ti('positions', { count })}
-                            </span>
+                            {count === null ? null : (
+                              <span className="text-app-muted w-full pl-8.5 font-mono text-body tabular-nums sm:w-auto sm:pl-0">
+                                {ti('positions', { count })}
+                              </span>
+                            )}
                           </label>
                         </li>
                       )
                     })}
                   </ul>
-                </Step>
-
-                <Step
-                  hint={t('peopleHint')}
-                  number="03"
-                  title={t('peopleTitle')}
-                >
-                  <InventoryTeamStatus team={team} />
-                  {!team.allowed || team.empty ? (
-                    <p className="text-app-muted text-sm">
-                      {team.allowed ? t('noPeople') : t('teamHidden')}
-                    </p>
-                  ) : people.length > 0 ? (
-                    <ul className="flex flex-wrap gap-2">
-                      {people.map((person) => (
-                        <li key={person.userId}>
-                          <span
-                            className="border-app-line text-app-muted flex min-h-control items-center gap-2.5 rounded-full border py-0 pr-4 pl-2 text-body font-semibold"
-                            title={t('personHint')}
-                          >
-                            <span
-                              aria-hidden
-                              className="flex size-7 items-center justify-center rounded-full bg-app-hover text-caption font-bold"
-                            >
-                              {initials(person.name)}
-                            </span>
-                            {person.name}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </Step>
-
-                <Step number="04" title={t('rulesTitle')}>
-                  <ul className="grid gap-2.5">
-                    <Toggle
-                      hint={t('lockHint')}
-                      label={t('lockLabel')}
-                      on
-                      why={t('lockWhy')}
-                    />
-                    <Toggle
-                      hint={t('blindHint')}
-                      label={t('blindLabel')}
-                      on={false}
-                      why={t('blindWhy')}
-                    />
-                    <Toggle
-                      hint={t('photoHint')}
-                      label={t('photoLabel')}
-                      on={false}
-                      why={t('photoWhy')}
-                    />
-                  </ul>
-                  <div className="mt-4">
-                    <Field hint={t('commentHint')} label={t('commentLabel')}>
-                      <TextArea
-                        disabled
-                        name="comment"
-                        placeholder={t('commentPlaceholder')}
-                        rows={2}
-                      />
-                    </Field>
-                  </div>
                 </Step>
               </div>
 
@@ -880,34 +794,8 @@ function NewSessionView() {
                     {t('zonesCount')}
                   </dt>
                   <dd className="font-mono text-title text-app-strong tabular-nums">
-                    {selected.length === 0 ? '—' : selected.length}
+                    {selected.length}
                   </dd>
-                  <dt className="text-app-muted text-body font-semibold">
-                    {t('positionsCount')}
-                  </dt>
-                  <dd className="font-mono text-title text-app-strong tabular-nums">
-                    {byZone === null || selected.length === 0
-                      ? '—'
-                      : partsTotal}
-                  </dd>
-                  <dt
-                    className="text-app-muted text-body font-semibold"
-                    title={t('peopleNotAssigned')}
-                  >
-                    {t('peopleCount')}
-                  </dt>
-                  <dd className="text-app-dim font-mono text-title">—</dd>
-                  <dd
-                    aria-hidden
-                    className="bg-app-line col-span-2 my-1 h-px"
-                  />
-                  <dt
-                    className="text-title font-bold text-app-strong"
-                    title={t('durationNotEstimated')}
-                  >
-                    {t('estimate')}
-                  </dt>
-                  <dd className="text-app-dim font-mono text-page">—</dd>
                 </dl>
                 <Button
                   className="mt-5.5 min-h-control-lg w-full text-title font-bold"
@@ -926,55 +814,6 @@ function NewSessionView() {
         )
       }}
     </Resource>
-  )
-}
-
-/** One numbered step of the form, with its own explanation. */
-/**
- * A rule of the count as a switch. Every switch here is fixed — the server has
- * no setting behind it — so each says on itself why it cannot be moved.
- */
-function Toggle({
-  label,
-  hint,
-  on,
-  why,
-}: {
-  label: string
-  hint: string
-  on: boolean
-  why: string
-}) {
-  const t = useT(newSessionMessages)
-  return (
-    <li
-      className="border-app-line bg-app-canvas flex items-center gap-3.5 rounded-panel border px-4 py-3.5"
-      title={why}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-title font-bold text-app-strong">
-          {label}
-        </span>
-        <span className="text-app-muted mt-0.5 block text-body leading-[1.45]">
-          {hint} {why}.
-        </span>
-      </span>
-      <span
-        aria-hidden
-        className={cn(
-          'flex h-6 w-10.5 shrink-0 items-center rounded-full p-[3px]',
-          on ? 'bg-brand' : 'bg-app-line-2',
-        )}
-      >
-        <span
-          className={cn(
-            'size-4.5 rounded-full',
-            on ? 'bg-app-canvas translate-x-4.5' : 'bg-app-muted',
-          )}
-        />
-      </span>
-      <span className="sr-only">{on ? t('toggleOn') : t('toggleOff')}</span>
-    </li>
   )
 }
 

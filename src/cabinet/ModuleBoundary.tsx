@@ -1,12 +1,14 @@
-import { lazy, Suspense, type ComponentType, type ReactNode } from 'react'
-import { Link } from 'react-router'
-import { AlertTriangle, Gauge } from 'lucide-react'
 import {
-  Button,
-  DeniedState,
-  SkeletonRows,
-  StateScreen,
-} from '@/components/app'
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router'
+import { AlertTriangle, Gauge } from 'lucide-react'
+import { Button, DeniedState, Notice, StateScreen } from '@/components/app'
 import { useT } from '@/i18n'
 import { accessMessages } from './access-messages'
 import { cabinetPath } from './cabinet-paths'
@@ -22,6 +24,9 @@ import {
   SubscriptionStateScreen,
 } from './screens/module-unavailable'
 import type { TenantAccessState } from './access-types'
+import { CabinetLoadingScreen } from './loading-screen'
+import { loadingPreview } from './loading-layout'
+import { loadingPreviewMessages } from './loading-preview-messages'
 
 export interface CabinetModuleScreenProps {
   definition: CabinetModuleDefinition
@@ -53,19 +58,96 @@ export function ModuleBoundary({
 
   if (decision.kind === 'allowed') {
     return (
-      <Suspense
-        fallback={
-          <div className="rz-page">
-            <SkeletonRows label={t('loadingModule')} />
-          </div>
-        }
-      >
-        <Screen definition={definition} />
-      </Suspense>
+      <AllowedModule
+        definition={definition}
+        screen={Screen}
+        label={t('loadingModule')}
+      />
     )
   }
 
   return <DecisionScreen decision={decision} definition={definition} />
+}
+
+function AllowedModule({
+  definition,
+  screen: Screen,
+  label,
+}: {
+  definition: CabinetModuleDefinition
+  screen: ComponentType<CabinetModuleScreenProps>
+  label: string
+}) {
+  const location = useLocation()
+  const preview = import.meta.env.DEV
+    ? loadingPreview(location.search, true)
+    : null
+  const screen = (
+    <Suspense
+      fallback={<CabinetLoadingScreen module={definition.key} label={label} />}
+    >
+      <Screen definition={definition} />
+    </Suspense>
+  )
+  if (preview !== null)
+    return (
+      <LoadingPreview
+        key={`${location.pathname}:${preview}`}
+        duration={preview}
+        module={definition.key}
+      >
+        {screen}
+      </LoadingPreview>
+    )
+  return screen
+}
+
+function LoadingPreview({
+  duration,
+  module,
+  children,
+}: {
+  duration: number | 'hold'
+  module: CabinetModuleKey
+  children: ReactNode
+}) {
+  const t = useT(loadingPreviewMessages)
+  const [, setSearchParams] = useSearchParams()
+  const [released, setReleased] = useState(false)
+  useEffect(() => {
+    if (duration === 'hold') return
+    const timer = window.setTimeout(() => setReleased(true), duration)
+    return () => window.clearTimeout(timer)
+  }, [duration])
+  if (released) return children
+  return (
+    <>
+      <div className="px-4 pt-3">
+        <Notice
+          action={
+            <Button
+              onClick={() => {
+                setReleased(true)
+                setSearchParams(
+                  (current) => {
+                    const next = new URLSearchParams(current)
+                    next.delete('loadingPreview')
+                    return next
+                  },
+                  { replace: true },
+                )
+              }}
+            >
+              {t('showScreen')}
+            </Button>
+          }
+        >
+          {t('preview')}
+        </Notice>
+      </div>
+      <CabinetLoadingScreen module={module} />
+    </>
+  )
 }
 
 function cabinetAccessState(
@@ -128,9 +210,10 @@ function DecisionScreen({
       )
     case 'access-loading':
       return (
-        <div className="rz-page">
-          <SkeletonRows label={t('checkingAccess')} />
-        </div>
+        <CabinetLoadingScreen
+          module={definition.key}
+          label={t('checkingAccess')}
+        />
       )
   }
 }

@@ -253,7 +253,7 @@ describe('pure helpers', () => {
     expect(phoneExample(null)).toBe('+380 67 123 45 67')
   })
 
-  it('maps the country refusal and passes other messages through', () => {
+  it('maps the country refusal and localises unknown failures', () => {
     const refusal = {
       kind: 'conflict',
       status: 409,
@@ -271,7 +271,7 @@ describe('pure helpers', () => {
         { kind: 'conflict', code: 'other', message: 'Server says no.' },
         'pl',
       ),
-    ).toBe('Server says no.')
+    ).toBe('Nie udało się wykonać działania z powodu konfliktu danych.')
   })
 
   it('names statuses and events in each locale, Ukrainian by default', () => {

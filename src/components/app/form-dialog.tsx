@@ -144,6 +144,8 @@ export function Sheet({
   footer,
   size = 'md',
   bodyClassName,
+  onEscapeKeyDown,
+  onCloseAutoFocus,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -158,6 +160,10 @@ export function Sheet({
   size?: 'md' | 'lg' | 'workspace'
   /** Optional bounded layout for a list with its own fixed search and pager. */
   bodyClassName?: string
+  /** Let a nested editor consume Escape before the sheet dismisses. */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void
+  /** Restore focus to a caller-owned trigger when the sheet closes. */
+  onCloseAutoFocus?: (event: Event) => void
 }) {
   const tc = useT(commonMessages)
   return (
@@ -165,11 +171,22 @@ export function Sheet({
       <Dialog.Portal>
         <Dialog.Overlay className="bg-app-scrim fixed inset-0 z-50" />
         <Dialog.Content
+          onCloseAutoFocus={onCloseAutoFocus}
           // Land on the sheet itself, not its close button: the reference
           // opens without a focus ring, and Tab still reaches every control.
           onOpenAutoFocus={(event) => {
             event.preventDefault()
             ;(event.currentTarget as HTMLElement | null)?.focus()
+          }}
+          onEscapeKeyDown={(event) => {
+            onEscapeKeyDown?.(event)
+            // Radix handles Escape during document capture, before the nested
+            // search picker can close its results. Let it consume Escape first.
+            if (
+              event.target instanceof Element &&
+              event.target.closest('[data-search-picker-open="true"]')
+            )
+              event.preventDefault()
           }}
           // A hidden file input can receive focus when a photo is chosen.
           // Clip the shell without making it scrollable; only the body scrolls.

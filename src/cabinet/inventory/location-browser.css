@@ -1,12 +1,7 @@
 @import './location-list-layout.css';
 
-/*
- * Warehouse, zone, section and shelf lists, drawn as the v2 table
- * (docs/design-system/v2/modules/12 Склади.dc.html): a `.rz-card` with a head
- * row, a 32px mono column row, then 44px rows with the name and its mono code
- * on one line. Rows stay links (one target per row), so the list keeps its
- * list semantics instead of becoming a data grid.
- */
+/* Location list composition. DataTable supplies table borders, row density,
+ * hover, selection and responsive semantics, as in the parts directory. */
 .location-browser {
   min-width: 0;
 }
@@ -53,84 +48,21 @@
   gap: 6px;
 }
 
-.location-browser__columns,
-.location-browser__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
-  align-items: center;
-  gap: 0;
-}
-
-.location-browser__columns {
-  min-height: 32px;
-  padding: 0 var(--rz-cell-px);
-  border-bottom: 1px solid var(--rz-border);
-  color: var(--rz-text-dim);
-  font-family: var(--rz-font-mono);
-  font-size: var(--rz-fs-micro);
-  letter-spacing: var(--rz-ls-mono);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.location-browser__columns--plain,
-.location-browser__row--plain {
-  grid-template-columns: minmax(0, 1fr) 40px;
-}
-
-.location-browser__row--section,
-.location-browser__columns--section {
-  grid-template-columns: minmax(0, 1fr) 80px 40px;
-}
-
-.location-browser__row--warehouse,
-.location-browser__columns--warehouse {
-  grid-template-columns: minmax(0, 1fr) auto 40px;
-}
-
-.location-browser__warehouse-counts {
-  display: grid;
-  grid-template-columns: 120px 80px;
-  align-items: center;
-  margin: 0;
-}
-
-.location-browser__warehouse-counts > * {
-  padding-left: var(--rz-cell-px);
-}
-
-.location-browser__row {
+/* DataTable owns the row frame and hover. Links use the same orange name
+ * treatment as the primary link in the parts directory. */
+.location-browser__link {
+  display: block;
   width: 100%;
   min-width: 0;
-  min-height: var(--location-list-row-height);
-  padding: 0 var(--rz-cell-px);
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--rz-text);
   text-align: left;
-  white-space: normal;
 }
 
-.location-browser__row--warehouse {
-  min-height: 48px;
-}
-
-.location-browser__row:is(a, button) {
-  cursor: pointer;
-}
-
-.location-browser__row:is(a, button):hover {
-  background: var(--rz-fill-hover);
-}
-
-.location-browser__row:focus:not(:focus-visible) {
-  outline: none;
-}
-
-.location-browser__row:focus-visible {
-  outline: 2px solid var(--rz-brand);
-  outline-offset: -2px;
+.location-browser__link:is(:hover, :focus-visible) .location-browser__name {
+  color: var(--rz-brand-text);
 }
 
 .location-browser__label {
@@ -139,7 +71,7 @@
   align-items: baseline;
   gap: 2px 8px;
   min-width: 0;
-  padding-block: 8px;
+  padding-block: 4px;
 }
 
 .location-browser__name {
@@ -158,70 +90,11 @@
   font-size: var(--rz-fs-caption);
 }
 
-.location-browser__row--muted .location-browser__label {
-  opacity: 0.6;
-}
-
-.location-browser__hint {
-  display: block;
-  margin-top: 2px;
-  color: var(--rz-text-muted);
-  font-size: var(--rz-fs-caption);
-}
-
-.location-browser__count {
-  color: var(--rz-text-strong);
-  font-family: var(--rz-font-mono);
-  font-size: var(--rz-fs-body);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.location-browser__count dd {
-  margin: 0;
-}
-
 .location-browser__arrow {
   width: var(--rz-icon-sm);
   height: var(--rz-icon-sm);
   justify-self: end;
   color: var(--rz-text-dim);
-}
-
-.location-browser__row:is(a, button):hover .location-browser__arrow,
-.location-browser__row:is(a, button):focus-visible .location-browser__arrow {
-  color: var(--rz-text);
-}
-
-.location-browser__section,
-.location-browser__direct > .location-browser__row {
-  border-bottom: 1px solid var(--rz-border);
-}
-
-.location-browser__list > .location-browser__section:last-child {
-  border-bottom: 0;
-}
-
-.location-browser__zone {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
-  align-items: center;
-}
-
-.location-browser__zone > .location-browser__row {
-  padding-right: 0;
-}
-
-/* The row menu sits in the table's last 40px column, as quiet as the chevron. */
-.location-browser__zone > .rz-btn--icon {
-  justify-self: center;
-  border-color: transparent;
-  background: transparent;
-  color: var(--rz-text-muted);
-}
-
-.location-browser__columns--zone-actions {
-  grid-template-columns: minmax(0, 1fr) 40px 40px;
 }
 
 .location-browser__empty {
@@ -232,43 +105,6 @@
   text-align: center;
 }
 
-/* Keep the shared table's semantics without its extra mobile card frame. */
-.location-browser__shelves .data-table,
-.location-browser__shelves .rz-table {
-  table-layout: fixed;
-}
-
-.location-browser__shelves thead {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.location-browser__shelves tbody th {
-  padding: 0;
-  max-width: none;
-}
-
-.location-browser__shelves tbody tr {
-  height: auto;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid var(--rz-border);
-  border-radius: 0;
-}
-
-.location-browser__shelves tbody tr:last-child {
-  border-bottom: 0;
-}
-
-.location-browser__shelves tbody tr + tr {
-  margin-top: 0;
-}
-
 /* Stand-in for a list that waits on a choice elsewhere on the page. */
 .location-browser__placeholder {
   min-height: 176px;
@@ -277,54 +113,18 @@
 }
 
 @media (max-width: 767px) {
-  .location-browser__lead,
-  .location-browser__columns {
+  .location-browser__lead {
     display: none;
-  }
-
-  .location-browser__row--warehouse {
-    grid-template-columns: minmax(0, 1fr) auto 24px;
-  }
-
-  .location-browser__row--plain {
-    grid-template-columns: minmax(0, 1fr) 24px;
-  }
-
-  .location-browser__row--section {
-    grid-template-columns: minmax(0, 1fr) auto 24px;
-    column-gap: 8px;
-  }
-
-  .location-browser__warehouse-counts {
-    grid-template-columns: auto auto;
-    gap: 12px;
-  }
-
-  .location-browser__count {
-    display: grid;
-    justify-items: end;
-  }
-
-  .location-browser__count dt {
-    color: var(--rz-text-dim);
-    font-family: var(--rz-font);
-    font-size: var(--rz-fs-micro);
-    text-transform: lowercase;
-  }
-
-  .location-browser__shelves tbody th {
-    display: block;
-    width: 100%;
   }
 }
 
-/* Navigation fills the same bounded workspace as the unassigned parts list.
- * Only the list scrolls on small/short viewports; the pager stays accessible. */
+/* Section and shelf cards follow the visible row count within the workspace.
+ * Only the list scrolls on short viewports; the pager stays below the rows. */
 .rz-workspace > .rz-page > .location-browser-layout,
 .rz-workspace .location-browser-card,
 .rz-workspace .location-browser--navigation {
   display: flex;
-  flex: 1 1 0;
+  flex: 0 1 auto;
   flex-direction: column;
   min-height: 0;
 }
@@ -338,22 +138,8 @@
 }
 
 .rz-workspace .location-browser__list {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-}
-
-.rz-workspace .location-browser__shelves > div,
-.rz-workspace .location-browser__shelves .rz-table-scroll {
-  overflow: visible;
-}
-
-/* Shelf cards follow the current page's row count, shrinking only when the
- * available workspace is shorter than the list. The pager stays below it. */
-.rz-workspace > .rz-page > .location-browser-layout--shelves,
-.rz-workspace .location-browser-layout--shelves .location-browser-card,
-.rz-workspace .location-browser-layout--shelves .location-browser--navigation,
-.rz-workspace .location-browser-layout--shelves .location-browser__list {
-  flex: 0 1 auto;
 }

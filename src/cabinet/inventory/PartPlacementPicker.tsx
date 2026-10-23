@@ -1,4 +1,5 @@
-import { Button, Field, SelectInput } from '@/components/app'
+import { Button } from '@/components/app'
+import { LocationSelect } from './LocationSelect'
 import { useT } from '@/i18n'
 import { placementMessages } from './part-placement-messages'
 import type { PartPlacement, PlacementOptions } from './part-placement-state'
@@ -7,12 +8,10 @@ export function PartPlacementPicker({
   value,
   onChange,
   options,
-  compact = false,
 }: {
   value: PartPlacement
   onChange: (next: PartPlacement) => void
   options: PlacementOptions
-  compact?: boolean
 }) {
   const t = useT(placementMessages)
   const warehouses = [
@@ -35,7 +34,6 @@ export function PartPlacementPicker({
     (shelf) => shelf.isActive && shelf.sectionId === value.sectionId,
   )
   const systemZone = warehouseZones.find((zone) => zone.isSystemUnassigned)
-  const id = compact ? 'batch' : 'part'
 
   if (options.loading)
     return (
@@ -57,13 +55,16 @@ export function PartPlacementPicker({
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label={t('warehouse')}>
-        <SelectInput
-          aria-label={compact ? t('warehouse') : undefined}
-          name={`${id}-warehouse`}
-          value={warehouseId}
-          onChange={(event) => {
-            const warehouseId = event.target.value
+      <div className="rz-field">
+        <p className="rz-label m-0">{t('warehouse')}</p>
+        <LocationSelect
+          label={t('warehouse')}
+          searchLabel={t('searchWarehouses')}
+          noneLabel={t('chooseWarehouse')}
+          options={warehouses.map(([id, name]) => ({ id, name }))}
+          value={warehouseId || null}
+          onChange={(id) => {
+            const warehouseId = id ?? ''
             const zoneId =
               options.zones.find(
                 (zone) =>
@@ -71,81 +72,60 @@ export function PartPlacementPicker({
               )?.id ?? ''
             onChange({ warehouseId, zoneId, sectionId: '', shelfId: '' })
           }}
-        >
-          <option value="">{t('chooseWarehouse')}</option>
-          {warehouses.map(([warehouseId, name]) => (
-            <option key={warehouseId} value={warehouseId}>
-              {name}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
+        />
+      </div>
       {warehouseId ? (
-        <Field label={t('zone')}>
-          <SelectInput
-            aria-label={compact ? t('zone') : undefined}
-            name={`${id}-zone`}
-            value={value.zoneId}
-            onChange={(event) =>
+        <div className="rz-field">
+          <p className="rz-label m-0">{t('zone')}</p>
+          <LocationSelect
+            label={t('zone')}
+            searchLabel={t('searchZones')}
+            noneLabel={t('chooseZone')}
+            allowNone={!systemZone}
+            options={warehouseZones.map((zone) => ({
+              id: zone.id,
+              name: zone.isSystemUnassigned ? t('warehouseOnly') : zone.name,
+              code: zone.isSystemUnassigned ? '' : zone.code,
+            }))}
+            value={value.zoneId || null}
+            onChange={(id) =>
               onChange({
                 ...value,
-                zoneId: event.target.value,
+                zoneId: id ?? '',
                 sectionId: '',
                 shelfId: '',
               })
             }
-          >
-            {!systemZone ? <option value="">{t('chooseZone')}</option> : null}
-            {systemZone ? (
-              <option value={systemZone.id}>{t('warehouseOnly')}</option>
-            ) : null}
-            {warehouseZones
-              .filter((zone) => !zone.isSystemUnassigned)
-              .map((zone) => (
-                <option key={zone.id} value={zone.id}>
-                  {zone.name}
-                </option>
-              ))}
-          </SelectInput>
-        </Field>
+          />
+        </div>
       ) : null}
       {value.zoneId && value.zoneId !== systemZone?.id ? (
-        <Field label={t('section')}>
-          <SelectInput
-            aria-label={compact ? t('section') : undefined}
-            name={`${id}-section`}
-            value={value.sectionId}
-            onChange={(event) =>
-              onChange({ ...value, sectionId: event.target.value, shelfId: '' })
+        <div className="rz-field">
+          <p className="rz-label m-0">{t('section')}</p>
+          <LocationSelect
+            label={t('section')}
+            searchLabel={t('searchSections')}
+            noneLabel={t('keepInZone')}
+            options={sections}
+            value={value.sectionId || null}
+            onChange={(id) =>
+              onChange({ ...value, sectionId: id ?? '', shelfId: '' })
             }
-          >
-            <option value="">{t('keepInZone')}</option>
-            {sections.map((section) => (
-              <option key={section.id} value={section.id}>
-                {section.name}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
+          />
+        </div>
       ) : null}
       {value.sectionId ? (
-        <Field label={t('shelf')}>
-          <SelectInput
-            aria-label={compact ? t('shelf') : undefined}
-            name={`${id}-shelf`}
-            value={value.shelfId}
-            onChange={(event) =>
-              onChange({ ...value, shelfId: event.target.value })
-            }
-          >
-            <option value="">{t('keepInSection')}</option>
-            {shelves.map((shelf) => (
-              <option key={shelf.id} value={shelf.id}>
-                {shelf.name}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
+        <div className="rz-field">
+          <p className="rz-label m-0">{t('shelf')}</p>
+          <LocationSelect
+            label={t('shelf')}
+            searchLabel={t('searchShelves')}
+            noneLabel={t('keepInSection')}
+            options={shelves}
+            value={value.shelfId || null}
+            onChange={(id) => onChange({ ...value, shelfId: id ?? '' })}
+          />
+        </div>
       ) : null}
       {value.zoneId &&
       value.zoneId !== systemZone?.id &&

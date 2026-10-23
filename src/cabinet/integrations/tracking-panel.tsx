@@ -6,6 +6,7 @@ import {
   DateValue,
   Field,
   Notice,
+  SkeletonRows,
   StatusPill,
   TextInput,
 } from '@/components/app'
@@ -295,9 +296,7 @@ export function TrackingSubscriptionPanel({
 
       <div className="rz-card__body grid gap-3">
         {state.kind === 'loading' && (
-          <p className="rz-muted m-0" role="status">
-            {t('readingState')}
-          </p>
+          <SkeletonRows embedded label={t('readingState')} rows={2} />
         )}
 
         {state.kind === 'denied' && <Notice tone="warn">{t('denied')}</Notice>}

@@ -1,8 +1,9 @@
+import { useRowNavigation } from '@/components/app/use-row-navigation'
+import { CabinetLoadingContent } from '../loading-screen'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   ArrowLeft,
-  ChevronDown,
   ChevronRight,
   Copy,
   MessageSquare,
@@ -30,12 +31,14 @@ import {
   DeniedState,
   ErrorState,
   Field,
+  NotesCard,
   Notice,
   Pagination,
   SearchInput,
   SelectInput,
+  SelectPicker,
   Sheet,
-  SkeletonRows,
+  SkeletonFields,
   StatusPill,
   TextArea,
   TextInput,
@@ -149,12 +152,16 @@ export function CustomersScreen({ definition }: CabinetModuleScreenProps) {
   if (location.pathname.endsWith('/edit') && id)
     return (
       <>
-        <CustomerDetailScreen definition={definition} customerId={id} />
+        <CustomerDetailScreen
+          key={id}
+          definition={definition}
+          customerId={id}
+        />
         <CustomerForm definition={definition} customerId={id} />
       </>
     )
   return id ? (
-    <CustomerDetailScreen definition={definition} customerId={id} />
+    <CustomerDetailScreen key={id} definition={definition} customerId={id} />
   ) : (
     <CustomerDirectory definition={definition} />
   )
@@ -418,25 +425,19 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
             </button>
           ))}
         </div>
-        <label className="rz-filter rz-filter--set relative">
-          <span className="rz-filter__key">{t('sortLabel')}:</span>
-          <select
-            aria-label={t('sortLabel')}
-            className="cursor-pointer appearance-none border-0 bg-transparent pr-4 text-inherit outline-none focus-visible:underline"
-            onChange={(event) => setSort(event.target.value as CustomerSort)}
-            value={sort}
-          >
-            {CUSTOMER_SORTS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {t(option.label)}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            aria-hidden
-            className="pointer-events-none absolute right-2 size-3"
-          />
-        </label>
+        <SelectPicker
+          label={t('sortLabel')}
+          searchable={false}
+          prefix={`${t('sortLabel')}: `}
+          className="w-full shrink-0 sm:w-48"
+          compact
+          value={sort}
+          options={CUSTOMER_SORTS.map((option) => ({
+            value: option.value,
+            label: t(option.label),
+          }))}
+          onValueChange={(value) => setSort(value as CustomerSort)}
+        />
         {filtered ? (
           <Button onClick={resetAll} variant="ghost">
             {t('resetFilters')}
@@ -451,7 +452,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
             onRetry={() => setAttempt((value) => value + 1)}
           />
         ) : !loaded ? (
-          <SkeletonRows columns={5} rows={8} />
+          <CabinetLoadingContent module="customers" heading={false} />
         ) : (
           <DataTable
             caption={t('listLabel')}
@@ -539,9 +540,9 @@ function CustomerDetailScreen({
   /** Where focus goes when the delete question is answered or dismissed. */
   const deleteTriggerRef = useRef<HTMLButtonElement>(null)
   const toast = useOptionalToast()
-  const [notes, setNotes] = useState('')
   const ordersTitleId = useId()
   const navigate = useNavigate()
+  const navigateRow = useRowNavigation()
   const directoryPath = `/app/${cabinet.targetTenant?.slug ?? ''}/customers`
   useEffect(() => {
     if (!ordersViewAllowed) return
@@ -551,7 +552,6 @@ function CustomerDetailScreen({
       .then((result) => {
         if (!controller.signal.aborted) {
           setCustomer(result)
-          setNotes(result.notes ?? '')
           setOrdersPage(1)
           setError(null)
         }
@@ -589,26 +589,6 @@ function CustomerDetailScreen({
       toast?.show({ tone: 'ok', message: t('phoneCopied') })
     } catch {
       setError('copyFailed')
-    }
-  }
-  const saveNotes = async () => {
-    if (!customer || busy || !mutationsAllowed) return
-    setBusy(true)
-    try {
-      const scope = requireLatestMutation({ quota: false })
-      requireLatestMutation({ permission: 'orders.view', quota: false })
-      const saved = await customersApi.update(
-        customer.id,
-        { notes: notes.trim() || null },
-        { signal: scope.signal },
-      )
-      setCustomer({ ...customer, notes: saved.customer.notes })
-      setNotes(saved.customer.notes ?? '')
-      setError(null)
-    } catch {
-      setError('loadError')
-    } finally {
-      setBusy(false)
     }
   }
   const remove = async () => {
@@ -664,7 +644,7 @@ function CustomerDetailScreen({
   if (!customer)
     return (
       <RedesignShell crumb={crumbTrail(t('title'))} width="record">
-        <SkeletonRows label={t('loading')} rows={6} />
+        <CabinetLoadingContent module="customers" label={t('loading')} />
       </RedesignShell>
     )
   const ordersPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders`
@@ -864,7 +844,13 @@ function CustomerDetailScreen({
                           locale,
                         )
                         return (
-                          <tr className="h-auto" key={order.id}>
+                          <tr
+                            className="h-auto cursor-pointer"
+                            key={order.id}
+                            onClick={(event) =>
+                              navigateRow(event, orderHref(order.id))
+                            }
+                          >
                             <th className="py-1.5" scope="row">
                               <Link
                                 className="text-app-strong block w-fit font-mono"
@@ -912,52 +898,43 @@ function CustomerDetailScreen({
             )}
           </section>
 
-          <Card
-            aside={
-              mutationsAllowed && notes.trim() !== (customer.notes ?? '') ? (
-                <div className="rz-btn-row gap-1.5">
-                  <Button
-                    disabled={busy}
-                    onClick={() => setNotes(customer.notes ?? '')}
-                    size="sm"
-                  >
-                    {tc('cancel')}
-                  </Button>
-                  <Button
-                    aria-busy={busy}
-                    disabled={busy}
-                    onClick={() => void saveNotes()}
-                    size="sm"
-                  >
-                    {t('saveNotes')}
-                  </Button>
-                </div>
-              ) : undefined
+          <NotesCard
+            key={customer.id}
+            busy={busy}
+            canEdit={mutationsAllowed && ordersViewAllowed}
+            maxLength={1000}
+            onSave={async (value) => {
+              const scope = requireLatestMutation({ quota: false })
+              requireLatestMutation({ permission: 'orders.view', quota: false })
+              // Core uses null to mean "leave unchanged"; an empty string clears.
+              const saved = await customersApi.update(
+                customer.id,
+                { notes: value },
+                { signal: scope.signal },
+              )
+              if (scope.signal.aborted)
+                throw new DOMException('Aborted', 'AbortError')
+              return saved.customer.notes ?? null
+            }}
+            onSaved={(value) =>
+              setCustomer((current) =>
+                current?.id === customer.id
+                  ? { ...current, notes: value }
+                  : current,
+              )
             }
-            headerClassName="py-2"
-            title={t('notes')}
-          >
-            {mutationsAllowed ? (
-              <Field label={t('notesLabel')} srLabel={customer.name}>
-                <TextArea
-                  disabled={busy}
-                  onChange={(event) => setNotes(event.target.value)}
-                  placeholder={t('notesPlaceholder')}
-                  rows={3}
-                  value={notes}
-                />
-              </Field>
-            ) : (
-              <p
-                className={cn(
-                  'm-0 whitespace-pre-wrap',
-                  customer.notes === null ? 'text-app-dim' : 'text-app-muted',
-                )}
-              >
-                {customer.notes ?? t('noNotes')}
-              </p>
-            )}
-          </Card>
+            readBack={async () => {
+              const scope = requireLatestMutation({ quota: false })
+              requireLatestMutation({ permission: 'orders.view', quota: false })
+              const fresh = await customersApi.getById(customer.id, {
+                signal: scope.signal,
+              })
+              if (scope.signal.aborted)
+                throw new DOMException('Aborted', 'AbortError')
+              return fresh.notes ?? null
+            }}
+            value={customer.notes}
+          />
         </div>
 
         <aside className="grid min-w-0 gap-3.5">
@@ -1253,7 +1230,7 @@ function CustomerForm({
       title={t('loadFailedTitle')}
     />
   ) : loading ? (
-    <SkeletonRows columns={2} label={t('loading')} rows={3} />
+    <SkeletonFields count={6} label={t('loading')} />
   ) : (
     <>
       {mutationsAllowed ? null : <Notice tone="warn">{t('readOnly')}</Notice>}

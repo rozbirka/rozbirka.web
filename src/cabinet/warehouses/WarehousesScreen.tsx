@@ -1495,12 +1495,7 @@ function ZoneLocations({
           )}
         />
       ) : null}
-      <div
-        className={cn(
-          'location-browser-layout grid min-w-0 items-stretch gap-[14px]',
-          section && 'location-browser-layout--shelves',
-        )}
-      >
+      <div className="location-browser-layout grid min-w-0 items-stretch gap-[14px]">
         <section
           aria-label={t(section ? 'shelfType' : 'sectionType')}
           className="location-browser-card rz-card min-w-0"
@@ -1954,7 +1949,9 @@ function PartPlacementView({
     () =>
       selection ??
       (resource.state.kind === 'ready'
-        ? resource.state.data.placement.map((zone) => zone.zoneId)
+        ? resource.state.data.placement.length === 1
+          ? resource.state.data.placement.map((zone) => zone.zoneId)
+          : []
         : []),
     [resource.state, selection],
   )
@@ -1962,7 +1959,7 @@ function PartPlacementView({
   const placementData =
     resource.state.kind === 'ready' ? resource.state.data : null
   const canSaveSelection =
-    selected.length > 0 &&
+    selected.length === 1 &&
     (placementData?.part == null || hasPlacementStock(placementData.part)) &&
     (!drawer?.requirePhysicalZone ||
       (placementData !== null &&
@@ -2057,6 +2054,9 @@ function PartPlacementView({
         { signal: scope.signal },
       )
       setWarehouseId(warehouse.id)
+      setSelection([])
+      setSectionSelection(null)
+      setShelfSelection(null)
       setDraft({ name: '', code: '' })
       setCreateMode('zone')
       resource.refresh()
@@ -2081,10 +2081,9 @@ function PartPlacementView({
         { warehouseId: targetWarehouseId, name, code },
         { signal: scope.signal },
       )
-      setSelection((value) => {
-        const current = value ?? selected
-        return current.includes(zone.id) ? current : [...current, zone.id]
-      })
+      setSelection([zone.id])
+      setSectionSelection(null)
+      setShelfSelection(null)
       setWarehouseId(zone.warehouseId)
       setQuery('')
       setCreateMode(null)
@@ -2192,25 +2191,21 @@ function PartPlacementView({
         const moves = (history?.events ?? []).filter((event) =>
           PLACEMENT_EVENTS.has(event.eventType),
         )
-        const toggleZone = (zoneId: string) => {
-          setShelfSelection(null)
-          setSectionSelection(null)
-          setSelection((currentSelection) => {
-            const current =
-              currentSelection ?? placement.map((zone) => zone.zoneId)
-            return current.includes(zoneId)
-              ? current.filter((id) => id !== zoneId)
-              : [
-                  ...current.filter((id) =>
-                    drawer?.requirePhysicalZone
-                      ? !zones.some(
-                          (zone) => zone.id === id && zone.isSystemUnassigned,
-                        )
-                      : id !== warehouseOnly?.id,
-                  ),
-                  zoneId,
-                ]
-          })
+        const chooseZone = (zoneId: string | null) => {
+          setSelection(zoneId ? [zoneId] : [])
+          if (selected.length !== 1 || selected[0] !== zoneId) {
+            setShelfSelection(null)
+            setSectionSelection(null)
+          }
+        }
+        const chooseWarehouse = (id: string | null) => {
+          setWarehouseId(id)
+          setQuery('')
+          if (id !== house) {
+            setSelection([])
+            setSectionSelection(null)
+            setShelfSelection(null)
+          }
         }
 
         const levelOf = (zone: (typeof zones)[number]) =>
@@ -2322,10 +2317,7 @@ function PartPlacementView({
                       options={houses}
                       value={house}
                       disabled={!canManage || saving || creating}
-                      onChange={(id) => {
-                        setWarehouseId(id)
-                        setQuery('')
-                      }}
+                      onChange={chooseWarehouse}
                     />
                   </div>
                   {house ? (
@@ -2344,30 +2336,18 @@ function PartPlacementView({
                       </div>
                       {zoneOptions.length ? (
                         <LocationSelect
-                          multiple
                           label={t('zone')}
                           searchLabel={t('zoneSearch')}
                           noneLabel={t('noZonesPicked')}
+                          allowNone={false}
                           options={zoneOptions}
-                          value={zoneOptions
-                            .filter((zone) => selected.includes(zone.id))
-                            .map((zone) => zone.id)}
+                          value={
+                            zoneOptions.find((zone) =>
+                              selected.includes(zone.id),
+                            )?.id ?? null
+                          }
                           disabled={!canManage || saving || creating}
-                          onChange={(ids) => {
-                            const current = zoneOptions
-                              .filter((zone) => selected.includes(zone.id))
-                              .map((zone) => zone.id)
-                            const toggled = [...current, ...ids].find(
-                              (id) => current.includes(id) !== ids.includes(id),
-                            )
-                            if (toggled && toggled === warehouseOnly?.id) {
-                              setSelection([toggled])
-                              setSectionSelection(null)
-                              setShelfSelection(null)
-                            } else if (toggled) {
-                              toggleZone(toggled)
-                            }
-                          }}
+                          onChange={chooseZone}
                         />
                       ) : (
                         <Notice tone="info">{t('noActiveZones')}</Notice>
@@ -2494,10 +2474,7 @@ function PartPlacementView({
                                 active && 'border-brand bg-brand-soft',
                               )}
                               key={item.id}
-                              onClick={() => {
-                                setWarehouseId(item.id)
-                                setQuery('')
-                              }}
+                              onClick={() => chooseWarehouse(item.id)}
                               role="radio"
                               type="button"
                             >
@@ -2532,11 +2509,7 @@ function PartPlacementView({
                             className="rz-radio"
                             disabled={!canManage}
                             checked={warehouseOnlyChecked}
-                            onChange={() => {
-                              setSelection([warehouseOnly.id])
-                              setSectionSelection(null)
-                              setShelfSelection(null)
-                            }}
+                            onChange={() => chooseZone(warehouseOnly.id)}
                           />
                           <span className="rz-caption text-app-muted">
                             {t('warehouseOnly')}
@@ -2619,10 +2592,11 @@ function PartPlacementView({
                                         <input
                                           aria-label={`${zone.warehouseName} · ${zone.name}`}
                                           checked={on}
-                                          className="rz-check mt-0.5"
+                                          className="rz-radio mt-0.5"
                                           disabled={!canManage}
-                                          onChange={() => toggleZone(zone.id)}
-                                          type="checkbox"
+                                          name="placement-location"
+                                          onChange={() => chooseZone(zone.id)}
+                                          type="radio"
                                         />
                                         <span className="grid min-w-0 flex-1 gap-0.5">
                                           <span className="rz-strong font-semibold break-words">

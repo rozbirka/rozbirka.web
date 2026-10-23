@@ -444,8 +444,9 @@ it('renders the inventory overview in British English', async () => {
 
 it('renders the inventory overview in Polish', async () => {
   renderIn('pl', '/app/yard/inventory')
+  await screen.findByRole('link', { name: 'Nowa sesja' })
   expect(
-    await screen.findByRole('heading', { level: 1, name: 'Inwentaryzacja' }),
+    screen.getByRole('heading', { level: 1, name: 'Inwentaryzacja' }),
   ).toBeInTheDocument()
   expect(screen.queryByRole('region', { name: 'Magazyny' })).toBeNull()
   expect(screen.getByRole('link', { name: 'Nowa sesja' })).toBeInTheDocument()
@@ -570,8 +571,10 @@ it('picks every zone of the warehouse for a full check', async () => {
   const zone = screen.getByRole('checkbox', { name: /Стелаж A1/ })
   expect(zone).toBeChecked()
   expect(zone).toBeDisabled()
-  // The sample check cannot be expressed as a list of zones.
-  expect(screen.getByRole('radio', { name: /Вибіркова/ })).toBeDisabled()
+  // Only the two choices that can be expressed as zone IDs are offered.
+  expect(
+    screen.queryByRole('radio', { name: /Вибіркова/ }),
+  ).not.toBeInTheDocument()
 })
 
 it('retries a failed start from the existing draft without creating another session', async () => {
@@ -796,7 +799,6 @@ it('renders discrepancy results and adjustment affordance', async () => {
 })
 
 it.each([
-  ['new session', '/app/yard/inventory/sessions/new'],
   ['session', '/app/yard/inventory/sessions/session-1'],
   ['results', '/app/yard/inventory/sessions/session-1/results'],
   ['audit', '/app/yard/inventory/sessions/session-1/audit'],
@@ -830,9 +832,6 @@ it.each([
       screen.queryByText('Імена видно тим, хто має право «team.view».'),
     ).toBeNull()
     expect(screen.getByRole('heading', { level: 1 })).toBeVisible()
-    if (path.endsWith('/new')) {
-      await user.click(screen.getByRole('checkbox', { name: /Стелаж A1/ }))
-    }
     await user.click(
       within(screen.getByRole('alert')).getByRole('button', {
         name: 'Повторити',
@@ -840,9 +839,6 @@ it.each([
     )
     expect((await screen.findAllByText(/Олена|Іван/)).length).toBeGreaterThan(0)
     expect(screen.queryByText('Не вдалося завантажити команду.')).toBeNull()
-    if (path.endsWith('/new')) {
-      expect(screen.getByRole('checkbox', { name: /Стелаж A1/ })).toBeChecked()
-    }
   },
 )
 
@@ -867,43 +863,14 @@ it('keeps known team names when refreshing the team fails', async () => {
   expect(screen.getByText('Іван', { selector: 'span.block' })).toBeVisible()
 })
 
-it('keeps the form usable while team loading is pending without claiming it is empty', async () => {
-  permissions.value.add('team.view')
-  let resolve!: (members: []) => void
-  team.listMembers.mockImplementationOnce(
-    () =>
-      new Promise<[]>((done) => {
-        resolve = done
-      }),
-  )
+it('does not request or explain team access on the new-session form', async () => {
   renderAt('/app/yard/inventory/sessions/new')
   expect(
-    await screen.findByRole('checkbox', { name: /Стелаж A1/ }),
-  ).toBeEnabled()
-  expect(screen.getByText('Завантажуємо імена команди…')).toBeVisible()
-  expect(screen.queryByText('У команді ще нікого немає.')).toBeNull()
-  await act(() => {
-    resolve([])
-    return Promise.resolve()
-  })
-  expect(await screen.findByText('У команді ще нікого немає.')).toBeVisible()
-})
-
-it('shows an empty team only after a successful empty response', async () => {
-  permissions.value.add('team.view')
-  team.listMembers.mockResolvedValue([])
-  renderAt('/app/yard/inventory/sessions/new')
-  expect(await screen.findByText('У команді ще нікого немає.')).toBeVisible()
-  expect(screen.queryByRole('alert')).toBeNull()
-})
-
-it('does not fetch the team without the permission', async () => {
-  renderAt('/app/yard/inventory/sessions/new')
-  expect(
-    await screen.findByText(
-      'Список команди видно тим, хто має право «team.view».',
-    ),
+    await screen.findByRole('heading', { name: 'Нова сесія інвентаризації' }),
   ).toBeVisible()
+  expect(
+    screen.queryByText('Список команди видно тим, хто має право «team.view».'),
+  ).not.toBeInTheDocument()
   expect(team.listMembers).not.toHaveBeenCalled()
 })
 
@@ -1294,7 +1261,7 @@ it('stores a part at the warehouse level without forcing a physical zone', async
   )
 })
 
-it('keeps multiple physical zones selected across warehouses', async () => {
+it('selects only one physical zone on the standalone placement page', async () => {
   const user = userEvent.setup()
   api.getWarehouses.mockResolvedValue([
     {
@@ -1348,33 +1315,33 @@ it('keeps multiple physical zones selected across warehouses', async () => {
   ])
   renderAt('/app/yard/parts/part-1/inventory')
 
-  const first = await screen.findByRole('checkbox', {
+  const first = await screen.findByRole('radio', {
     name: 'Основний склад · Стелаж A1',
   })
-  const second = screen.getByRole('checkbox', {
+  const second = screen.getByRole('radio', {
     name: 'Основний склад · Стелаж A2',
   })
   await user.click(first)
   await user.click(second)
-  expect(first).toBeChecked()
+  expect(first).not.toBeChecked()
   expect(second).toBeChecked()
 
   await user.click(screen.getByRole('radio', { name: /Другий склад/ }))
   expect(
     screen.getByRole('button', { name: 'Зберегти розміщення' }),
-  ).toBeEnabled()
+  ).toBeDisabled()
   expect(
     screen.getByRole('region', { name: 'Нове розміщення' }),
-  ).toHaveTextContent('Стелаж A2')
+  ).not.toHaveTextContent('Стелаж A2')
 
   await user.click(
-    screen.getByRole('checkbox', { name: 'Другий склад · Стелаж B1' }),
+    screen.getByRole('radio', { name: 'Другий склад · Стелаж B1' }),
   )
   await user.click(screen.getByRole('button', { name: 'Зберегти розміщення' }))
   await waitFor(() =>
     expect(api.replacePartZones).toHaveBeenCalledWith(
       'part-1',
-      ['zone-1', 'zone-2', 'zone-3'],
+      ['zone-3'],
       expect.any(Object),
       undefined,
       undefined,
@@ -1382,7 +1349,7 @@ it('keeps multiple physical zones selected across warehouses', async () => {
   )
 })
 
-it('preserves an existing multi-zone placement when saved', async () => {
+it('requires a single destination before replacing an existing multi-zone placement', async () => {
   const user = userEvent.setup()
   api.getZones.mockResolvedValue([
     {
@@ -1428,17 +1395,24 @@ it('preserves an existing multi-zone placement when saved', async () => {
   ])
   renderAt('/app/yard/parts/part-1/inventory')
 
+  const first = await screen.findByRole('radio', {
+    name: 'Основний склад · Стелаж A1',
+  })
+  const second = screen.getByRole('radio', {
+    name: 'Основний склад · Стелаж A2',
+  })
+  expect(first).not.toBeChecked()
+  expect(second).not.toBeChecked()
   expect(
-    await screen.findByRole('checkbox', { name: 'Основний склад · Стелаж A1' }),
-  ).toBeChecked()
-  expect(
-    screen.getByRole('checkbox', { name: 'Основний склад · Стелаж A2' }),
-  ).toBeChecked()
+    screen.getByRole('button', { name: 'Зберегти розміщення' }),
+  ).toBeDisabled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
+  await user.click(second)
   await user.click(screen.getByRole('button', { name: 'Зберегти розміщення' }))
   await waitFor(() =>
     expect(api.replacePartZones).toHaveBeenCalledWith(
       'part-1',
-      ['zone-1', 'zone-2'],
+      ['zone-2'],
       expect.any(Object),
       undefined,
       undefined,
@@ -1489,9 +1463,7 @@ it('updates the zone code when its name is edited in the side drawer', async () 
   await user.click(
     await screen.findByRole('button', { name: 'Дії із зоною Стелаж A1' }),
   )
-  await user.click(
-    screen.getByRole('menuitem', { name: 'Редагувати зону Стелаж A1' }),
-  )
+  await user.click(screen.getByRole('menuitem', { name: 'Редагувати' }))
   const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
   expect(drawer).toHaveClass('rz-sheet')
   expect(within(drawer).getByRole('textbox', { name: 'Код' })).toHaveValue('A1')
@@ -1559,7 +1531,7 @@ it('shows progress while part placement is being saved', async () => {
 it('confirms that part placement was saved with an ok toast', async () => {
   renderAt('/app/yard/parts/part-1/inventory')
   fireEvent.click(
-    await screen.findByRole('checkbox', { name: 'Основний склад · Стелаж A1' }),
+    await screen.findByRole('radio', { name: 'Основний склад · Стелаж A1' }),
   )
   fireEvent.click(screen.getByRole('button', { name: 'Зберегти розміщення' }))
 
@@ -1631,7 +1603,7 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
     screen.getByRole('button', { name: 'Дії із зоною Стелаж A1' }),
   )
   expect(
-    screen.getByRole('menuitem', { name: 'Архівувати зону Стелаж A1' }),
+    screen.getByRole('menuitem', { name: 'Архівувати' }),
   ).toBeInTheDocument()
   await user.keyboard('{Escape}')
 
@@ -1694,8 +1666,8 @@ it('browses locations without row actions or part counts and prints selected she
     },
   ])
   renderAt('/app/yard/warehouses/zones/zone-1')
-  const sectionGroup = await screen.findByRole('group', {
-    name: 'Секція: Секція B',
+  const sectionGroup = await screen.findByRole('row', {
+    name: /Секція B/,
   })
   expect(
     within(sectionGroup).queryByLabelText(/Позицій/),
@@ -1838,8 +1810,8 @@ it('creates a shelf in a side drawer for its section', async () => {
   const user = userEvent.setup()
   renderAt('/app/yard/warehouses/zones/zone-1')
 
-  const sectionGroup = await screen.findByRole('group', {
-    name: 'Секція: Секція B',
+  const sectionGroup = await screen.findByRole('row', {
+    name: /Секція B/,
   })
   await user.click(
     within(sectionGroup).getByRole('link', { name: /^Секція B/ }),
@@ -1966,7 +1938,7 @@ it('loads only the selected zone and links back to its warehouse', async () => {
   expect(
     screen.queryByRole('combobox', { name: 'Зона складу' }),
   ).not.toBeInTheDocument()
-  await screen.findByRole('group', { name: 'Секція: Секція B' })
+  await screen.findByRole('row', { name: /Секція B/ })
   expect(api.getSections).toHaveBeenCalledWith('zone-1', expect.anything())
   expect(api.getShelves).toHaveBeenCalledTimes(1)
   expect(api.getShelves).toHaveBeenCalledWith(
@@ -2010,9 +1982,7 @@ it('edits a zone in the same side drawer', async () => {
   await user.click(
     await screen.findByRole('button', { name: 'Дії із зоною Стелаж A1' }),
   )
-  await user.click(
-    screen.getByRole('menuitem', { name: 'Редагувати зону Стелаж A1' }),
-  )
+  await user.click(screen.getByRole('menuitem', { name: 'Редагувати' }))
   const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
   expect(drawer).toHaveClass('rz-sheet')
   const name = within(drawer).getByRole('textbox', { name: 'Назва' })
@@ -2214,7 +2184,7 @@ it('saves placement from the drawer and blocks dismissal while saving', async ()
   })
   expect(drawer).toHaveClass('rz-sheet')
   await user.click(
-    await within(drawer).findByRole('button', { name: /^Зона:/ }),
+    await within(drawer).findByRole('searchbox', { name: 'Пошук зони' }),
   )
   await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -2228,7 +2198,7 @@ it('saves placement from the drawer and blocks dismissal while saving', async ()
   expect(parts.facets).not.toHaveBeenCalled()
 
   await user.click(
-    within(drawer).getByRole('button', { name: /^Секція \/ стелаж:/ }),
+    within(drawer).getByRole('searchbox', { name: 'Пошук секції' }),
   )
   await user.click(await screen.findByRole('option', { name: /Секція B/ }))
   await user.click(
@@ -2286,32 +2256,34 @@ it.each([false, true])(
       within(dialog).queryByRole('button', { name: warehouseOnlyName }),
     ).not.toBeInTheDocument()
     await user.click(
-      await within(dialog).findByRole('button', { name: /^Зона:/ }),
+      await within(dialog).findByRole('searchbox', { name: 'Пошук зони' }),
     )
     await user.click(screen.getByRole('option', { name: warehouseOnlyName }))
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     if (hasPhysicalZones) {
-      await user.click(within(dialog).getByRole('button', { name: /^Зона:/ }))
+      await user.click(
+        within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
+      )
       await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
       expect(
-        within(dialog).getByRole('button', { name: 'Зона: Стелаж A1' }),
+        within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
       ).toBeVisible()
       await user.click(
-        within(dialog).getByRole('button', { name: /^Секція \/ стелаж:/ }),
+        within(dialog).getByRole('searchbox', { name: 'Пошук секції' }),
       )
       await user.click(screen.getByRole('option', { name: /Секція B/ }))
-      await user.click(within(dialog).getByRole('button', { name: /^Зона:/ }))
+      await user.click(
+        within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
+      )
       await user.click(screen.getByRole('option', { name: warehouseOnlyName }))
     }
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(
-      within(dialog).getByRole('button', {
-        name: `Зона: ${warehouseOnlyName}`,
-      }),
-    ).toBeVisible()
+      within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
+    ).toHaveValue(warehouseOnlyName)
     expect(
-      within(dialog).queryByRole('button', { name: /^Секція \/ стелаж:/ }),
+      within(dialog).queryByRole('searchbox', { name: 'Пошук секції' }),
     ).not.toBeInTheDocument()
     await user.click(
       within(dialog).getByRole('button', { name: 'Зберегти розміщення' }),
@@ -2328,7 +2300,123 @@ it.each([false, true])(
   },
 )
 
-it('preserves zones across warehouses in the compact placement drawer', async () => {
+it('replaces the selected zone in the same warehouse, closes the dropdown and clears its section', async () => {
+  const user = userEvent.setup()
+  const existingZones = (await api.getZones()) as InventoryZone[]
+  api.getZones.mockResolvedValue([
+    ...existingZones,
+    { ...existingZones[0], id: 'zone-2', name: 'Стелаж A2', code: 'A2' },
+  ])
+  render(
+    <MemoryRouter>
+      <PartPlacementDrawer
+        partId="part-1"
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    </MemoryRouter>,
+  )
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Розміщення на складі',
+  })
+  await user.click(
+    await within(dialog).findByRole('searchbox', { name: 'Пошук зони' }),
+  )
+  await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
+  await user.click(
+    within(dialog).getByRole('searchbox', { name: 'Пошук секції' }),
+  )
+  await user.click(screen.getByRole('option', { name: /Секція B/ }))
+  await user.click(
+    within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
+  )
+  await user.click(screen.getByRole('option', { name: /Стелаж A2/ }))
+
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  const trigger = within(dialog).getByRole('searchbox', { name: 'Пошук зони' })
+  expect(trigger).toHaveFocus()
+  expect(trigger).toHaveValue('Стелаж A2')
+  expect(within(dialog).queryByText('Зон вибрано: 2')).not.toBeInTheDocument()
+  await user.click(trigger)
+  expect(screen.getByRole('listbox')).not.toHaveAttribute(
+    'aria-multiselectable',
+    'true',
+  )
+  expect(screen.getByRole('option', { name: /Стелаж A1/ })).toHaveAttribute(
+    'aria-selected',
+    'false',
+  )
+  expect(screen.getByRole('option', { name: /Стелаж A2/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  await user.click(screen.getByRole('option', { name: /Стелаж A2/ }))
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти розміщення' }),
+  )
+  await waitFor(() =>
+    expect(api.replacePartZones).toHaveBeenCalledWith(
+      'part-1',
+      ['zone-2'],
+      expect.anything(),
+      undefined,
+      undefined,
+    ),
+  )
+})
+
+it('uses a newly created zone as the only placement in the drawer', async () => {
+  const user = userEvent.setup()
+  const existingZones = (await api.getZones()) as InventoryZone[]
+  const createdZone = {
+    ...existingZones[0],
+    id: 'zone-new',
+    name: 'Нова зона',
+    code: 'nova-zona',
+  }
+  api.createZone.mockResolvedValue(createdZone)
+  render(
+    <MemoryRouter>
+      <PartPlacementDrawer
+        partId="part-1"
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    </MemoryRouter>,
+  )
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Розміщення на складі',
+  })
+  await user.click(
+    await within(dialog).findByRole('searchbox', { name: 'Пошук зони' }),
+  )
+  await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
+  await user.click(within(dialog).getByRole('button', { name: 'Додати зону' }))
+  const editor = screen.getByRole('dialog', { name: 'Нова зона' })
+  await user.type(
+    within(editor).getByRole('textbox', { name: 'Назва' }),
+    'Нова зона',
+  )
+  api.getZones.mockResolvedValue([...existingZones, createdZone])
+  await user.click(within(editor).getByRole('button', { name: 'Додати зону' }))
+  expect(
+    await within(dialog).findByRole('searchbox', { name: 'Пошук зони' }),
+  ).toHaveValue('Нова зона')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти розміщення' }),
+  )
+  await waitFor(() =>
+    expect(api.replacePartZones).toHaveBeenCalledWith(
+      'part-1',
+      ['zone-new'],
+      expect.anything(),
+      undefined,
+      undefined,
+    ),
+  )
+})
+
+it('replaces the previous zone across warehouses in the compact placement drawer', async () => {
   const user = userEvent.setup()
   const existingZones = (await api.getZones()) as InventoryZone[]
   const existingWarehouses = (await api.getWarehouses()) as Warehouse[]
@@ -2367,13 +2455,20 @@ it('preserves zones across warehouses in the compact placement drawer', async ()
     name: 'Розміщення на складі',
   })
   await user.click(
-    await within(dialog).findByRole('button', { name: /^Зона:/ }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук зони' }),
   )
   await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-  await user.click(within(dialog).getByRole('button', { name: /^Склад:/ }))
+  await user.click(
+    within(dialog).getByRole('searchbox', { name: 'Пошук складу' }),
+  )
   await user.click(screen.getByRole('option', { name: /Другий склад/ }))
-  await user.click(within(dialog).getByRole('button', { name: /^Зона:/ }))
+  expect(
+    within(dialog).getByRole('button', { name: 'Зберегти розміщення' }),
+  ).toBeDisabled()
+  await user.click(
+    within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
+  )
   await user.click(screen.getByRole('option', { name: /Стелаж B1/ }))
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   await user.click(
@@ -2382,7 +2477,7 @@ it('preserves zones across warehouses in the compact placement drawer', async ()
   await waitFor(() =>
     expect(api.replacePartZones).toHaveBeenCalledWith(
       'part-1',
-      ['zone-1', 'zone-2'],
+      ['zone-2'],
       expect.anything(),
       undefined,
       undefined,
@@ -2418,7 +2513,7 @@ it('blocks saving from the part placement editor when the balance is zero', asyn
     ),
   ).toBeVisible()
   await user.click(
-    await within(dialog).findByRole('button', { name: /^Зона:/ }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук зони' }),
   )
   await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -2446,7 +2541,7 @@ it('keeps the placement drawer selection on failure and retries successfully', a
   )
   const drawer = screen.getByRole('dialog', { name: 'Розміщення на складі' })
   await user.click(
-    await within(drawer).findByRole('button', { name: /^Зона:/ }),
+    await within(drawer).findByRole('searchbox', { name: 'Пошук зони' }),
   )
   await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -2455,8 +2550,8 @@ it('keeps the placement drawer selection on failure and retries successfully', a
   )
   expect(await within(drawer).findByRole('alert')).toBeInTheDocument()
   expect(
-    within(drawer).getByRole('button', { name: /^Зона:/ }),
-  ).toHaveTextContent('Стелаж A1')
+    within(drawer).getByRole('searchbox', { name: 'Пошук зони' }),
+  ).toHaveValue('Стелаж A1')
   expect(onClose).not.toHaveBeenCalled()
   await user.click(
     within(drawer).getByRole('button', { name: 'Зберегти розміщення' }),
@@ -2527,33 +2622,33 @@ it('searches 100 sections and 100 shelves inside the placement drawer and submit
   )
   const drawer = screen.getByRole('dialog', { name: 'Розміщення на складі' })
   await user.click(
-    await within(drawer).findByRole('button', { name: /^Зона:/ }),
+    await within(drawer).findByRole('searchbox', { name: 'Пошук зони' }),
   )
   await user.click(screen.getByRole('option', { name: /Стелаж A1/ }))
   expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   await user.click(
-    within(drawer).getByRole('button', { name: /^Секція \/ стелаж:/ }),
+    within(drawer).getByRole('searchbox', { name: 'Пошук секції' }),
   )
   await user.type(
-    screen.getByRole('combobox', { name: 'Пошук секції' }),
+    screen.getByRole('searchbox', { name: 'Пошук секції' }),
     's100',
   )
   await user.keyboard('{Escape}')
   expect(onClose).not.toHaveBeenCalled()
   expect(drawer).toBeInTheDocument()
   await user.click(
-    within(drawer).getByRole('button', { name: /^Секція \/ стелаж:/ }),
+    within(drawer).getByRole('searchbox', { name: 'Пошук секції' }),
   )
   await user.type(
-    screen.getByRole('combobox', { name: 'Пошук секції' }),
+    screen.getByRole('searchbox', { name: 'Пошук секції' }),
     's100',
   )
   await user.click(screen.getByRole('option', { name: /Секція 100/ }))
   await user.click(
-    within(drawer).getByRole('button', { name: /^Місце\/полиця:/ }),
+    within(drawer).getByRole('searchbox', { name: 'Пошук полиці' }),
   )
   await user.type(
-    screen.getByRole('combobox', { name: 'Пошук полиці' }),
+    screen.getByRole('searchbox', { name: 'Пошук полиці' }),
     'p100',
   )
   expect(screen.getAllByRole('option')).toHaveLength(2)
@@ -2752,7 +2847,7 @@ it('counts only active shelves in each section, including empty sections', async
 it('opens section label printing only through the zone menu', async () => {
   const user = userEvent.setup()
   renderAt('/app/yard/warehouses/zones/zone-1')
-  await screen.findByRole('group', { name: 'Секція: Секція B' })
+  await screen.findByRole('row', { name: /Секція B/ })
   expect(
     screen.queryByRole('button', { name: 'Етикетки секцій' }),
   ).not.toBeInTheDocument()
@@ -2919,10 +3014,10 @@ it.each(['missing-section', 'archived-section', 'missing-warehouse'])(
 
 it('opens warehouses separately from stocktake sessions', async () => {
   renderAt('/app/yard/warehouses')
+  const warehouses = await screen.findByRole('region', { name: 'Склади' })
   expect(
-    await screen.findByRole('heading', { level: 1, name: 'Склади' }),
+    screen.getByRole('heading', { level: 1, name: 'Склади' }),
   ).toBeVisible()
-  const warehouses = screen.getByRole('region', { name: 'Склади' })
   expect(
     within(warehouses).getByRole('link', { name: /Основний склад/ }),
   ).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
@@ -2941,10 +3036,10 @@ it('shows warehouse stock figures with a direct opening action', async () => {
     name: 'Відкрити склад Основний склад',
   })
   expect(
-    within(warehouse).getByText('Запчастин').nextElementSibling,
+    within(warehouse.closest('tr')!).getAllByRole('cell')[0],
   ).toHaveTextContent(/1\s378/)
   expect(
-    within(warehouse).getByText('Зон').nextElementSibling,
+    within(warehouse.closest('tr')!).getAllByRole('cell')[1],
   ).toHaveTextContent('4')
   expect(warehouse).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
 })
@@ -3054,7 +3149,9 @@ it.each([
       expect(screen.getByText(/7 позицій/)).toBeVisible()
     } else {
       expect(
-        screen.getByRole('link', { name: 'Відкрити склад Основний склад' }),
+        screen
+          .getByRole('link', { name: 'Відкрити склад Основний склад' })
+          .closest('tr'),
       ).toHaveTextContent('7')
     }
   },
@@ -3212,15 +3309,13 @@ it('shows an archive conflict inside the zone confirmation', async () => {
   await user.click(
     screen.getByRole('button', { name: 'Дії із зоною Стелаж A1' }),
   )
-  await user.click(
-    screen.getByRole('menuitem', { name: 'Архівувати зону Стелаж A1' }),
-  )
+  await user.click(screen.getByRole('menuitem', { name: 'Архівувати' }))
   const dialog = screen.getByRole('dialog', { name: 'Архівувати зону?' })
   await user.click(
     within(dialog).getByRole('button', { name: 'Архівувати зону' }),
   )
   expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-    'Спочатку перемістіть усі запчастини із зони.',
+    'Спочатку перемістіть усі запчастини до іншого місця. Після цього зону можна архівувати або деактивувати.',
   )
 })
 
@@ -3240,7 +3335,7 @@ it('shows an archive conflict inside the confirmation and leaves the warehouse o
     within(dialog).getByRole('button', { name: 'Архівувати склад' }),
   )
   expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-    'Спочатку перемістіть усі запчастини зі складу.',
+    'Спочатку перемістіть усі запчастини, включно з «Без зони», до іншого складу. Після цього склад можна архівувати або деактивувати.',
   )
   expect(screen.getByTestId('inventory-url')).toHaveTextContent(
     '/app/yard/warehouses/wh-1',
@@ -3302,10 +3397,10 @@ it('shows an empty warehouse as zero parts in the warehouse directory', async ()
     name: 'Відкрити склад Основний склад',
   })
   expect(
-    within(warehouse).getByText('Запчастин').nextElementSibling,
+    within(warehouse.closest('tr')!).getAllByRole('cell')[0],
   ).toHaveTextContent('0')
   expect(
-    within(warehouse).getByText('Зон').nextElementSibling,
+    within(warehouse.closest('tr')!).getAllByRole('cell')[1],
   ).toHaveTextContent('4')
   expect(warehouse).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
 })
@@ -3318,10 +3413,10 @@ it('keeps warehouse navigation available when stock figures fail', async () => {
   })
   expect(warehouse).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
   expect(
-    within(warehouse).getByText('Запчастин').nextElementSibling,
+    within(warehouse.closest('tr')!).getAllByRole('cell')[0],
   ).toHaveTextContent('залишки недоступні')
   expect(
-    within(warehouse).getByText('Зон').nextElementSibling,
+    within(warehouse.closest('tr')!).getAllByRole('cell')[1],
   ).toHaveTextContent('4')
 })
 
@@ -3333,7 +3428,9 @@ it('keeps the warehouse directory available without stock or management permissi
     const warehouse = await screen.findByRole('link', {
       name: 'Відкрити склад Основний склад',
     })
-    expect(within(warehouse).getByText('залишки недоступні')).toBeVisible()
+    expect(
+      within(warehouse.closest('tr')!).getByText('залишки недоступні'),
+    ).toBeVisible()
     expect(parts.facets).not.toHaveBeenCalled()
     expect(parts.search).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Додати склад' })).toBeNull()
@@ -3427,8 +3524,9 @@ it('retries a failed warehouse list request', async () => {
 it('loads warehouses independently of stocktake sessions', async () => {
   api.getSessions.mockRejectedValue(new Error('stocktake unavailable'))
   renderAt('/app/yard/warehouses')
+  await screen.findByRole('region', { name: 'Склади' })
   expect(
-    await screen.findByRole('heading', { level: 1, name: 'Склади' }),
+    screen.getByRole('heading', { level: 1, name: 'Склади' }),
   ).toBeVisible()
   expect(api.getSessions).not.toHaveBeenCalled()
   expect(screen.queryByRole('link', { name: 'Інвентаризація' })).toBeNull()
@@ -3617,7 +3715,7 @@ it('keeps the placement choice on save failure and allows retry from the queue',
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
   expect(await within(dialog).findByRole('alert')).toBeVisible()
   expect(
-    within(dialog).getByRole('button', { name: 'Зона: Стелаж A1' }),
+    within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
   ).toBeDisabled()
   expect(
     screen.getByRole('button', { name: 'Розмістити Крило', hidden: true }),
@@ -3764,11 +3862,11 @@ async function choosePlacementShelf(
   dialog: HTMLElement,
 ) {
   await user.click(
-    await within(dialog).findByRole('button', { name: /Секція.*Без секції/ }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук секції' }),
   )
   await user.click(await screen.findByRole('option', { name: /Секція A/ }))
   await user.click(
-    await within(dialog).findByRole('button', { name: /полиця.*Без полиці/i }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук полиці' }),
   )
   await user.click(await screen.findByRole('option', { name: /Полиця 1/ }))
 }
@@ -3843,11 +3941,11 @@ it('clears section and shelf when changing the selected zone', async () => {
   const dialog = await openBulkUnassignedPlacement(user)
   await choosePlacementShelf(user, dialog)
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зона: Стелаж A1' }),
+    within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
   )
   await user.click(await screen.findByRole('option', { name: /Інша зона/ }))
   expect(
-    await within(dialog).findByRole('button', { name: /Секція.*Без секції/ }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук секції' }),
   ).toBeVisible()
   expect(within(dialog).queryByRole('button', { name: /полиця/i })).toBeNull()
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
@@ -3876,11 +3974,11 @@ it('keeps the selected parent and retries failed section and shelf loading', asy
     within(dialog).getByRole('button', { name: 'Розмістити' }),
   ).toBeDisabled()
   expect(
-    within(dialog).getByRole('button', { name: 'Зона: Стелаж A1' }),
+    within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
   ).toBeVisible()
   await user.click(within(dialog).getByRole('button', { name: 'Повторити' }))
   await user.click(
-    await within(dialog).findByRole('button', { name: /Секція.*Без секції/ }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук секції' }),
   )
   await user.click(await screen.findByRole('option', { name: /Секція A/ }))
   expect(
@@ -3890,11 +3988,11 @@ it('keeps the selected parent and retries failed section and shelf loading', asy
     within(dialog).getByRole('button', { name: 'Розмістити' }),
   ).toBeDisabled()
   expect(
-    within(dialog).getByRole('button', { name: 'Секція / стелаж: Секція A' }),
+    within(dialog).getByRole('searchbox', { name: 'Пошук секції' }),
   ).toBeVisible()
   await user.click(within(dialog).getByRole('button', { name: 'Повторити' }))
   await user.click(
-    await within(dialog).findByRole('button', { name: /полиця.*Без полиці/i }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук полиці' }),
   )
   await user.click(await screen.findByRole('option', { name: /Полиця 1/ }))
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
@@ -4149,7 +4247,7 @@ async function chooseUnassignedZone(
   dialog: HTMLElement,
 ) {
   await user.click(
-    await within(dialog).findByRole('button', { name: 'Зона: Виберіть зону' }),
+    await within(dialog).findByRole('searchbox', { name: 'Пошук зони' }),
   )
   await user.click(await screen.findByRole('option', { name: /Стелаж A1/ }))
 }
@@ -4236,7 +4334,7 @@ it('bulk retries only failed parts and preserves the selected zone after a parti
     'Розміщено: 1 із 2',
   )
   expect(
-    within(dialog).getByRole('button', { name: 'Зона: Стелаж A1' }),
+    within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
   ).toBeDisabled()
   await user.click(
     within(dialog).getByRole('button', { name: 'Повторити для нерозміщених' }),
@@ -4610,7 +4708,8 @@ it('keeps an archived section visible and allows retry after a restore error', a
   api.restoreSection
     .mockRejectedValueOnce({
       kind: 'conflict',
-      message: 'Спочатку розархівуйте батьківський склад і зону.',
+      code: 'INVENTORY_LOCATION_PARENT_INACTIVE',
+      message: 'Restore the parent warehouse and zone first.',
     })
     .mockResolvedValue({ ...archived, isActive: true })
   renderAt('/app/yard/warehouses/zones/zone-1?locationStatus=archived')
@@ -4620,7 +4719,9 @@ it('keeps an archived section visible and allows retry after a restore error', a
   )
   await user.click(screen.getByRole('menuitem', { name: 'Розархівувати' }))
   expect(
-    await screen.findByText('Спочатку розархівуйте батьківський склад і зону.'),
+    await screen.findByText(
+      'Спочатку розархівуйте батьківський склад і зону, після цього повторіть відновлення.',
+    ),
   ).toBeInTheDocument()
   expect(screen.getByText('Стара секція')).toBeInTheDocument()
   await user.click(
@@ -4674,5 +4775,69 @@ it.each([
     expect(
       add.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
+  },
+)
+
+it('offers only backend-supported choices when creating a stocktake session', async () => {
+  permissions.value.add('team.view')
+  renderAt('/app/yard/inventory/sessions/new')
+  await screen.findByRole('heading', { name: 'Нова сесія інвентаризації' })
+  const types = screen.getByRole('radiogroup', { name: 'Тип перевірки' })
+  expect(within(types).getAllByRole('radio')).toHaveLength(2)
+  expect(
+    screen.queryByRole('radio', { name: /Вибіркова/ }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('heading', { name: 'Виконавці' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('heading', { name: 'Правила' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('textbox', { name: 'Коментар до сесії' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText('Блокувати рух позицій')).not.toBeInTheDocument()
+  expect(screen.queryByText('Сліпий підрахунок')).not.toBeInTheDocument()
+  expect(screen.queryByText('Фото при розходженні')).not.toBeInTheDocument()
+  const scope = screen.getByRole('region', { name: 'Обсяг сесії' })
+  expect(within(scope).queryByText('Виконавців')).not.toBeInTheDocument()
+  expect(within(scope).queryByText('Орієнтовно')).not.toBeInTheDocument()
+  expect(within(scope).queryByText('Позицій')).not.toBeInTheDocument()
+  expect(within(scope).queryByText('—')).not.toBeInTheDocument()
+  expect(team.listMembers).not.toHaveBeenCalled()
+})
+
+it('saves only selected zone IDs as a draft without starting the session', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/new')
+  await user.click(await screen.findByRole('checkbox', { name: /Стелаж A1/ }))
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  await waitFor(() =>
+    expect(api.createSession).toHaveBeenCalledWith(['zone-1'], {
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+  expect(api.createSession).toHaveBeenCalledTimes(1)
+  expect(api.startSession).not.toHaveBeenCalled()
+})
+
+it.each(['no permission', 'unavailable'] as const)(
+  'hides unknown zone counts when parts data is %s without blocking zone selection',
+  async (state) => {
+    if (state === 'no permission') permissions.value.delete('parts.view')
+    else parts.facets.mockRejectedValueOnce(new Error('Parts unavailable'))
+    const user = userEvent.setup()
+    renderAt('/app/yard/inventory/sessions/new')
+    const zone = await screen.findByRole('checkbox', { name: /Стелаж A1/ })
+    expect(screen.queryByText('18 позицій')).not.toBeInTheDocument()
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+    if (state === 'no permission') expect(parts.facets).not.toHaveBeenCalled()
+    await user.click(zone)
+    expect(
+      within(screen.getByRole('region', { name: 'Обсяг сесії' })).getByRole(
+        'button',
+        { name: 'Розпочати сесію' },
+      ),
+    ).toBeEnabled()
   },
 )

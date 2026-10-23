@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { CabinetLoadingContent } from '../loading-screen'
 import { useSearchParams } from 'react-router'
 import { Check, Minus } from 'lucide-react'
 import {
@@ -8,7 +9,6 @@ import {
   ErrorState,
   Notice,
   Segmented,
-  SkeletonRows,
   StatusPill,
   useOperation,
 } from '@/components/app'
@@ -163,7 +163,11 @@ export function PlansScreen() {
   if (currentPlansState.kind === 'loading') {
     return (
       <PlansFrame>
-        <SkeletonRows columns={3} label={t('loading')} rows={3} />
+        <CabinetLoadingContent
+          module="plans"
+          heading={false}
+          label={t('loading')}
+        />
       </PlansFrame>
     )
   }

@@ -6,7 +6,7 @@ import {
   type InventoryZone,
   type Warehouse,
 } from '@/api/inventory'
-import { Button, Notice, SelectInput } from '@/components/app'
+import { Button, Notice, SelectPicker } from '@/components/app'
 import { commonMessages, useT } from '@/i18n'
 import { partsListMessages } from './parts-list-messages'
 
@@ -182,21 +182,19 @@ export function PartLocationFilters({
       ? zones.items
       : fallbackZones
   const parentOptions = (
-    items: { id: string; name: string }[],
+    items: { id: string; name: string; code?: string }[],
     selected: string,
     label: string,
-  ) => (
-    <>
-      {selected && !items.some((item) => item.id === selected) ? (
-        <option value={selected}>{label}</option>
-      ) : null}
-      {items.map((item) => (
-        <option key={item.id} value={item.id}>
-          {item.name}
-        </option>
-      ))}
-    </>
-  )
+  ) => [
+    ...(selected && !items.some((item) => item.id === selected)
+      ? [{ value: selected, label }]
+      : []),
+    ...items.map((item) => ({
+      value: item.id,
+      label: item.name,
+      ...(item.code ? { searchText: item.code } : {}),
+    })),
+  ]
   const failed =
     (warehouses.key === parentKey && warehouses.error) ||
     (zones.key === zoneKey && zones.error) ||
@@ -204,49 +202,60 @@ export function PartLocationFilters({
     (shelves.key === shelfKey && shelves.error)
   return (
     <>
-      <SelectInput
-        aria-label={t('warehouse')}
-        name="warehouse"
+      <SelectPicker
+        label={t('warehouse')}
+        compact
+        compactOptions
         value={warehouseId}
-        onChange={(event) => onChange('warehouse', event.target.value || null)}
-      >
-        <option value="">{t('warehouseAll')}</option>
-        {parentOptions(warehouseOptions, warehouseId, t('selectedWarehouse'))}
-      </SelectInput>
-      <SelectInput
-        aria-label={t('zone')}
-        name="zone"
+        onValueChange={(value) => onChange('warehouse', value || null)}
+        options={[
+          { value: '', label: t('warehouseAll') },
+          ...parentOptions(
+            warehouseOptions,
+            warehouseId,
+            t('selectedWarehouse'),
+          ),
+        ]}
+      />
+      <SelectPicker
+        label={t('zone')}
+        compact
+        compactOptions
         value={zoneId}
         disabled={!warehouseId}
-        title={warehouseId ? undefined : t('chooseWarehouseFirst')}
-        onChange={(event) => onChange('zone', event.target.value || null)}
-      >
-        <option value="">{t('zoneAll')}</option>
-        {parentOptions(zoneOptions, zoneId, t('selectedZone'))}
-      </SelectInput>
+        onValueChange={(value) => onChange('zone', value || null)}
+        options={[
+          { value: '', label: t('zoneAll') },
+          ...parentOptions(zoneOptions, zoneId, t('selectedZone')),
+        ]}
+      />
       {warehouseId && zoneId ? (
-        <SelectInput
-          aria-label={t('section')}
-          name="section"
+        <SelectPicker
+          label={t('section')}
+          compact
+          compactOptions
           value={withoutSection ? WITHOUT_LOCATION : sectionId}
-          onChange={(event) => onChange('section', event.target.value || null)}
-        >
-          <option value="">└ {t('sectionAll')}</option>
-          <option value={WITHOUT_LOCATION}>{t('withoutSection')}</option>
-          {parentOptions(sectionOptions, sectionId, t('selectedSection'))}
-        </SelectInput>
+          onValueChange={(value) => onChange('section', value || null)}
+          options={[
+            { value: '', label: t('sectionAll') },
+            { value: WITHOUT_LOCATION, label: t('withoutSection') },
+            ...parentOptions(sectionOptions, sectionId, t('selectedSection')),
+          ]}
+        />
       ) : null}
       {warehouseId && zoneId && sectionId && !withoutSection ? (
-        <SelectInput
-          aria-label={t('shelf')}
-          name="shelf"
+        <SelectPicker
+          label={t('shelf')}
+          compact
+          compactOptions
           value={withoutShelf ? WITHOUT_LOCATION : shelfId}
-          onChange={(event) => onChange('shelf', event.target.value || null)}
-        >
-          <option value="">└ {t('shelfAll')}</option>
-          <option value={WITHOUT_LOCATION}>{t('withoutShelf')}</option>
-          {parentOptions(shelfOptions, shelfId, t('selectedShelf'))}
-        </SelectInput>
+          onValueChange={(value) => onChange('shelf', value || null)}
+          options={[
+            { value: '', label: t('shelfAll') },
+            { value: WITHOUT_LOCATION, label: t('withoutShelf') },
+            ...parentOptions(shelfOptions, shelfId, t('selectedShelf')),
+          ]}
+        />
       ) : null}
       {failed ? (
         <Notice

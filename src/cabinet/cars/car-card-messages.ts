@@ -32,11 +32,8 @@ export const carCardMessages = defineMessages({
     breakEven: 'беззбитковість {amount}',
 
     partsTitle: 'Запчастини з авто',
-    partsAll: 'Усі {count} →',
-    partsNone: 'З цього авто ще не розібрано жодної позиції.',
-    partsSold: 'продано',
     partsInStock: 'на складі',
-    share: '{percent} %',
+    partsNone: 'З цього авто ще не розібрано жодної позиції.',
     partsFromCar: {
       one: '{count} запчастина з цього авто',
       few: '{count} запчастини з цього авто',
@@ -81,11 +78,8 @@ export const carCardMessages = defineMessages({
     breakEven: 'break-even {amount}',
 
     partsTitle: 'Parts from this car',
-    partsAll: 'All {count} →',
-    partsNone: 'No parts have been taken off this car yet.',
-    partsSold: 'sold',
     partsInStock: 'in stock',
-    share: '{percent}%',
+    partsNone: 'No parts have been taken off this car yet.',
     partsFromCar: {
       one: '{count} part from this car',
       other: '{count} parts from this car',
@@ -130,11 +124,8 @@ export const carCardMessages = defineMessages({
     breakEven: 'próg rentowności {amount}',
 
     partsTitle: 'Części z auta',
-    partsAll: 'Wszystkie {count} →',
-    partsNone: 'Z tego auta nie zdjęto jeszcze żadnej części.',
-    partsSold: 'sprzedane',
     partsInStock: 'w magazynie',
-    share: '{percent} %',
+    partsNone: 'Z tego auta nie zdjęto jeszcze żadnej części.',
     partsFromCar: {
       one: '{count} część z tego auta',
       few: '{count} części z tego auta',

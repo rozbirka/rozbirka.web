@@ -297,8 +297,8 @@ it('keeps normalized facade problems stable across API boundaries', async () => 
     kind: 'validation',
     status: 422,
     code: 'INVALID_CODE',
-    message: 'Code is invalid',
-    fieldErrors: { code: ['Try another code'] },
+    message: 'Перевірте правильність введених даних.',
+    fieldErrors: { code: ['Перевірте правильність введених даних.'] },
   })
 })
 

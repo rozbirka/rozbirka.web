@@ -1,14 +1,14 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { ArrowRight, Circle, CircleDot, CreditCard, Plus } from 'lucide-react'
 import {
   Button,
   StatusPill,
-  TextArea,
+  NotesCard,
   Thumbnail,
   type StatusTone,
 } from '@/components/app'
-import { commonMessages, useLocale, useT } from '@/i18n'
+import { useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { customersApi, type CustomerDetail } from '@/api/customers'
 import type { OrderDetail, OrderDetailItem } from '@/api/orders'
@@ -163,6 +163,7 @@ export function OrderItemsCard({
 }) {
   const t = useT(orderCardMessages)
   const to = useT(orderMessages)
+  const navigate = useNavigate()
   return (
     <OrderCard
       aside={
@@ -210,7 +211,33 @@ export function OrderItemsCard({
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr className="h-auto" key={item.id}>
+                  <tr
+                    className={cn(
+                      'h-auto',
+                      partsPath !== null && 'cursor-pointer',
+                    )}
+                    key={item.id}
+                    onClick={
+                      partsPath === null
+                        ? undefined
+                        : (event) => {
+                            if (
+                              event.defaultPrevented ||
+                              event.button !== 0 ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.shiftKey ||
+                              event.altKey ||
+                              (event.target instanceof Element &&
+                                event.target.closest(
+                                  'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [contenteditable]',
+                                ))
+                            )
+                              return
+                            void navigate(`${partsPath}/${item.partId}`)
+                          }
+                    }
+                  >
                     <th className="py-2 sm:max-w-64" scope="row">
                       <OrderItemLine item={item} partsPath={partsPath} />
                     </th>
@@ -373,71 +400,26 @@ export function OrderNotesCard({
   editable,
   notes,
   onSave,
+  onSaved,
+  readBack,
 }: {
   busy: boolean
   editable: boolean
   notes: string | null
-  onSave: (value: string) => void
+  onSave: (value: string) => Promise<string | null>
+  onSaved: (value: string | null) => void
+  readBack: () => Promise<string | null>
 }) {
-  const t = useT(orderCardMessages)
-  const tc = useT(commonMessages)
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(notes ?? '')
-  const hasNote = notes !== null && notes !== ''
-
   return (
-    <OrderCard
-      aside={
-        editable && !editing ? (
-          <SmallButton
-            label={hasNote ? t('editNotes') : t('addNotes')}
-            onClick={() => {
-              setDraft(notes ?? '')
-              setEditing(true)
-            }}
-          >
-            {hasNote ? t('edit') : t('add')}
-          </SmallButton>
-        ) : null
-      }
-      padded
-      title={t('notes')}
-    >
-      {editing ? (
-        <>
-          <TextArea
-            aria-label={t('orderNotes')}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={t('notesPlaceholder')}
-            rows={3}
-            value={draft}
-          />
-          <div className="rz-btn-row mt-2.5 justify-end">
-            <Button
-              aria-label={t('cancelNotes')}
-              onClick={() => setEditing(false)}
-            >
-              {tc('cancel')}
-            </Button>
-            <Button
-              aria-label={t('saveNotes')}
-              disabled={busy}
-              onClick={() => {
-                onSave(draft)
-                setEditing(false)
-              }}
-              variant="primary"
-            >
-              {tc('save')}
-            </Button>
-          </div>
-        </>
-      ) : hasNote ? (
-        <p className="text-app-ink m-0 whitespace-pre-line">{notes}</p>
-      ) : (
-        <p className="rz-dim m-0">{t('noNotes')}</p>
-      )}
-    </OrderCard>
+    <NotesCard
+      busy={busy}
+      canEdit={editable}
+      maxLength={1000}
+      onSave={onSave}
+      onSaved={onSaved}
+      readBack={readBack}
+      value={notes}
+    />
   )
 }
 

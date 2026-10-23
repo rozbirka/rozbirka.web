@@ -25,6 +25,7 @@ import { ToastProvider } from './toast'
 import { useOperation } from './use-operation'
 import { useSteps } from './use-steps'
 import { Amount, DateValue, Fact, FactList, Quantity } from './value'
+import { LocaleProvider } from '@/i18n/LocaleProvider'
 
 it('keeps the label the accessible name when a field is required', () => {
   render(
@@ -612,6 +613,33 @@ it('runs an operation without a toast provider and reports success in place', as
   await waitFor(() =>
     expect(screen.getByRole('status')).toHaveTextContent('Збережено'),
   )
+})
+
+it('localises an unexpected operation failure instead of displaying its raw diagnostic', async () => {
+  const user = userEvent.setup()
+  function Probe() {
+    const save = useOperation(() =>
+      Promise.reject(new Error('Internal English diagnostic')),
+    )
+    return (
+      <>
+        <Button onClick={save.run}>Save</Button>
+        {save.error ? <p role="alert">{save.error}</p> : null}
+      </>
+    )
+  }
+  render(
+    <LocaleProvider locale="pl" syncDocumentLang={false}>
+      <Probe />
+    </LocaleProvider>,
+  )
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Wystąpił nieoczekiwany błąd. Spróbuj ponownie.',
+  )
+  expect(
+    screen.queryByText('Internal English diagnostic'),
+  ).not.toBeInTheDocument()
 })
 
 it('reads a figure against the limit that gives it meaning', () => {

@@ -1937,20 +1937,20 @@ test('compact location browser searches and pages large shelf lists @location-br
     await expect(
       page.getByRole('table', { name: 'Деталі на складі' }).getByRole('row'),
     ).toHaveCount(31)
-    // v2: location selects live in the "Склад" filter popover.
+    // Shared location pickers live in the "Склад" filter popover.
     await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
-      page.getByRole('combobox', { name: 'Склад', exact: true }),
-    ).toHaveValue('warehouse-1')
+      page.getByRole('button', { name: 'Склад', exact: true }),
+    ).toHaveText('Основний склад')
     await expect(
-      page.getByRole('combobox', { name: 'Зона', exact: true }),
-    ).toHaveValue('zone-1')
+      page.getByRole('button', { name: 'Зона', exact: true }),
+    ).toHaveText('Зона А')
     await expect(
-      page.getByRole('combobox', { name: 'Секція', exact: true }),
-    ).toHaveValue('section-6')
+      page.getByRole('button', { name: 'Секція', exact: true }),
+    ).toHaveText('Секція 7')
     await expect(
-      page.getByRole('combobox', { name: 'Полиця', exact: true }),
-    ).toHaveValue('section-6-shelf-99')
+      page.getByRole('button', { name: 'Полиця', exact: true }),
+    ).toHaveText('Полиця 100')
     await expect
       .poll(() => contentRequests.at(-1))
       .toMatchObject({
@@ -1975,11 +1975,10 @@ test('compact location browser searches and pages large shelf lists @location-br
     await page.reload()
     await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
-      page.getByRole('combobox', { name: 'Полиця', exact: true }),
-    ).toHaveValue('section-6-shelf-99')
-    await page
-      .getByRole('combobox', { name: 'Полиця', exact: true })
-      .selectOption('section-6-shelf-98')
+      page.getByRole('button', { name: 'Полиця', exact: true }),
+    ).toHaveText('Полиця 100')
+    await page.getByRole('button', { name: 'Полиця', exact: true }).click()
+    await page.getByRole('option', { name: 'Полиця 99', exact: true }).click()
     await expect(page).toHaveURL(/shelf=section-6-shelf-98/)
     await expect
       .poll(() => contentRequests.at(-1))
@@ -2001,8 +2000,8 @@ test('compact location browser searches and pages large shelf lists @location-br
       .click()
     await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
-      page.getByRole('combobox', { name: 'Полиця', exact: true }),
-    ).toHaveValue('')
+      page.getByRole('button', { name: 'Полиця', exact: true }),
+    ).toHaveText('Усі полиці')
     await expect
       .poll(() => {
         const request = contentRequests.at(-1)
@@ -2556,8 +2555,9 @@ test('requires a source before creating a part', async ({ page }) => {
   await expect(drawer.getByRole('alert')).toContainText('Деталь не створено')
   const source = drawer.getByLabel('Автомобіль-джерело', { exact: true })
   await expect(source).toBeVisible()
-  await source.selectOption('car-1')
-  await expect(source).toHaveValue('car-1')
+  await source.click()
+  await page.getByRole('option', { name: /Ford Focus/ }).click()
+  await expect(source).toContainText('Ford Focus')
   await source.focus()
   await expect(source).toBeFocused()
   await page.setViewportSize({ width: 375, height: 812 })
@@ -2864,7 +2864,7 @@ test('creates and places a zone from an empty warehouse without QR scanning @har
   await dialog.getByRole('textbox', { name: 'Код' }).fill('A1')
   await dialog.getByRole('button', { name: 'Додати зону' }).click()
   await expect(
-    page.getByRole('checkbox', { name: 'Основний склад · Стелаж A1' }),
+    page.getByRole('radio', { name: 'Основний склад · Стелаж A1' }),
   ).toBeChecked()
   await page.getByRole('button', { name: 'Зберегти розміщення' }).click()
   await expect.poll(() => placement).toEqual(['zone-new'])
@@ -2942,7 +2942,7 @@ test('creates a warehouse before a zone when placement has no warehouses @harden
   await zoneDialog.getByRole('textbox', { name: 'Код' }).fill('A1')
   await zoneDialog.getByRole('button', { name: 'Додати зону' }).click()
   await expect(
-    page.getByRole('checkbox', { name: 'Новий склад · Полиця A1' }),
+    page.getByRole('radio', { name: 'Новий склад · Полиця A1' }),
   ).toBeChecked()
 })
 
@@ -3189,41 +3189,41 @@ test('placement drawer searches large section and shelf choices without moving t
     await page.goto('/app/koval/parts/part-picker')
     await page.getByRole('button', { name: 'Перемістити', exact: true }).click()
     const drawer = page.getByRole('dialog', { name: 'Розміщення на складі' })
-    const sectionTrigger = drawer.getByRole('button', {
-      name: /^Секція \/ стелаж:/,
+    const sectionTrigger = drawer.getByRole('searchbox', {
+      name: 'Пошук секції',
     })
     await expect(sectionTrigger).toBeVisible()
     const pageScroll = await page.evaluate(() => scrollY)
     await expect(page.getByRole('option')).toHaveCount(0)
     await sectionTrigger.click()
-    const initialList = page.getByRole('listbox')
+    const initialList = page.locator('[data-search-picker-scroll]')
     const initialMetrics = await initialList.evaluate((el) => ({
       height: el.clientHeight,
       scrollHeight: el.scrollHeight,
     }))
-    expect(initialMetrics.height).toBeLessThanOrEqual(256)
+    expect(initialMetrics.height).toBeLessThanOrEqual(460)
     expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.height)
-    const sectionSearch = page.getByRole('combobox', { name: 'Пошук секції' })
+    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
     await sectionSearch.fill('s100')
     await expect(page.getByRole('option')).toHaveCount(2)
     await page.getByRole('option', { name: /Секція 100/ }).click()
-    await drawer.getByRole('button', { name: /^Місце\/полиця:/ }).click()
-    await page.getByRole('combobox', { name: 'Пошук полиці' }).fill('p100')
+    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
     await expect(page.getByRole('option')).toHaveCount(2)
     const popup = page.getByRole('listbox')
     const bounds = await popup.boundingBox()
     expect(bounds).not.toBeNull()
     expect(bounds!.width).toBeLessThanOrEqual(width)
-    expect(bounds!.height).toBeLessThanOrEqual(256)
+    expect(bounds!.height).toBeLessThanOrEqual(460)
     await page.keyboard.press('Escape')
     await expect(drawer).toBeVisible()
     await expect(page.getByRole('listbox')).toHaveCount(0)
-    await drawer.getByRole('button', { name: /^Місце\/полиця:/ }).click()
-    await page.getByRole('combobox', { name: 'Пошук полиці' }).fill('p100')
+    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
     await page.keyboard.press('Enter')
     await expect(
-      drawer.getByRole('button', { name: 'Місце/полиця: Полиця 100' }),
-    ).toBeVisible()
+      drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
+    ).toHaveValue('Полиця 100')
     const overflow = await page.evaluate(() => ({
       width: innerWidth,
       scroll: document.documentElement.scrollWidth,

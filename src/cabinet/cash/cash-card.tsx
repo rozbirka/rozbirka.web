@@ -1,3 +1,5 @@
+import { useRowNavigation } from '@/components/app/use-row-navigation'
+import { cashOrderHref } from './cash-navigation'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button, Notice, StatusPill } from '@/components/app'
@@ -77,6 +79,7 @@ function MoneyLines({
 }
 
 export function CashCard({
+  ordersPath = null,
   cashHref,
   register,
   ledger,
@@ -92,6 +95,7 @@ export function CashCard({
   pagination,
   children,
 }: {
+  ordersPath?: string | null
   cashHref: string
   register: CashRegister
   ledger: readonly CashTransaction[]
@@ -107,6 +111,7 @@ export function CashCard({
   pagination: ReactNode
   children?: ReactNode
 }) {
+  const navigateRow = useRowNavigation()
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
   const {
@@ -229,16 +234,34 @@ export function CashCard({
                 </thead>
                 <tbody>
                   {shown.map((entry) => (
-                    <tr key={entry.id}>
+                    <tr
+                      className={cn(
+                        cashOrderHref(entry, ordersPath) !== null &&
+                          'cursor-pointer',
+                      )}
+                      key={entry.id}
+                      onClick={(event) =>
+                        navigateRow(event, cashOrderHref(entry, ordersPath))
+                      }
+                    >
                       <th className="py-2" scope="row">
                         <span className="rz-mono rz-dim font-normal whitespace-nowrap">
                           {moment(entry.createdAt)}
                         </span>
                       </th>
                       <td className="py-2" data-label={t('colPurpose')}>
-                        <span className="text-app-ink block font-medium">
-                          {entry.note ?? movementText(entry.type)}
-                        </span>
+                        {cashOrderHref(entry, ordersPath) === null ? (
+                          <span className="text-app-ink block font-medium">
+                            {entry.note ?? movementText(entry.type)}
+                          </span>
+                        ) : (
+                          <Link
+                            className="text-app-ink block font-medium"
+                            to={cashOrderHref(entry, ordersPath)!}
+                          >
+                            {entry.note ?? movementText(entry.type)}
+                          </Link>
+                        )}
                         <span className="rz-caption block">
                           {movementText(entry.type)} · {entry.createdByName}
                         </span>

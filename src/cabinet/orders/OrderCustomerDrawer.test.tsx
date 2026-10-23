@@ -2,10 +2,12 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '@/i18n'
+import type { CustomerSearchItem } from '@/api/customers'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
 
 const customerMocks = vi.hoisted(() => ({
   search: vi.fn(),
+  list: vi.fn(),
   create: vi.fn(),
 }))
 
@@ -22,21 +24,38 @@ const deferred = <T,>() => {
   return { promise, resolve }
 }
 
+const customerPage = (items: CustomerSearchItem[]) => ({
+  items: items.map((item) => ({
+    ...item,
+    notes: null,
+    totalAmount: null,
+    lastOrderAt: null,
+  })),
+  page: 1,
+  pageSize: 20,
+  total: items.length,
+})
+
 beforeEach(() => {
+  customerMocks.list.mockReset()
+  customerMocks.list.mockResolvedValue(customerPage([]))
   customerMocks.search.mockReset()
   customerMocks.create.mockReset()
 })
 
 it('hides results from the previous query as soon as the search changes', async () => {
-  customerMocks.search
-    .mockResolvedValueOnce([
-      {
-        id: 'customer-old',
-        name: 'Старий клієнт',
-        phone: '+380501111111',
-        ordersCount: 1,
-      },
-    ])
+  customerMocks.search.mockReturnValue(new Promise(() => undefined))
+  customerMocks.list
+    .mockResolvedValueOnce(
+      customerPage([
+        {
+          id: 'customer-old',
+          name: 'Старий клієнт',
+          phone: '+380501111111',
+          ordersCount: 1,
+        },
+      ]),
+    )
     .mockReturnValueOnce(new Promise(() => undefined))
   const user = userEvent.setup()
 
@@ -69,9 +88,8 @@ it('ignores a late response from the previous customer query', async () => {
     deferred<
       { id: string; name: string; phone: string | null; ordersCount: number }[]
     >()
-  customerMocks.search
-    .mockReturnValueOnce(oldSearch.promise)
-    .mockReturnValueOnce(newSearch.promise)
+  customerMocks.list.mockReturnValueOnce(oldSearch.promise.then(customerPage))
+  customerMocks.search.mockReturnValueOnce(newSearch.promise)
   const user = userEvent.setup()
 
   render(
@@ -87,9 +105,9 @@ it('ignores a late response from the previous customer query', async () => {
     />,
   )
 
-  await waitFor(() => expect(customerMocks.search).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(customerMocks.list).toHaveBeenCalledTimes(1))
   await user.type(screen.getByLabelText('Пошук клієнта'), 'новий')
-  await waitFor(() => expect(customerMocks.search).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(customerMocks.search).toHaveBeenCalledTimes(1))
 
   await act(async () => {
     oldSearch.resolve([
@@ -116,15 +134,17 @@ it('ignores a late response from the previous customer query', async () => {
 })
 
 it('does not show results from the previous opening while reloading', async () => {
-  customerMocks.search
-    .mockResolvedValueOnce([
-      {
-        id: 'customer-old',
-        name: 'Клієнт із попереднього відкриття',
-        phone: null,
-        ordersCount: 1,
-      },
-    ])
+  customerMocks.list
+    .mockResolvedValueOnce(
+      customerPage([
+        {
+          id: 'customer-old',
+          name: 'Клієнт із попереднього відкриття',
+          phone: null,
+          ordersCount: 1,
+        },
+      ]),
+    )
     .mockReturnValueOnce(new Promise(() => undefined))
 
   const props = {
@@ -149,7 +169,7 @@ it('does not show results from the previous opening while reloading', async () =
   expect(
     screen.queryByText('Клієнт із попереднього відкриття'),
   ).not.toBeInTheDocument()
-  await waitFor(() => expect(customerMocks.search).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(customerMocks.list).toHaveBeenCalledTimes(2))
 })
 
 const drawerProps = {
@@ -175,6 +195,8 @@ it.each([
     const user = userEvent.setup()
     render(<OrderCustomerDrawer {...drawerProps} onAssign={onAssign} />)
 
+    await user.click(screen.getByLabelText('Пошук клієнта'))
+    await user.keyboard('{Escape}')
     await user.click(
       await screen.findByRole('button', { name: 'Новий клієнт' }),
     )
@@ -200,6 +222,8 @@ it('explains an incomplete number in an international, country-neutral way', asy
   const user = userEvent.setup()
   render(<OrderCustomerDrawer {...drawerProps} onAssign={vi.fn()} />)
 
+  await user.click(screen.getByLabelText('Пошук клієнта'))
+  await user.keyboard('{Escape}')
   await user.click(await screen.findByRole('button', { name: 'Новий клієнт' }))
   await user.type(screen.getByLabelText('Ім’я або назва компанії'), 'Клієнт')
   await user.type(screen.getByLabelText('Телефон'), '50111')
@@ -214,21 +238,24 @@ it('explains an incomplete number in an international, country-neutral way', asy
 })
 
 it('renders the customer picker in British English', async () => {
-  customerMocks.search.mockResolvedValue([
-    {
-      id: 'customer-1',
-      name: 'John Smith',
-      phone: '+447700900123',
-      ordersCount: 2,
-    },
-  ])
+  customerMocks.list.mockResolvedValue(
+    customerPage([
+      {
+        id: 'customer-1',
+        name: 'John Smith',
+        phone: '+447700900123',
+        ordersCount: 2,
+      },
+    ]),
+  )
   render(
     <LocaleProvider locale="en-GB">
       <OrderCustomerDrawer {...drawerProps} onAssign={vi.fn()} />
     </LocaleProvider>,
   )
 
-  expect(await screen.findByText('+44 7700 900123 · 2 orders')).toBeVisible()
+  expect(await screen.findByText('+44 7700 900123')).toBeVisible()
+  expect(screen.getByText('2 orders')).toBeVisible()
   expect(screen.getByRole('dialog', { name: 'Add customer' })).toBeVisible()
   expect(screen.getByText('Order #12 · customer')).toBeVisible()
   expect(screen.getByLabelText('Search customers')).toBeVisible()

@@ -24,6 +24,7 @@ import {
 } from '@/components/app'
 import { reportsApi, type ReportJob } from '@/api/reports'
 import { normalizeApiProblem } from '@/api/errors'
+import { localizeApiError } from '@/api/error-localization'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { tenantRequestScope } from '../tenant-request-scope'
@@ -620,7 +621,12 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       {transferError ? <Notice tone="danger">{transferError}</Notice> : null}
 
       {isLoading ? (
-        <SkeletonRows label={t('loading')} rows={3} />
+        <SkeletonRows
+          columnWidths={['2fr', '1fr', '3fr']}
+          details
+          label={t('loading')}
+          rows={3}
+        />
       ) : (
         <DataTable
           caption={t('list')}
@@ -700,7 +706,15 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                     {status === 'failed' ? (
                       <span className="rz-caption rz-muted">
                         {report.errorMessage
-                          ? t('failedReason', { reason: report.errorMessage })
+                          ? t('failedReason', {
+                              reason: localizeApiError(
+                                {
+                                  message: report.errorMessage,
+                                  kind: 'server',
+                                },
+                                locale,
+                              ),
+                            })
                           : t('failedUnknown')}{' '}
                         {canManage ? t('replaceHint') : t('askOwner')}
                       </span>

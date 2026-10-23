@@ -1,3 +1,4 @@
+import { CabinetLoadingScreen } from '../loading-screen'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
@@ -7,7 +8,6 @@ import {
   Field,
   TextInput,
   Notice,
-  SkeletonRows,
   StateScreen,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
@@ -83,7 +83,7 @@ export function ImportScreen(props: CabinetModuleScreenProps) {
   const { importId } = useParams()
   const t = useImportT(importScreenMessages)
   if (cabinet.status !== 'ready' || !cabinet.snapshot)
-    return <SkeletonRows label={t('checkingAccess')} />
+    return <CabinetLoadingScreen module="parts" label={t('checkingAccess')} />
   if (!cabinet.snapshot.permissions.has('parts.manage'))
     return (
       <div className="rz-page">
@@ -673,7 +673,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
         />
       </div>
     ) : (
-      <SkeletonRows label={t('loadingSettings')} />
+      <CabinetLoadingScreen module="parts" label={t('loadingSettings')} />
     )
   return (
     <div className="grid min-w-0 content-start">

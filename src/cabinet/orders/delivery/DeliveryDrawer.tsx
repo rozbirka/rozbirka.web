@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CustomerSearchPicker } from '@/components/customers/CustomerSearchPicker'
 import {
   Button,
   Field,
@@ -104,6 +105,7 @@ function Section({
  */
 export function DeliveryDrawer({
   countryCode = null,
+  customerSearchAllowed = false,
   customerName,
   customerPhone,
   declaredValue,
@@ -119,6 +121,7 @@ export function DeliveryDrawer({
 }: {
   /** The tenant's country; only picks the phone example. */
   countryCode?: BusinessCountry | null
+  customerSearchAllowed?: boolean
   customerName: string | null
   customerPhone: string | null
   declaredValue: number | null
@@ -152,6 +155,9 @@ export function DeliveryDrawer({
     shipment?.dispatchPointId ?? defaultPoint?.id ?? '',
   )
   const [name, setName] = useState(saved?.recipient.name ?? customerName ?? '')
+  const [recipientCustomerId, setRecipientCustomerId] = useState<string | null>(
+    null,
+  )
   const [phone, setPhone] = useState(
     saved?.recipient.phone ?? customerPhone ?? '',
   )
@@ -422,13 +428,34 @@ export function DeliveryDrawer({
         </Section>
 
         <Section title={t('sectionRecipient')}>
-          <Field label={t('recipientName')} required>
-            <TextInput
-              onChange={(event) => setName(event.target.value)}
-              placeholder={t('recipientNamePlaceholder')}
-              value={name}
+          {customerSearchAllowed ? (
+            <CustomerSearchPicker
+              disabled={busy !== null}
+              hint={t('recipientLookupHint')}
+              label={t('recipientName')}
+              query={name}
+              selectedId={recipientCustomerId}
+              onQueryChange={(next) => {
+                setName(next)
+                setRecipientCustomerId(null)
+              }}
+              onSelect={(customer) => {
+                setName(customer.name)
+                setPhone(customer.phone ?? '')
+                setRecipientCustomerId(customer.id)
+              }}
+              required
+              showLabel
             />
-          </Field>
+          ) : (
+            <Field label={t('recipientName')} required>
+              <TextInput
+                onChange={(event) => setName(event.target.value)}
+                placeholder={t('recipientNamePlaceholder')}
+                value={name}
+              />
+            </Field>
+          )}
           <Field
             error={
               phone !== '' && !PHONE.test(trimmedPhone)
@@ -441,7 +468,10 @@ export function DeliveryDrawer({
             <TextInput
               className="font-mono"
               inputMode="tel"
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={(event) => {
+                setPhone(event.target.value)
+                setRecipientCustomerId(null)
+              }}
               placeholder={example}
               value={phone}
             />

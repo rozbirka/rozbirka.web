@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 import { useOptionalToast } from './toast-context'
 import { useLocale } from '@/i18n/LocaleProvider'
-import { translate } from '@/i18n/messages'
 import type { Locale } from '@/i18n/locales'
-import { appMessages } from './app-messages'
+import { normalizeApiProblem } from '@/api/errors'
+import { localizeApiError } from '@/api/error-localization'
 
 export type OperationStatus = 'idle' | 'pending' | 'done' | 'failed'
 
@@ -31,9 +31,7 @@ export interface OperationOptions<Result> {
 }
 
 const defaultErrorMessage = (error: unknown, locale: Locale): string =>
-  error instanceof Error && error.message
-    ? error.message
-    : translate(appMessages, locale, 'operationFailed')
+  localizeApiError(normalizeApiProblem(error), locale)
 
 /**
  * One contract for "the user asked for something and it is happening": a

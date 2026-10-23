@@ -946,7 +946,7 @@ it('keeps the transfer form available while surfacing an explicit conflict', asy
   await user.click(screen.getByRole('button', { name: 'Переказати кошти' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Недостатньо коштів для переказу.',
+    'Не вдалося виконати дію через конфлікт даних.',
   )
   expect(
     screen.getByRole('heading', { name: 'Переказ між касами' }),
@@ -1337,7 +1337,9 @@ it('keeps current cash register currencies visible when addition fails', async (
 
   await user.click(await screen.findByRole('button', { name: 'Додати GBP' }))
 
-  expect(await screen.findByText('Add failed')).toBeVisible()
+  expect(
+    await screen.findByText('Не вдалося виконати дію через конфлікт даних.'),
+  ).toBeVisible()
   expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
   expect(screen.queryByText('GBP (Фунт стерлінгів)')).not.toBeInTheDocument()
   expect(cashMocks.getById).toHaveBeenCalledTimes(2)
@@ -1823,3 +1825,71 @@ it('does not render unsupported till settings', async () => {
   expect(screen.queryByText('Звіряння й доступ')).not.toBeInTheDocument()
   expect(screen.getByText('Валюти')).toBeVisible()
 })
+
+it.each([
+  ['overview', true],
+  ['ledger', true],
+  ['overview', false],
+  ['ledger', false],
+] as const)(
+  'navigates from %s cash rows according to orders permission (%s)',
+  async (screenKind, ordersAllowed) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet([
+        'finance.view',
+        'finance.manage',
+        ...(ordersAllowed ? ['orders.view'] : []),
+      ]),
+    )
+    const register = {
+      id: 'cash-1',
+      name: 'Каса переходів',
+      type: 'cash',
+      isActive: true,
+      balances: { USD: 100 },
+    }
+    cashMocks.list.mockResolvedValue([register])
+    cashMocks.getById.mockResolvedValue(register)
+    cashMocks.transactions.mockResolvedValue({
+      items: [
+        {
+          id: 'tx-nav',
+          type: 'sale_in',
+          direction: 'in',
+          amount: 100,
+          currency: 'USD',
+          referenceId: 'order-nav',
+          note: 'Order #362',
+          createdByName: 'Олена',
+          createdAt: '2026-10-22T10:00:00Z',
+        },
+      ],
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      totalPages: 1,
+    })
+    const initialPath =
+      screenKind === 'overview' ? '/app/garage/cash' : '/app/garage/cash/cash-1'
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/app/garage/cash/*',
+          element: <CashScreen definition={definition} />,
+        },
+        { path: '/app/garage/orders/:id', element: <p>Замовлення з каси</p> },
+      ],
+      { initialEntries: [initialPath] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+    await user.click((await screen.findByText('Order #362')).closest('tr')!)
+    expect(router.state.location.pathname).toBe(
+      ordersAllowed
+        ? '/app/garage/orders/order-nav'
+        : '/app/garage/cash/cash-1',
+    )
+    if (!ordersAllowed)
+      await screen.findByRole('heading', { name: 'Каса переходів' })
+  },
+)

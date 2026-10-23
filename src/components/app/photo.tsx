@@ -76,9 +76,28 @@ export function Thumbnail({
       )}
     >
       {failed ? (
-        <span className="text-app-dim grid h-full place-items-center gap-1 p-2 text-center text-caption">
-          <ImageOff aria-hidden className="size-4" />
-          {t('photoUnavailable')}
+        <span
+          className={cn(
+            'text-app-dim absolute inset-0 flex flex-col items-center justify-center text-center whitespace-normal',
+            size === 'thumbnail'
+              ? 'p-0.5 text-[9px] leading-tight'
+              : 'gap-1 p-2 text-caption leading-tight',
+          )}
+        >
+          {size === 'full' ? (
+            <ImageOff aria-hidden className="size-4 shrink-0" />
+          ) : null}
+          <span className="w-full min-w-0 wrap-anywhere">
+            {size === 'thumbnail'
+              ? t('photoUnavailable')
+                  .split(' ')
+                  .map((word, index) => (
+                    <span className="block whitespace-nowrap" key={index}>
+                      {word}
+                    </span>
+                  ))
+              : t('photoUnavailable')}
+          </span>
         </span>
       ) : (
         <>

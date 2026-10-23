@@ -61,7 +61,7 @@ describe('integration labels', () => {
     )
   })
 
-  it('maps the country refusal and passes other server messages through', () => {
+  it('maps the country refusal and localises unknown server failures', () => {
     expect(
       integrationProblemMessage(
         { code: 'INTEGRATION_COUNTRY_UNAVAILABLE', message: 'raw' },
@@ -75,7 +75,7 @@ describe('integration labels', () => {
         { code: 'other', message: 'As received' },
         'pl',
       ),
-    ).toBe('As received')
+    ).toBe('Wystąpił nieoczekiwany błąd. Spróbuj ponownie.')
   })
 
   it('decides Nova Poshta by business country only', () => {

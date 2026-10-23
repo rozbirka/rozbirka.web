@@ -168,7 +168,7 @@ it('shows the registration sign-in switch as a text action without a filled hove
   })
   expect(signIn).not.toHaveClass('rounded-control')
   expect(signIn).not.toHaveClass('hover:bg-app-hover')
-  expect(screen.getByText('Увійти')).toHaveClass('group-hover:text-app-strong')
+  expect(screen.getByText('Увійти')).toHaveClass('text-brand-text')
   await user.click(signIn)
   expect(
     screen.getByRole('heading', { name: 'Вхід за номером телефону' }),

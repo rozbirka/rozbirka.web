@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MapPinOff } from 'lucide-react'
-import { Button, EmptyState, Notice, StatusPill } from '@/components/app'
+import {
+  Button,
+  EmptyState,
+  Notice,
+  SkeletonRows,
+  StatusPill,
+} from '@/components/app'
 import {
   integrationsApi,
   type NovaPoshtaDispatchPoint,
@@ -194,9 +200,7 @@ export function DispatchPointsPanel({
       )}
 
       {state.kind === 'loading' && (
-        <p className="rz-muted m-0" role="status">
-          {t('pointsLoading')}
-        </p>
+        <SkeletonRows label={t('pointsLoading')} rows={3} />
       )}
 
       {state.kind === 'ready' && points.length === 0 && (

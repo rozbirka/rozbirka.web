@@ -1,5 +1,6 @@
 import type { StatusTone } from '@/components/app'
 import type { ApiProblem } from '@/api/contracts'
+import { localizeApiError } from '@/api/error-localization'
 import type { Integration, IntegrationStatus } from '@/api/integrations'
 import type { BusinessCountry } from '@/api/tenant-settings'
 import { SOURCE_LOCALE, translate, type Locale } from '@/i18n'
@@ -51,16 +52,17 @@ export function novaPoshtaUnavailableText(locale: Locale = SOURCE_LOCALE): {
 }
 
 /**
- * The server's own message for a failed request, except where the code means
- * something this cabinet explains itself (NP refused for the country).
+ * A failed request in the interface language, with the cabinet's specific
+ * explanation when Nova Poshta is unavailable in this country.
  */
 export function integrationProblemMessage(
-  problem: Pick<ApiProblem, 'code' | 'message'>,
+  problem: Pick<ApiProblem, 'code' | 'message'> &
+    Partial<Pick<ApiProblem, 'kind'>>,
   locale: Locale = SOURCE_LOCALE,
 ): string {
   return isCountryUnavailableProblem(problem)
     ? label(locale, `error.${INTEGRATION_COUNTRY_UNAVAILABLE}`)
-    : problem.message
+    : localizeApiError({ ...problem, kind: problem.kind ?? 'unknown' }, locale)
 }
 
 const STATUS_TONES: Record<IntegrationStatus, StatusTone> = {

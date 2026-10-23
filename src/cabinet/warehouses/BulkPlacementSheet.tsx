@@ -179,9 +179,13 @@ export function BulkPlacementSheet({
                   Boolean(zone.sectionId ?? zone.shelfId),
               )
             ) {
-              throw Object.assign(new Error(t('existingSpecificLocation')), {
-                kind: 'validation',
+              next.push({
+                part,
+                kind: 'failed',
+                message: t('existingSpecificLocation'),
               })
+              setProcessed((value) => value + 1)
+              continue
             }
             requireLatestMutation({
               permission: 'inventory.zones.manage',

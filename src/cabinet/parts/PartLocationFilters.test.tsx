@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { PartLocationFilters } from './PartLocationFilters'
@@ -24,9 +24,17 @@ beforeEach(() => {
   props.onChange.mockReset()
   api.getWarehouses
     .mockReset()
-    .mockResolvedValue([{ id: 'w', name: 'Склад', isActive: true }])
+    .mockResolvedValue([
+      { id: 'w', name: 'Склад', code: 'main', isActive: true },
+    ])
   api.getZones.mockReset().mockResolvedValue([
-    { id: 'z', warehouseId: 'w', name: 'Зона', isActive: true },
+    {
+      id: 'z',
+      warehouseId: 'w',
+      name: 'Зона',
+      code: 'zone-code',
+      isActive: true,
+    },
     { id: 'z2', warehouseId: 'w', name: 'Зона 2', isActive: true },
   ])
   api.getSections
@@ -45,30 +53,28 @@ beforeEach(() => {
     })),
   )
 })
-it('loads only the selected parents and uses the same native selector for 100 shelves', async () => {
+it('loads only the selected parents and searches 100 shelves with the shared dropdown', async () => {
   const user = userEvent.setup()
   render(<PartLocationFilters {...props} />)
   await waitFor(() =>
     expect(api.getShelves).toHaveBeenCalledWith('z', expect.anything(), 's'),
   )
   expect(api.getSections).toHaveBeenCalledWith('z', expect.anything())
-  await screen.findByRole('option', { name: 'Полиця 100' })
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Полиця' }),
-    'p100',
-  )
+  await user.click(screen.getByRole('button', { name: 'Полиця' }))
+  await user.type(screen.getByRole('searchbox'), 'P100')
+  await user.click(await screen.findByRole('option', { name: 'Полиця 100' }))
+  expect(screen.queryByRole('listbox')).toBeNull()
   expect(props.onChange).toHaveBeenCalledWith('shelf', 'p100')
 })
 it('keeps section-only and shelf-less placements distinct', async () => {
   const user = userEvent.setup()
   render(<PartLocationFilters {...props} />)
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Полиця' }),
-    '__without__',
-  )
+  await user.click(screen.getByRole('button', { name: 'Полиця' }))
+  await user.click(screen.getByRole('option', { name: 'Без полиці' }))
   expect(props.onChange).toHaveBeenCalledWith('shelf', '__without__')
 })
 it('does not show options from the previous zone after a delayed read completes', async () => {
+  const user = userEvent.setup()
   let complete: (items: unknown[]) => void = () => undefined
   api.getSections
     .mockImplementationOnce(
@@ -101,6 +107,7 @@ it('does not show options from the previous zone after a delayed read completes'
       ]),
     )
   })
+  await user.click(screen.getByRole('button', { name: 'Секція' }))
   expect(
     await screen.findByRole('option', { name: /^Нова секція/ }),
   ).toBeInTheDocument()
@@ -114,7 +121,9 @@ it('keeps a linked shelf selected when loading its options fails and offers retr
   expect(
     await screen.findByText('Не вдалося завантажити список секцій або полиць.'),
   ).toBeInTheDocument()
-  expect(screen.getByRole('combobox', { name: 'Полиця' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Полиця' })).toHaveTextContent(
+    'Обрана полиця',
+  )
   expect(
     screen.getByRole('button', { name: 'Спробувати ще раз' }),
   ).toBeInTheDocument()
@@ -126,32 +135,48 @@ it('reveals each child only after its parents are selected and hides children wh
     <PartLocationFilters {...props} warehouseId="" zoneId="" sectionId="" />,
   )
   expect(
-    screen.queryByRole('combobox', { name: 'Секція' }),
+    screen.queryByRole('button', { name: 'Секція' }),
   ).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('combobox', { name: 'Полиця' }),
+    screen.queryByRole('button', { name: 'Полиця' }),
   ).not.toBeInTheDocument()
   view.rerender(<PartLocationFilters {...props} zoneId="" sectionId="" />)
   expect(
-    screen.queryByRole('combobox', { name: 'Секція' }),
+    screen.queryByRole('button', { name: 'Секція' }),
   ).not.toBeInTheDocument()
   view.rerender(<PartLocationFilters {...props} sectionId="" />)
-  expect(screen.getByRole('combobox', { name: 'Секція' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Секція' })).toBeInTheDocument()
   expect(
-    screen.queryByRole('combobox', { name: 'Полиця' }),
+    screen.queryByRole('button', { name: 'Полиця' }),
   ).not.toBeInTheDocument()
   view.rerender(<PartLocationFilters {...props} />)
-  expect(screen.getByRole('combobox', { name: 'Полиця' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Полиця' })).toBeInTheDocument()
   view.rerender(<PartLocationFilters {...props} sectionId="" withoutSection />)
-  expect(screen.getByRole('combobox', { name: 'Секція' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Секція' })).toBeInTheDocument()
   expect(
-    screen.queryByRole('combobox', { name: 'Полиця' }),
+    screen.queryByRole('button', { name: 'Полиця' }),
   ).not.toBeInTheDocument()
   view.rerender(<PartLocationFilters {...props} zoneId="" sectionId="" />)
   expect(
-    screen.queryByRole('combobox', { name: 'Секція' }),
+    screen.queryByRole('button', { name: 'Секція' }),
   ).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('combobox', { name: 'Полиця' }),
+    screen.queryByRole('button', { name: 'Полиця' }),
+  ).not.toBeInTheDocument()
+})
+
+it.each([
+  ['Склад', 'Склад', 'main'],
+  ['Зона', 'Зона', 'zone-code'],
+  ['Секція', 'Секція А', 'A'],
+  ['Полиця', 'Полиця 100', 'P100'],
+])('shows only names in the %s dropdown', async (label, name, code) => {
+  const user = userEvent.setup()
+  render(<PartLocationFilters {...props} />)
+  await user.click(screen.getByRole('button', { name: label }))
+  const option = await screen.findByRole('option', { name })
+  expect(option).toHaveTextContent(name)
+  expect(
+    within(option).queryByText(code, { exact: true }),
   ).not.toBeInTheDocument()
 })

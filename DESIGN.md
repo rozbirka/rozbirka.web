@@ -18,8 +18,9 @@ canvas `#0b0b0b`, surface `#121212`, input `#191919`, text `#f6f4f2`, muted
 scale. Marketing retains Visuelt Hero. Do not duplicate or replace these values
 in screen-local CSS.
 
-Authentication reuses `src/screens/login.tsx`'s 420px column, the v2 brand mark,
-step headers and shared app Button, Field, TextInput and Notice components. Login and
+Authentication reuses the v2 brand mark, step headers and shared app Button,
+Field, TextInput and Notice components. Login uses a responsive 560px column
+with 44px fields and primary actions. Login and
 registration are explicit business variants of the same flow. Localized text
 names the action; invitation context survives both variants. Language names are
 always written in their own language with a matching `lang` attribute. Billing preserves

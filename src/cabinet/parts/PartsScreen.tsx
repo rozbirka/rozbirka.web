@@ -1,8 +1,14 @@
+import { Popover } from 'radix-ui'
+import { localizeApiError } from '@/api/error-localization'
+import { PartSourceFilter } from './PartSourceFilter'
+import { PartLocationCard } from './PartLocationCard'
+import { PartNotesCard } from './PartNotesCard'
+import { PartPriceDrawer } from './PartPriceDrawer'
+import { CabinetLoadingContent } from '../loading-screen'
 import {
   lazy,
   Suspense,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -53,6 +59,7 @@ import {
   PillGroup,
   QuantityStepper,
   SkeletonRows,
+  SkeletonFields,
   SpecGrid,
   BulkBar,
   Button,
@@ -63,7 +70,7 @@ import {
   InlineEdit,
   Notice,
   SearchInput,
-  SelectInput,
+  SelectPicker,
   StateScreen,
   StatusPill,
   TextArea,
@@ -95,7 +102,6 @@ import {
   historyKind,
   type HistoryKind,
   historyLabel,
-  originLabel,
   PIECES_UNIT,
   sourceLabel,
   unitLabel,
@@ -281,8 +287,9 @@ function useSourceOptions(
   return options
 }
 
-const carLabel = (car: CarListItem) =>
-  `${car.code} · ${car.brand} ${car.model} (${car.year})`
+const carLabel = (
+  car: Pick<CarListItem, 'code' | 'brand' | 'model' | 'year'>,
+) => `${car.code} · ${car.brand} ${car.model} (${car.year})`
 const intakeLabel = (intake: IntakeListItem, locale: Locale) =>
   `${intake.name ?? translate(partFormMessages, locale, 'intakeNoName')} · ${intake.supplier ?? translate(partFormMessages, locale, 'intakeNoSupplier')}`
 
@@ -431,6 +438,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       ...(filters.withoutSection ? { missingSection: true } : {}),
       ...(filters.withoutShelf ? { missingShelf: true } : {}),
       ...(filters.carIds.length > 0 ? { carIds: filters.carIds } : {}),
+      ...(filters.intakeIds.length > 0 ? { intakeIds: filters.intakeIds } : {}),
       ...(filters.makeId || filters.modelId
         ? {
             compatibility: {
@@ -611,7 +619,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         })
       return () => controller.abort()
     }
-    if (!partId && !isNew) {
+    if (!partId && (!isNew || createDecision.kind === 'allowed')) {
       void Promise.all([
         partsApi.search(searchRequest, { signal: controller.signal }),
         partsApi.facets(searchRequest, FACET_DIMENSIONS, {
@@ -630,26 +638,26 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         })
     }
     return () => controller.abort()
-  }, [isEdit, isNew, partId, reloadToken, searchRequest, showEditBackground])
+  }, [
+    createDecision.kind,
+    isEdit,
+    isNew,
+    partId,
+    reloadToken,
+    searchRequest,
+    showEditBackground,
+  ])
 
   if (isNew && createDecision.kind !== 'allowed')
     return <AccessDenied decision={createDecision} />
   if (isEdit && manageDecision.kind !== 'allowed')
     return <AccessDenied decision={manageDecision} />
-  if (isNew)
-    return (
-      <PartForm
-        canViewCars={links.cars}
-        canViewIntakes={links.intakes}
-        requireLatestMutation={requireLatestMutation}
-        title={translate(partFormMessages, locale, 'newPart')}
-      />
-    )
   if (isEdit && partId)
     return (
       <>
         {showEditBackground ? (
           <PartDetailScreen
+            key={partId}
             detail={detail}
             history={history}
             error={error !== null}
@@ -658,11 +666,22 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             links={links}
             requireLatestMutation={requireLatestMutation}
             tenantSlug={cabinet.targetTenant?.slug ?? ''}
+            onPriceSaved={(saved) => {
+              setDetail((current) => (current?.id === partId ? saved : current))
+              setReloadToken((value) => value + 1)
+            }}
+            onNotesSaved={(notes) => {
+              setDetail((current) =>
+                current?.id === partId ? { ...current, notes } : current,
+              )
+              setReloadToken((value) => value + 1)
+            }}
             onPlacementSaved={() => setReloadToken((value) => value + 1)}
             placementRevision={reloadToken}
           />
         ) : null}
         <PartEdit
+          key={partId}
           canViewCars={links.cars}
           canViewIntakes={links.intakes}
           partId={partId}
@@ -673,6 +692,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   if (partId)
     return (
       <PartDetailScreen
+        key={partId}
         detail={detail}
         history={history}
         error={error !== null}
@@ -681,6 +701,16 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         links={links}
         requireLatestMutation={requireLatestMutation}
         tenantSlug={cabinet.targetTenant?.slug ?? ''}
+        onPriceSaved={(saved) => {
+          setDetail((current) => (current?.id === partId ? saved : current))
+          setReloadToken((value) => value + 1)
+        }}
+        onNotesSaved={(notes) => {
+          setDetail((current) =>
+            current?.id === partId ? { ...current, notes } : current,
+          )
+          setReloadToken((value) => value + 1)
+        }}
         onPlacementSaved={() => setReloadToken((value) => value + 1)}
         placementRevision={reloadToken}
       />
@@ -693,12 +723,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     facets === null
       ? undefined
       : facets[dimension].reduce((sum, value) => sum + value.count, 0)
-  const facetOptions = (dimension: keyof PartFacets) =>
-    (facets?.[dimension] ?? []).map((value) => (
-      <option key={value.id} value={value.id}>
-        {value.name} ({value.count})
-      </option>
-    ))
   const statusTotal = facetTotal('statuses')
 
   const updatePage = (page: number) => {
@@ -799,6 +823,26 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       label: t('totalSold'),
     },
   ]
+  const selectedSourceCar =
+    filters.carIds.length === 1
+      ? filteredCars.find((car) => car.id === filters.carIds[0])
+      : undefined
+  const sourceOwner = `${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`
+  const updateSource = (kind: 'cars' | 'intakes', id: string | null) => {
+    const next = new URLSearchParams(searchParams)
+    const ownKey = kind === 'cars' ? 'car_ids' : 'intake_ids'
+    const otherKey = kind === 'cars' ? 'intake_ids' : 'car_ids'
+    next.delete(ownKey)
+    if (id) {
+      next.set(ownKey, id)
+      next.delete(otherKey)
+    }
+    for (const key of ['make', 'model', 'origin', 'page']) next.delete(key)
+    appliedCarPresetRef.current = normalizedIds(next.getAll('car_ids')).join(
+      ',',
+    )
+    setSearchParams(next)
+  }
   const loading = pageMeta === null && error === null
   // Out of quota or on a lapsed subscription the button stays in its place,
   // switched off with the reason, so nobody wonders where it went.
@@ -816,13 +860,17 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     statusTotal === 0 &&
     activeFilters.length === 0
 
+  const directoryPath = isNew
+    ? location.pathname.replace(/\/new$/, '')
+    : location.pathname
+
   const emptyActions =
     manageDecision.kind === 'allowed' || createDecision.kind === 'allowed' ? (
       <>
         {manageDecision.kind === 'allowed' ? (
           <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
             <Button asChild>
-              <Link to="imports">
+              <Link to={`${directoryPath}/imports`}>
                 <Upload aria-hidden />
                 {t('importParts')}
               </Link>
@@ -831,7 +879,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         ) : null}
         {createDecision.kind === 'allowed' ? (
           <Button asChild variant="primary">
-            <Link to="new">
+            <Link to={`${directoryPath}/new`}>
               <Plus aria-hidden />
               {t('addPart')}
             </Link>
@@ -840,7 +888,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       </>
     ) : null
 
-  return (
+  const directory = (
     <RedesignShell
       {...(peekId === null || loading || error
         ? {}
@@ -865,7 +913,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             {manageDecision.kind === 'allowed' ? (
               <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
                 <Button asChild>
-                  <Link to="imports">
+                  <Link to={`${directoryPath}/imports`}>
                     <Upload aria-hidden />
                     {t('importParts')}
                   </Link>
@@ -874,7 +922,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             ) : null}
             {createDecision.kind === 'allowed' ? (
               <Button asChild variant="primary">
-                <Link to="new">
+                <Link to={`${directoryPath}/new`}>
                   <Plus aria-hidden />
                   {t('addPart')}
                 </Link>
@@ -973,53 +1021,30 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           ))}
         </div>
 
-        <FilterPopover
-          label={t('filterCompatibility')}
-          placeholder={t('makeAny')}
-          {...(filters.makeId
-            ? {
-                setKey: t('make'),
-                setValue: [
-                  facetName('makes', filters.makeId) ?? filters.makeId,
-                  filters.modelId
-                    ? (facetName('models', filters.modelId) ?? filters.modelId)
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · '),
-              }
-            : {})}
-        >
-          <div className="grid gap-2 p-3">
-            <SelectInput
-              aria-label={t('make')}
-              name="make"
-              onChange={(event) => {
-                const next = new URLSearchParams(searchParams)
-                if (event.target.value) next.set('make', event.target.value)
-                else next.delete('make')
-                next.delete('model')
-                next.delete('page')
-                setSearchParams(next)
-              }}
-              value={filters.makeId}
-            >
-              <option value="">{t('makeAny')}</option>
-              {facetOptions('makes')}
-            </SelectInput>
-            <SelectInput
-              aria-label={t('model')}
-              disabled={!filters.makeId}
-              name="model"
-              onChange={(event) => updateFilter('model', event.target.value)}
-              title={filters.makeId ? undefined : t('chooseMakeFirst')}
-              value={filters.modelId}
-            >
-              <option value="">{t('modelAny')}</option>
-              {facetOptions('models')}
-            </SelectInput>
-          </div>
-        </FilterPopover>
+        {links.cars ? (
+          <PartSourceFilter
+            key={`${sourceOwner}:cars`}
+            kind="cars"
+            owner={sourceOwner}
+            values={filters.carIds}
+            enabled={links.cars}
+            selectedLabel={
+              selectedSourceCar ? carLabel(selectedSourceCar) : undefined
+            }
+            onChange={(id) => updateSource('cars', id)}
+          />
+        ) : null}
+
+        {links.intakes ? (
+          <PartSourceFilter
+            key={`${sourceOwner}:intakes`}
+            kind="intakes"
+            owner={sourceOwner}
+            values={filters.intakeIds}
+            enabled={links.intakes}
+            onChange={(id) => updateSource('intakes', id)}
+          />
+        ) : null}
 
         <FilterPopover
           label={t('filterPlacement')}
@@ -1120,41 +1145,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           </div>
         </FilterPopover>
 
-        <FilterPopover
-          label={t('filterOrigin')}
-          placeholder={t('filterOrigin')}
-          {...(filters.origin
-            ? {
-                setKey: t('filterOrigin'),
-                setValue: originLabel(
-                  filters.origin,
-                  facetName('origins', filters.origin) ?? filters.origin,
-                  locale,
-                ),
-              }
-            : {})}
-        >
-          <div className="grid gap-px p-1">
-            <FilterOption
-              active={filters.origin === ''}
-              count={facetTotal('origins')}
-              label={t('all')}
-              onSelect={() => updateFilter('origin', '')}
-            />
-            {(facets?.origins ?? [])
-              .filter((value) => ['car', 'batch'].includes(value.id))
-              .map((value) => (
-                <FilterOption
-                  active={filters.origin === value.id}
-                  count={value.count}
-                  key={value.id}
-                  label={originLabel(value.id, value.name, locale)}
-                  onSelect={() => updateFilter('origin', value.id)}
-                />
-              ))}
-          </div>
-        </FilterPopover>
-
         {activeFilters.length === 0 ? null : (
           <Button
             onClick={() => setSearchParams(new URLSearchParams())}
@@ -1192,7 +1182,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           />
         )
       ) : loading ? (
-        <SkeletonRows columns={5} rows={8} />
+        <CabinetLoadingContent module="parts" heading={false} />
       ) : (
         <DataTable
           caption={t('tableCaption')}
@@ -1395,6 +1385,22 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       )}
     </RedesignShell>
   )
+
+  // A route-backed drawer still needs its directory underneath, including
+  // when /new is opened directly rather than from the add-part button.
+  return (
+    <>
+      {directory}
+      {isNew ? (
+        <PartForm
+          canViewCars={links.cars}
+          canViewIntakes={links.intakes}
+          requireLatestMutation={requireLatestMutation}
+          title={translate(partFormMessages, locale, 'newPart')}
+        />
+      ) : null}
+    </>
+  )
 }
 
 /**
@@ -1419,59 +1425,37 @@ function FilterPopover({
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const popoverId = useId()
   const isSet = setKey !== undefined && setValue !== undefined
-
-  useEffect(() => {
-    if (!open) return
-    const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [open])
-
   return (
-    <div
-      className="relative"
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape' || !open) return
-        event.stopPropagation()
-        setOpen(false)
-        buttonRef.current?.focus()
-      }}
-      ref={rootRef}
-    >
-      <button
-        aria-controls={open ? popoverId : undefined}
-        aria-expanded={open}
-        className={cn('rz-filter', isSet && 'rz-filter--set')}
-        onClick={() => setOpen((value) => !value)}
-        ref={buttonRef}
-        type="button"
-      >
-        {isSet ? (
-          <>
-            <span className="rz-filter__key">{setKey}:</span> {setValue}
-          </>
-        ) : (
-          placeholder
-        )}
-        <ChevronDown aria-hidden className="text-app-dim size-3" />
-      </button>
-      {open ? (
-        <div
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          className={cn('rz-filter', isSet && 'rz-filter--set')}
+          type="button"
+        >
+          {isSet ? (
+            <>
+              <span className="rz-filter__key">{setKey}:</span> {setValue}
+            </>
+          ) : (
+            placeholder
+          )}
+          <ChevronDown aria-hidden className="text-app-dim size-3" />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
           aria-label={label}
-          className="rz-popover absolute top-full left-0 z-[var(--rz-z-popover)] mt-1 max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:bottom-20 max-sm:w-auto"
-          id={popoverId}
-          role="dialog"
+          className="rz rz-popover z-50 max-w-[calc(100vw-1.5rem)]"
+          align="start"
+          collisionPadding={12}
+          sideOffset={4}
+          onOpenAutoFocus={(event) => event.preventDefault()}
         >
           {children}
-        </div>
-      ) : null}
-    </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
 
@@ -1534,6 +1518,8 @@ function PartDetailScreen({
   requireLatestMutation,
   tenantSlug,
   onPlacementSaved,
+  onNotesSaved,
+  onPriceSaved,
   placementRevision,
 }: {
   detail: PartDetail | null
@@ -1552,10 +1538,14 @@ function PartDetailScreen({
   >['requireLatestMutation']
   tenantSlug: string
   onPlacementSaved: () => void
+  onNotesSaved: (notes: string) => void
+  onPriceSaved: (saved: PartDetail) => void
   placementRevision: number
 }) {
   const navigate = useNavigate()
   const [placementOpen, setPlacementOpen] = useState(false)
+  const [priceOpen, setPriceOpen] = useState(false)
+  const priceTrigger = useRef<HTMLButtonElement>(null)
   const tPlacement = useT(movePlacementMessages)
   const t = useT(partDetailMessages)
   const tc = useT(commonMessages)
@@ -1598,6 +1588,7 @@ function PartDetailScreen({
     links.orders ? `/app/${tenantSlug}/orders/${id}` : null
   const [compat, setCompat] = useState<PartCompatibilities | null>(null)
   const [zones, setZones] = useState<PartInventoryZone[] | null>(null)
+  const [zonesFailed, setZonesFailed] = useState(false)
   const [historyFilter, setHistoryFilter] =
     useState<(typeof HISTORY_FILTERS)[number]['value']>('all')
   const [historyAll, setHistoryAll] = useState(false)
@@ -1623,10 +1614,13 @@ function PartDetailScreen({
     const controller = new AbortController()
     void inventoryApi.getPartZones(partId, { signal: controller.signal }).then(
       (result) => {
-        if (!controller.signal.aborted) setZones(result)
+        if (!controller.signal.aborted) {
+          setZones(result)
+          setZonesFailed(false)
+        }
       },
       () => {
-        if (!controller.signal.aborted) setZones([])
+        if (!controller.signal.aborted) setZonesFailed(true)
       },
     )
     return () => controller.abort()
@@ -1656,8 +1650,6 @@ function PartDetailScreen({
   const lastGroup = historyGroups.at(-1)
   if (lastGroup) lastGroup.last = true
 
-  /** The asking price the yard set; a sale below it is a discount. */
-  const listPrice = detail?.desiredSalePrice ?? null
   // One table over two different things: a reservation has no price of its
   // own, a sale does. The row keeps that difference rather than hiding it.
   const salesRows = [
@@ -1671,7 +1663,6 @@ function PartDetailScreen({
           quantity: reservation.quantity,
           unitPrice: null as number | null,
           date: null as string | null,
-          discount: 0,
         }))),
     ...(salesTab === 'reserved'
       ? []
@@ -1683,27 +1674,8 @@ function PartDetailScreen({
           quantity: order.quantitySold,
           unitPrice: order.unitPrice,
           date: order.confirmedAt,
-          discount:
-            listPrice === null
-              ? 0
-              : Math.max(0, listPrice - order.unitPrice) * order.quantitySold,
         }))),
   ]
-  /** What the yard gave away against its own asking price. */
-  const soldDiscount =
-    listPrice === null
-      ? 0
-      : soldOrders.reduce(
-          (sum, order) =>
-            sum + Math.max(0, listPrice - order.unitPrice) * order.quantitySold,
-          0,
-        )
-
-  const soldRevenue = soldOrders.reduce(
-    (sum, order) => sum + order.quantitySold * order.unitPrice,
-    0,
-  )
-
   const copyCode = async (code: string) => {
     try {
       if (!navigator.clipboard?.writeText)
@@ -1718,16 +1690,23 @@ function PartDetailScreen({
   const name = detail === null ? t('titleFallback') : detail.name
   const editState = { partEditBackground: true }
   const editHref = `${base}/${partId}/edit`
-  const salesTotal =
-    salesTab === 'reserved'
-      ? null
-      : salesRows.reduce(
-          (sum, row) => sum + (row.unitPrice ?? 0) * row.quantity,
-          0,
-        )
+  const hasSalesAmounts = salesRows.some((row) => row.kind === 'sold')
+  const salesTotal = salesRows.reduce(
+    (sum, row) => sum + (row.unitPrice ?? 0) * row.quantity,
+    0,
+  )
 
   return (
     <div className="grid content-start">
+      {priceOpen && canManage && detail ? (
+        <PartPriceDrawer
+          part={detail}
+          beforeSave={() => requireLatestMutation({ quota: false })}
+          onClose={() => setPriceOpen(false)}
+          onSaved={onPriceSaved}
+          returnFocus={() => priceTrigger.current?.focus()}
+        />
+      ) : null}
       {placementOpen && links.inventory ? (
         <Suspense
           fallback={
@@ -1901,7 +1880,11 @@ function PartDetailScreen({
             title={t('loadErrorTitle')}
           />
         ) : detail === null ? (
-          <SkeletonRows columns={2} label={t('loading')} rows={4} />
+          <CabinetLoadingContent
+            module="parts"
+            heading={false}
+            label={t('loading')}
+          />
         ) : (
           <div className="flex flex-wrap items-start gap-4">
             <div className="grid min-w-0 flex-[1_1_480px] gap-4">
@@ -1964,42 +1947,6 @@ function PartDetailScreen({
                   bodyClassName="p-0"
                   title={t('sales')}
                 >
-                  <div className="border-app-line border-b px-4 py-2">
-                    <dl className="rz-totals">
-                      <div className="flex items-baseline gap-1.5">
-                        <dt>{t('revenue')}</dt>
-                        <dd className="text-app-strong">
-                          <Amount
-                            currency={partCurrency}
-                            currencyDisplay="code"
-                            value={soldRevenue}
-                          />
-                        </dd>
-                      </div>
-                      <div className="flex items-baseline gap-1.5">
-                        <dt>{t('reservedWorth')}</dt>
-                        <dd
-                          className="text-app-dim"
-                          title={t('reserveNoPrice')}
-                        >
-                          —
-                        </dd>
-                      </div>
-                      <div className="flex items-baseline gap-1.5">
-                        <dt>{t('discounts')}</dt>
-                        <dd
-                          className={soldDiscount > 0 ? 'text-state-warn' : ''}
-                        >
-                          <Amount
-                            currency={partCurrency}
-                            currencyDisplay="code"
-                            value={soldDiscount}
-                          />
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-
                   {salesRows.length === 0 ? (
                     <p className="text-app-dim m-0 p-4">
                       {salesTab === 'reserved'
@@ -2019,17 +1966,45 @@ function PartDetailScreen({
                               <th className="rz-num" scope="col">
                                 {t('colQuantity')}
                               </th>
-                              <th className="rz-num" scope="col">
-                                {t('colSum')}
-                              </th>
-                              <th scope="col">
-                                <span className="sr-only">{tc('actions')}</span>
-                              </th>
+                              {hasSalesAmounts ? (
+                                <th className="rz-num" scope="col">
+                                  {t('colSum')}
+                                </th>
+                              ) : null}
                             </tr>
                           </thead>
                           <tbody>
                             {salesRows.map((row) => (
-                              <tr key={`${row.kind}-${row.orderId}`}>
+                              <tr
+                                className={cn(
+                                  row.kind === 'reserved' &&
+                                    links.orders &&
+                                    'cursor-pointer',
+                                )}
+                                key={`${row.kind}-${row.orderId}`}
+                                onClick={
+                                  row.kind !== 'reserved' || !links.orders
+                                    ? undefined
+                                    : (event) => {
+                                        const href = orderHref(row.orderId)
+                                        if (
+                                          href === null ||
+                                          event.defaultPrevented ||
+                                          event.button !== 0 ||
+                                          event.metaKey ||
+                                          event.ctrlKey ||
+                                          event.shiftKey ||
+                                          event.altKey ||
+                                          (event.target instanceof Element &&
+                                            event.target.closest(
+                                              'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [contenteditable]',
+                                            ))
+                                        )
+                                          return
+                                        void navigate(href)
+                                      }
+                                }
+                              >
                                 <th className="py-2 align-top" scope="row">
                                   {orderHref(row.orderId) === null ? (
                                     <span className="font-mono">
@@ -2047,16 +2022,14 @@ function PartDetailScreen({
                                       })}
                                     </Link>
                                   )}
-                                  <span className="rz-caption block font-mono font-normal">
-                                    {row.date === null ? (
-                                      '—'
-                                    ) : (
+                                  {row.date !== null ? (
+                                    <span className="rz-caption block font-mono font-normal">
                                       <DateValue
                                         value={row.date}
                                         withTime={false}
                                       />
-                                    )}
-                                  </span>
+                                    </span>
+                                  ) : null}
                                 </th>
                                 <td
                                   className="py-2 align-top"
@@ -2065,38 +2038,32 @@ function PartDetailScreen({
                                   <span className="text-app-ink block">
                                     {row.customerName ?? t('noCustomer')}
                                   </span>
-                                  <span
-                                    className="rz-caption block"
-                                    title={t('deliveryNotOnPart')}
-                                  >
-                                    {t('deliveryHidden')}
-                                  </span>
                                 </td>
                                 <td
                                   className="py-2 align-top"
                                   data-label={t('colStatus')}
                                 >
-                                  <StatusPill
-                                    tone={
-                                      row.kind === 'reserved' ? 'warn' : 'ok'
-                                    }
-                                  >
-                                    {row.kind === 'reserved'
-                                      ? t('reserve')
-                                      : t('sold')}
-                                  </StatusPill>
-                                  <span
-                                    className="rz-caption mt-1 block text-pretty"
-                                    title={
-                                      row.kind === 'reserved'
-                                        ? t('reserveNoTerm')
-                                        : undefined
-                                    }
-                                  >
-                                    {row.kind === 'reserved'
-                                      ? t('reserveHolds')
-                                      : t('saleClosed')}
-                                  </span>
+                                  {row.kind === 'reserved' && links.orders ? (
+                                    <Link
+                                      aria-label={`${t('reserve')} · ${t('orderNumber', { number: String(row.orderNumber) })}`}
+                                      className="inline-flex rounded-full"
+                                      to={orderHref(row.orderId) ?? '#'}
+                                    >
+                                      <StatusPill tone="warn">
+                                        {t('reserve')}
+                                      </StatusPill>
+                                    </Link>
+                                  ) : (
+                                    <StatusPill
+                                      tone={
+                                        row.kind === 'reserved' ? 'warn' : 'ok'
+                                      }
+                                    >
+                                      {row.kind === 'reserved'
+                                        ? t('reserve')
+                                        : t('sold')}
+                                    </StatusPill>
+                                  )}
                                 </td>
                                 <td
                                   className="rz-num py-2 align-top"
@@ -2104,86 +2071,45 @@ function PartDetailScreen({
                                 >
                                   {row.quantity}
                                 </td>
-                                <td
-                                  className="rz-num py-2 align-top"
-                                  data-label={t('colSum')}
-                                >
-                                  {row.unitPrice === null ? (
-                                    <span
-                                      className="text-app-dim"
-                                      title={t('reserveNoPrice')}
-                                    >
-                                      —
-                                    </span>
-                                  ) : (
-                                    <Amount
-                                      currency={partCurrency}
-                                      currencyDisplay="code"
-                                      value={row.unitPrice * row.quantity}
-                                    />
-                                  )}
-                                  {/* Five columns as on the reference: the
-                                      unit price and any discount ride under
-                                      the line total instead of a column. */}
-                                  {row.unitPrice === null ||
-                                  row.quantity === 1 ? null : (
-                                    <span
-                                      className="rz-caption block"
-                                      title={t('colPrice')}
-                                    >
-                                      {row.quantity} ×{' '}
-                                      <Amount
-                                        currency={partCurrency}
-                                        currencyDisplay="code"
-                                        value={row.unitPrice}
-                                      />
-                                    </span>
-                                  )}
-                                  {row.discount > 0 ? (
-                                    <span className="text-state-warn block text-caption">
-                                      −
-                                      <Amount
-                                        currency={partCurrency}
-                                        currencyDisplay="code"
-                                        value={row.discount}
-                                      />
-                                    </span>
-                                  ) : null}
-                                </td>
-                                <td className="py-2 text-right align-top">
-                                  <Button
-                                    disabled
-                                    size="sm"
-                                    title={
-                                      row.kind === 'reserved'
-                                        ? t('reserveNoTerm')
-                                        : t('returnNotFromPart')
-                                    }
+                                {hasSalesAmounts ? (
+                                  <td
+                                    className="rz-num py-2 align-top"
+                                    data-label={t('colSum')}
                                   >
-                                    {row.kind === 'reserved'
-                                      ? t('extend')
-                                      : t('return')}
-                                  </Button>
-                                </td>
+                                    {row.unitPrice !== null ? (
+                                      <>
+                                        <Amount
+                                          currency={partCurrency}
+                                          currencyDisplay="code"
+                                          value={row.unitPrice * row.quantity}
+                                        />
+                                        {row.quantity === 1 ? null : (
+                                          <span
+                                            className="rz-caption block"
+                                            title={t('colPrice')}
+                                          >
+                                            {row.quantity} ×{' '}
+                                            <Amount
+                                              currency={partCurrency}
+                                              currencyDisplay="code"
+                                              value={row.unitPrice}
+                                            />
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : null}
+                                  </td>
+                                ) : null}
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                      <div className="rz-card__foot">
-                        <span className="text-app-muted">
-                          {salesTab === 'reserved'
-                            ? t('totalReserved')
-                            : t('totalSold')}
-                        </span>
-                        {salesTotal === null ? (
-                          <span
-                            className="text-app-dim font-mono"
-                            title={t('reserveNoPrice')}
-                          >
-                            —
+                      {hasSalesAmounts ? (
+                        <div className="rz-card__foot">
+                          <span className="text-app-muted">
+                            {t('totalSold')}
                           </span>
-                        ) : (
                           <span className="font-mono text-app-strong">
                             <Amount
                               currency={partCurrency}
@@ -2191,8 +2117,8 @@ function PartDetailScreen({
                               value={salesTotal}
                             />
                           </span>
-                        )}
-                      </div>
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </Card>
@@ -2212,7 +2138,7 @@ function PartDetailScreen({
                 title={t('compatibility')}
               >
                 {compat === null ? (
-                  <p className="text-app-dim m-0">{t('loadingShort')}</p>
+                  <SkeletonRows embedded label={t('loadingShort')} rows={2} />
                 ) : compat.items.length === 0 ? (
                   <p className="text-app-dim m-0 text-pretty">
                     {t('compatEmpty')}
@@ -2381,10 +2307,12 @@ function PartDetailScreen({
               <Card
                 aside={
                   canManage && detail.effectiveSalePrice !== null ? (
-                    <Button asChild size="sm">
-                      <Link state={editState} to={editHref}>
-                        {t('change')}
-                      </Link>
+                    <Button
+                      ref={priceTrigger}
+                      size="sm"
+                      onClick={() => setPriceOpen(true)}
+                    >
+                      {t('change')}
                     </Button>
                   ) : null
                 }
@@ -2401,13 +2329,12 @@ function PartDetailScreen({
                     </Notice>
                     {canManage ? (
                       <Button
-                        asChild
+                        ref={priceTrigger}
                         className="justify-self-start"
                         variant="primary"
+                        onClick={() => setPriceOpen(true)}
                       >
-                        <Link state={editState} to={editHref}>
-                          {t('setPrice')}
-                        </Link>
+                        {t('setPrice')}
                       </Button>
                     ) : null}
                   </>
@@ -2525,38 +2452,28 @@ function PartDetailScreen({
                 ) : null}
               </Card>
 
-              <Card
-                aside={
-                  links.inventory ? (
-                    <Button onClick={() => setPlacementOpen(true)} size="sm">
-                      {t('move')}
-                    </Button>
-                  ) : null
-                }
-                title={t('placement')}
-              >
-                <p className="text-app-ink m-0 text-pretty">
-                  {detail.quantityAvailable + detail.quantityReserved === 0
-                    ? t('notInStock', {
-                        place: placementLabel(
-                          zones,
-                          links.inventory,
-                          t,
-                        ).toLocaleLowerCase(locale),
-                      })
-                    : placementLabel(zones, links.inventory, t)}
-                </p>
-              </Card>
-
-              <Card
-                bodyClassName={detail.createdByName ? 'p-0' : ''}
-                title={t('notes')}
-              >
-                {detail.createdByName ? (
-                  <>
-                    <div className="rz-card__body">
-                      <NotesText notes={detail.notes} empty={t('notesEmpty')} />
-                    </div>
+              <PartLocationCard
+                zones={zones}
+                allowed={links.inventory}
+                failed={zonesFailed}
+                inStock={detail.quantityAvailable + detail.quantityReserved > 0}
+                canMove={canManage && links.inventory}
+                onMove={() => setPlacementOpen(true)}
+                onRetry={() => {
+                  setZones(null)
+                  setZonesFailed(false)
+                  onPlacementSaved()
+                }}
+              />
+              <PartNotesCard
+                key={partId}
+                partId={partId}
+                notes={detail.notes}
+                canEdit={canManage && detail.quantityAvailable > 0}
+                beforeSave={() => requireLatestMutation({ quota: false })}
+                onSaved={onNotesSaved}
+                footer={
+                  detail.createdByName ? (
                     <dl className="rz-facts border-app-line border-t">
                       <div>
                         <dt>{t('createdBy')}</dt>
@@ -2568,11 +2485,9 @@ function PartDetailScreen({
                         </dd>
                       </div>
                     </dl>
-                  </>
-                ) : (
-                  <NotesText notes={detail.notes} empty={t('notesEmpty')} />
-                )}
-              </Card>
+                  ) : undefined
+                }
+              />
             </aside>
           </div>
         )}
@@ -2590,15 +2505,6 @@ function PartDetailScreen({
         title={t('deleteTitle')}
       />
     </div>
-  )
-}
-
-/** The part's own note, or a line saying there is none yet. */
-function NotesText({ notes, empty }: { notes: string | null; empty: string }) {
-  return notes ? (
-    <p className="text-app-ink m-0 whitespace-pre-line text-pretty">{notes}</p>
-  ) : (
-    <p className="text-app-dim m-0">{empty}</p>
   )
 }
 
@@ -2966,11 +2872,7 @@ function SourceChip({
   )
 }
 
-/*
- * What the sales table cannot promise (reserveNoPrice, reserveNoTerm, …): a
- * reservation is a line in an order, not a document of its own: it carries no
- * price until the order is confirmed, and the yard keeps no clock on it.
- */
+/** Reservation rows expose the fields supplied by PartReservationDto. */
 const SALES_TABS = [
   { value: 'all', label: 'tabAll' },
   { value: 'reserved', label: 'tabReserved' },
@@ -3016,9 +2918,8 @@ const yearSpan = (
 }
 
 /**
- * Where the part sits, in the words the warehouse uses. Core keeps a system
- * zone for everything nobody has placed yet, so that one reads as "not placed"
- * rather than as a location.
+ * Core represents warehouse-level placement with a system zone. Show the
+ * warehouse and the absence of a physical zone instead of hiding the location.
  */
 const placementLabel = (
   zones: PartInventoryZone[] | null,
@@ -3027,10 +2928,18 @@ const placementLabel = (
 ): string => {
   if (!allowed) return t('placementNeedsModule')
   if (zones === null) return t('loadingShort')
-  const placed = zones.filter((zone) => !zone.isSystemUnassigned)
-  if (placed.length === 0) return t('notPlaced')
-  return placed
-    .map((zone) => `${zone.warehouseName} · ${zone.zoneName}`)
+  if (zones.length === 0) return t('notPlaced')
+  return zones
+    .map((zone) =>
+      [
+        zone.warehouseName,
+        ...(zone.isSystemUnassigned
+          ? [t('locationWarehouseLevel')]
+          : [zone.zoneName, zone.sectionName, zone.shelfName]),
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    )
     .join(', ')
 }
 
@@ -3518,85 +3427,76 @@ function PartFields({
               ))}
             </fieldset>
           ) : (
-            <Field
-              hint={edit ? t('sourceTypeEditHint') : t('sourceTypeCreateHint')}
+            <SelectPicker
               label={t('sourceType')}
-            >
-              <SelectInput
-                aria-label={t('sourceType')}
-                disabled={edit}
-                onChange={(event) =>
-                  setValues({
-                    ...values,
-                    sourceType: event.target.value,
-                    sourceId: '',
-                  })
-                }
-                value={values.sourceType}
-              >
-                {canViewCars || values.sourceType === 'car' ? (
-                  <option value="car">{t('optionCar')}</option>
-                ) : null}
-                {canViewIntakes || values.sourceType === 'batch' ? (
-                  <option value="batch">{t('optionBatch')}</option>
-                ) : null}
-              </SelectInput>
-            </Field>
+              searchable={false}
+              hint={edit ? t('sourceTypeEditHint') : t('sourceTypeCreateHint')}
+              disabled={edit ?? false}
+              value={values.sourceType}
+              options={[
+                ...(canViewCars || values.sourceType === 'car'
+                  ? [{ value: 'car', label: t('optionCar') }]
+                  : []),
+                ...(canViewIntakes || values.sourceType === 'batch'
+                  ? [{ value: 'batch', label: t('optionBatch') }]
+                  : []),
+              ]}
+              onValueChange={(value) =>
+                setValues({ ...values, sourceType: value, sourceId: '' })
+              }
+              showLabel
+            />
           )}
           {values.sourceType === 'car' && canViewCars ? (
-            <Field
+            <SelectPicker
+              label={t('sourceCar')}
               error={errors.sourceId}
               hint={edit ? t('carEditHint') : t('carCreateHint')}
-              label={t('sourceCar')}
+              disabled={(edit ?? false) || sourceOptions.carsUnavailable}
+              value={values.sourceId}
+              options={[
+                { value: '', label: t('chooseCarOption') },
+                ...sourceOptions.cars.map((item) => ({
+                  value: item.id,
+                  label: carLabel(item),
+                })),
+                ...(values.sourceId &&
+                !sourceOptions.cars.some((item) => item.id === values.sourceId)
+                  ? [{ value: values.sourceId, label: t('carOutside') }]
+                  : []),
+              ]}
+              onValueChange={(value) =>
+                setValues({ ...values, sourceId: value })
+              }
               required={!edit}
-            >
-              <SelectInput
-                aria-label={t('sourceCar')}
-                disabled={(edit ?? false) || sourceOptions.carsUnavailable}
-                onChange={field('sourceId')}
-                value={values.sourceId}
-              >
-                <option value="">{t('chooseCarOption')}</option>
-                {sourceOptions.cars.map((car) => (
-                  <option key={car.id} value={car.id}>
-                    {carLabel(car)}
-                  </option>
-                ))}
-                {values.sourceId &&
-                !sourceOptions.cars.some(
-                  (car) => car.id === values.sourceId,
-                ) ? (
-                  <option value={values.sourceId}>{t('carOutside')}</option>
-                ) : null}
-              </SelectInput>
-            </Field>
+              showLabel
+            />
           ) : values.sourceType === 'batch' && canViewIntakes ? (
-            <Field
+            <SelectPicker
+              label={t('sourceBatch')}
               error={errors.sourceId}
               hint={edit ? t('batchEditHint') : t('batchCreateHint')}
-              label={t('sourceBatch')}
-              required={!edit}
-            >
-              <SelectInput
-                aria-label={t('sourceBatch')}
-                disabled={(edit ?? false) || sourceOptions.intakesUnavailable}
-                onChange={field('sourceId')}
-                value={values.sourceId}
-              >
-                <option value="">{t('chooseBatchOption')}</option>
-                {sourceOptions.intakes.map((intake) => (
-                  <option key={intake.id} value={intake.id}>
-                    {intakeLabel(intake, locale)}
-                  </option>
-                ))}
-                {values.sourceId &&
+              disabled={(edit ?? false) || sourceOptions.intakesUnavailable}
+              value={values.sourceId}
+              options={[
+                { value: '', label: t('chooseBatchOption') },
+                ...sourceOptions.intakes.map((item) => ({
+                  value: item.id,
+                  label: intakeLabel(item, locale),
+                })),
+                ...(values.sourceId &&
                 !sourceOptions.intakes.some(
-                  (intake) => intake.id === values.sourceId,
-                ) ? (
-                  <option value={values.sourceId}>{t('batchOutside')}</option>
-                ) : null}
-              </SelectInput>
-            </Field>
+                  (item) => item.id === values.sourceId,
+                )
+                  ? [{ value: values.sourceId, label: t('batchOutside') }]
+                  : []),
+              ]}
+              onValueChange={(value) =>
+                setValues({ ...values, sourceId: value })
+              }
+              required={!edit}
+              showLabel
+            />
           ) : null}
         </div>
         {sourceCreateLink &&
@@ -3675,10 +3575,10 @@ function PartFields({
               value={values.partType}
             />
           </Field>
-          <Field hint={edit ? t('oemEditHint') : t('oemHint')} label={t('oem')}>
+          <Field hint={t('oemHint')} label={t('oem')}>
             <TextInput
               aria-label={t('oem')}
-              disabled={edit}
+              maxLength={100}
               onChange={field('oemCode')}
               value={values.oemCode}
             />
@@ -3852,8 +3752,8 @@ function PartFields({
 
 /**
  * Source error codes Core sends on create, read in the interface language.
- * An unknown code falls back to the server's own message (it already follows
- * Accept-Language); a failure without a code gets the generic sentence.
+ * Other codes use the shared error translations; a failure without a code gets
+ * the form's generic sentence.
  */
 const SOURCE_ERROR_KEYS: Readonly<
   Record<string, 'archivedSource' | 'invalidSourceType'>
@@ -3870,7 +3770,7 @@ const createFailureMessage = (failure: unknown, locale: Locale): string => {
   const known = SOURCE_ERROR_KEYS[code]
   return known
     ? translate(partFormMessages, locale, known)
-    : problem.message || translate(partFormMessages, locale, 'createFailed')
+    : localizeApiError(problem, locale)
 }
 
 function validFormNumbers(values: PartFormValues) {
@@ -4332,6 +4232,8 @@ function PartEdit({
   const td = useT(partDetailMessages)
   const tl = useT(lostResponseMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
+  const mountedRef = useRef(true)
   const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
@@ -4365,6 +4267,12 @@ function PartEdit({
     onAccept: (accepted) => void save(undefined, accepted),
   })
   useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+  useEffect(() => {
     const controller = new AbortController()
     void partsApi.compatibilities(partId, { signal: controller.signal }).then(
       (result) => {
@@ -4382,6 +4290,7 @@ function PartEdit({
     const controller = new AbortController()
     void partsApi.get(partId, { signal: controller.signal }).then(
       (part) => {
+        if (controller.signal.aborted) return
         if (!part) {
           setError(translate(partFormMessages, locale, 'editLoadFailed'))
           return
@@ -4451,6 +4360,13 @@ function PartEdit({
     setStatus(null)
     setError(null)
     const pricing = price.hasPrice && !price.disabled
+    const finishSave = () => {
+      if (!mountedRef.current) return
+      requireLatestMutation({ quota: false })
+      guard.afterSave(pricing)
+      toast?.show({ tone: 'ok', message: t('saved') })
+      void navigate(backTo, { replace: true })
+    }
     try {
       if (
         guard.needsCheck(pricing) &&
@@ -4462,6 +4378,7 @@ function PartEdit({
         partId,
         {
           name: values.name.trim(),
+          oemCode: optional(values.oemCode) ?? null,
           condition: optional(values.condition) ?? null,
           notes: optional(values.notes) ?? null,
           quantity: parsed.quantity,
@@ -4475,9 +4392,10 @@ function PartEdit({
         },
         { signal: scope.signal },
       )
-      guard.afterSave(pricing)
-      setStatus(t('saved'))
+      if (scope.signal.aborted) return
+      finishSave()
     } catch (failure) {
+      if (!mountedRef.current) return
       if (!isLostResponse(failure)) {
         const problem = normalizeApiProblem(failure)
         const fieldMessage = Object.values(problem.fieldErrors ?? {}).flat()[0]
@@ -4493,20 +4411,39 @@ function PartEdit({
       // values again is safe, and the form keeps them meanwhile.
       setStatus(tl('checking'))
       try {
-        const fresh = await partsApi.get(partId)
+        const scope = requireLatestMutation({ quota: false })
+        const fresh = await partsApi.get(partId, { signal: scope.signal })
+        if (!mountedRef.current || scope.signal.aborted) return
+        const photoKeys = committedPhotoKeys(mediaItems)
+        const storedPhotoKeys = (fresh.photos ?? []).map(
+          (photo) => photo.storageKey,
+        )
         const landed =
           fresh.name === values.name.trim() &&
+          (fresh.oemCode ?? null) === (optional(values.oemCode) ?? null) &&
+          fresh.quantityTotal === parsed.quantity &&
+          (fresh.notes ?? null) ===
+            (optional(values.notes) ?? detail?.notes ?? null) &&
+          (fresh.condition ?? null) ===
+            (optional(values.condition) ?? detail?.condition ?? null) &&
+          (fresh.partType ?? null) ===
+            (optional(values.partType) ?? detail?.partType ?? null) &&
+          storedPhotoKeys.length === photoKeys.length &&
+          storedPhotoKeys.every((key, index) => key === photoKeys[index]) &&
           (price.disabled || fresh.desiredSalePrice === (parsed.price ?? null))
-        setStatus(landed ? t('saved') : null)
-        if (landed) guard.afterSave(pricing)
-        else setError(tl('notSaved'))
+        if (landed) finishSave()
+        else {
+          setStatus(null)
+          setError(tl('notSaved'))
+        }
       } catch {
+        if (!mountedRef.current) return
         setStatus(null)
         setError(tl('checkFailed'))
       }
     } finally {
       pendingRef.current = false
-      setPending(false)
+      if (mountedRef.current) setPending(false)
     }
   }
   const navigate = useNavigate()
@@ -4666,11 +4603,18 @@ function PartEdit({
                         value={values.partType}
                       />
                     </Field>
-                    <Field hint={t('oemServerHint')} label={t('oem')}>
+                    <Field hint={t('oemHint')} label={t('oem')}>
                       <TextInput
                         className="font-mono"
-                        disabled
+                        maxLength={100}
                         name="oemCode"
+                        onChange={(event) =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, oemCode: event.target.value }
+                              : current,
+                          )
+                        }
                         value={values.oemCode}
                       />
                     </Field>
@@ -4899,10 +4843,9 @@ function PartEdit({
             </aside>
           </form>
         ) : !error ? (
-          <SkeletonRows
-            columns={2}
+          <SkeletonFields
+            count={8}
             label={translate(partDetailMessages, locale, 'loading')}
-            rows={4}
           />
         ) : null}
       </div>

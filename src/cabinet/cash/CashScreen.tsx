@@ -1,5 +1,8 @@
+import { cabinetModules } from '../module-registry'
+import { cabinetPath } from '../cabinet-paths'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { CabinetLoadingContent } from '../loading-screen'
 import {
   Button,
   ErrorState,
@@ -8,7 +11,7 @@ import {
   Pagination,
   SelectInput,
   Sheet,
-  SkeletonRows,
+  SkeletonFields,
   TextInput,
   Toolbar,
   useOptionalToast,
@@ -118,6 +121,17 @@ const canMutate = (
       'mutation',
     ).kind === 'allowed'
   )
+}
+const ordersPathFor = (cabinet: ReturnType<typeof useCabinet>) => {
+  if (cabinet.status !== 'ready' || !cabinet.snapshot || !cabinet.targetTenant)
+    return null
+  const allowed =
+    evaluateModuleAccess(
+      cabinetModules.orders,
+      { status: 'ready', snapshot: cabinet.snapshot, error: null },
+      'view',
+    ).kind === 'allowed'
+  return allowed ? cabinetPath(cabinet.targetTenant.slug, 'orders') : null
 }
 const canTransfer = (
   definition: CabinetModuleScreenProps['definition'],
@@ -242,6 +256,8 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
   return (
     <>
       <CashList
+        cashHref={`/app/${cabinet.targetTenant?.slug ?? ''}/cash`}
+        ordersPath={ordersPathFor(cabinet)}
         canCreate={mutationsAllowed}
         canTransfer={transferAllowed && activeRegisters.length > 0}
         date={date}
@@ -390,7 +406,7 @@ function CashRegisterDetail({
   if (!register)
     return (
       <RedesignShell crumb={<CashCrumbs />}>
-        <SkeletonRows label={t('loadingTill')} rows={3} />
+        <CabinetLoadingContent module="cash" label={t('loadingTill')} />
       </RedesignShell>
     )
   const setFilter = (key: 'currency' | 'from' | 'to', value: string) => {
@@ -403,6 +419,7 @@ function CashRegisterDetail({
   return (
     <>
       <CashCard
+        ordersPath={ordersPathFor(cabinet)}
         cashHref={`/app/${cabinet.targetTenant?.slug ?? ''}/cash`}
         canManage={mutationsAllowed}
         activating={activateBusy}
@@ -598,7 +615,7 @@ function CashRegisterEdit({
           title={t('loadFailed')}
         />
       ) : !register ? (
-        <SkeletonRows label={t('loadingTill')} rows={3} />
+        <SkeletonFields count={3} label={t('loadingTill')} />
       ) : (
         <form
           aria-busy={busy}

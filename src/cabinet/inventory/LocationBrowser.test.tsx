@@ -98,7 +98,7 @@ describe('location resource navigation', () => {
     expect(row).toHaveTextContent('Секція 1')
     expect(row).toHaveTextContent('S1')
     expect(row).toHaveAccessibleDescription('Полиць: 100')
-    expect(within(row).getByText('100')).toBeVisible()
+    expect(within(row.closest('tr')!).getByText('100')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Секції' })).toHaveTextContent(
       /^Секції$/,
     )

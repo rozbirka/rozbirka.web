@@ -8,9 +8,9 @@ import {
 } from '@/i18n'
 
 /**
- * Text the API layer produces itself (fallbacks when the server sent no
- * message). Built outside React, so it follows the interface locale the
- * requests carry (`requestLocale`), Ukrainian before the provider mounts.
+ * Text the API layer produces itself (including safe fallbacks when the
+ * server sends an unrecognised error). Built outside React, so it follows the
+ * interface locale requests carry (`requestLocale`), Ukrainian before the provider mounts.
  */
 export const apiMessages = defineMessages({
   uk: {

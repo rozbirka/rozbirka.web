@@ -24,7 +24,7 @@ export const placementMessages = defineMessages({
     legendFilled: 'є позиції',
     legendBusiest: 'найзавантаженіша',
     zoneHint:
-      'Виберіть зони складу або створіть нову. За потреби далі вкажіть конкретну полицю.',
+      'Виберіть зону складу або створіть нову. За потреби далі вкажіть конкретну полицю.',
     zone: 'Зона',
     section: 'Секція / стелаж',
     sectionSearch: 'Пошук секції',
@@ -58,7 +58,7 @@ export const placementMessages = defineMessages({
     noLocationSelected: 'Виберіть склад або зону.',
     locationLevel: 'Рівень',
     warehouseLevel: 'Лише склад',
-    noZonesPicked: 'Зони не вибрані',
+    noZonesPicked: 'Виберіть зону',
     zonesPicked: 'Зон вибрано',
     before: 'Було',
     capacityNotCounted: 'Місткість зони не рахується',
@@ -66,8 +66,7 @@ export const placementMessages = defineMessages({
     savePlacement: 'Зберегти розміщення',
     pickPhysicalZone:
       'Виберіть зону для запчастини. За потреби уточніть секцію та полицю.',
-    pickOne:
-      'Виберіть хоча б одну зону — запчастина не може лишитися без місця.',
+    pickOne: 'Виберіть одну зону — запчастина не може лишитися без місця.',
     replacesAll:
       'Збереження замінить увесь набір зон цієї запчастини, а не тільки вибраний склад.',
     unchanged: 'Нічого не змінилося — набір зон уже такий.',
@@ -95,7 +94,7 @@ export const placementMessages = defineMessages({
     legendFilled: 'has items',
     legendBusiest: 'busiest',
     zoneHint:
-      'Choose warehouse zones or create a new one. You can then select a specific shelf.',
+      'Choose a warehouse zone or create a new one. You can then select a specific shelf.',
     zone: 'Zone',
     section: 'Section / rack',
     sectionSearch: 'Search sections',
@@ -125,7 +124,7 @@ export const placementMessages = defineMessages({
     noLocationSelected: 'Choose a warehouse or zone.',
     locationLevel: 'Level',
     warehouseLevel: 'Warehouse only',
-    noZonesPicked: 'No zones selected',
+    noZonesPicked: 'Choose a zone',
     zonesPicked: 'Zones selected',
     before: 'Before',
     capacityNotCounted: 'Zone capacity isn’t tracked',
@@ -133,7 +132,7 @@ export const placementMessages = defineMessages({
     savePlacement: 'Save location',
     pickPhysicalZone:
       'Choose a zone for the part. You can also specify a section and shelf.',
-    pickOne: 'Select at least one zone — a part can’t be left without a place.',
+    pickOne: 'Select one zone — a part can’t be left without a place.',
     replacesAll:
       'Saving replaces this part’s whole set of zones, not just the selected warehouse.',
     unchanged: 'Nothing has changed — the zones are already set like this.',
@@ -160,7 +159,7 @@ export const placementMessages = defineMessages({
     legendFilled: 'są pozycje',
     legendBusiest: 'najbardziej zajęta',
     zoneHint:
-      'Wybierz strefy magazynu lub utwórz nową, a następnie konkretną półkę, jeśli potrzeba.',
+      'Wybierz strefę magazynu lub utwórz nową, a następnie konkretną półkę, jeśli potrzeba.',
     zone: 'Strefa',
     section: 'Sekcja / regał',
     sectionSearch: 'Szukaj sekcji',
@@ -195,7 +194,7 @@ export const placementMessages = defineMessages({
     noLocationSelected: 'Wybierz magazyn lub strefę.',
     locationLevel: 'Poziom',
     warehouseLevel: 'Tylko magazyn',
-    noZonesPicked: 'Nie wybrano stref',
+    noZonesPicked: 'Wybierz strefę',
     zonesPicked: 'Wybrane strefy',
     before: 'Było',
     capacityNotCounted: 'Pojemność strefy nie jest liczona',
@@ -203,8 +202,7 @@ export const placementMessages = defineMessages({
     savePlacement: 'Zapisz lokalizację',
     pickPhysicalZone:
       'Wybierz strefę dla części. Możesz też wskazać sekcję i półkę.',
-    pickOne:
-      'Wybierz co najmniej jedną strefę — część nie może zostać bez miejsca.',
+    pickOne: 'Wybierz jedną strefę — część nie może zostać bez miejsca.',
     replacesAll:
       'Zapis zastąpi cały zestaw stref tej części, a nie tylko wybrany magazyn.',
     unchanged: 'Nic się nie zmieniło — zestaw stref już taki jest.',

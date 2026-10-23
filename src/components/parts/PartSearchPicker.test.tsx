@@ -61,12 +61,15 @@ const page = (items: ReturnType<typeof part>[], total = items.length) => ({
 
 function Harness({
   onSelect = () => undefined,
+  compact = false,
 }: {
   onSelect?: (part: PartPickerItem) => void
+  compact?: boolean
 }) {
   const [query, setQuery] = useState('')
   return (
     <PartSearchPicker
+      compact={compact}
       currency="USD"
       onClear={vi.fn()}
       onQueryChange={setQuery}
@@ -83,7 +86,7 @@ function Harness({
 describe('PartSearchPicker', () => {
   beforeEach(() => {
     vi.useRealTimers()
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     partMocks.facets.mockResolvedValue({
       statuses: [
         { id: 'available', name: 'В наявності', count: 9 },
@@ -102,27 +105,18 @@ describe('PartSearchPicker', () => {
       inventoryLocks: [],
       discrepancies: [],
     })
-    partMocks.search.mockImplementation(
-      ({ statuses }: { statuses?: string[] }) =>
-        Promise.resolve(
-          statuses?.[0] === 'reserved'
-            ? page([
-                part('2', {
-                  quantityAvailable: 1,
-                  quantityReserved: 2,
-                  status: 'reserved',
-                }),
-              ])
-            : statuses?.[0] === 'available'
-              ? page([part('1')], 9)
-              : page(
-                  [
-                    part('1'),
-                    part('2', { quantityAvailable: 0, status: 'sold' }),
-                  ],
-                  12,
-                ),
-        ),
+    partMocks.search.mockResolvedValue(
+      page(
+        [
+          part('1'),
+          part('2', {
+            quantityAvailable: 1,
+            quantityReserved: 2,
+            status: 'reserved',
+          }),
+        ],
+        9,
+      ),
     )
     partMocks.get.mockImplementation((id: string) =>
       Promise.resolve({
@@ -132,7 +126,7 @@ describe('PartSearchPicker', () => {
     )
   })
 
-  it('loads all status counts in one request instead of multiplying list searches', async () => {
+  it('requests only parts with free stock without loading redundant status counts', async () => {
     const user = userEvent.setup()
     render(<Harness />)
 
@@ -142,7 +136,11 @@ describe('PartSearchPicker', () => {
     )
 
     await screen.findByRole('option', { name: /Інвертор 1/ })
-    await waitFor(() => expect(partMocks.facets).toHaveBeenCalledOnce())
+    expect(partMocks.facets).not.toHaveBeenCalled()
+    expect(partMocks.search).toHaveBeenCalledWith(
+      expect.objectContaining({ statuses: ['available'] }),
+      expect.anything(),
+    )
     expect(partMocks.search).toHaveBeenCalledTimes(1)
     expect(partMocks.list).not.toHaveBeenCalled()
   })
@@ -164,7 +162,7 @@ describe('PartSearchPicker', () => {
       name: 'Choose part Інвертор 1',
     })
     expect(option).toHaveTextContent('3 in stock')
-    expect(screen.getByRole('button', { name: /^All/ })).toBeVisible()
+    expect(screen.getByText('In stock')).toBeVisible()
     expect(screen.getByRole('listbox', { name: 'Parts found' })).toBeVisible()
   })
 
@@ -185,98 +183,75 @@ describe('PartSearchPicker', () => {
     expect(partMocks.get).toHaveBeenCalledTimes(2)
   })
 
-  it('searches, filters, loads more like mobile, renders optional prices, and selects a part', async () => {
+  it('keeps partially reserved stock, omits fully reserved and sold parts, and paginates available results', async () => {
     const user = userEvent.setup()
     const onSelect = vi.fn()
+    partMocks.search
+      .mockResolvedValueOnce(
+        page(
+          [
+            part('1', {
+              quantityTotal: 1,
+              quantity: 1,
+              quantityAvailable: 0,
+              quantityReserved: 1,
+              status: 'reserved',
+            }),
+            part('2', {
+              quantityTotal: 3,
+              quantity: 3,
+              quantityAvailable: 1,
+              quantityReserved: 2,
+              status: 'available',
+            }),
+            part('sold', { quantity: 0, quantityAvailable: 0, status: 'sold' }),
+          ],
+          7,
+        ),
+      )
+      .mockResolvedValueOnce({ ...page([part('3')], 7), page: 2 })
     render(<Harness onSelect={onSelect} />)
-
-    const search = screen.getByRole('searchbox', {
-      name: 'Пошук запчастини',
-    })
+    const search = screen.getByRole('searchbox', { name: 'Пошук запчастини' })
     await user.type(search, 'інвертор')
-
     const dropdown = await screen.findByRole('dialog', {
       name: 'Результати пошуку запчастин',
     })
-    await waitFor(() =>
-      expect(
-        within(dropdown).getByRole('button', { name: /Усі\s*12/ }),
-      ).toBeVisible(),
-    )
-    const availableFilter = within(dropdown).getByRole('button', {
-      name: /В наявності\s*9/,
-    })
-    // v2: the status filter is a neutral segmented control — the state lives
-    // in the row badges, not in the colour of the filter.
-    expect(availableFilter.closest('.rz-seg')).not.toBeNull()
-    expect(availableFilter).toHaveAttribute('aria-pressed', 'false')
-    const reservedFilter = within(dropdown).getByRole('button', {
-      name: /Резерв\s*1/,
-    })
-    expect(reservedFilter).toHaveAttribute('aria-pressed', 'false')
-    expect(within(dropdown).queryByRole('button', { name: /Немає/ })).toBeNull()
-    expect(within(dropdown).queryByText('І1')).toBeNull()
-    expect(within(dropdown).getByText(/^0,00\sUSD$/)).toBeVisible()
-    expect(within(dropdown).getByText('—')).toBeVisible()
-    expect(
-      within(dropdown).getAllByText('Volkswagen ID.4 · 2022'),
-    ).toHaveLength(2)
-    expect(within(dropdown).getByText('P-1')).toBeVisible()
-    const availableOption = within(dropdown).getByRole('option', {
-      name: /Інвертор 1/,
-    })
-    expect(within(availableOption).getByText('3 в наявності')).toHaveClass(
-      'rz-pill--ok',
-    )
-    const unavailableOption = within(dropdown).getByRole('option', {
+    const available = await within(dropdown).findByRole('option', {
       name: /Інвертор 2/,
     })
-    expect(within(unavailableOption).getByText('Немає')).toHaveClass(
-      'rz-pill--danger',
-    )
-
+    expect(within(available).getByText('1 в наявності')).toBeVisible()
+    expect(
+      within(dropdown).queryByRole('option', { name: /Інвертор 1/ }),
+    ).toBeNull()
+    expect(
+      within(dropdown).queryByRole('option', { name: /Інвертор sold/ }),
+    ).toBeNull()
+    expect(
+      within(dropdown).queryByRole('button', { name: /Резерв/ }),
+    ).toBeNull()
+    expect(partMocks.get).not.toHaveBeenCalledWith('1', expect.anything())
     await user.click(
       within(dropdown).getByRole('button', { name: 'Показати ще' }),
     )
-    await waitFor(() =>
-      expect(partMocks.search).toHaveBeenCalledWith(
-        expect.objectContaining({ page: 2, pageSize: 6 }),
-        expect.objectContaining({}),
-      ),
-    )
-    expect(within(dropdown).queryByText('На сторінці')).not.toBeInTheDocument()
-
-    await user.click(
-      within(dropdown).getByRole('button', { name: /Резерв\s*1/ }),
-    )
-    await waitFor(() =>
-      expect(partMocks.search).toHaveBeenCalledWith(
-        expect.objectContaining({
-          page: 1,
-          pageSize: 6,
-          statuses: ['reserved'],
-        }),
-        expect.objectContaining({}),
-      ),
-    )
-    const reservedOption = await within(dropdown).findByRole('option', {
-      name: /Інвертор 2/,
+    const next = await within(dropdown).findByRole('option', {
+      name: /Інвертор 3/,
     })
-    const reservedBadge = within(reservedOption).getByText('Резерв')
-    expect(reservedBadge).toHaveClass('rz-pill--warn')
-    expect(
-      within(dropdown).getByRole('button', { name: /Резерв\s*1/ }),
-    ).toHaveAttribute('aria-pressed', 'true')
-    expect(availableFilter).toHaveAttribute('aria-pressed', 'false')
-
-    await user.click(await screen.findByRole('option', { name: /Інвертор 2/ }))
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: '2', effectiveSalePrice: null }),
+    expect(available).toBeVisible()
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        statuses: ['available'],
+        page: 2,
+        pageSize: 6,
+      }),
+      expect.anything(),
     )
+    expect(within(dropdown).getByText('2 з 7')).toBeVisible()
+    await user.click(next)
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: '3' }))
   })
 
-  it('keeps the matching parts visible when an auxiliary count request fails', async () => {
-    partMocks.facets.mockRejectedValue(new Error('count down'))
+  it('keeps the matching parts visible when an auxiliary price request fails', async () => {
+    partMocks.get.mockRejectedValueOnce(new Error('price down'))
     partMocks.search.mockResolvedValue(page([part('1')], 1))
     const user = userEvent.setup()
     render(<Harness />)
@@ -296,10 +271,8 @@ describe('PartSearchPicker', () => {
     vi.useFakeTimers()
     const pending = new Map<string, (result: ReturnType<typeof page>) => void>()
     partMocks.search.mockImplementation(
-      ({ query, statuses }: { query?: string; statuses?: string[] }) =>
-        statuses?.length
-          ? Promise.resolve(page([]))
-          : new Promise((resolve) => pending.set(query ?? '', resolve)),
+      ({ query }: { query?: string }) =>
+        new Promise((resolve) => pending.set(query ?? '', resolve)),
     )
     render(<Harness />)
 
@@ -318,5 +291,43 @@ describe('PartSearchPicker', () => {
 
     expect(screen.getByText('Інвертор new')).toBeVisible()
     expect(screen.queryByText('Інвертор old')).toBeNull()
+  })
+  it('matches the compact order dropdown without redundant headings or missing-car copy', async () => {
+    partMocks.search.mockResolvedValue(
+      page([
+        part('1', { car: null, externalCode: null, oemCode: null }),
+        part('2', { car: null, externalCode: 'OEM-2' }),
+        part('sold', { car: null, quantityAvailable: 0, status: 'sold' }),
+      ]),
+    )
+    partMocks.get.mockResolvedValue({ effectiveSalePrice: 100 })
+    const onSelect = vi.fn()
+    const user = userEvent.setup()
+    render(<Harness compact onSelect={onSelect} />)
+    await user.type(screen.getByRole('searchbox'), 'цапфа')
+    const option = await screen.findByRole('option', {
+      name: 'Обрати запчастину Інвертор 1',
+    })
+    expect(screen.getAllByText('В наявності')).toHaveLength(2)
+    expect(screen.queryByText('Без привʼязки до автомобіля')).toBeNull()
+    expect(screen.queryByRole('option', { name: /sold/ })).toBeNull()
+    expect(within(option).getByText('В наявності')).toHaveClass(
+      'rz-pill',
+      'rz-pill--ok',
+    )
+    expect(within(option).getByText('3 шт')).toBeVisible()
+    expect(within(option).getByText('В наявності')).not.toContainElement(
+      within(option).getByText('3 шт'),
+    )
+    expect(await within(option).findByText('100,00 USD')).toBeVisible()
+    expect(screen.getByText('OEM-2')).toBeVisible()
+    await user.click(option)
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: '1',
+        quantityAvailable: 3,
+        effectiveSalePrice: 100,
+      }),
+    )
   })
 })

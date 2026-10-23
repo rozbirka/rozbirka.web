@@ -1,19 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { X } from 'lucide-react'
-import {
-  Button,
-  Field,
-  Notice,
-  QuantityStepper,
-  Sheet,
-  SkeletonRows,
-  SearchInput,
-  TextInput,
-} from '@/components/app'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Field, Notice, QuantityStepper, Sheet } from '@/components/app'
 import { commonMessages, useT } from '@/i18n'
-import { cn } from '@/lib/utils'
-import { partsApi, type PartListItem } from '@/api/parts'
-import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
+import { partsApi } from '@/api/parts'
+import {
+  PartSearchPicker,
+  type PartPickerItem,
+} from '@/components/parts/PartSearchPicker'
 import { normalizeApiProblem } from '@/api/errors'
 import { orderCardMessages } from './order-cards-messages'
 import { useLocale, type SupportedCurrency } from '@/i18n'
@@ -24,38 +16,10 @@ import { usePriceSlots } from '../currency/use-price-slots'
 import { money } from './order-money'
 import { SheetGroup } from './sheet-group'
 
-const SEARCH_DEBOUNCE_MS = 250
-const PAGE_SIZE = 8
-
-interface Candidate extends PartListItem {
-  /** What the part sells for, read from its own card. */
-  price: number | null
-  oemCode: string | null
-  /** The plate the car wears, which is how a yard names it out loud. */
-  carCode: string | null
-  /** Where it physically lies, so the row says what to go and fetch. */
-  place: string | null
-}
-
-const origin = (part: Candidate, noCar: string) =>
-  part.car === null
-    ? noCar
-    : [
-        `${part.car.make} ${part.car.model} ${String(part.car.year)}`,
-        part.carCode,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-
-/** A zone reads as warehouse and shelf, the way the label on it is written. */
-const placeOf = (zones: PartInventoryZone[]): string | null => {
-  if (!Array.isArray(zones)) return null
-  const zone = zones.find((item) => !item.isSystemUnassigned) ?? zones[0]
-  if (zone === undefined || zone.isSystemUnassigned === true) return null
-  return [zone.warehouseName, zone.zoneCode ?? zone.zoneName]
-    .filter(Boolean)
-    .join(' · ')
-}
+type SelectedPart = Pick<
+  PartPickerItem,
+  'id' | 'name' | 'quantityAvailable' | 'effectiveSalePrice'
+>
 
 /**
  * Picking a part for an order, over the order rather than instead of it.
@@ -119,98 +83,36 @@ function OpenOrderItemDrawer({
 }: OrderItemDrawerProps) {
   const t = useT(orderCardMessages)
   const tc = useT(commonMessages)
-  const listId = useId()
   const [query, setQuery] = useState(() => draft?.query ?? '')
-  const [items, setItems] = useState<Candidate[] | null>(null)
+  const [picked, setPicked] = useState<SelectedPart | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [pickedId, setPickedId] = useState<string | null>(
-    () => draft?.pickedId ?? null,
-  )
   const [quantity, setQuantity] = useState(() => draft?.quantity ?? 1)
   const [price, setPrice] = useState<string | null>(() => draft?.price ?? null)
-  const [attempt, setAttempt] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
   const requestRef = useRef<AbortController | null>(null)
 
   const taken = useMemo(() => new Set(takenPartIds), [takenPartIds])
 
+  // Restore the selected part after the trip to accounting-currency settings.
+  // Fetch its card directly; the search dropdown can stay closed.
   useEffect(() => {
-    if (!open || !query.trim()) return
+    if (!draft?.pickedId) return
     const controller = new AbortController()
     requestRef.current = controller
-    const timer = setTimeout(() => {
-      void partsApi
-        .list({
-          q: query.trim(),
-          page: 1,
-          pageSize: PAGE_SIZE,
-          status: 'available',
-          signal: controller.signal,
-        })
-        .then(async (page) => {
-          if (controller.signal.aborted) return
-          const available = page.items.filter(
-            (item) => item.quantityAvailable > 0,
-          )
-          // The list carries no price; a part's own card does. Only the page on
-          // screen is asked, so the drawer stays one request per visible row.
-          const [details, zones] = await Promise.all([
-            Promise.allSettled(
-              available.map((item) =>
-                partsApi.get(item.id, { signal: controller.signal }),
-              ),
-            ),
-            // Where a part lies is its own record; the row is the one place a
-            // picker reads it, so it is asked for the visible page only.
-            Promise.allSettled(
-              available.map((item) =>
-                inventoryApi.getPartZones(item.id, {
-                  signal: controller.signal,
-                }),
-              ),
-            ),
-          ])
-          if (controller.signal.aborted) return
-          setItems(
-            available.map((item, index) => {
-              const detail = details[index]
-              const zone = zones[index]
-              return {
-                ...item,
-                price:
-                  detail?.status === 'fulfilled'
-                    ? detail.value.effectiveSalePrice
-                    : null,
-                oemCode:
-                  detail?.status === 'fulfilled'
-                    ? detail.value.oemCode
-                    : (item.externalCode ?? null),
-                carCode:
-                  detail?.status === 'fulfilled' ? detail.value.carCode : null,
-                place:
-                  zone?.status === 'fulfilled' ? placeOf(zone.value) : null,
-              }
-            }),
-          )
-          setLoadError(null)
-        })
-        .catch((reason: unknown) => {
-          if (!controller.signal.aborted) {
-            setItems([])
-            setLoadError(normalizeApiProblem(reason).message)
-          }
-        })
-    }, SEARCH_DEBOUNCE_MS)
-    return () => {
-      controller.abort()
-      clearTimeout(timer)
-    }
-  }, [open, query, attempt])
+    void partsApi.get(draft.pickedId, { signal: controller.signal }).then(
+      (part) => {
+        if (!controller.signal.aborted) setPicked(part)
+      },
+      (failure: unknown) => {
+        if (!controller.signal.aborted)
+          setLoadError(normalizeApiProblem(failure).message)
+      },
+    )
+    return () => controller.abort()
+  }, [draft?.pickedId])
 
-  const picked = items?.find((item) => item.id === pickedId) ?? null
   const unitPrice =
     price === null
-      ? (picked?.price ?? null)
+      ? (picked?.effectiveSalePrice ?? null)
       : Number(price.replace(/\s/g, '').replace(',', '.'))
   const { locale } = useLocale()
   const currency = guard.currency
@@ -241,22 +143,27 @@ function OpenOrderItemDrawer({
     ...(onKeepDraft
       ? {
           draftKept: true,
-          onLeave: () => onKeepDraft({ query, pickedId, quantity, price }),
+          onLeave: () =>
+            onKeepDraft({
+              query,
+              pickedId: picked?.id ?? null,
+              quantity,
+              price,
+            }),
         }
       : {}),
   })
 
   const reset = () => {
-    setPickedId(null)
+    requestRef.current?.abort()
+    setPicked(null)
+    setLoadError(null)
     setQuantity(1)
     setPrice(null)
   }
 
   const changeQuery = (value: string) => {
-    requestRef.current?.abort()
     setQuery(value)
-    setItems(null)
-    setLoadError(null)
     reset()
   }
 
@@ -305,156 +212,31 @@ function OpenOrderItemDrawer({
     >
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
-      <Field hiddenLabel label={t('searchPart')}>
-        <span className="relative block">
-          <SearchInput
-            aria-controls={listId}
-            autoComplete="off"
-            className="h-control-lg pr-9"
-            ref={inputRef}
-            onChange={(event) => changeQuery(event.target.value)}
-            placeholder={t('searchPlaceholder')}
-            type="text"
-            value={query}
-          />
-          {query ? (
-            <Button
-              aria-label={t('clearSearch')}
-              className="absolute top-1/2 right-1 -translate-y-1/2"
-              onClick={() => {
-                changeQuery('')
-                inputRef.current?.focus()
-              }}
-              size="icon"
-              variant="quiet"
-            >
-              <X aria-hidden />
-            </Button>
-          ) : null}
-        </span>
-      </Field>
-
-      {query.trim() && loadError !== null ? (
-        <div className="grid justify-items-start gap-2.5" id={listId}>
-          <Notice tone="danger">{loadError}</Notice>
-          <Button
-            onClick={() => {
-              setLoadError(null)
-              setItems(null)
-              setAttempt((value) => value + 1)
-            }}
-          >
-            {t('retrySearch')}
-          </Button>
-        </div>
-      ) : (
-        <div
-          className="border-app-line min-h-fit overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)"
-          id={listId}
-        >
-          {!query.trim() ? (
-            <p
-              className="rz-muted m-0 px-4 py-4 text-center text-pretty"
-              role="status"
-            >
-              <span>{t('searchPrompt')}</span>. <span>{t('searchScope')}</span>
-            </p>
-          ) : items === null ? (
-            <div className="p-3">
-              <SkeletonRows label={t('searching')} rows={4} />
-            </div>
-          ) : items.length === 0 ? (
-            <p className="rz-muted m-0 px-4 py-4 text-center" role="status">
-              {t('nothingFound')}
-            </p>
-          ) : (
-            <ul aria-label={t('foundParts')} className="m-0 list-none p-0">
-              {items.map((item) => {
-                const already = taken.has(item.id)
-                const out = item.quantityAvailable <= 0
-                const disabled = already || out
-                const active = item.id === pickedId
-                return (
-                  <li
-                    className="[&:first-child>button]:border-t-0"
-                    key={item.id}
-                  >
-                    <button
-                      className={cn(
-                        'border-app-line flex min-h-11 w-full items-center gap-3 border-0 border-t bg-transparent px-3 py-2 text-left transition-colors',
-                        active
-                          ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
-                          : disabled
-                            ? 'cursor-default'
-                            : 'cursor-pointer hover:bg-app-hover',
-                      )}
-                      disabled={disabled}
-                      onClick={() => {
-                        setPickedId(item.id)
-                        setQuantity(1)
-                        setPrice(null)
-                      }}
-                      type="button"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={cn(
-                            'block font-semibold text-pretty',
-                            disabled ? 'text-app-dim' : 'text-app-strong',
-                          )}
-                        >
-                          {item.name}
-                        </span>
-                        <span className="rz-dim block font-mono text-micro">
-                          {[item.oemCode, origin(item, t('noCar')), item.place]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-right">
-                        <span
-                          className={cn(
-                            'rz-num block',
-                            disabled ? 'text-app-dim' : 'text-app-strong',
-                          )}
-                        >
-                          {money(item.price, currency, locale)}
-                        </span>
-                        <span
-                          className={cn(
-                            'mt-0.5 block text-micro font-medium whitespace-nowrap',
-                            already
-                              ? 'text-app-muted'
-                              : out
-                                ? 'text-state-danger'
-                                : 'text-state-ok',
-                          )}
-                        >
-                          {already
-                            ? t('inOrder')
-                            : out
-                              ? t('outOfStock')
-                              : t('inStock', { count: item.quantityAvailable })}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-      )}
+      <PartSearchPicker
+        currency={currency}
+        disabled={busy}
+        onClear={reset}
+        onQueryChange={setQuery}
+        onSelect={(part) => {
+          requestRef.current?.abort()
+          setPicked(part)
+          setQuery(part.name)
+          setQuantity(1)
+          setPrice(null)
+          setLoadError(null)
+        }}
+        query={query}
+        takenPartIds={takenPartIds}
+        value={picked}
+      />
+      {loadError ? <Notice tone="danger">{loadError}</Notice> : null}
 
       {picked === null ? null : (
         <SheetGroup
-          hint={t('stockNote', {
-            count: picked.quantityAvailable,
-            number: String(orderNumber),
-          })}
+          className="border-app-line gap-4 rounded-rz-md border bg-(--rz-sheet-field) p-4"
           title={t('selected')}
         >
-          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-[auto_minmax(0,1fr)]">
             <Field label={t('quantity')}>
               <QuantityStepper
                 label={t('itemQuantity')}
@@ -476,20 +258,30 @@ function OpenOrderItemDrawer({
                 inputMode="decimal"
                 numeric
                 onChange={(event) => setPrice(event.target.value)}
-                value={price ?? String(picked.price ?? '')}
-              />
-            </Field>
-            <Field label={t('lineSum')}>
-              <TextInput
-                className="opacity-60"
-                numeric
-                readOnly
-                tabIndex={-1}
-                value={money(lineTotal, currency, locale)}
+                value={price ?? String(picked.effectiveSalePrice ?? '')}
               />
             </Field>
           </div>
           {priceSlots.note}
+          <div className="border-app-line grid gap-2 border-t pt-3">
+            <dl className="m-0 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <dt className="rz-muted">{t('lineSum')}</dt>
+              <dd className="m-0 min-w-0">
+                <output
+                  aria-label={t('lineSum')}
+                  className="rz-num rz-strong text-title break-all font-semibold"
+                >
+                  {money(lineTotal, currency, locale)}
+                </output>
+              </dd>
+            </dl>
+            <p className="rz-caption m-0 text-pretty">
+              {t('stockNote', {
+                count: picked.quantityAvailable,
+                number: String(orderNumber),
+              })}
+            </p>
+          </div>
           {priceSlots.saveNotes}
         </SheetGroup>
       )}

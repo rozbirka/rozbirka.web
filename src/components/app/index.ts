@@ -13,13 +13,19 @@ export { InlineEdit, type InlineEditProps } from './inline-edit'
 export { Field, type FieldProps } from './field'
 export { useFieldControl, type FieldControlContext } from './field-context'
 export { SearchInput, SelectInput, TextArea, TextInput } from './input'
+export { SelectPicker, type SelectPickerOption } from './select-picker'
+export {
+  SearchPicker,
+  SearchPickerOption,
+  SearchPickerOptions,
+} from './search-picker'
 export { Notice, type NoticeTone } from './notice'
 export { PageBody, PageHeader } from './page-header'
 export { Pagination, type PaginationProps } from './pagination'
 export { QuantityStepper } from './quantity-stepper'
 export { PillGroup, type PillOption } from './pill-group'
 export { Panel, StatCard, StatStrip } from './panel'
-export { Skeleton, SkeletonRows } from './skeleton'
+export { Skeleton, SkeletonFields, SkeletonRows } from './skeleton'
 export {
   DeniedState,
   EmptyState,
@@ -70,3 +76,5 @@ export { RecordIdentity } from './identity'
 export { Meter, type MeterTone } from './meter'
 export { ActionMenu, type MenuAction } from './action-menu'
 export { FactRows, type FactRow } from './fact-rows'
+
+export { InlineNotes, NotesCard, type InlineNotesProps } from './inline-notes'

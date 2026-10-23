@@ -1,77 +1,98 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { guardFixture } from '../currency/guard-fixture'
 import { OrderItemDrawer } from './OrderItemDrawer'
 
-const partsApi = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn() }))
-vi.mock('@/api/parts', () => ({
-  partsApi,
-}))
-const inventoryApi = vi.hoisted(() => ({ getPartZones: vi.fn() }))
-vi.mock('@/api/inventory', () => ({
-  inventoryApi,
-}))
+const partsApi = vi.hoisted(() => ({ search: vi.fn(), get: vi.fn() }))
+vi.mock('@/api/parts', () => ({ partsApi }))
 
+const part = (id = 'part-1', name = 'Фара ліва', available = 2) => ({
+  id,
+  name,
+  externalCode: 'OEM-123',
+  oemCode: 'OEM-123',
+  quantity: 3,
+  quantityReserved: 1,
+  quantityAvailable: available,
+  status: 'available',
+  car: { id: 'car-1', make: 'Tesla', model: 'Model Y', year: 2023, vin: null },
+  thumbnailUrl: null,
+  unit: 'pcs',
+  condition: 'used',
+  sourceType: 'car',
+  createdAt: '2026-10-06T10:00:00Z',
+  isInventoryLocked: false,
+  hasDiscrepancy: false,
+})
+const page = (items: ReturnType<typeof part>[] = []) => ({
+  items,
+  page: 1,
+  pageSize: 6,
+  total: items.length,
+  totalPages: 1,
+})
+const drawerProps = () => ({
+  guard: guardFixture(),
+  open: true,
+  busy: false,
+  error: null,
+  orderNumber: 1,
+  orderTotal: 0,
+  takenPartIds: [] as string[],
+  onOpenChange: vi.fn(),
+  onSubmit: vi.fn(),
+})
+function renderDrawer(
+  overrides: Partial<ComponentProps<typeof OrderItemDrawer>> = {},
+) {
+  return render(<OrderItemDrawer {...drawerProps()} {...overrides} />)
+}
 beforeEach(() => {
   vi.resetAllMocks()
-  // Most tests do not care where a part lies; the row simply omits it.
-  inventoryApi.getPartZones.mockResolvedValue([])
+  partsApi.search.mockResolvedValue(page())
+  partsApi.get.mockResolvedValue({ ...part(), effectiveSalePrice: 100 })
 })
 
-function renderDrawer() {
-  return render(
-    <OrderItemDrawer
-      guard={guardFixture()}
-      open
-      busy={false}
-      error={null}
-      orderNumber={1}
-      orderTotal={0}
-      takenPartIds={[]}
-      onOpenChange={vi.fn()}
-      onSubmit={vi.fn()}
-    />,
-  )
-}
-
-it('stays idle without fetching stock until a query is entered', async () => {
-  partsApi.list.mockResolvedValue({ items: [] })
+it('uses the same search field and stays idle until a query is entered', async () => {
   renderDrawer()
-  expect(screen.getByText('Введіть назву або OEM-код')).toBeVisible()
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+  ).toBeVisible()
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 300))
   })
-  expect(partsApi.list).not.toHaveBeenCalled()
-  expect(screen.queryByText('Шукаємо запчастини…')).not.toBeInTheDocument()
+  expect(partsApi.search).not.toHaveBeenCalled()
+  expect(
+    screen.queryByRole('dialog', { name: 'Результати пошуку запчастин' }),
+  ).not.toBeInTheDocument()
 })
 
-it('shows failure instead of empty results and retries the same query', async () => {
-  partsApi.list
+it('shows a failed search and retries the same query inside the shared dropdown', async () => {
+  partsApi.search
     .mockRejectedValueOnce(new Error('network'))
-    .mockResolvedValueOnce({ items: [] })
+    .mockResolvedValueOnce(page())
   const user = userEvent.setup()
   renderDrawer()
-  await user.type(
-    screen.getByRole('textbox', { name: 'Пошук запчастини' }),
-    'OEM',
-  )
-  expect(screen.getByText('Шукаємо запчастини…')).toBeVisible()
+  await user.type(screen.getByRole('searchbox'), 'OEM')
   await user.click(
     await screen.findByRole('button', { name: 'Повторити пошук' }),
   )
-  expect(
-    screen.queryByRole('button', { name: 'Повторити пошук' }),
-  ).not.toBeInTheDocument()
-  await screen.findByText('Нічого не знайдено. Спробуйте OEM-код.')
-  expect(partsApi.list).toHaveBeenLastCalledWith(
-    expect.objectContaining({ q: 'OEM', status: 'available' }),
+  await screen.findByText('Нічого не знайдено')
+  expect(partsApi.search).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      query: 'OEM',
+      statuses: ['available'],
+      pageSize: 6,
+    }),
+    expect.anything(),
   )
 })
 
-it('clearing a pending search returns to idle and ignores its late result', async () => {
-  let resolve!: (value: { items: never[] }) => void
-  partsApi.list.mockImplementation(
+it('clearing a pending search closes the dropdown and ignores its late result', async () => {
+  let resolve!: (value: ReturnType<typeof page>) => void
+  partsApi.search.mockImplementation(
     () =>
       new Promise((done) => {
         resolve = done
@@ -79,235 +100,150 @@ it('clearing a pending search returns to idle and ignores its late result', asyn
   )
   const user = userEvent.setup()
   renderDrawer()
-  await user.type(
-    screen.getByRole('textbox', { name: 'Пошук запчастини' }),
-    'OEM',
-  )
-  await waitFor(() => expect(partsApi.list).toHaveBeenCalledTimes(1))
-  await user.click(screen.getByRole('button', { name: 'Очистити пошук' }))
+  await user.type(screen.getByRole('searchbox'), 'OEM')
+  await waitFor(() => expect(partsApi.search).toHaveBeenCalledOnce())
+  await user.clear(screen.getByRole('searchbox'))
   await act(async () => {
-    resolve({ items: [] })
+    resolve(page([part()]))
     await Promise.resolve()
   })
-  expect(screen.getByText('Введіть назву або OEM-код')).toBeVisible()
-  expect(screen.queryByText(/Нічого не знайдено/)).not.toBeInTheDocument()
+  expect(screen.queryByRole('option')).not.toBeInTheDocument()
   expect(
-    screen.getByRole('textbox', { name: 'Пошук запчастини' }),
-  ).toHaveFocus()
+    screen.queryByRole('dialog', { name: 'Результати пошуку запчастин' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('searchbox')).toHaveFocus()
 })
 
-it('only offers available stock, including the free remainder of a reserved part', async () => {
-  const part = {
-    id: 'available',
-    name: 'Двері',
-    photos: [],
-    quantityTotal: 3,
-    quantityReserved: 1,
-    quantityAvailable: 2,
-    quantitySoldTotal: 0,
-    status: 'available',
-    car: null,
-    order: null,
-    externalCode: null,
-  }
-  partsApi.list.mockResolvedValue({
-    items: [
-      part,
-      {
-        ...part,
-        id: 'reserved',
-        name: 'У резерві',
-        quantityAvailable: 0,
-        quantityReserved: 3,
-      },
-      {
-        ...part,
-        id: 'sold',
-        name: 'Продано',
-        quantityAvailable: 0,
-        quantityTotal: 0,
-      },
-    ],
-    page: 1,
-    pageSize: 8,
-    total: 3,
-    totalPages: 1,
-  })
-  partsApi.get.mockResolvedValue({
-    effectiveSalePrice: 100,
-  })
+it('offers only free stock, closes after selection and enforces its quantity limit', async () => {
+  partsApi.search.mockResolvedValue(
+    page([
+      part(),
+      { ...part('reserved', 'У резерві', 0), status: 'reserved' },
+      { ...part('sold', 'Продано', 0), status: 'sold' },
+    ]),
+  )
   const submit = vi.fn()
   const user = userEvent.setup()
-  render(
-    <OrderItemDrawer
-      guard={guardFixture()}
-      open
-      busy={false}
-      error={null}
-      orderNumber={1}
-      orderTotal={0}
-      takenPartIds={[]}
-      onOpenChange={vi.fn()}
-      onSubmit={submit}
-    />,
-  )
-  await user.type(
-    screen.getByRole('textbox', { name: 'Пошук запчастини' }),
-    'Двері',
-  )
-  await screen.findByRole('button', { name: /Двері/ })
+  renderDrawer({ onSubmit: submit })
+  await user.type(screen.getByRole('searchbox'), 'Фара')
+  const option = await screen.findByRole('option', {
+    name: 'Обрати запчастину Фара ліва',
+  })
+  await waitFor(() => expect(option).toBeEnabled())
   expect(
-    screen.queryByRole('button', { name: /У резерві/ }),
+    screen.queryByRole('option', { name: /У резерві|Продано/ }),
   ).not.toBeInTheDocument()
+  expect(within(option).getByText('2 в наявності')).toBeVisible()
+  await user.click(option)
   expect(
-    screen.queryByRole('button', { name: /Продано/ }),
+    screen.queryByRole('dialog', { name: 'Результати пошуку запчастин' }),
   ).not.toBeInTheDocument()
-  expect(
-    screen.queryByRole('group', { name: 'Наявність' }),
-  ).not.toBeInTheDocument()
-  expect(partsApi.list).toHaveBeenLastCalledWith(
-    expect.objectContaining({ status: 'available' }),
-  )
-  await waitFor(() =>
-    expect(partsApi.list).toHaveBeenLastCalledWith(
-      expect.objectContaining({ q: 'Двері', status: 'available' }),
-    ),
-  )
-  await user.click(screen.getByRole('button', { name: /Двері/ }))
+  expect(screen.getByRole('searchbox')).toHaveValue('Фара ліва')
   await user.click(screen.getByRole('button', { name: 'Більше' }))
   expect(screen.getByRole('button', { name: 'Більше' })).toBeDisabled()
+  await user.clear(screen.getByLabelText('Кількість'))
+  await user.type(screen.getByLabelText('Кількість'), '999')
+  expect(screen.getByLabelText('Кількість')).toHaveValue('2')
   await user.click(screen.getByRole('button', { name: 'Додати в замовлення' }))
   expect(submit).toHaveBeenCalledWith({
-    partId: 'available',
+    partId: 'part-1',
     quantity: 2,
     unitPrice: 100,
   })
-  partsApi.list.mockImplementation(() => new Promise(() => undefined))
-  await user.type(
-    screen.getByRole('textbox', { name: 'Пошук запчастини' }),
-    ' X',
-  )
-  expect(
-    screen.queryByRole('button', { name: /Двері/ }),
-  ).not.toBeInTheDocument()
+  await user.type(screen.getByRole('searchbox'), ' X')
   expect(screen.queryByText('Вибрано')).not.toBeInTheDocument()
   expect(
     screen.getByRole('button', { name: 'Додати в замовлення' }),
   ).toBeDisabled()
-  expect(screen.getByText('Шукаємо запчастини…')).toBeVisible()
 })
 
-it('names the car by its plate and says where the part lies', async () => {
-  partsApi.list.mockResolvedValue({
-    items: [
-      {
-        id: 'part-1',
-        name: 'Карта дверей RR',
-        externalCode: null,
-        photos: [],
-        quantityTotal: 1,
-        quantityReserved: 0,
-        quantityAvailable: 1,
-        quantitySoldTotal: 0,
-        status: 'available',
-        car: {
-          id: 'car-1',
-          make: 'Tesla',
-          model: 'Model Y',
-          year: 2023,
-          vin: null,
-        },
-        order: null,
-      },
-    ],
-  })
-  partsApi.get.mockResolvedValue({
-    oemCode: '1494120-00-B',
-    carCode: 'BC 9105 TX',
-    effectiveSalePrice: 320,
-  })
-  inventoryApi.getPartZones.mockResolvedValue([
-    { isSystemUnassigned: false, warehouseName: 'Склад B', zoneCode: '04-2' },
-  ])
+it('shows the same car, code and price presentation as the new-order picker', async () => {
+  partsApi.search.mockResolvedValue(page([part()]))
   const user = userEvent.setup()
   renderDrawer()
-
-  await user.type(screen.getByLabelText('Пошук запчастини'), 'карта')
-
-  // The plate is how a yard names a car out loud, and the shelf is what the
-  // picker walks to — both belong on the one line under the name.
-  expect(
-    await screen.findByText(
-      '1494120-00-B · Tesla Model Y 2023 · BC 9105 TX · Склад B · 04-2',
-    ),
-  ).toBeVisible()
+  await user.type(screen.getByRole('searchbox'), 'фара')
+  const option = await screen.findByRole('option', { name: /Фара ліва/ })
+  expect(within(option).getByText('Tesla Model Y · 2023')).toBeVisible()
+  expect(within(option).getByText('OEM-123')).toBeVisible()
+  expect(await within(option).findByText(/100,00 USD/)).toBeVisible()
 })
 
-it('starts with an empty search after it is closed and opened again', async () => {
-  partsApi.list.mockResolvedValue({ items: [] })
+it('starts with an empty search after closing and reopening', async () => {
   const user = userEvent.setup()
-  const props = {
-    busy: false,
-    error: null,
-    orderNumber: 1,
-    orderTotal: 0,
-    takenPartIds: [] as string[],
-    guard: guardFixture(),
-    onOpenChange: vi.fn(),
-    onSubmit: vi.fn(),
-  }
-  const { rerender } = render(<OrderItemDrawer {...props} open />)
-
-  await user.type(screen.getByLabelText('Пошук запчастини'), 'двері')
-  await screen.findByText('Нічого не знайдено. Спробуйте OEM-код.')
-
+  const props = drawerProps()
+  const { rerender } = render(<OrderItemDrawer {...props} />)
+  await user.type(screen.getByRole('searchbox'), 'фара')
+  await screen.findByText('Нічого не знайдено')
   rerender(<OrderItemDrawer {...props} open={false} />)
-  rerender(<OrderItemDrawer {...props} open />)
-
-  expect(screen.getByLabelText('Пошук запчастини')).toHaveValue('')
-  expect(screen.getByText('Введіть назву або OEM-код')).toBeVisible()
-  expect(partsApi.list).toHaveBeenCalledTimes(1)
+  rerender(<OrderItemDrawer {...props} />)
+  expect(screen.getByRole('searchbox')).toHaveValue('')
+  expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  expect(partsApi.search).toHaveBeenCalledOnce()
 })
 
-it('comes back with the item typed before choosing the currency', async () => {
-  partsApi.list.mockResolvedValue({
-    items: [
-      {
-        id: 'part-1',
-        name: 'Фара ліва',
-        photos: [],
-        quantityTotal: 2,
-        quantityReserved: 0,
-        quantityAvailable: 2,
-        quantitySoldTotal: 0,
-        status: 'available',
-        car: null,
-        order: null,
-        externalCode: null,
-      },
-    ],
-    page: 1,
-    pageSize: 8,
-    total: 1,
-    totalPages: 1,
+it('restores the selected part and entered values after choosing a currency', async () => {
+  renderDrawer({
+    draft: { query: 'Фара', pickedId: 'part-1', quantity: 2, price: '55' },
   })
-  partsApi.get.mockResolvedValue({ effectiveSalePrice: 40 })
-  render(
-    <OrderItemDrawer
-      busy={false}
-      draft={{ query: 'Фара', pickedId: 'part-1', quantity: 2, price: '55' }}
-      error={null}
-      guard={guardFixture()}
-      onOpenChange={vi.fn()}
-      onSubmit={vi.fn()}
-      open
-      orderNumber={1}
-      orderTotal={0}
-      takenPartIds={[]}
-    />,
-  )
-  expect(screen.getByRole('textbox', { name: 'Пошук запчастини' })).toHaveValue(
-    'Фара',
-  )
+  expect(screen.getByRole('searchbox')).toHaveValue('Фара')
   expect(await screen.findByDisplayValue('55')).toBeVisible()
+  expect(screen.getByLabelText('Кількість')).toHaveValue('2')
+  expect(
+    screen.getByRole('button', { name: 'Додати в замовлення' }),
+  ).toBeEnabled()
+})
+
+it('disables existing order lines and Escape closes only the results', async () => {
+  partsApi.search.mockResolvedValue(page([part('taken', 'Вже додана'), part()]))
+  const onOpenChange = vi.fn()
+  const user = userEvent.setup()
+  renderDrawer({ takenPartIds: ['taken'], onOpenChange })
+  await user.type(screen.getByRole('searchbox'), 'фара')
+  const taken = await screen.findByRole('option', { name: /Вже додана/ })
+  await waitFor(() =>
+    expect(screen.getByRole('option', { name: /Фара ліва/ })).toBeEnabled(),
+  )
+  expect(taken).toBeDisabled()
+  expect(within(taken).getByText('у замовленні')).toBeVisible()
+  await user.click(taken)
+  expect(
+    screen.getByRole('button', { name: 'Додати в замовлення' }),
+  ).toBeDisabled()
+  await user.click(screen.getByRole('searchbox'))
+  await user.keyboard('{ArrowDown}')
+  expect(screen.getByRole('option', { name: /Фара ліва/ })).toHaveFocus()
+  await user.keyboard('{Escape}')
+  expect(
+    screen.queryByRole('dialog', { name: 'Результати пошуку запчастин' }),
+  ).not.toBeInTheDocument()
+  expect(onOpenChange).not.toHaveBeenCalled()
+  await user.keyboard('{Escape}')
+  expect(onOpenChange).toHaveBeenCalledWith(false)
+})
+
+it('does not restore an old currency draft over a new search', async () => {
+  let resolve!: (
+    value: ReturnType<typeof part> & { effectiveSalePrice: number },
+  ) => void
+  partsApi.get.mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done
+    }),
+  )
+  const user = userEvent.setup()
+  renderDrawer({
+    draft: { query: 'Фара', pickedId: 'part-1', quantity: 2, price: '55' },
+  })
+  await waitFor(() => expect(partsApi.get).toHaveBeenCalledOnce())
+  await user.clear(screen.getByRole('searchbox'))
+  await user.type(screen.getByRole('searchbox'), 'Двері')
+  await act(async () => {
+    resolve({ ...part(), effectiveSalePrice: 100 })
+    await Promise.resolve()
+  })
+  expect(screen.getByRole('searchbox')).toHaveValue('Двері')
+  expect(screen.queryByText('Вибрано')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Додати в замовлення' }),
+  ).toBeDisabled()
 })

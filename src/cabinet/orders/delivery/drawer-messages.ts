@@ -44,6 +44,7 @@ export const deliveryDrawerMessages = defineMessages({
     sectionRecipient: 'Отримувач',
     recipientName: 'Ім’я отримувача',
     recipientNamePlaceholder: 'ПІБ',
+    recipientLookupHint: 'Виберіть клієнта або введіть ім’я отримувача вручну.',
     phone: 'Телефон',
     phoneFormat: 'Телефон у міжнародному форматі, напр. {example}',
     savedSettlement: 'Збережений пункт залишається, доки не виберете інший.',
@@ -245,6 +246,8 @@ export const deliveryDrawerMessages = defineMessages({
     sectionRecipient: 'Recipient',
     recipientName: 'Recipient name',
     recipientNamePlaceholder: 'Full name',
+    recipientLookupHint:
+      'Choose a customer or enter the recipient’s name manually.',
     phone: 'Phone',
     phoneFormat: 'Phone in international format, e.g. {example}',
     savedSettlement: 'The saved place stays until you choose another.',
@@ -440,6 +443,7 @@ export const deliveryDrawerMessages = defineMessages({
     sectionRecipient: 'Odbiorca',
     recipientName: 'Imię i nazwisko odbiorcy',
     recipientNamePlaceholder: 'Imię i nazwisko',
+    recipientLookupHint: 'Wybierz klienta lub wpisz dane odbiorcy ręcznie.',
     phone: 'Telefon',
     phoneFormat: 'Telefon w formacie międzynarodowym, np. {example}',
     savedSettlement:

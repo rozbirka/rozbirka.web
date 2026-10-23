@@ -259,7 +259,9 @@ it('keeps a failed verification visible and does not start diagnostics', async (
   )
 
   expect(
-    await screen.findByText('Нова пошта не прийняла цей ключ API.'),
+    await screen.findByText(
+      'Нова пошта не прийняла ключ API. Перевірте налаштування інтеграції.',
+    ),
   ).toBeVisible()
   expect(integrationsApi.diagnose).not.toHaveBeenCalled()
 })

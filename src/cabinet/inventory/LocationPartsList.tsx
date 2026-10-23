@@ -198,9 +198,7 @@ function OwnedLocationPartsList({
         ) : null}
       </div>
       {!current ? (
-        <div className="rz-card p-[var(--rz-card-p)]">
-          <SkeletonRows rows={3} />
-        </div>
+        <SkeletonRows rows={3} />
       ) : current.error ? (
         <Notice tone="danger">
           {t('failed')}{' '}

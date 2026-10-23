@@ -44,6 +44,15 @@ it('opens secondary record actions as one vertical menu', async () => {
   expect(screen.getByRole('menuitem', { name: 'Видалити' })).toHaveClass(
     'rz-menu__item--danger',
   )
+  await user.keyboard('{ArrowDown}')
+  expect(screen.getByRole('menuitem', { name: 'Архівувати' })).toHaveFocus()
+  await user.keyboard('{ArrowDown}')
+  expect(screen.getByRole('menuitem', { name: 'Видалити' })).toHaveFocus()
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Інші дії з записом' }),
+  ).toHaveFocus()
 })
 
 it('names a field control by its label and describes it with the hint', () => {

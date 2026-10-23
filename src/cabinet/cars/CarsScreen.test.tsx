@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { carsApi } from '@/api/cars'
 import { mediaApi } from '@/api/media'
@@ -562,11 +562,13 @@ it('retains successful files when another media upload fails and reports that fi
     })
     .mockRejectedValueOnce({
       kind: 'validation',
-      message: 'Непідтримуваний формат.',
+      code: 'INVALID_FILE_TYPE',
+      message: 'Unsupported file type.',
     })
     .mockRejectedValueOnce({
       kind: 'validation',
-      message: 'Файл завеликий.',
+      code: 'FILE_TOO_LARGE',
+      message: 'File too large.',
     })
   function Harness() {
     const [items, setItems] = useState<{ storageKey: string; url: string }[]>(
@@ -589,8 +591,12 @@ it('retains successful files when another media upload fails and reports that fi
   expect(screen.getByText('ok.jpg')).toBeVisible()
   const errors = within(screen.getByRole('alert')).getAllByRole('listitem')
   expect(errors).toHaveLength(2)
-  expect(errors[0]).toHaveTextContent('bad.heic: Непідтримуваний формат.')
-  expect(errors[1]).toHaveTextContent('large.jpg: Файл завеликий.')
+  expect(errors[0]).toHaveTextContent(
+    'bad.heic: Цей формат файлу не підтримується.',
+  )
+  expect(errors[1]).toHaveTextContent(
+    'large.jpg: Файл перевищує дозволений розмір.',
+  )
 })
 
 it('previews selected media before its upload finishes', async () => {
@@ -661,8 +667,14 @@ it('chooses make and model from inline lists and keeps photos local until submit
 
   expect(screen.getByText('Додаткові витрати')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Марка' }))
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByRole('dialog', { name: 'Марка' })).toBeVisible()
   expect(await screen.findByRole('listbox', { name: 'Марка' })).toBeVisible()
+  await screen.findByRole('option', { name: 'BMW' })
+  const makeSearch = screen.getByRole('searchbox', { name: 'Пошук: Марка' })
+  await user.type(makeSearch, 'no such make')
+  expect(screen.getByRole('status')).toHaveTextContent('Нічого не знайдено.')
+  await user.clear(makeSearch)
+  await user.type(makeSearch, 'bmw')
   await user.click(await screen.findByRole('option', { name: 'BMW' }))
   await user.click(screen.getByRole('button', { name: 'Модель' }))
   expect(await screen.findByRole('listbox', { name: 'Модель' })).toBeVisible()
@@ -786,7 +798,7 @@ it('retries only remaining initial expenses after partial failure without recrea
     }),
   )
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Автомобіль створено, але не всі витрати збережено: Витрата вже існує. Виправте дані витрати й надішліть форму ще раз — автомобіль не створиться повторно.',
+    'Автомобіль створено, але не всі витрати збережено: Не вдалося виконати дію через конфлікт даних. Виправте дані витрати й надішліть форму ще раз — автомобіль не створиться повторно.',
   )
   expect(
     screen.getByRole('link', { name: 'Відкрити автомобіль' }),
@@ -1416,4 +1428,160 @@ it('does not save after cancellation while an edit photo upload is pending', asy
     await Promise.resolve()
   })
   expect(carsApi.update).not.toHaveBeenCalled()
+})
+
+const renderCarNotes = () =>
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+it('saves car notes in place without financial or photo fields and keeps the gallery', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['cars.view', 'cars.manage']))
+  vi.mocked(carsApi.update).mockResolvedValue({
+    ...detail,
+    notes: 'Нова нотатка',
+  })
+  const user = userEvent.setup()
+  renderCarNotes()
+  const card = await screen.findByRole('region', { name: 'Фото та нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', { name: 'Нотатки' })
+  await user.clear(input)
+  await user.type(input, '  Нова нотатка  ')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+
+  await waitFor(() => expect(carsApi.update).toHaveBeenCalledOnce())
+  expect(carsApi.update).toHaveBeenCalledWith(
+    'car-1',
+    { notes: 'Нова нотатка' },
+    expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
+  )
+  await waitFor(() =>
+    expect(within(card).queryByRole('textbox')).not.toBeInTheDocument(),
+  )
+  expect(within(card).getByText('Нова нотатка')).toBeVisible()
+  expect(within(card).getByRole('region', { name: 'Фото' })).toBeVisible()
+})
+
+it('clears car notes with an empty string and can add the first note again', async () => {
+  vi.mocked(carsApi.update).mockResolvedValue({ ...detail, notes: null })
+  const user = userEvent.setup()
+  renderCarNotes()
+  const card = await screen.findByRole('region', { name: 'Фото та нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.clear(within(card).getByRole('textbox', { name: 'Нотатки' }))
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+
+  await waitFor(() =>
+    expect(within(card).getByText('Нотаток немає.')).toBeVisible(),
+  )
+  expect(carsApi.update).toHaveBeenCalledWith(
+    'car-1',
+    { notes: '' },
+    expect.anything(),
+  )
+  expect(within(card).getByRole('button', { name: 'Редагувати' })).toBeEnabled()
+})
+
+it('retains an unsaved car note after failure and cancels back to the saved value', async () => {
+  vi.mocked(carsApi.update).mockRejectedValue(new Error('Не вдалося зберегти'))
+  const user = userEvent.setup()
+  renderCarNotes()
+  const card = await screen.findByRole('region', { name: 'Фото та нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', { name: 'Нотатки' })
+  await user.clear(input)
+  await user.type(input, 'Чернетка')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+
+  await within(card).findByRole('alert')
+  expect(input).toHaveValue('Чернетка')
+  await user.click(within(card).getByRole('button', { name: 'Скасувати' }))
+  expect(within(card).getByText('Перевірено')).toBeVisible()
+  expect(within(card).queryByRole('textbox')).not.toBeInTheDocument()
+})
+
+it('rechecks car permissions when saving notes after opening the inline editor', async () => {
+  const currentCabinet = cabinet(['cars.view', 'cars.manage'])
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  const user = userEvent.setup()
+  renderCarNotes()
+  const card = await screen.findByRole('region', { name: 'Фото та нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(card).getByRole('textbox', { name: 'Нотатки' }),
+    ' чернетка',
+  )
+  currentCabinet.snapshot.permissions.delete('cars.manage')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+
+  await within(card).findByRole('alert')
+  expect(carsApi.update).not.toHaveBeenCalled()
+})
+
+it('shows car notes read-only without cars.manage', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['cars.view']))
+  renderCarNotes()
+  const card = await screen.findByRole('region', { name: 'Фото та нотатки' })
+  expect(within(card).getByText('Перевірено')).toBeVisible()
+  expect(
+    within(card).queryByRole('button', { name: 'Редагувати' }),
+  ).not.toBeInTheDocument()
+})
+
+it('unmounts a pending car note editor immediately when navigating to another car', async () => {
+  const user = userEvent.setup()
+  let finishSave!: (value: typeof detail) => void
+  let finishNextLoad!: (value: typeof detail) => void
+  const saveResponse = new Promise<typeof detail>((resolve) => {
+    finishSave = resolve
+  })
+  const nextResponse = new Promise<typeof detail>((resolve) => {
+    finishNextLoad = resolve
+  })
+  vi.mocked(carsApi.update).mockReturnValue(saveResponse)
+  vi.mocked(carsApi.get)
+    .mockResolvedValueOnce(detail)
+    .mockReturnValueOnce(nextResponse)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+      <Link to="/app/demo/cars/car-2">Next car</Link>
+      <Routes>
+        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const first = await screen.findByRole('region', { name: 'Фото та нотатки' })
+  await user.click(within(first).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(first).getByRole('textbox', { name: 'Нотатки' }),
+    ' чернетка',
+  )
+  await user.click(within(first).getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() => expect(carsApi.update).toHaveBeenCalledOnce())
+  await user.click(screen.getByRole('link', { name: 'Next car' }))
+  expect(
+    screen.queryByRole('textbox', { name: 'Нотатки' }),
+  ).not.toBeInTheDocument()
+  expect(first).not.toBeInTheDocument()
+  await act(async () => {
+    finishNextLoad({
+      ...detail,
+      id: 'car-2',
+      code: 'CAR-002',
+      notes: 'Інше авто',
+    })
+    await nextResponse
+  })
+  expect(await screen.findByText('Інше авто')).toBeVisible()
+  await act(async () => {
+    finishSave({ ...detail, notes: 'Перевірено чернетка' })
+    await saveResponse
+  })
+  expect(screen.getByText('Інше авто')).toBeVisible()
+  expect(screen.queryByText('Перевірено чернетка')).not.toBeInTheDocument()
 })

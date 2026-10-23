@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ChevronRight, RefreshCw, Search } from 'lucide-react'
-import { Button, Segmented, Skeleton } from '@/components/app'
+import { Button, Segmented, SkeletonRows } from '@/components/app'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
@@ -48,24 +48,8 @@ const PERIOD_OPTIONS = Object.keys(PERIODS) as DashboardPeriod[]
 
 /** The main column's placeholder cards while the summary loads. */
 const SKELETON_MAIN = ['a', 'b'] as const
-/** Placeholder bars of uneven width, so the card reads as text loading. */
-const SKELETON_WIDTHS = [
-  'w-11/12',
-  'w-4/5',
-  'w-full',
-  'w-3/4',
-  'w-5/6',
-  'w-4/5',
-]
-
 function SkeletonCard({ lines }: { lines: number }) {
-  return (
-    <div className="rz-card rz-card__body grid gap-2.5">
-      {SKELETON_WIDTHS.slice(0, lines).map((width, index) => (
-        <Skeleton className={cn('h-7', width)} key={index} />
-      ))}
-    </div>
-  )
+  return <SkeletonRows announce={false} rows={lines} />
 }
 
 const DAY_NAME: Intl.DateTimeFormatOptions = {

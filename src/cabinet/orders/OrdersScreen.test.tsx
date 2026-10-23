@@ -1,11 +1,20 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
+import type { OrderDetail } from '@/api/orders'
 import { useCabinet } from '../CabinetContext'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { OrdersScreen } from './OrdersScreen'
+import { saveCurrencyDraft } from '../currency/form-draft'
 
 const orderMocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -119,8 +128,9 @@ const pickerPart = (id: string) => ({
 async function selectPickerPart(
   user: ReturnType<typeof userEvent.setup>,
   id: string,
+  available = 3,
 ) {
-  const part = pickerPart(id)
+  const part = { ...pickerPart(id), quantityAvailable: available }
   partMocks.search.mockResolvedValue({
     items: [part],
     page: 1,
@@ -128,7 +138,9 @@ async function selectPickerPart(
     total: 1,
     totalPages: 1,
   })
-  await user.type(screen.getByLabelText('Пошук запчастини'), part.name)
+  const search = screen.getByLabelText('Пошук запчастини')
+  await user.clear(search)
+  await user.type(search, part.name)
   await user.click(
     await screen.findByRole('option', {
       name: `Обрати запчастину ${part.name}`,
@@ -137,14 +149,13 @@ async function selectPickerPart(
 }
 
 /**
- * Picks a part inside the add-item drawer. The drawer lists parts itself and
- * reads each one's card for a price, so both mocks have to answer.
+ * Picks a part with the same search component used by the new-order form.
  */
 async function pickDrawerPart(ids: string[]) {
-  partMocks.list.mockResolvedValue({
+  partMocks.search.mockResolvedValue({
     items: ids.map(pickerPart),
     page: 1,
-    pageSize: 8,
+    pageSize: 6,
     total: ids.length,
     totalPages: 1,
   })
@@ -152,13 +163,27 @@ async function pickDrawerPart(ids: string[]) {
   await userEvent
     .setup()
     .type(
-      within(drawer).getByRole('textbox', { name: 'Пошук запчастини' }),
+      within(drawer).getByRole('searchbox', { name: 'Пошук запчастини' }),
       'Тестова',
     )
-  const rows = await within(drawer).findAllByRole('button', {
+  const rows = await within(drawer).findAllByRole('option', {
     name: /Тестова запчастина/,
   })
   return { drawer, rows }
+}
+
+async function confirmCurrentOrder(user: ReturnType<typeof userEvent.setup>) {
+  if (!screen.queryByRole('dialog', { name: /Підтвердити замовлення #/ })) {
+    await user.click(
+      screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+    )
+  }
+  const dialog = await screen.findByRole('dialog', {
+    name: /Підтвердити замовлення #/,
+  })
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
 }
 
 async function openInlineCustomerForm(
@@ -330,8 +355,11 @@ it('prevents a duplicate canonical create while the first request is pending', a
   )
 
   await selectPickerPart(user, 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+  fireEvent.change(screen.getByLabelText(/^Кількість /), {
+    target: { value: '1' },
+  })
+  await user.type(screen.getByLabelText(/^Ціна за одиницю /), '250')
+  await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
   const submit = screen.getByRole('button', { name: 'Створити замовлення' })
   await user.click(submit)
   await user.click(submit)
@@ -366,9 +394,11 @@ it('opens canonical creation in a side drawer and preselects the linked customer
   expect(
     within(drawer).getByRole('button', { name: 'Створити замовлення' }),
   ).toHaveAttribute('form', 'order-create-form')
-  expect(await screen.findByLabelText('Пошук клієнта')).toHaveValue(
-    'Ірина Коваль',
-  )
+  expect(
+    await screen.findByRole('button', { name: 'Змінити клієнта' }),
+  ).toHaveTextContent('Ірина Коваль')
+  expect(screen.queryByText('Клієнта обрано')).toBeNull()
+  expect(screen.queryByRole('searchbox', { name: 'Пошук клієнта' })).toBeNull()
   expect(
     screen.queryByRole('group', { name: 'Новий клієнт' }),
   ).not.toBeInTheDocument()
@@ -401,8 +431,11 @@ it('opens the created order inside the orders route', async () => {
   )
 
   await selectPickerPart(user, 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+  fireEvent.change(screen.getByLabelText(/^Кількість /), {
+    target: { value: '1' },
+  })
+  await user.type(screen.getByLabelText(/^Ціна за одиницю /), '250')
+  await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   await waitFor(() =>
@@ -425,8 +458,11 @@ it.each(['parts.view', 'customers.view'])(
     )
 
     await selectPickerPart(user, 'part-1')
-    await user.type(screen.getByLabelText('Кількість'), '1')
-    await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+    fireEvent.change(screen.getByLabelText(/^Кількість /), {
+      target: { value: '1' },
+    })
+    await user.type(screen.getByLabelText(/^Ціна за одиницю /), '250')
+    await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
     ;(access.snapshot!.permissions as Set<string>).delete(permission)
     await user.click(
       screen.getByRole('button', { name: 'Створити замовлення' }),
@@ -523,8 +559,11 @@ it('creates a customer inline before canonical order creation', async () => {
   await user.type(screen.getByLabelText('Телефон нового клієнта'), '501112233')
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
   await selectPickerPart(user, 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+  fireEvent.change(screen.getByLabelText(/^Кількість /), {
+    target: { value: '1' },
+  })
+  await user.type(screen.getByLabelText(/^Ціна за одиницю /), '250')
+  await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(customerMocks.create).toHaveBeenCalledWith(
@@ -642,7 +681,7 @@ it('reuses an active duplicate-phone customer in the pending order', async () =>
           customerId: 'customer-existing',
           customerName: 'Ірина',
           isActive: true,
-          message: 'Телефон уже використовується',
+          message: 'A customer with this phone already exists.',
         },
       },
     },
@@ -662,12 +701,21 @@ it('reuses an active duplicate-phone customer in the pending order', async () =>
     '+380501112233',
   )
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
+  expect(
+    await screen.findByText('Клієнт із таким номером телефону вже існує.'),
+  ).toBeVisible()
+  expect(
+    screen.queryByText('A customer with this phone already exists.'),
+  ).not.toBeInTheDocument()
   await user.click(
     await screen.findByRole('button', { name: 'Використати клієнта Ірина' }),
   )
   await selectPickerPart(user, 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+  fireEvent.change(screen.getByLabelText(/^Кількість /), {
+    target: { value: '1' },
+  })
+  await user.type(screen.getByLabelText(/^Ціна за одиницю /), '250')
+  await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(orderMocks.create).toHaveBeenCalledWith(
@@ -713,8 +761,11 @@ it('reactivates an inactive duplicate-phone customer before selecting it', async
     await screen.findByRole('button', { name: 'Активувати Олена' }),
   )
   await selectPickerPart(user, 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+  fireEvent.change(screen.getByLabelText(/^Кількість /), {
+    target: { value: '1' },
+  })
+  await user.type(screen.getByLabelText(/^Ціна за одиницю /), '250')
+  await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(customerMocks.activate).toHaveBeenCalledWith('customer-inactive', {
@@ -836,22 +887,26 @@ it('uses the reusable customer and part searches to populate a canonical order',
   ).toBeNull()
   await user.type(screen.getByLabelText('Пошук клієнта'), 'Ірина')
   await user.click(
-    await screen.findByRole('button', { name: 'Обрати клієнта Ірина' }),
+    await screen.findByRole('option', { name: 'Обрати клієнта Ірина' }),
   )
-  expect(screen.getByLabelText('Пошук клієнта')).toHaveValue('Ірина')
-  // The chosen customer is the current selection: brand edge on the field.
   expect(
-    screen.getByLabelText('Пошук клієнта').closest('.rz-search'),
-  ).toHaveClass('border-brand')
+    screen.getByRole('status', { name: 'Клієнта обрано' }),
+  ).toHaveTextContent('Ірина')
+  expect(screen.queryByRole('searchbox', { name: 'Пошук клієнта' })).toBeNull()
   expect(
-    screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
+    screen.queryByRole('option', { name: 'Обрати клієнта Ірина' }),
   ).toBeNull()
   expect(screen.getByRole('button', { name: 'Менше' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Більше' })).toBeEnabled()
-  // Money is typed in the mono, right-aligned numeric input.
-  expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('rz-input--num')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+  // Money keeps the mono numeric style; shared decimal controls align it left.
+  expect(screen.getByLabelText(/^Ціна за одиницю /)).toHaveClass(
+    'rz-input--num',
+  )
+  fireEvent.change(screen.getByLabelText(/^Кількість /), {
+    target: { value: '1' },
+  })
+  await user.type(screen.getByLabelText(/^Ціна за одиницю /), '250')
+  await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(partMocks.search).toHaveBeenCalledWith(
@@ -866,26 +921,155 @@ it('uses the reusable customer and part searches to populate a canonical order',
   })
 })
 
-it('builds a multi-part order and shows its total in dollars', async () => {
-  partMocks.search.mockResolvedValue({
-    items: [
-      {
-        ...pickerPart('part-1'),
-        name: 'Ліхтар',
-      },
-      {
-        ...pickerPart('part-2'),
-        name: 'Двері',
-        quantity: 2,
-        quantityTotal: 2,
-        quantityAvailable: 2,
-      },
-    ],
-    page: 1,
-    pageSize: 10,
-    total: 2,
-    totalPages: 1,
-  })
+it.each([false, true])(
+  'keeps the committed customer during replacement search and clears it only explicitly: %s',
+  async (clear) => {
+    customerMocks.search.mockResolvedValue([
+      { id: 'customer-1', name: 'Борис', phone: null, ordersCount: 0 },
+    ])
+    orderMocks.create.mockResolvedValue({ id: 'order-1' })
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await addDraftOrderPart(user, 'part-1', 1, 50)
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Пошук клієнта' }),
+      'Борис',
+    )
+    await user.click(
+      await screen.findByRole('option', { name: 'Обрати клієнта Борис' }),
+    )
+    await user.click(screen.getByRole('button', { name: 'Змінити клієнта' }))
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Ім’я або телефон' }),
+      'Олена',
+    )
+    expect(
+      screen.getByRole('status', { name: 'Клієнта обрано' }),
+    ).toHaveTextContent('Борис')
+    if (clear)
+      await user.click(
+        screen.getByRole('button', { name: 'Прибрати клієнта Борис' }),
+      )
+    await user.click(
+      screen.getByRole('button', { name: 'Створити замовлення' }),
+    )
+    expect(orderMocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: clear ? null : 'customer-1' }),
+    )
+  },
+)
+
+it('shows the approved empty order layout without an empty item editor or QR caption', () => {
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+  ).toBeVisible()
+  expect(screen.queryByLabelText(/^Кількість /)).toBeNull()
+  expect(screen.queryByLabelText(/^Ціна за одиницю /)).toBeNull()
+  expect(screen.queryByRole('list', { name: 'Позиції замовлення' })).toBeNull()
+  expect(screen.getByText('Лише наявні запчастини')).toBeVisible()
+  expect(
+    screen.getByText(
+      'Позицій ще немає. Знайдіть запчастину за назвою чи артикулом.',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText('Можна шукати за QR-кодом стікера')).toBeNull()
+  expect(
+    screen.getByRole('region', { name: 'Підсумок замовлення' }),
+  ).toHaveTextContent('0,00 USD')
+  expect(screen.queryByRole('button', { name: 'Додати ще деталь' })).toBeNull()
+  expect(
+    screen.queryByText(
+      'Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення.',
+    ),
+  ).toBeNull()
+  expect(
+    screen.getByRole('button', { name: 'Створити замовлення' }),
+  ).toBeDisabled()
+})
+
+it.each([0, 1, 3])(
+  'keeps inline quantity within %s available units',
+  async (available) => {
+    orderMocks.create.mockResolvedValue({ id: 'order-1' })
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    if (!available) {
+      partMocks.search.mockResolvedValue({
+        items: [{ ...pickerPart('part-1'), quantityAvailable: 0 }],
+        page: 1,
+        pageSize: 6,
+        total: 1,
+        totalPages: 1,
+      })
+      await user.type(
+        screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+        'Тест',
+      )
+      expect(await screen.findByText('Нічого не знайдено')).toBeVisible()
+      expect(screen.queryByLabelText(/^Кількість /)).toBeNull()
+      expect(
+        screen.getByRole('button', { name: 'Створити замовлення' }),
+      ).toBeDisabled()
+      return
+    }
+    await selectPickerPart(user, 'part-1', available)
+    const quantity = screen.getByLabelText(/^Кількість /)
+    expect(quantity).toHaveValue('1')
+    expect(screen.getByRole('button', { name: 'Менше' })).toBeDisabled()
+    fireEvent.change(quantity, { target: { value: '999' } })
+    expect(quantity).toHaveValue(String(available))
+    expect(screen.getByRole('button', { name: 'Більше' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText(/^Ціна за одиницю /), {
+      target: { value: '10' },
+    })
+    await user.click(screen.getByRole('button', { name: /^Підтвердити ціну:/ }))
+    await user.click(
+      screen.getByRole('button', { name: 'Створити замовлення' }),
+    )
+    expect(orderMocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ partId: 'part-1', quantity: available, unitPrice: 10 }],
+      }),
+    )
+  },
+)
+
+async function addDraftOrderPart(
+  user: ReturnType<typeof userEvent.setup>,
+  id: string,
+  quantity: number,
+  price: number,
+) {
+  await selectPickerPart(user, id)
+  fireEvent.change(
+    screen.getByLabelText(`Кількість Тестова запчастина ${id}`),
+    { target: { value: String(quantity) } },
+  )
+  fireEvent.change(
+    screen.getByLabelText(`Ціна за одиницю Тестова запчастина ${id}`),
+    { target: { value: String(price) } },
+  )
+  await user.click(
+    screen.getByRole('button', {
+      name: `Підтвердити ціну: Тестова запчастина ${id}`,
+    }),
+  )
+}
+
+it('keeps search above compact cards and confirms or cancels price edits', async () => {
   orderMocks.create.mockResolvedValue({ id: 'order-1' })
   const user = userEvent.setup()
   render(
@@ -893,49 +1077,192 @@ it('builds a multi-part order and shows its total in dollars', async () => {
       <OrdersScreen definition={definition} />
     </MemoryRouter>,
   )
-
-  const search = screen.getByLabelText('Пошук запчастини')
-  await user.type(search, 'Ліх')
-  await user.click(
-    await screen.findByRole('option', { name: 'Обрати запчастину Ліхтар' }),
-  )
-  expect(search).toHaveValue('Ліхтар')
-  await user.type(screen.getByLabelText('Кількість'), '2')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '50')
-  await user.click(screen.getByRole('button', { name: 'Додати деталь' }))
-
-  const items = screen.getByLabelText('Позиції замовлення')
-  expect(within(items).getByText('Ліхтар')).toBeVisible()
-  expect(within(items).getByText('2 × 50,00 USD')).toBeVisible()
-  expect(within(items).getByText('100,00 USD')).toBeVisible()
-
-  await user.type(search, 'Двер')
-  await user.click(
-    await screen.findByRole('option', { name: 'Обрати запчастину Двері' }),
-  )
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
-  await user.click(screen.getByRole('button', { name: 'Додати деталь' }))
-
-  const summary = screen.getByLabelText('Підсумок замовлення')
-  expect(within(summary).getByText('Разом за замовлення')).toBeVisible()
-  // v2 summary: the item-count line and the total line both carry the sum.
+  await addDraftOrderPart(user, 'part-1', 2, 50)
+  const search = screen.getByRole('searchbox', { name: 'Пошук запчастини' })
+  const list = screen.getByRole('list', { name: 'Позиції замовлення' })
   expect(
-    within(summary).getByText('2 позиції').parentElement,
-  ).toHaveTextContent('175,00 USD')
+    search.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Додати ще деталь' })).toBeNull()
+  expect(screen.queryByLabelText(/^Ціна за одиницю /)).toBeNull()
+  await addDraftOrderPart(user, 'part-2', 1, 75)
+  const quantity = screen.getByLabelText('Кількість Тестова запчастина part-1')
+  const row = quantity.closest('li')!
+  const name = within(row).getByText('Тестова запчастина part-1')
+  expect(row).toContainElement(name)
+  expect(within(row).queryByText('Сума')).toBeNull()
+  const edit = () =>
+    screen.getByRole('button', {
+      name: 'Редагувати ціну: Тестова запчастина part-1',
+    })
+  await user.click(edit())
+  let price = screen.getByLabelText('Ціна за одиницю Тестова запчастина part-1')
+  expect(price).toHaveFocus()
   expect(
-    within(summary).getByText('Разом за замовлення').parentElement,
-  ).toHaveTextContent('175,00 USD')
+    within(row).queryByRole('button', {
+      name: 'Прибрати Тестова запчастина part-1',
+    }),
+  ).toBeNull()
+  const cancel = () =>
+    within(row).getByRole('button', {
+      name: 'Скасувати зміну ціни: Тестова запчастина part-1',
+    })
+  fireEvent.change(price, { target: { value: '999' } })
+  await user.click(cancel())
+  expect(within(row).getByText('100,00 USD')).toBeVisible()
+  expect(within(row).getByText('2 × 50,00 USD')).toBeVisible()
+  expect(
+    within(row).getByRole('button', {
+      name: 'Прибрати Тестова запчастина part-1',
+    }),
+  ).toBeVisible()
+  await user.click(edit())
+  price = screen.getByLabelText('Ціна за одиницю Тестова запчастина part-1')
+  fireEvent.change(price, { target: { value: '999' } })
+  expect(
+    screen.getByRole('button', { name: 'Створити замовлення' }),
+  ).toBeDisabled()
+  fireEvent.submit(price.closest('form')!)
+  expect(orderMocks.create).not.toHaveBeenCalled()
+  cancel().focus()
+  await user.keyboard('{Escape}')
+  expect(screen.getByRole('dialog', { name: 'Нове замовлення' })).toBeVisible()
+  expect(edit()).toHaveFocus()
+  expect(within(row).getByText('100,00 USD')).toBeVisible()
+  expect(within(row).getByText('2 × 50,00 USD')).toBeVisible()
+  await user.click(edit())
+  price = screen.getByLabelText('Ціна за одиницю Тестова запчастина part-1')
+  fireEvent.change(quantity, { target: { value: '3' } })
+  fireEvent.change(price, { target: { value: '60.5' } })
+  await user.keyboard('{Enter}')
+  expect(
+    screen.queryByLabelText('Ціна за одиницю Тестова запчастина part-1'),
+  ).toBeNull()
+  expect(within(list).getAllByRole('listitem')).toHaveLength(2)
+  expect(
+    screen.getByRole('region', { name: 'Підсумок замовлення' }),
+  ).toHaveTextContent('256,50 USD')
+  expect(within(row).getByText('181,50 USD')).toBeVisible()
+  expect(within(row).getByText('3 × 60,50 USD')).toBeVisible()
+  expect(screen.getByText('Позиції · 4 шт')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
-
   expect(orderMocks.create).toHaveBeenCalledWith({
     customerId: null,
     notes: null,
     items: [
-      { partId: 'part-1', quantity: 2, unitPrice: 50 },
+      { partId: 'part-1', quantity: 3, unitPrice: 60.5 },
       { partId: 'part-2', quantity: 1, unitPrice: 75 },
     ],
   })
+})
+
+it('marks an already added part unavailable in the next search instead of duplicating it', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await addDraftOrderPart(user, 'part-1', 2, 50)
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+    'Тест',
+  )
+  expect(
+    await screen.findByRole('option', {
+      name: 'Обрати запчастину Тестова запчастина part-1',
+    }),
+  ).toBeDisabled()
+  expect(
+    within(
+      screen.getByRole('list', { name: 'Позиції замовлення' }),
+    ).getAllByRole('listitem'),
+  ).toHaveLength(1)
+  expect(
+    screen.getByLabelText('Кількість Тестова запчастина part-1'),
+  ).toHaveValue('2')
+})
+
+it.each(['', '-1', 'abc', '1.001'])(
+  'prevents creating an order with an invalid inline price %s',
+  async (price) => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await selectPickerPart(user, 'part-1')
+    const input = screen.getByLabelText(/^Ціна за одиницю /)
+    fireEvent.change(input, { target: { value: price } })
+    expect(
+      screen.getByRole('button', { name: 'Створити замовлення' }),
+    ).toBeDisabled()
+    fireEvent.submit(input.closest('form')!)
+    expect(orderMocks.create).not.toHaveBeenCalled()
+  },
+)
+
+it('returns to the empty search after removing the last card', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await addDraftOrderPart(user, 'part-1', 2, 50)
+  await user.click(
+    screen.getByRole('button', { name: 'Прибрати Тестова запчастина part-1' }),
+  )
+  expect(screen.queryByRole('list', { name: 'Позиції замовлення' })).toBeNull()
+  expect(screen.queryByLabelText(/^Кількість /)).toBeNull()
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+  ).toHaveValue('')
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+  ).toHaveFocus()
+  expect(
+    screen.getByRole('button', { name: 'Створити замовлення' }),
+  ).toBeDisabled()
+})
+
+it('restores older currency drafts into an editable card without losing unfinished changes', async () => {
+  const part = { ...pickerPart('part-1'), effectiveSalePrice: 50 }
+  saveCurrencyDraft('order-form:new', '/app/garage', {
+    partId: part.id,
+    partQuery: part.name,
+    customerId: '',
+    customerQuery: '',
+    selectedCustomerName: '',
+    quantity: '1',
+    unitPrice: '60',
+    notes: '',
+    draftItems: [{ part, quantity: 2, unitPrice: 50 }],
+    selectedPartDraft: part,
+    editingPartId: part.id,
+  })
+  orderMocks.create.mockResolvedValue({ id: 'order-1' })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new?draft=1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  expect(screen.getByLabelText(/^Кількість /)).toHaveValue('1')
+  expect(screen.queryByLabelText(/^Ціна за одиницю /)).toBeNull()
+  expect(
+    screen.getByRole('button', { name: /^Редагувати ціну:/ }),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+  ).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
+  expect(orderMocks.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      items: [{ partId: 'part-1', quantity: 1, unitPrice: 60 }],
+    }),
+  )
 })
 
 it('appends an item to the full Core item list when the replacement endpoint is used', async () => {
@@ -1189,9 +1516,7 @@ it('persists a payment before confirming a pending order separately', async () =
   expect(within(persistedPayments).getByText('Сейф · USD')).toBeVisible()
   expect(within(persistedPayments).getByText('250,00 USD')).toBeVisible()
 
-  await user.click(
-    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
-  )
+  await confirmCurrentOrder(user)
 
   expect(orderMocks.confirm).toHaveBeenCalledWith(
     'order-1',
@@ -1263,16 +1588,13 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   await user.click(
     within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
-  const submit = screen.getByRole('button', {
-    name: 'Підтвердити замовлення',
-  })
 
-  await user.click(submit)
+  await confirmCurrentOrder(user)
   // A lost answer is read back first: the order is still pending.
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'зміни не збереглися',
   )
-  await user.click(submit)
+  await confirmCurrentOrder(user)
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'зміни не збереглися',
   )
@@ -1295,6 +1617,11 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   )
   expect(randomUUID).toHaveBeenCalledTimes(2)
 
+  await user.click(
+    within(
+      screen.getByRole('dialog', { name: /Підтвердити замовлення #/ }),
+    ).getByRole('button', { name: 'Скасувати' }),
+  )
   await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
   dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
   await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
@@ -1306,7 +1633,7 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   await user.click(
     within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
-  await user.click(submit)
+  await confirmCurrentOrder(user)
 
   expect(orderMocks.confirm).toHaveBeenNthCalledWith(
     3,
@@ -1376,9 +1703,7 @@ it('rotates a confirmation key when client-side navigation changes the order res
   await user.click(
     within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
-  await user.click(
-    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
-  )
+  await confirmCurrentOrder(user)
   expect(await screen.findByRole('alert')).toBeVisible()
 
   await act(async () => {
@@ -1398,9 +1723,7 @@ it('rotates a confirmation key when client-side navigation changes the order res
   await user.click(
     within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
-  await user.click(
-    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
-  )
+  await confirmCurrentOrder(user)
 
   expect(orderMocks.confirm).toHaveBeenNthCalledWith(
     1,
@@ -1495,7 +1818,7 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
   )
   await submit()
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Перевірте причину повернення.',
+    'Перевірте правильність введених даних.',
   )
   await submit()
   await waitFor(() =>
@@ -1563,6 +1886,38 @@ it('hides finance transitions when the snapshot lacks finance.manage', async () 
   ).not.toBeInTheDocument()
 })
 
+it.each([125.5, 0, null])(
+  'prefills the saved part price %s and keeps it editable when creating an order',
+  async (price) => {
+    const user = userEvent.setup()
+    partMocks.get.mockImplementation((id: string) =>
+      Promise.resolve({ effectiveSalePrice: id === 'part-1' ? price : null }),
+    )
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await selectPickerPart(user, 'part-1')
+    if (price !== null) {
+      expect(screen.queryByLabelText(/^Ціна за одиницю /)).toBeNull()
+      await user.click(
+        screen.getByRole('button', { name: /^Редагувати ціну:/ }),
+      )
+    }
+    const input = screen.getByLabelText(/^Ціна за одиницю /)
+    expect(input).toHaveValue(price === null ? '' : String(price))
+    await user.clear(input)
+    await user.type(input, '75')
+    expect(input).toHaveValue('75')
+    await selectPickerPart(user, 'part-2')
+    expect(
+      screen.getByLabelText('Ціна за одиницю Тестова запчастина part-2'),
+    ).toHaveValue('')
+    expect(input).toHaveValue('75')
+  },
+)
+
 it('keeps server search, status, and pagination in the order URL', async () => {
   orderMocks.list.mockResolvedValue({
     items: [
@@ -1595,7 +1950,10 @@ it('keeps server search, status, and pagination in the order URL', async () => {
   expect(await screen.findByRole('link', { name: /#12/ })).toBeVisible()
   expect(screen.getByLabelText('Пошук замовлень')).toHaveValue('door')
   // The status is a set of chips now; the URL's one is the pressed chip.
-  expect(screen.getByRole('radio', { name: /Очікує/ })).toBeChecked()
+  expect(screen.getByRole('radio', { name: 'Очікує' })).toBeChecked()
+  for (const name of ['Підтверджено', 'Повернено', 'Скасовано'])
+    expect(screen.getByRole('radio', { name })).toHaveTextContent(name)
+  expect(screen.getByRole('radio', { name: 'Усі' })).toHaveTextContent(/^Усі$/)
   expect(orderMocks.list).toHaveBeenCalledWith(
     {
       search: 'door',
@@ -1728,11 +2086,13 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   )
 
   // The note is edited where it is read: the card swaps to a field in place.
-  await user.click(screen.getByRole('button', { name: 'Редагувати нотатки' }))
-  await user.clear(screen.getByLabelText('Нотатки замовлення'))
-  await user.type(screen.getByLabelText('Нотатки замовлення'), 'Готово')
-  await user.click(screen.getByRole('button', { name: 'Зберегти нотатки' }))
-  expect(orderMocks.updateNotes).toHaveBeenCalledWith('order-1', 'Готово')
+  await user.click(screen.getByRole('button', { name: 'Редагувати' }))
+  await user.clear(screen.getByRole('textbox', { name: 'Нотатки' }))
+  await user.type(screen.getByRole('textbox', { name: 'Нотатки' }), 'Готово')
+  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  expect(orderMocks.updateNotes).toHaveBeenCalledWith('order-1', 'Готово', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
 
   expect(
     screen.queryByLabelText('ID клієнта замовлення'),
@@ -2501,9 +2861,7 @@ it('reads a confirmation back after a lost answer and does not confirm twice', a
     ...order,
     status: 'confirmed',
   })
-  await user.click(
-    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
-  )
+  await confirmCurrentOrder(user)
 
   await waitFor(() => expect(orderMocks.getById).toHaveBeenCalledTimes(2))
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -2511,4 +2869,429 @@ it('reads a confirmation back after a lost answer and does not confirm twice', a
   expect(
     screen.queryByRole('button', { name: 'Підтвердити замовлення' }),
   ).not.toBeInTheDocument()
+})
+
+it('keeps an order note draft after failure, cancels locally, and saves trimmed text in place', async () => {
+  const user = userEvent.setup()
+  orderMocks.updateNotes
+    .mockRejectedValueOnce({ kind: 'validation', message: 'Виправте нотатку' })
+    .mockResolvedValueOnce({ notes: 'Готово' })
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(card).getByRole('textbox', { name: 'Нотатки' }),
+    'Чернетка',
+  )
+  await user.click(within(card).getByRole('button', { name: 'Скасувати' }))
+  expect(orderMocks.updateNotes).not.toHaveBeenCalled()
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', { name: 'Нотатки' })
+  expect(input).toHaveValue('')
+  await user.type(input, '  Готово  ')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  expect(await within(card).findByRole('alert')).toBeVisible()
+  expect(input).toHaveValue('  Готово  ')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  expect(orderMocks.updateNotes).toHaveBeenLastCalledWith('order-1', 'Готово', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
+  expect(await within(card).findByText('Готово')).toBeVisible()
+  expect(within(card).queryByRole('textbox')).not.toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Замовлення #1' })).toBeVisible()
+})
+
+it('clears order notes without updating other order fields', async () => {
+  const original = (await orderMocks.getById()) as OrderDetail
+  orderMocks.getById.mockResolvedValue({ ...original, notes: 'Прибрати' })
+  orderMocks.updateNotes.mockResolvedValue({ notes: null })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.clear(within(card).getByRole('textbox', { name: 'Нотатки' }))
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  expect(await within(card).findByText('Нотаток немає.')).toBeVisible()
+  expect(orderMocks.updateNotes).toHaveBeenCalledWith('order-1', '', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
+  expect(screen.getByRole('heading', { name: 'Замовлення #1' })).toBeVisible()
+  expect(orderMocks.updateItems).not.toHaveBeenCalled()
+})
+
+it('does not offer an order note editor without order management permission', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['orders.view']))
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  expect(within(card).queryByRole('button')).not.toBeInTheDocument()
+  expect(within(card).queryByRole('textbox')).not.toBeInTheDocument()
+})
+
+it.each(['confirmed', 'cancelled', 'refunded'])(
+  'lets managers edit notes on a %s order',
+  async (status) => {
+    const original = (await orderMocks.getById()) as OrderDetail
+    orderMocks.getById.mockResolvedValue({ ...original, status })
+    orderMocks.updateNotes.mockResolvedValue({
+      notes: 'Уточнення після продажу',
+    })
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    const card = await screen.findByRole('region', { name: 'Нотатки' })
+    await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+    await user.type(
+      within(card).getByRole('textbox', { name: 'Нотатки' }),
+      'Уточнення після продажу',
+    )
+    await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+    expect(
+      await within(card).findByText('Уточнення після продажу'),
+    ).toBeVisible()
+    expect(orderMocks.updateNotes).toHaveBeenCalledWith(
+      'order-1',
+      'Уточнення після продажу',
+      { signal: expect.any(AbortSignal) as AbortSignal },
+    )
+    expect(orderMocks.updateItems).not.toHaveBeenCalled()
+  },
+)
+
+it('offers the same inline note editor on delivery orders', async () => {
+  deliveryMocks.get.mockResolvedValue({
+    orderId: 'order-1',
+    agreedTotalUah: 100,
+    appliedUah: 0,
+    outstandingUah: 100,
+    netReceivedUah: 0,
+    feesUah: 0,
+    requiredDepositUah: 0,
+    depositShortfallUah: 0,
+    depositSatisfied: true,
+    depositWaived: false,
+    depositRequired: false,
+    customerTrusted: false,
+    dispatchedAt: null,
+    receivedAt: null,
+    returnedAt: null,
+    awaitingCodReconciliation: false,
+    payments: [],
+  })
+  orderMocks.updateNotes.mockResolvedValue({
+    notes: 'Зателефонувати перед доставкою',
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await waitFor(() => expect(deliveryMocks.get).toHaveBeenCalled())
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(card).getByRole('textbox', { name: 'Нотатки' }),
+    'Зателефонувати перед доставкою',
+  )
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  expect(
+    await within(card).findByText('Зателефонувати перед доставкою'),
+  ).toBeVisible()
+})
+
+it('discards the previous order note editor on navigation and ignores its late save', async () => {
+  const first = (await orderMocks.getById()) as OrderDetail
+  const second = { ...first, id: 'order-2', number: 2, notes: 'Друга нотатка' }
+  let resolveSecond!: (value: OrderDetail) => void
+  let resolveSave!: (value: { notes: string }) => void
+  orderMocks.getById.mockImplementation((id: string) =>
+    id === first.id
+      ? Promise.resolve(first)
+      : new Promise<OrderDetail>((resolve) => {
+          resolveSecond = resolve
+        }),
+  )
+  orderMocks.updateNotes.mockReturnValue(
+    new Promise<{ notes: string }>((resolve) => {
+      resolveSave = resolve
+    }),
+  )
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/orders/:orderId',
+        element: <OrdersScreen definition={definition} />,
+      },
+    ],
+    { initialEntries: ['/app/garage/orders/order-1'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(card).getByRole('textbox', { name: 'Нотатки' }),
+    'Збережена перша',
+  )
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  await act(() => router.navigate('/app/garage/orders/order-2'))
+  expect(
+    screen.queryByRole('textbox', { name: 'Нотатки' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('heading', { name: 'Замовлення #1' }),
+  ).not.toBeInTheDocument()
+  await act(async () => {
+    resolveSecond(second)
+    await Promise.resolve()
+  })
+  expect(await screen.findByText('Друга нотатка')).toBeVisible()
+  await act(async () => {
+    resolveSave({ notes: 'Збережена перша' })
+    await Promise.resolve()
+  })
+  expect(screen.getByText('Друга нотатка')).toBeVisible()
+  expect(screen.queryByText('Збережена перша')).not.toBeInTheDocument()
+  expect(orderMocks.updateNotes).toHaveBeenCalledTimes(1)
+})
+
+it.each(['normal', 'lost-response'])(
+  'refreshes order note history after a %s save while preserving item drafts',
+  async (outcome) => {
+    const original = (await orderMocks.getById()) as OrderDetail
+    orderMocks.getById.mockClear()
+    const order: OrderDetail = {
+      ...original,
+      items: [
+        {
+          id: 'item-1',
+          partId: 'part-1',
+          partName: 'Ліхтар',
+          partType: null,
+          coverPhotoUrl: null,
+          carBrand: null,
+          carModel: null,
+          carCode: null,
+          quantity: 1,
+          unitPrice: 100,
+          totalPrice: 100,
+        },
+      ],
+    }
+    const saved = {
+      ...order,
+      notes: 'Нова нотатка',
+      history: [
+        {
+          eventType: 'notesupdated',
+          userName: 'Олена',
+          createdAt: '2026-09-21T11:00:00Z',
+          data: null,
+        },
+      ],
+    }
+    orderMocks.getById.mockResolvedValueOnce(order).mockResolvedValue(saved)
+    if (outcome === 'normal') orderMocks.updateNotes.mockResolvedValue(saved)
+    else
+      orderMocks.updateNotes.mockRejectedValue({
+        kind: 'network',
+        message: 'Connection lost',
+      })
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await user.click(
+      await screen.findByRole('button', { name: 'Редагувати позиції' }),
+    )
+    const quantity = screen.getByLabelText('Кількість Ліхтар')
+    await user.clear(quantity)
+    await user.type(quantity, '2')
+    const card = screen.getByRole('region', { name: 'Нотатки' })
+    await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+    await user.type(
+      within(card).getByRole('textbox', { name: 'Нотатки' }),
+      'Нова нотатка',
+    )
+    await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+    expect(await within(card).findByText('Нова нотатка')).toBeVisible()
+    const history = screen.getByRole('list', { name: 'Історія замовлення' })
+    expect(within(history).getByText('Нотатки оновлено')).toBeVisible()
+    expect(screen.getByLabelText('Кількість Ліхтар')).toHaveValue('2')
+    expect(
+      screen.getByRole('button', { name: 'Зберегти позиції' }),
+    ).toBeVisible()
+    expect(orderMocks.updateItems).not.toHaveBeenCalled()
+    expect(orderMocks.getById).toHaveBeenCalledTimes(
+      outcome === 'normal' ? 1 : 2,
+    )
+  },
+)
+
+it('requires an explicit confirmation and lets the user cancel without changing the order', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
+  expect(orderMocks.confirm).not.toHaveBeenCalled()
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Підтвердити замовлення #1?',
+  })
+  expect(
+    within(dialog).getByText(
+      'Підтверджуючи замовлення, ви визнаєте його повністю оплаченим.',
+    ),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByRole('button', { name: 'Скасувати' }),
+  ).toHaveFocus()
+  await user.click(within(dialog).getByRole('button', { name: 'Скасувати' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(orderMocks.confirm).not.toHaveBeenCalled()
+})
+
+const confirmationOrder = (id = 'order-1') => ({
+  id,
+  number: id === 'order-1' ? 1 : 2,
+  status: 'pending',
+  customerId: null,
+  customerName: null,
+  notes: null,
+  items: [],
+  payments: [],
+  history: [],
+  totalAmount: 100,
+  totalPaid: 0,
+  paymentCurrency: null,
+  createdAt: '2026-10-22T10:00:00Z',
+  createdByName: 'Олена',
+})
+
+it('keeps confirmation open while pending, prevents duplicate submits and closes after success', async () => {
+  let finish!: (value: unknown) => void
+  orderMocks.confirm.mockReset().mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await confirmCurrentOrder(user)
+  const dialog = screen.getByRole('dialog', {
+    name: 'Підтвердити замовлення #1?',
+  })
+  const confirm = within(dialog).getByRole('button', {
+    name: 'Підтвердити замовлення',
+  })
+  expect(confirm).toBeDisabled()
+  expect(
+    within(dialog).getByRole('button', { name: 'Скасувати' }),
+  ).toBeDisabled()
+  expect(within(dialog).getByRole('button', { name: 'Закрити' })).toBeDisabled()
+  await user.click(confirm)
+  await user.keyboard('{Escape}')
+  expect(dialog).toBeVisible()
+  expect(orderMocks.confirm).toHaveBeenCalledOnce()
+  await act(async () => {
+    finish({ ...confirmationOrder(), status: 'confirmed' })
+    await Promise.resolve()
+  })
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Підтвердити замовлення' }),
+  ).not.toBeInTheDocument()
+})
+
+it('shows a confirmation failure in the dialog and allows retrying there', async () => {
+  orderMocks.confirm
+    .mockReset()
+    .mockRejectedValueOnce({ kind: 'validation', code: 'PART_NOT_AVAILABLE' })
+    .mockResolvedValueOnce({ ...confirmationOrder(), status: 'confirmed' })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await confirmCurrentOrder(user)
+  const dialog = screen.getByRole('dialog', {
+    name: 'Підтвердити замовлення #1?',
+  })
+  expect(await within(dialog).findByRole('alert')).toBeVisible()
+  expect(screen.getAllByRole('alert')).toHaveLength(1)
+  expect(
+    within(dialog).getByRole('button', { name: 'Підтвердити замовлення' }),
+  ).toBeEnabled()
+  await confirmCurrentOrder(user)
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(orderMocks.confirm).toHaveBeenCalledTimes(2)
+})
+
+it('does not carry an open confirmation into another order', async () => {
+  orderMocks.getById.mockImplementation((id: string) =>
+    Promise.resolve(confirmationOrder(id)),
+  )
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/garage/orders/:id',
+        element: <OrdersScreen definition={definition} />,
+      },
+    ],
+    { initialEntries: ['/app/garage/orders/order-1'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
+  expect(
+    await screen.findByRole('dialog', { name: 'Підтвердити замовлення #1?' }),
+  ).toBeVisible()
+  await act(async () => {
+    await router.navigate('/app/garage/orders/order-2')
+  })
+  await screen.findByRole('heading', { name: 'Замовлення #2' })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(orderMocks.confirm).not.toHaveBeenCalled()
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
+  expect(
+    await screen.findByRole('dialog', { name: 'Підтвердити замовлення #2?' }),
+  ).toBeVisible()
 })

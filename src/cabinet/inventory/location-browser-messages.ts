@@ -2,6 +2,7 @@ import { defineMessages } from '@/i18n'
 export const locationBrowserMessages = defineMessages({
   uk: {
     selectedLocations: 'Вибрано: {count}',
+    shownOf: '{shown} з {total}',
     zonesActions: 'Дії із зонами',
     chooseZone: 'Виберіть зону, щоб переглянути її секції',
     searchZones: 'Пошук зони',
@@ -54,6 +55,7 @@ export const locationBrowserMessages = defineMessages({
   },
   'en-GB': {
     selectedLocations: 'Selected: {count}',
+    shownOf: '{shown} of {total}',
     zonesActions: 'Zone list actions',
     chooseZone: 'Choose a zone to view its sections',
     searchZones: 'Search zones',
@@ -106,6 +108,7 @@ export const locationBrowserMessages = defineMessages({
   },
   pl: {
     selectedLocations: 'Wybrano: {count}',
+    shownOf: '{shown} z {total}',
     zonesActions: 'Działania na liście stref',
     chooseZone: 'Wybierz strefę, aby zobaczyć jej sekcje',
     searchZones: 'Szukaj strefy',

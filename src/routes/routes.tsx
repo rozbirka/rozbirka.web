@@ -186,7 +186,6 @@ const commerceDetailRoutes: RouteObject[] = [
     'intakes/:intakeId',
     'intakes/:intakeId/edit',
     'intakes/:intakeId/parts/new',
-    'intakes/:intakeId/parts/batch',
   ].map((path) =>
     cabinetScreenRoute(
       'intakes',

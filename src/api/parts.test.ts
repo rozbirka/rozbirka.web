@@ -142,6 +142,30 @@ it.each([
   },
 )
 
+it.each(['00123-AB', null, undefined])(
+  'sends OEM update %s without losing explicit clearing or omission',
+  async (oemCode) => {
+    let request: InternalAxiosRequestConfig | undefined
+    apiClient.defaults.adapter = (config) => {
+      request = config
+      return Promise.resolve({
+        data: { data: { id: 'part-1' } },
+        status: 200,
+        statusText: 'OK',
+        headers: new AxiosHeaders(),
+        config,
+      } satisfies AxiosResponse)
+    }
+    await partsApi.update('part-1', {
+      ...(oemCode === undefined ? {} : { oemCode }),
+      desiredSalePrice: { isSet: false },
+    })
+    expect(JSON.parse(request?.data as string)).toEqual(
+      oemCode === undefined ? {} : { oemCode },
+    )
+  },
+)
+
 it('restores relations Core omits rather than sends as null', async () => {
   // `JsonIgnoreCondition.WhenWritingNull` drops a null property entirely, so a
   // part with no car arrives without `car` at all. Read straight off the

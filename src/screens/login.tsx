@@ -492,17 +492,17 @@ function LoginFlow() {
   }
 
   return (
-    <div className="rz relative flex min-h-screen flex-col">
-      <header className="flex items-center justify-end px-4 pt-4">
+    <div className="rz relative flex min-h-dvh flex-col">
+      <header className="absolute inset-x-0 top-0 flex items-center justify-end px-4 pt-4">
         <Link className="rz-btn rz-btn--ghost" to="/">
           <ArrowLeft aria-hidden />
           <span>{t('home')}</span>
         </Link>
       </header>
 
-      <main className="grid flex-1 content-start justify-items-center px-4 pt-2 pb-6 sm:pt-4">
-        <div className="grid w-full max-w-[420px] gap-5">
-          <AuthBrand />
+      <main className="grid flex-1 content-center justify-items-center px-4 py-16">
+        <div className="grid w-full max-w-[560px] gap-6 text-title [&_.rz-caption]:text-input [&_.rz-error]:text-input [&_.rz-hint]:text-input [&_.rz-label]:text-input">
+          <AuthBrand showMark={false} />
           {step === 'phone' && (
             <PhoneStep
               purpose={purpose}
@@ -602,9 +602,9 @@ function StepHeader({
   children?: ReactNode
 }) {
   return (
-    <div className="grid gap-1.5">
-      <span className="rz-eyebrow">{eyebrow}</span>
-      <h1 className="rz-h-page text-balance">{title}</h1>
+    <div className="grid gap-2">
+      <span className="rz-eyebrow text-caption">{eyebrow}</span>
+      <h1 className="rz-h-page text-display text-balance">{title}</h1>
       {children}
     </div>
   )
@@ -669,7 +669,7 @@ function PhoneStep({
           hint={t('phoneHint', { pattern: PHONE_PATTERN[country] })}
           label={t('phoneLabel')}
         >
-          <div className="rz-input-group h-control-lg has-[input[aria-invalid=true]]:border-state-danger">
+          <div className="rz-input-group h-touch has-[input[aria-invalid=true]]:border-state-danger">
             <div className="border-app-line relative flex h-full shrink-0 items-center border-r">
               <span
                 aria-hidden
@@ -700,7 +700,7 @@ function PhoneStep({
               autoComplete="tel"
               autoFocus
               disabled={pending}
-              className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 font-mono tabular-nums shadow-none hover:border-0 focus:shadow-none pointer-coarse:text-[16px]"
+              className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 font-mono text-title tabular-nums shadow-none hover:border-0 focus:shadow-none"
               inputMode="tel"
               maxLength={22}
               onChange={(e) => onChange(e.target.value)}
@@ -716,8 +716,8 @@ function PhoneStep({
 
         <Button
           aria-busy={pending}
-          className="rz-btn--block"
-          size="lg"
+          className="rz-btn--block text-title"
+          size="touch"
           disabled={pending || resendIn > 0}
           type="submit"
           variant="primary"
@@ -739,7 +739,7 @@ function PhoneStep({
             type="button"
           >
             {purpose === 'login' ? t('toRegistrationLead') : t('toLoginLead')}{' '}
-            <span className="text-app-muted hover:text-app-strong group-hover:text-app-strong group-focus-visible:text-app-strong">
+            <span className="text-brand-text group-hover:underline group-focus-visible:underline">
               {purpose === 'login'
                 ? t('toRegistrationAction')
                 : t('toLoginAction')}
@@ -834,8 +834,8 @@ function OtpStep({
 
         <Button
           aria-busy={pending}
-          className="rz-btn--block"
-          size="lg"
+          className="rz-btn--block text-title"
+          size="touch"
           disabled={pending}
           type="submit"
           variant="primary"
@@ -905,7 +905,7 @@ function NameStep({
           <TextInput
             autoComplete="name"
             autoFocus
-            className="rz-input pointer-coarse:text-[16px]"
+            className="rz-input h-touch text-title"
             inputMode="text"
             maxLength={64}
             onChange={(e) => onChange(e.target.value)}
@@ -917,8 +917,8 @@ function NameStep({
 
         <Button
           aria-busy={pending}
-          className="rz-btn--block"
-          size="lg"
+          className="rz-btn--block text-title"
+          size="touch"
           disabled={busy}
           type="submit"
           variant="primary"
@@ -936,7 +936,12 @@ function SuccessStep({ returnTo }: { returnTo: string }) {
     <div className="grid gap-5">
       <StepHeader eyebrow={t('eyebrowLogin')} title={t('signedIn')} />
       <Notice tone="ok">{t('redirecting')}</Notice>
-      <Button asChild className="rz-btn--block" size="lg" variant="primary">
+      <Button
+        asChild
+        className="rz-btn--block text-title"
+        size="touch"
+        variant="primary"
+      >
         <Link to={returnTo}>{t('continue')}</Link>
       </Button>
     </div>
@@ -1014,7 +1019,7 @@ function OtpInput({
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
           autoComplete="one-time-code"
-          className="rz-input h-control-lg min-w-0 px-0 text-center font-mono pointer-coarse:text-[16px]"
+          className="rz-input h-touch min-w-0 px-0 text-center font-mono text-title"
           inputMode="numeric"
           key={i}
           aria-label={t('digit', { index: i + 1 })}
