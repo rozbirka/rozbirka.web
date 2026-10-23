@@ -115,10 +115,11 @@ jobs:
     if: ${{ !inputs.skip_e2e }}
     name: Browser E2E ${{ inputs.project_name }} (${{ matrix.project }})
     runs-on: ubuntu-latest
-    # Match @playwright/test in package-lock.json. Browser binaries and their
-    # Ubuntu dependencies are bundled, so apt mirror stalls cannot block tests.
+    # Firefox/WebKit use bundled dependencies to avoid slow apt mirrors.
+    # Chromium keeps the host environment used by the visual baselines.
+    # Match the image version to @playwright/test in package-lock.json.
     container:
-      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      image: ${{ matrix.browser != 'chromium' && 'mcr.microsoft.com/playwright:v1.61.1-noble' || '' }}
       options: --ipc=host
     defaults:
       run:
@@ -159,14 +160,30 @@ jobs:
 
       - run: npm ci
 
+      - if: inputs.run_build && matrix.browser == 'chromium'
+        name: Install Chromium on the visual baseline runner
+        run: |
+          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99-dpkg-lock-timeout >/dev/null
+          timeout 900 npx playwright install-deps chromium
+          for attempt in 1 2 3; do
+            if timeout 300 npx playwright install chromium; then
+              exit 0
+            fi
+            echo "Chromium download attempt ${attempt} failed or timed out; retrying"
+            sleep 10
+          done
+          exit 1
+
       - if: inputs.run_build
-        name: Verify bundled ${{ matrix.browser }}
+        name: Verify installed ${{ matrix.browser }}
         env:
           BROWSER_ENGINE: ${{ matrix.browser }}
         run: |
           # GitHub mounts this directory with the runner's UID. Firefox requires
           # its owner to match the container user; keep the existing HOME path.
-          chown "$(id -u):$(id -g)" "$HOME"
+          if [ "$BROWSER_ENGINE" != chromium ]; then
+            chown "$(id -u):$(id -g)" "$HOME"
+          fi
           node <<'NODE'
           const fs = require('node:fs');
           const browser = require('@playwright/test')[process.env.BROWSER_ENGINE];
