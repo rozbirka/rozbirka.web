@@ -312,12 +312,18 @@ export function PhotoGrid({
   label,
   emptyLabel,
   className,
+  variant = 'compact',
+  coverLabel,
 }: {
   photos: readonly Photo[]
   /** Names the group, and seeds the alt text of each photo. */
   label: string
   emptyLabel?: string
   className?: string
+  /** Record tiles use a wider frame and keep the shared thumbnail loading. */
+  variant?: 'compact' | 'tiles'
+  /** When supplied, identifies the first photo as the record cover. */
+  coverLabel?: string
 }) {
   const t = useT(appMessages)
   const opener = useRef<HTMLButtonElement | null>(null)
@@ -335,13 +341,17 @@ export function PhotoGrid({
     <>
       <ul
         aria-label={label}
-        className={cn('rz-photos m-0 list-none p-0', className)}
+        className={cn(
+          'rz-photos m-0 list-none p-0',
+          variant === 'tiles' && 'rz-photos--tiles',
+          className,
+        )}
       >
         {photos.map((photo, index) => (
           <li key={photo.id}>
             <button
               aria-label={photo.alt ?? `${label} ${String(index + 1)}`}
-              className="block w-full cursor-zoom-in"
+              className="relative block w-full cursor-zoom-in"
               onClick={(event) => {
                 opener.current = event.currentTarget
                 setOpenIndex(index)
@@ -351,7 +361,13 @@ export function PhotoGrid({
               <Thumbnail
                 alt={photo.alt ?? `${label} ${String(index + 1)}`}
                 photo={photo}
+                ratio={variant === 'tiles' ? 'wide' : 'square'}
               />
+              {index === 0 && coverLabel ? (
+                <span className="rz-photo__badge pointer-events-none">
+                  {coverLabel}
+                </span>
+              ) : null}
             </button>
           </li>
         ))}

@@ -415,7 +415,7 @@ it('opens the newly created part instead of leaving the creation drawer open', a
 
   expect(await screen.findByText('Картка деталі')).toBeVisible()
   expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
-  expect(screen.queryByRole('dialog', { name: 'Нова деталь' })).toBeNull()
+  expect(screen.queryByRole('region', { name: 'Нова деталь' })).toBeNull()
   expect(screen.getByRole('status')).toHaveTextContent('Деталь створено.')
 })
 
@@ -463,7 +463,11 @@ it('saves the chosen warehouse, zone, section and shelf after creating a part', 
 
 async function expectPartFormClosed() {
   await vi.waitFor(() =>
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    expect(
+      screen.queryByRole('region', {
+        name: /^(Нова деталь|New part|Nowa część)$/,
+      }),
+    ).not.toBeInTheDocument(),
   )
 }
 
@@ -1008,7 +1012,7 @@ it('shows saved compatibility rows in the part edit screen', async () => {
   )
 })
 
-it('opens part editing from its card in a side drawer and closes back to the card', async () => {
+it('opens part editing as a standalone page and returns to the card', async () => {
   const part = {
     id: 'part-1',
     name: 'Фара',
@@ -1052,18 +1056,24 @@ it('opens part editing from its card in a side drawer and closes back to the car
 
   await user.click(await screen.findByRole('link', { name: 'Редагувати' }))
   expect(router.state.location.pathname).toBe('/app/yard/parts/part-1/edit')
-  const drawer = await screen.findByRole('dialog', {
+  const drawer = await screen.findByRole('region', {
     name: 'Редагувати деталь',
   })
   expect(
     within(drawer).getByRole('button', { name: 'Зберегти зміни' }),
   ).toBeVisible()
-  await user.click(within(drawer).getByRole('button', { name: 'Закрити' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Ціна продажу' }),
+  ).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1/edit')
+  await user.click(within(drawer).getByRole('button', { name: 'Назад' }))
   expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
   await user.click(await screen.findByRole('link', { name: 'Редагувати' }))
-  const editing = await screen.findByRole('dialog', {
+  const editing = await screen.findByRole('region', {
     name: 'Редагувати деталь',
   })
   await user.clear(within(editing).getByRole('textbox', { name: 'Назва' }))
@@ -1091,7 +1101,7 @@ it('opens part editing from its card in a side drawer and closes back to the car
     expect(router.state.location.pathname).toBe('/app/yard/parts/part-1'),
   )
   expect(
-    screen.queryByRole('dialog', { name: 'Редагувати деталь' }),
+    screen.queryByRole('region', { name: 'Редагувати деталь' }),
   ).not.toBeInTheDocument()
   expect(
     await screen.findByRole('heading', { level: 1, name: 'Фара права' }),
@@ -1531,9 +1541,10 @@ it('guards duplicate creates with aria-busy and exposes mutation failures', asyn
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
   const cancel = screen.getByRole('button', { name: 'Скасувати' })
+  expect(screen.getByRole('button', { name: 'Назад' })).toBeDisabled()
   expect(cancel).toBeDisabled()
   fireEvent.click(cancel)
-  expect(screen.getByRole('dialog', { name: 'Нова деталь' })).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Нова деталь' })).toBeVisible()
   expect(partMocks.create).toHaveBeenCalledTimes(1)
   rejectCreate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -1584,7 +1595,7 @@ it('guards duplicate edits with aria-busy and exposes mutation failures', async 
     'Не вдалося зберегти зміни.',
   )
   expect(
-    screen.getByRole('dialog', { name: 'Редагувати деталь' }),
+    screen.getByRole('region', { name: 'Редагувати деталь' }),
   ).toBeVisible()
   expect(screen.getByLabelText('Назва')).toHaveValue('Bumper')
 })
@@ -2314,7 +2325,7 @@ it('ignores an aborted stale detail failure after navigation', async () => {
   expect(screen.getByRole('heading', { name: 'Mirror' })).toBeInTheDocument()
 })
 
-it('blocks an invalid create and points at the offending fields', async () => {
+it('validates the name and creates with the quantity selected by the stepper', async () => {
   cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   render(
     <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
@@ -2329,16 +2340,15 @@ it('blocks an invalid create and points at the offending fields', async () => {
   fireEvent.change(screen.getByLabelText('Кількість'), {
     target: { value: '0' },
   })
+  expect(screen.getByLabelText('Кількість')).toHaveValue('1')
+  expect(screen.getByRole('button', { name: 'Менше' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'виправте позначені нижче поля',
   )
   expect(partMocks.create).not.toHaveBeenCalled()
-  for (const [label, message] of [
-    ['Назва', 'Введіть назву деталі'],
-    ['Кількість', 'Вкажіть ціле число від 1'],
-  ] as const) {
+  for (const [label, message] of [['Назва', 'Введіть назву деталі']] as const) {
     const control = screen.getByLabelText(label)
     expect(control).toHaveAttribute('aria-invalid', 'true')
     expect(
@@ -2349,12 +2359,17 @@ it('blocks an invalid create and points at the offending fields', async () => {
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Bumper' },
   })
-  fireEvent.change(screen.getByLabelText('Кількість'), {
-    target: { value: '2' },
-  })
+  fireEvent.click(screen.getByRole('button', { name: 'Більше' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Більше' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Менше' }))
+  expect(screen.getByLabelText('Кількість')).toHaveValue('2')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   await expectPartFormClosed()
+  expect(partMocks.create).toHaveBeenCalledWith(
+    expect.objectContaining({ quantity: 2 }),
+    expect.anything(),
+  )
   expect(screen.queryByLabelText('Назва')).toBeNull()
 })
 
@@ -2912,7 +2927,7 @@ it('blames the server, not the network, when the request came back 500', async (
   ).toBeVisible()
 })
 
-it('opens the new part as a drawer and names the next thing to fix', async () => {
+it('opens the new part as a standalone page and names the next thing to fix', async () => {
   cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   const user = userEvent.setup()
 
@@ -2927,8 +2942,8 @@ it('opens the new part as a drawer and names the next thing to fix', async () =>
     </MemoryRouter>,
   )
 
-  const drawer = await screen.findByRole('dialog')
-  expect(drawer).toHaveClass('rz-sheet')
+  const drawer = await screen.findByRole('region', { name: 'Нова деталь' })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(within(drawer).getByText(/Введіть назву деталі/)).toBeVisible()
 
   await user.type(within(drawer).getByLabelText('Назва'), 'Цапфа RR')
@@ -3757,7 +3772,7 @@ it('reads the new-part form in English (UK) and Polish', async () => {
     '/app/:tenant/parts/new',
   )
 
-  const drawer = await screen.findByRole('dialog', { name: 'New part' })
+  const drawer = await screen.findByRole('region', { name: 'New part' })
   expect(within(drawer).getByText('Warehouse · Parts')).toBeVisible()
   expect(
     within(drawer).getByRole('button', { name: 'Create part' }),
@@ -3789,7 +3804,7 @@ it('reads the new-part form in English (UK) and Polish', async () => {
   unmount()
 
   renderInLocale('pl', '/app/yard/parts/new', '/app/:tenant/parts/new')
-  const polish = await screen.findByRole('dialog', { name: 'Nowa część' })
+  const polish = await screen.findByRole('region', { name: 'Nowa część' })
   expect(
     within(polish).getByRole('button', { name: 'Utwórz część' }),
   ).toBeVisible()
@@ -3809,7 +3824,7 @@ it('reads a known source error code on create in the interface language', async 
     '/app/yard/parts/new?intake_id=intake-1',
     '/app/:tenant/parts/new',
   )
-  const drawer = await screen.findByRole('dialog', { name: 'New part' })
+  const drawer = await screen.findByRole('region', { name: 'New part' })
   await user.type(within(drawer).getByLabelText('Name'), 'Bumper')
   await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
 
@@ -4568,7 +4583,7 @@ it('keeps reservation rows non-navigable without access to orders', async () => 
 })
 
 it.each(['/app/yard/parts', '/app/yard/parts/new'])(
-  'keeps the parts directory behind the create drawer opened from %s',
+  'opens a standalone part form from %s without rendering its directory',
   async (entry) => {
     partMocks.search.mockResolvedValue({
       items: pickableRows,
@@ -4590,16 +4605,15 @@ it.each(['/app/yard/parts', '/app/yard/parts/new'])(
       await screen.findByRole('link', { name: 'Фара ліва' })
       await user.click(screen.getByRole('link', { name: 'Додати деталь' }))
     }
-    const drawer = await screen.findByRole('dialog', { name: 'Нова деталь' })
-    const table = await screen.findByRole('table', { hidden: true })
-    expect(within(table).getByText('Фара ліва')).toBeVisible()
-    expect(within(table).getByText('Бампер передній')).toBeVisible()
+    const drawer = await screen.findByRole('region', { name: 'Нова деталь' })
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/app/yard/parts/new')
     expect(partMocks.get).not.toHaveBeenCalled()
     await user.click(within(drawer).getByRole('button', { name: 'Скасувати' }))
     expect(router.state.location.pathname).toBe('/app/yard/parts')
     expect(
-      screen.queryByRole('dialog', { name: 'Нова деталь' }),
+      screen.queryByRole('region', { name: 'Нова деталь' }),
     ).not.toBeInTheDocument()
     expect(await screen.findByRole('link', { name: 'Фара ліва' })).toBeVisible()
     expect(partMocks.create).not.toHaveBeenCalled()
@@ -4607,7 +4621,7 @@ it.each(['/app/yard/parts', '/app/yard/parts/new'])(
 )
 
 it.each(['empty', 'failed', 'loading'] as const)(
-  'opens the part form over its directory when the background request is %s',
+  'opens the part page without fetching the directory when its request would be %s',
   async (state) => {
     if (state === 'failed')
       partMocks.search.mockRejectedValueOnce({ kind: 'network' })
@@ -4635,12 +4649,14 @@ it.each(['empty', 'failed', 'loading'] as const)(
         </Routes>
       </MemoryRouter>,
     )
-    const drawer = await screen.findByRole('dialog', { name: 'Нова деталь' })
-    expect(screen.getByText('Деталі', { selector: 'h1' })).toBeVisible()
+    const drawer = await screen.findByRole('region', { name: 'Нова деталь' })
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Нова деталь' }),
+    ).toBeVisible()
     const name = within(drawer).getByRole('textbox', { name: /^Назва/ })
     fireEvent.change(name, { target: { value: 'Нова фара' } })
     expect(name).toHaveValue('Нова фара')
-    expect(partMocks.search).toHaveBeenCalled()
+    expect(partMocks.search).not.toHaveBeenCalled()
     expect(partMocks.create).not.toHaveBeenCalled()
   },
 )

@@ -5,6 +5,7 @@ import { PartLocationCard } from './PartLocationCard'
 import { PartNotesCard } from './PartNotesCard'
 import { PartPriceDrawer } from './PartPriceDrawer'
 import { CabinetLoadingContent } from '../loading-screen'
+import { FormPage } from '../form-page'
 import {
   lazy,
   Suspense,
@@ -51,8 +52,9 @@ import {
   Amount,
   DateValue,
   PhotoFileField,
-  Gallery,
+  PhotoGrid,
   Card,
+  PanelFooter,
   CodeChip,
   SectionPanel,
   Sheet,
@@ -360,10 +362,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [error, setError] = useState<ApiProblem | null>(null)
   const isNew = location.pathname.endsWith('/new')
   const isEdit = location.pathname.endsWith('/edit')
-  const showEditBackground =
-    isEdit &&
-    (location.state as { partEditBackground?: boolean } | null)
-      ?.partEditBackground === true
   const createDecision = evaluateModuleAccess(
     definition,
     accessState(cabinet),
@@ -603,7 +601,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    if (partId && (!isEdit || showEditBackground)) {
+    if (partId && !isEdit) {
       void Promise.all([
         partsApi.get(partId, { signal: controller.signal }),
         partsApi.history(partId, { signal: controller.signal }),
@@ -619,7 +617,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         })
       return () => controller.abort()
     }
-    if (!partId && (!isNew || createDecision.kind === 'allowed')) {
+    if (!partId && !isNew) {
       void Promise.all([
         partsApi.search(searchRequest, { signal: controller.signal }),
         partsApi.facets(searchRequest, FACET_DIMENSIONS, {
@@ -638,56 +636,30 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         })
     }
     return () => controller.abort()
-  }, [
-    createDecision.kind,
-    isEdit,
-    isNew,
-    partId,
-    reloadToken,
-    searchRequest,
-    showEditBackground,
-  ])
+  }, [createDecision.kind, isEdit, isNew, partId, reloadToken, searchRequest])
 
   if (isNew && createDecision.kind !== 'allowed')
     return <AccessDenied decision={createDecision} />
   if (isEdit && manageDecision.kind !== 'allowed')
     return <AccessDenied decision={manageDecision} />
+  if (isNew)
+    return (
+      <PartForm
+        canViewCars={links.cars}
+        canViewIntakes={links.intakes}
+        requireLatestMutation={requireLatestMutation}
+        title={translate(partFormMessages, locale, 'newPart')}
+      />
+    )
   if (isEdit && partId)
     return (
-      <>
-        {showEditBackground ? (
-          <PartDetailScreen
-            key={partId}
-            detail={detail}
-            history={history}
-            error={error !== null}
-            partId={partId}
-            canManage={canManage}
-            links={links}
-            requireLatestMutation={requireLatestMutation}
-            tenantSlug={cabinet.targetTenant?.slug ?? ''}
-            onPriceSaved={(saved) => {
-              setDetail((current) => (current?.id === partId ? saved : current))
-              setReloadToken((value) => value + 1)
-            }}
-            onNotesSaved={(notes) => {
-              setDetail((current) =>
-                current?.id === partId ? { ...current, notes } : current,
-              )
-              setReloadToken((value) => value + 1)
-            }}
-            onPlacementSaved={() => setReloadToken((value) => value + 1)}
-            placementRevision={reloadToken}
-          />
-        ) : null}
-        <PartEdit
-          key={partId}
-          canViewCars={links.cars}
-          canViewIntakes={links.intakes}
-          partId={partId}
-          requireLatestMutation={requireLatestMutation}
-        />
-      </>
+      <PartEdit
+        key={partId}
+        canViewCars={links.cars}
+        canViewIntakes={links.intakes}
+        partId={partId}
+        requireLatestMutation={requireLatestMutation}
+      />
     )
   if (partId)
     return (
@@ -1386,21 +1358,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     </RedesignShell>
   )
 
-  // A route-backed drawer still needs its directory underneath, including
-  // when /new is opened directly rather than from the add-part button.
-  return (
-    <>
-      {directory}
-      {isNew ? (
-        <PartForm
-          canViewCars={links.cars}
-          canViewIntakes={links.intakes}
-          requireLatestMutation={requireLatestMutation}
-          title={translate(partFormMessages, locale, 'newPart')}
-        />
-      ) : null}
-    </>
-  )
+  return directory
 }
 
 /**
@@ -1688,7 +1646,6 @@ function PartDetailScreen({
   }
 
   const name = detail === null ? t('titleFallback') : detail.name
-  const editState = { partEditBackground: true }
   const editHref = `${base}/${partId}/edit`
   const hasSalesAmounts = salesRows.some((row) => row.kind === 'sold')
   const salesTotal = salesRows.reduce(
@@ -1748,7 +1705,7 @@ function PartDetailScreen({
           {canManage ? (
             <>
               <Button asChild>
-                <Link state={editState} to={editHref}>
+                <Link to={editHref}>
                   <Pencil aria-hidden />
                   {tc('edit')}
                 </Link>
@@ -1894,10 +1851,9 @@ function PartDetailScreen({
                     {t('photosCount', { count: detail.photos.length })}
                   </span>
                 }
-                bodyClassName="p-0"
                 title={t('photos')}
               >
-                <Gallery
+                <PhotoGrid
                   emptyLabel={t('galleryEmpty')}
                   label={t('galleryLabel', { name: detail.name })}
                   photos={detail.photos.map((photo, index) => ({
@@ -1911,7 +1867,8 @@ function PartDetailScreen({
                       index: index + 1,
                     }),
                   }))}
-                  variant="framed"
+                  variant="tiles"
+                  coverLabel={t('coverPhoto')}
                 />
               </Card>
 
@@ -3347,7 +3304,7 @@ function PartFields({
   canViewIntakes: boolean
   errors: PartFieldErrors
   edit?: boolean
-  /** `plain` is the drawer: numbered sections divided by a rule. */
+  /** Framed page sections or plain sections inside an existing surface. */
   variant?: 'panel' | 'plain'
 }) {
   const cabinet = useCabinet()
@@ -3386,7 +3343,7 @@ function PartFields({
   const nextCompatibilityKey = useRef(0)
   const showCompatibility = !edit
   const step = (number: string, title: string) =>
-    variant === 'plain' ? (
+    !edit ? (
       <span className="flex items-baseline gap-2.5">
         <span aria-hidden className="text-brand-text font-mono text-micro">
           {number}
@@ -3404,7 +3361,7 @@ function PartFields({
         variant={variant}
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          {variant === 'plain' && !edit ? (
+          {!edit ? (
             <fieldset className="col-span-full grid gap-2 sm:grid-cols-2">
               <legend className="sr-only">{t('sourceType')}</legend>
               {SOURCE_KINDS.filter(
@@ -3599,7 +3556,7 @@ function PartFields({
         title={step('03', t('conditionStep'))}
         variant={variant}
       >
-        {variant === 'plain' ? (
+        {!edit ? (
           <>
             <div
               aria-label={t('conditionStep')}
@@ -3639,13 +3596,13 @@ function PartFields({
       >
         <div className="grid items-start gap-3 sm:grid-cols-3">
           <Field error={errors.quantity} label={t('quantity')} required>
-            <TextInput
-              aria-label={t('quantity')}
-              inputMode="numeric"
-              min="1"
-              onChange={field('quantity')}
-              type="number"
-              value={values.quantity}
+            <QuantityStepper
+              label={t('quantityInStock')}
+              min={1}
+              onChange={(next) =>
+                setValues({ ...values, quantity: String(next) })
+              }
+              value={Number(values.quantity) || 1}
             />
           </Field>
           <Field hint={t('unitHint')} label={t('unit')}>
@@ -4101,54 +4058,51 @@ function PartForm({
     rowsProblem(compatRows, locale) === null
 
   return (
-    <Sheet
-      footer={
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="basis-full empty:hidden">{price.saveNotes}</div>
+    <FormPage
+      backTo={base}
+      busy={pending}
+      footerNote={
+        <div className="grid gap-2">
+          {price.saveNotes}
           <p
             className={cn(
-              'min-w-0 text-caption text-pretty',
+              'm-0 text-caption text-pretty',
               ready ? 'text-app-muted' : 'text-state-warn',
             )}
           >
             {footerNote}
           </p>
-          <div className="ml-auto flex items-center gap-2.5">
-            <Button
-              disabled={pending}
-              onClick={() => void navigate(base)}
-              type="button"
-            >
-              {tc('cancel')}
-            </Button>
-            <Button
-              aria-busy={pending || mediaPending}
-              disabled={pending || mediaPending}
-              form={CREATE_PART_FORM}
-              type="submit"
-              variant="primary"
-            >
-              {t('createPart')}
-            </Button>
-          </div>
         </div>
       }
-      eyebrow={t('sheetEyebrow')}
-      onOpenChange={(next: boolean) => {
-        if (!next && !pending) void navigate(base)
-      }}
-      open
-      size="lg"
+      actions={
+        <div className="ml-auto flex items-center gap-2.5">
+          <Button
+            disabled={pending}
+            onClick={() => void navigate(base)}
+            type="button"
+          >
+            {tc('cancel')}
+          </Button>
+          <Button
+            aria-busy={pending || mediaPending}
+            disabled={pending || mediaPending}
+            form={CREATE_PART_FORM}
+            type="submit"
+            variant="primary"
+          >
+            {t('createPart')}
+          </Button>
+        </div>
+      }
+      context={t('sheetEyebrow')}
       title={title}
     >
       <form
-        className="grid"
+        className="grid gap-4"
         id={CREATE_PART_FORM}
         noValidate
         onSubmit={(event) => void submit(event)}
       >
-        {/* Scheme 1b keeps the head to the title and where the sheet sits;
-            the hint about required fields opens the body instead. */}
         <p className="rz-caption m-0 text-pretty">
           {t('requiredFields')} <span className="text-brand-text">*</span>.{' '}
           {t('restLater')}
@@ -4164,7 +4118,7 @@ function PartForm({
           setValues={setValues}
           sourceOptions={sourceOptions}
           values={values}
-          variant="plain"
+          variant="panel"
         />
         {canPlace ? (
           <SectionPanel
@@ -4180,7 +4134,7 @@ function PartForm({
               </span>
             }
             description={tPlacement('hint')}
-            variant="plain"
+            variant="panel"
           >
             <PartPlacementPicker
               value={values.placement ?? emptyPartPlacement}
@@ -4205,11 +4159,11 @@ function PartForm({
               {t('photos')}
             </span>
           }
-          variant="plain"
+          variant="panel"
         />
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
-    </Sheet>
+    </FormPage>
   )
 }
 
@@ -4476,10 +4430,12 @@ function PartEdit({
   )
 
   return (
-    <Sheet
+    <FormPage
+      backTo={backTo}
+      busy={pending || deleting}
       description={detail?.name ?? undefined}
-      eyebrow={t('sheetEyebrow')}
-      footer={
+      context={t('sheetEyebrow')}
+      actions={
         <div className="flex w-full items-center justify-end gap-2.5">
           <Button
             disabled={pending || deleting}
@@ -4499,11 +4455,6 @@ function PartEdit({
           </Button>
         </div>
       }
-      onOpenChange={(next) => {
-        if (!next && !pending && !deleting) void navigate(backTo)
-      }}
-      open
-      size="lg"
       title={t('editTitle')}
     >
       <div className="grid gap-5">
@@ -4512,12 +4463,42 @@ function PartEdit({
 
         {values ? (
           <form
-            className="grid gap-5"
+            className="grid gap-4"
             id="part-edit"
             noValidate
             onSubmit={(event) => void save(event)}
           >
-            <div className="grid">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+              <span className="text-app-muted text-caption">
+                {t('available')}{' '}
+                <span className="text-app-ink font-mono tabular-nums">
+                  {detail?.quantityAvailable ?? 0}{' '}
+                  {unitLabel(values.unit, locale)}
+                </span>
+              </span>
+              <span className="text-app-muted text-caption">
+                {t('reserved')}{' '}
+                <span className="text-app-ink font-mono tabular-nums">
+                  {detail?.quantityReserved ?? 0}{' '}
+                  {unitLabel(values.unit, locale)}
+                </span>
+              </span>
+              {detail?.qrCode ? (
+                <span className="rz-code max-w-full">
+                  <span className="text-app-dim">{t('qrCode')}</span>
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    {detail.qrCode}
+                  </span>
+                </span>
+              ) : null}
+              <Button asChild size="sm" className="sm:ml-auto">
+                <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
+                  <Printer aria-hidden />
+                  {t('printSticker')}
+                </Link>
+              </Button>
+            </div>
+            <div className="grid gap-4">
               <SectionPanel
                 aside={
                   <span className="text-app-dim text-body">
@@ -4525,56 +4506,48 @@ function PartEdit({
                   </span>
                 }
                 title={editStep('01', t('sourceStep'))}
-                variant="plain"
+                variant="panel"
               >
-                <div className="grid gap-4">
-                  <p className="text-app-muted text-body">
-                    {t('sourceSetOnCreate')}
-                  </p>
-                  <div className="rz-inset flex flex-wrap items-center justify-between gap-3">
-                    <div className="grid min-w-0 gap-1">
-                      <span className="font-semibold break-words text-app-strong">
-                        {detail?.carId && detail.carCode
-                          ? t('fromCar', { code: detail.carCode })
-                          : detail?.intakeId
-                            ? t('fromIntake')
-                            : sourceLabel(values.sourceType, locale)}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="grid min-w-0 gap-1">
+                    <span className="font-semibold break-words text-app-strong">
+                      {detail?.carId && detail.carCode
+                        ? t('fromCar', { code: detail.carCode })
+                        : detail?.intakeId
+                          ? t('fromIntake')
+                          : sourceLabel(values.sourceType, locale)}
+                    </span>
+                    {detail?.carId && detail.carBrand ? (
+                      <span className="text-app-muted text-body">
+                        {detail.carBrand} {detail.carModel}
                       </span>
-                      {detail?.carId && detail.carBrand ? (
-                        <span className="text-app-muted text-body">
-                          {detail.carBrand} {detail.carModel}
-                        </span>
-                      ) : null}
-                    </div>
-                    {detail?.carId && canViewCars ? (
-                      <Button asChild>
-                        <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
-                          {t('openCar')}
-                          <ExternalLink aria-hidden />
-                        </Link>
-                      </Button>
-                    ) : detail?.intakeId && canViewIntakes ? (
-                      <Button asChild>
-                        <Link
-                          to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
-                        >
-                          {t('openIntake')}
-                          <ExternalLink aria-hidden />
-                        </Link>
-                      </Button>
                     ) : null}
                   </div>
+                  {detail?.carId && canViewCars ? (
+                    <Button asChild>
+                      <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
+                        {t('openCar')}
+                        <ExternalLink aria-hidden />
+                      </Link>
+                    </Button>
+                  ) : detail?.intakeId && canViewIntakes ? (
+                    <Button asChild>
+                      <Link
+                        to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
+                      >
+                        {t('openIntake')}
+                        <ExternalLink aria-hidden />
+                      </Link>
+                    </Button>
+                  ) : null}
                 </div>
               </SectionPanel>
 
               <SectionPanel
                 title={editStep('02', t('describeStep'))}
-                variant="plain"
+                variant="panel"
               >
                 <div className="grid gap-4">
-                  <p className="text-app-muted text-body">
-                    {t('describeEditDescription')}
-                  </p>
                   <Field error={errors.name} label={t('name')} required>
                     <TextInput
                       name="name"
@@ -4639,7 +4612,7 @@ function PartEdit({
 
               <SectionPanel
                 title={editStep('03', t('conditionStep'))}
-                variant="plain"
+                variant="panel"
               >
                 <div className="grid gap-4">
                   <p className="text-app-muted text-body">
@@ -4673,14 +4646,12 @@ function PartEdit({
               </SectionPanel>
 
               <SectionPanel
+                description={t('quantityDescription')}
                 title={editStep('04', t('quantityStep'))}
-                variant="plain"
+                variant="panel"
               >
-                <div className="grid gap-4">
-                  <p className="text-app-muted text-body">
-                    {t('quantityDescription')}
-                  </p>
-                  <div className="grid items-start gap-4 sm:grid-cols-2">
+                <div className="grid gap-3">
+                  <div className="grid items-start gap-3 sm:grid-cols-3">
                     <Field
                       error={errors.quantity}
                       label={t('quantity')}
@@ -4742,7 +4713,7 @@ function PartEdit({
                   </span>
                 }
                 title={editStep('05', t('compatStep'))}
-                variant="plain"
+                variant="panel"
               >
                 <p className="text-app-muted text-body">
                   {t('compatReadOnly')}
@@ -4788,59 +4759,27 @@ function PartEdit({
                 items={mediaItems}
                 requireLatestMutation={requireLatestMutation}
                 setItems={setMediaItems}
-                variant="plain"
+                variant="panel"
               />
             </div>
 
-            <aside className="grid">
-              <SectionPanel title={t('summary')} variant="plain">
-                <dl className="rz-facts px-0">
-                  <div>
-                    <dt>{t('available')}</dt>
-                    <dd className="font-mono text-app-strong tabular-nums">
-                      {detail?.quantityAvailable ?? 0}{' '}
-                      {unitLabel(values.unit, locale)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('reserved')}</dt>
-                    <dd className="font-mono text-app-strong tabular-nums">
-                      {detail?.quantityReserved ?? 0}{' '}
-                      {unitLabel(values.unit, locale)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('qrCode')}</dt>
-                    <dd className="font-mono break-all text-app-strong">
-                      {detail?.qrCode ?? '—'}
-                    </dd>
-                  </div>
-                </dl>
-                <Button asChild className="w-full">
-                  <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
-                    <Printer aria-hidden />
-                    {t('printSticker')}
-                  </Link>
-                </Button>
-              </SectionPanel>
-
-              <SectionPanel title={t('deletion')} variant="plain">
-                <p className="text-app-muted m-0">
-                  {detail && detail.quantityReserved > 0
-                    ? t('deleteBlocked')
-                    : t('deleteAllowed')}
-                </p>
-                <Button
-                  className="w-full"
-                  onClick={() => setConfirmingDelete(true)}
-                  type="button"
-                  variant="danger"
-                >
-                  <Trash2 aria-hidden />
-                  {t('deletePart')}
-                </Button>
-              </SectionPanel>
-            </aside>
+            <PanelFooter
+              leading={
+                detail && detail.quantityReserved > 0
+                  ? t('deleteBlocked')
+                  : t('deleteAllowed')
+              }
+            >
+              <Button
+                disabled={pending || deleting}
+                onClick={() => setConfirmingDelete(true)}
+                type="button"
+                variant="danger"
+              >
+                <Trash2 aria-hidden />
+                {t('deletePart')}
+              </Button>
+            </PanelFooter>
           </form>
         ) : !error ? (
           <SkeletonFields
@@ -4861,6 +4800,6 @@ function PartEdit({
         pending={deleting}
         title={t('deleteTitle')}
       />
-    </Sheet>
+    </FormPage>
   )
 }

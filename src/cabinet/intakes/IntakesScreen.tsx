@@ -15,6 +15,7 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
+import { FormPage } from '../form-page'
 import { PartsStockCard } from '../parts/PartsStockCard'
 import { useFeatureFlag } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
@@ -47,7 +48,6 @@ import {
   QuantityStepper,
   SearchInput,
   SectionPanel,
-  Sheet,
   StateScreen,
   StatusPill,
   type StatusTone,
@@ -279,10 +279,7 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
     if (partCreateDecision.kind !== 'allowed')
       return <Denied decision={partCreateDecision} />
     return intakeId ? (
-      <>
-        <IntakeDetail base={base} intakeId={intakeId} key={intakeId} />
-        <PartForm canUploadMedia={partsMediaManage} intakeId={intakeId} />
-      </>
+      <PartForm canUploadMedia={partsMediaManage} intakeId={intakeId} />
     ) : (
       <Denied decision={{ kind: 'permission-denied' }} />
     )
@@ -1828,7 +1825,9 @@ function PartForm({
   const saveNote = named ? tf('saveNoteNamed') : tf('saveNoteUnnamed')
 
   return (
-    <Sheet
+    <FormPage
+      backTo={backTo}
+      busy={busy}
       description={
         <>
           {tf('partInIntake')} {intake?.name ?? '…'}
@@ -1837,11 +1836,9 @@ function PartForm({
             : ''}
         </>
       }
-      eyebrow={`${t('eyebrow')} · ${t('title')}`}
-      footer={
+      context={`${t('eyebrow')} · ${t('title')}`}
+      actions={
         <div className="flex w-full flex-wrap items-center gap-2.5">
-          <p className="rz-caption m-0 w-full">{saveNote}</p>
-          <div className="w-full empty:hidden">{priceSlots.saveNotes}</div>
           <Button disabled={busy} onClick={() => void navigate(backTo)}>
             {tc('cancel')}
           </Button>
@@ -1863,11 +1860,12 @@ function PartForm({
           </Button>
         </div>
       }
-      onOpenChange={(next) => {
-        if (!next && !busy) void navigate(backTo)
-      }}
-      open
-      size="lg"
+      footerNote={
+        <div className="grid gap-2">
+          <p className="rz-caption m-0">{saveNote}</p>
+          {priceSlots.saveNotes}
+        </div>
+      }
       title={tf('addPart')}
     >
       <form
@@ -1880,7 +1878,7 @@ function PartForm({
         <div className="grid gap-5">
           <SectionPanel
             title={<NumberedTitle number="01" title={tf('descriptionTitle')} />}
-            variant="plain"
+            variant="panel"
           >
             <Field
               error={fieldErrors.name}
@@ -1924,7 +1922,7 @@ function PartForm({
           <SectionPanel
             description={tp('conditionDescription')}
             title={<NumberedTitle number="02" title={tp('conditionStep')} />}
-            variant="plain"
+            variant="panel"
           >
             <div
               aria-label={tp('conditionStep')}
@@ -1947,12 +1945,13 @@ function PartForm({
           </SectionPanel>
 
           <SectionPanel
+            description={tp('quantityDescription')}
             title={
               <NumberedTitle number="03" title={tf('quantityPriceTitle')} />
             }
-            variant="plain"
+            variant="panel"
           >
-            <div className="grid items-start gap-4 sm:grid-cols-3">
+            <div className="grid items-start gap-3 sm:grid-cols-3">
               <Field label={tf('quantity')} required>
                 <QuantityStepper
                   label={tf('quantityStepper')}
@@ -1990,7 +1989,7 @@ function PartForm({
           <SectionPanel
             description={tp('compatDescription')}
             title={<NumberedTitle number="04" title={tp('compatStep')} />}
-            variant="plain"
+            variant="panel"
           >
             <div className="grid gap-2.5">
               {compatRows.map((row, index) => (
@@ -2034,7 +2033,7 @@ function PartForm({
             <SectionPanel
               description={tPlacement('hint')}
               title={<NumberedTitle number="05" title={tf('placementTitle')} />}
-              variant="plain"
+              variant="panel"
             >
               <PartPlacementPicker
                 value={values.placement ?? emptyPartPlacement}
@@ -2053,7 +2052,7 @@ function PartForm({
                 title={tf('photosNotesTitle')}
               />
             }
-            variant="plain"
+            variant="panel"
           >
             {canUploadMedia ? (
               <MediaPicker
@@ -2081,7 +2080,7 @@ function PartForm({
           </SectionPanel>
         </div>
 
-        <SectionPanel title={tf('newPosition')} variant="plain">
+        <SectionPanel title={tf('newPosition')} variant="panel">
           <div className="rz-inset grid gap-2">
             <p
               className={cn(
@@ -2111,7 +2110,7 @@ function PartForm({
           <SectionPanel
             aside={added.length}
             title={tf('justAdded')}
-            variant="plain"
+            variant="panel"
           >
             <ul className="divide-app-line border-app-line m-0 grid list-none divide-y rounded-panel border p-0">
               {added.map((item) => (
@@ -2136,7 +2135,7 @@ function PartForm({
           </SectionPanel>
         ) : null}
       </form>
-    </Sheet>
+    </FormPage>
   )
 }
 

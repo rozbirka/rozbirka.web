@@ -2547,7 +2547,7 @@ test('requires a source before creating a part', async ({ page }) => {
   )
   await loginFrom(page)
   await page.goto('/app/koval/parts/new')
-  const drawer = page.getByRole('dialog')
+  const drawer = page.getByRole('region', { name: 'Нова деталь', exact: true })
   await expect(drawer).toBeVisible()
   await expect(drawer.getByRole('button', { name: /Вільна/ })).toHaveCount(0)
   await drawer.getByLabel('Назва', { exact: true }).fill('Фара')

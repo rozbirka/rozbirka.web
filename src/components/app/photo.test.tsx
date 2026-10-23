@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it } from 'vitest'
-import { Gallery, Thumbnail } from './photo'
+import { Gallery, PhotoGrid, Thumbnail } from './photo'
 
 const photo = {
   id: 'legacy-photo',
@@ -54,4 +54,34 @@ it('recovers from a failed image when changing to another photo', () => {
     'src',
     'https://qamedia.rozbirka.com/other.webp',
   )
+})
+
+// Record tiles must retain the same HEIC handling and keyboard viewer as Gallery.
+it('opens a photo tile at its selected index and returns focus after Escape', async () => {
+  const user = userEvent.setup()
+  render(
+    <PhotoGrid
+      label="Фото деталі"
+      variant="tiles"
+      coverLabel="Обкладинка"
+      photos={[
+        { id: 'cover', url: 'https://qamedia.rozbirka.com/cover.webp' },
+        { ...photo, alt: 'Друге фото' },
+      ]}
+    />,
+  )
+  expect(screen.getAllByText('Обкладинка')).toHaveLength(1)
+  const tile = screen.getByRole('button', { name: 'Друге фото' })
+  expect(within(tile).getByRole('img')).toHaveAttribute(
+    'src',
+    photo.thumbnailUrl,
+  )
+  await user.click(tile)
+  expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
+    'src',
+    fullSource,
+  )
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(tile).toHaveFocus()
 })

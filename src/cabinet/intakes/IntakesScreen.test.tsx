@@ -630,7 +630,7 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
   expect(screen.queryByLabelText('Додати фото')).not.toBeInTheDocument()
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
   await user.click(
-    within(screen.getByRole('dialog', { name: 'Додати деталь' })).getByRole(
+    within(screen.getByRole('region', { name: 'Додати деталь' })).getByRole(
       'button',
       { name: 'Додати деталь' },
     ),
@@ -752,7 +752,7 @@ it.each(['save', 'save-and-add-another'] as const)(
 
     await screen.findByRole('link', { name: 'Усі 2 →' })
     await user.click(screen.getAllByRole('link', { name: 'Додати деталь' })[0]!)
-    const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+    const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
     await user.type(
       within(drawer).getByRole('textbox', { name: 'Назва' }),
       'Нова фара',
@@ -779,7 +779,7 @@ it.each(['save', 'save-and-add-another'] as const)(
 
     await waitFor(() =>
       expect(
-        screen.queryByRole('dialog', { name: 'Додати деталь' }),
+        screen.queryByRole('region', { name: 'Додати деталь' }),
       ).not.toBeInTheDocument(),
     )
     expect(await screen.findByRole('link', { name: 'Усі 3 →' })).toBeVisible()
@@ -809,7 +809,7 @@ it('cancels a filled intake part without creating it', async () => {
       </Routes>
     </MemoryRouter>,
   )
-  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
   await user.type(
     within(drawer).getByRole('textbox', { name: 'Назва' }),
     'Не зберігати',
@@ -846,7 +846,7 @@ it('limits pasted OEM to 100 characters and saves the complete allowed value', a
       </Routes>
     </MemoryRouter>,
   )
-  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
   await user.type(
     within(drawer).getByRole('textbox', { name: 'Назва' }),
     'Довгий OEM',
@@ -886,7 +886,7 @@ it('keeps name and OEM when Add part fails offline and creates it on retry', asy
       </Routes>
     </MemoryRouter>,
   )
-  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
   const name = within(drawer).getByRole('textbox', { name: 'Назва' })
   const oem = within(drawer).getByRole('textbox', { name: 'OEM-код' })
   await user.type(name, 'Тест OEM — Фара')
@@ -1081,7 +1081,7 @@ it('saves intake part compatibility and retries without adding a duplicate part'
   vi.unstubAllGlobals()
 })
 
-it('opens add-part over its intake in a side drawer and returns to the intake on close', async () => {
+it('opens add-part as a standalone page and returns to the intake', async () => {
   const user = userEvent.setup()
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
@@ -1104,13 +1104,13 @@ it('opens add-part over its intake in a side drawer and returns to the intake on
   await user.click(
     (await screen.findAllByRole('link', { name: 'Додати деталь' }))[0]!,
   )
-  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
-  expect(drawer).toHaveClass('rz-sheet')
-  expect(document.querySelector('[role="main"]')).toHaveTextContent(
-    'Липнева партія',
-  )
-  await user.click(within(drawer).getByRole('button', { name: 'Закрити' }))
-  expect(screen.queryByRole('dialog', { name: 'Додати деталь' })).toBeNull()
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('heading', { name: 'Липнева партія' }),
+  ).not.toBeInTheDocument()
+  await user.click(within(drawer).getByRole('button', { name: 'Назад' }))
+  expect(screen.queryByRole('region', { name: 'Додати деталь' })).toBeNull()
   expect(screen.getByRole('heading', { name: 'Липнева партія' })).toBeVisible()
 })
 
@@ -1168,7 +1168,7 @@ it('locks add-part submit, prevents duplicates, normalizes conflict, and retains
 
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
   const save = within(
-    screen.getByRole('dialog', { name: 'Додати деталь' }),
+    screen.getByRole('region', { name: 'Додати деталь' }),
   ).getByRole('button', { name: 'Додати деталь' })
   await user.click(save)
   expect(save).toBeDisabled()

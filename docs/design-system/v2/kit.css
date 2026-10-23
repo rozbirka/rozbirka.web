@@ -292,7 +292,7 @@
 .rz-sheet { position: fixed; top: 0; right: 0; bottom: 0; z-index: var(--rz-z-dialog); width: min(560px, 100vw); display: grid; grid-template-rows: auto 1fr auto; border-left: 1px solid var(--rz-border-strong); background: var(--rz-sheet-body); box-shadow: var(--rz-shadow-dialog); }
 .rz-sheet__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--rz-border); background: var(--rz-sheet-band); }
 .rz-sheet__head { display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--rz-border); background: var(--rz-sheet-band); }
-:is(.rz-sheet, .rz-dialog, .rz-confirm) :is(.rz-input, .rz-select, .rz-textarea, .rz-input-group, .rz-search) { background: var(--rz-sheet-field); }
+:is(.rz-sheet, .rz-dialog, .rz-confirm, .rz-form-page) :is(.rz-input, .rz-select, .rz-textarea, .rz-input-group, .rz-search) { background: var(--rz-sheet-field); }
 @media (max-width: 639px) { .rz-sheet { top: auto; left: 0; width: 100%; max-height: 92dvh; border-left: 0; border-top: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-lg) var(--rz-r-lg) 0 0; } }
 .rz-menu { min-width: 220px; display: grid; gap: 1px; padding: 4px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-md); background: var(--rz-overlay); box-shadow: var(--rz-shadow-popover); }
 /* Menu focus is shown by the active row, never an orange ring around the popup. */
@@ -316,6 +316,10 @@
 .rz-stepper--glove button { width: var(--rz-target-glove); }
 .rz-stepper--glove input { width: 64px; font-size: var(--rz-fs-page); }
 .rz-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.rz-photos--tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 640px) {
+  .rz-photos--tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 180px)); }
+}
 .rz-photo { position: relative; aspect-ratio: 4 / 3; border: 1px solid var(--rz-border); border-radius: var(--rz-r-sm); background: var(--rz-surface-2); overflow: hidden; display: grid; place-items: center; color: var(--rz-text-dim); font-size: var(--rz-fs-caption); }
 .rz-photo img { width: 100%; height: 100%; object-fit: cover; }
 .rz-photo__badge { position: absolute; left: 6px; top: 6px; height: 18px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: var(--rz-r-xs); background: var(--rz-overlay); color: var(--rz-text); font-size: var(--rz-fs-micro); font-weight: 600; box-shadow: var(--rz-shadow-popover); }

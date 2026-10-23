@@ -1,4 +1,4 @@
-import { Warehouse } from 'lucide-react'
+import { Move } from 'lucide-react'
 import type { PartInventoryZone } from '@/api/inventory'
 import { Button, Card, Notice, SkeletonRows } from '@/components/app'
 import { useT } from '@/i18n'
@@ -28,9 +28,11 @@ export function PartLocationCard({
   return (
     <Card
       title={t('placement')}
+      bodyClassName={allowed && !failed && placed.length > 0 ? 'p-0' : ''}
       aside={
         canMove ? (
           <Button size="sm" onClick={onMove}>
+            <Move aria-hidden />
             {t('move')}
           </Button>
         ) : undefined
@@ -52,52 +54,41 @@ export function PartLocationCard({
       ) : (
         <>
           {!inStock ? (
-            <p className="rz-caption m-0 mb-3">{t('lastPlacement')}</p>
+            <p className="rz-caption m-0 px-4 pt-3">{t('lastPlacement')}</p>
           ) : null}
-          <ul className="m-0 grid list-none gap-4 p-0">
+          <ul className="m-0 grid list-none p-0">
             {placed.map((zone, index) => (
               <li
                 key={zone.zoneId}
-                className={index ? 'border-app-line border-t pt-4' : undefined}
+                className={index ? 'border-app-line border-t' : undefined}
               >
-                <div className="flex min-w-0 items-start gap-2.5">
-                  <Warehouse
-                    aria-hidden
-                    className="text-app-muted mt-0.5 size-4 shrink-0"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-app-ink m-0 font-semibold [overflow-wrap:anywhere]">
-                      {zone.warehouseName}
-                    </p>
-                    {zone.isSystemUnassigned ? (
-                      <p className="rz-caption m-0 mt-1">
-                        {t('locationWarehouseLevel')}
-                      </p>
-                    ) : (
-                      <dl className="border-app-line m-0 mt-3 grid gap-2 border-l pl-3">
-                        {(
-                          [
-                            ['locationZone', zone.zoneName],
-                            ['locationSection', zone.sectionName],
-                            ['locationShelf', zone.shelfName],
-                          ] as const
-                        )
-                          .filter(([, name]) => Boolean(name))
-                          .map(([label, name]) => (
-                            <div
-                              key={label}
-                              className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-2"
-                            >
-                              <dt className="rz-caption">{t(label)}</dt>
-                              <dd className="m-0 [overflow-wrap:anywhere]">
-                                {name}
-                              </dd>
-                            </div>
-                          ))}
-                      </dl>
-                    )}
-                  </div>
-                </div>
+                <dl className="rz-facts">
+                  {(
+                    [
+                      ['locationWarehouse', zone.warehouseName],
+                      ['locationZone', zone.zoneName],
+                      ['locationSection', zone.sectionName],
+                      ['locationShelf', zone.shelfName],
+                    ] as const
+                  )
+                    .filter(
+                      ([label, name]) =>
+                        Boolean(name) &&
+                        (!zone.isSystemUnassigned ||
+                          label === 'locationWarehouse'),
+                    )
+                    .map(([label, name]) => (
+                      <div key={label}>
+                        <dt>{t(label)}</dt>
+                        <dd>{name}</dd>
+                      </div>
+                    ))}
+                </dl>
+                {zone.isSystemUnassigned ? (
+                  <p className="rz-caption m-0 px-4 pb-3">
+                    {t('locationWarehouseLevel')}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

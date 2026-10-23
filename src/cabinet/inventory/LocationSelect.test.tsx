@@ -46,6 +46,23 @@ function MultipleExample() {
 }
 
 describe('compact location selection', () => {
+  it('renders choices outside a clipping card while preserving the input relationship', async () => {
+    const user = userEvent.setup()
+    render(
+      <div data-testid="clipping-card" style={{ overflow: 'clip' }}>
+        <Example />
+      </div>,
+    )
+    const input = screen.getByRole('searchbox')
+    await user.click(input)
+    const popup = screen.getByRole('dialog', { name: 'Пошук полиці' })
+    expect(screen.getByTestId('clipping-card')).not.toContainElement(popup)
+    expect(input).toHaveAttribute('aria-controls', popup.id)
+    await user.type(input, 'a01-100{Enter}')
+    expect(screen.getByTestId('selected')).toHaveTextContent('p100')
+    expect(input).toHaveFocus()
+  })
+
   it('keeps 100 options collapsed and searches by name or code without changing the selection', async () => {
     const user = userEvent.setup()
     render(<Example />)

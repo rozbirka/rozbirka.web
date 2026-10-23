@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { Check } from 'lucide-react'
 import {
   SearchPicker,
@@ -42,7 +42,6 @@ export function LocationSelect(props: LocationSelectProps) {
   const values = props.multiple ? props.value : props.value ? [props.value] : []
   const t = useT(locationBrowserMessages)
   const id = useId()
-  const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -88,10 +87,10 @@ export function LocationSelect(props: LocationSelectProps) {
     setQuery('')
   }
   useEffect(() => {
-    const list = rootRef.current?.querySelector<HTMLElement>(
-      '[data-search-picker-scroll]',
-    )
-    const row = list?.querySelector<HTMLElement>('[data-active="true"]')
+    // The shared picker portals its popup outside clipping cards. Resolve the
+    // active option by its unique ID so keyboard scrolling follows the portal.
+    const row = document.getElementById(`${id}-option-${activeIndex}`)
+    const list = row?.closest<HTMLElement>('[data-search-picker-scroll]')
     if (!list || !row || list.clientHeight === 0) return
     const bounds = list.getBoundingClientRect()
     const item = row.getBoundingClientRect()
@@ -99,7 +98,7 @@ export function LocationSelect(props: LocationSelectProps) {
     if (item.top < bounds.top) list.scrollTop -= bounds.top - item.top
     else if (item.bottom > bounds.bottom)
       list.scrollTop += item.bottom - bounds.bottom
-  }, [open, query, active?.id])
+  }, [open, query, active?.id, activeIndex, id])
   const changeOpen = (next: boolean) => {
     if (next === open) return
     setOpen(next)
@@ -136,7 +135,7 @@ export function LocationSelect(props: LocationSelectProps) {
     setActiveId(items[next]?.id ?? '')
   }
   return (
-    <div ref={rootRef}>
+    <div>
       <SearchPicker
         label={searchLabel}
         placeholder={selectedName || t('nameOrCode')}
@@ -161,6 +160,7 @@ export function LocationSelect(props: LocationSelectProps) {
         activeDescendant={active ? `${id}-option-${activeIndex}` : undefined}
         disabled={disabled}
         compact
+        floating
         allowEmptyQuery
       >
         <SearchPickerOptions label={label} multiple={props.multiple === true}>
