@@ -187,3 +187,50 @@ it('does not send a price when the latest permission guard rejects it', async ()
   expect(onClose).not.toHaveBeenCalled()
   expect(screen.getByRole('alert')).toBeVisible()
 })
+
+it.each([
+  ['reserved', 'Запчастина у резерві. Редагування та зміна ціни недоступні.'],
+  ['sold', 'Запчастину вже продано. Редагування та зміна ціни недоступні.'],
+])(
+  'explains the server %s restriction and retains the entered price',
+  async (status, message) => {
+    mocks.update.mockRejectedValue({
+      kind: 'conflict',
+      status: 409,
+      code: 'PART_NOT_EDITABLE',
+      message: `Part is ${status} and cannot be edited.`,
+    })
+    const user = userEvent.setup()
+    const { onClose, onSaved } = mount({ ...part, status: 'available' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ціна продажу' }), {
+      target: { value: '150' },
+    })
+    await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByRole('textbox', { name: 'Ціна продажу' })).toHaveValue(
+      '150',
+    )
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(mocks.update).toHaveBeenCalledOnce()
+  },
+)
+
+it.each(['reserved', 'sold'])(
+  'disables the price and save for a %s part, including direct form submission',
+  (status) => {
+    const { onSaved } = mount({ ...part, status })
+    const input = screen.getByRole('textbox', { name: 'Ціна продажу' })
+    expect(input).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Зберегти' })).toBeDisabled()
+    expect(input).toHaveAccessibleDescription(
+      status === 'reserved'
+        ? 'Запчастина у резерві. Редагування та зміна ціни недоступні.'
+        : 'Запчастину вже продано. Редагування та зміна ціни недоступні.',
+    )
+    fireEvent.submit(input.closest('form')!)
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Скасувати' })).toBeEnabled()
+  },
+)

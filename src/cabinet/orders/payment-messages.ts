@@ -46,7 +46,7 @@ export const paymentMessages = defineMessages({
     statusRefunded: 'Кошти повернено',
     statusCancelled: 'Замовлення скасовано',
     payment: 'Платіж',
-    refundLabel: 'Повернути {amounts}',
+    refundLabel: 'Повернути',
     refundNothing: 'Оформити повернення',
     refundNoPayments:
       'Платежів за замовленням немає — з каси нічого не списується',
@@ -105,7 +105,7 @@ export const paymentMessages = defineMessages({
     statusRefunded: 'Refunded',
     statusCancelled: 'Order cancelled',
     payment: 'Payment',
-    refundLabel: 'Refund {amounts}',
+    refundLabel: 'Refund',
     refundNothing: 'Process refund',
     refundNoPayments:
       'The order has no payments — nothing is taken from a till',
@@ -161,7 +161,7 @@ export const paymentMessages = defineMessages({
     statusRefunded: 'Zwrócono środki',
     statusCancelled: 'Zamówienie anulowane',
     payment: 'Płatność',
-    refundLabel: 'Zwróć {amounts}',
+    refundLabel: 'Zwróć',
     refundNothing: 'Przeprowadź zwrot',
     refundNoPayments:
       'Zamówienie nie ma płatności — z kasy nic nie zostanie pobrane',

@@ -554,3 +554,27 @@ export const errorMessages = defineMessages({
       'Inny pracownik zmienił zgodność. Odśwież dane.',
   },
 })
+
+/** PART_NOT_EDITABLE uses one code for both states; Core names the state in its message. */
+export const partEditErrorMessages = defineMessages({
+  uk: {
+    reserved: 'Запчастина у резерві. Редагування та зміна ціни недоступні.',
+    sold: 'Запчастину вже продано. Редагування та зміна ціни недоступні.',
+    unavailable:
+      'Редагування та зміна ціни недоступні: запчастина у резерві або вже продана.',
+  },
+  'en-GB': {
+    reserved:
+      'This part is reserved. Editing and price changes are unavailable.',
+    sold: 'This part has been sold. Editing and price changes are unavailable.',
+    unavailable:
+      'Editing and price changes are unavailable: this part is reserved or has been sold.',
+  },
+  pl: {
+    reserved:
+      'Ta część jest zarezerwowana. Edycja i zmiana ceny są niedostępne.',
+    sold: 'Ta część została sprzedana. Edycja i zmiana ceny są niedostępne.',
+    unavailable:
+      'Edycja i zmiana ceny są niedostępne: część jest zarezerwowana lub została już sprzedana.',
+  },
+})

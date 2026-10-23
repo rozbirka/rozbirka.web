@@ -940,11 +940,11 @@ function CustomerDetailScreen({
         <aside className="grid min-w-0 gap-3.5">
           <Card bodyClassName="p-0" headerClassName="py-2" title={t('details')}>
             <dl className="rz-facts">
-              <div>
+              <div className="grid-cols-[minmax(0,1fr)_auto]!">
                 <dt>{t('phone')}</dt>
                 <dd
                   className={cn(
-                    'flex flex-wrap items-center gap-x-2 gap-y-1 font-mono',
+                    'flex items-center gap-2 font-mono whitespace-nowrap',
                     customer.phone === null && 'text-app-dim',
                   )}
                 >

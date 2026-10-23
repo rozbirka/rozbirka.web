@@ -476,7 +476,10 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
     ) {
       return
     }
-    const popup = print ? window.open('', '_blank', 'noopener') : null
+    // Keep the handle for PDF navigation/printing: the noopener feature itself
+    // makes open() return null even when the browser opens the window.
+    const popup = print ? window.open('', '_blank') : null
+    if (popup) popup.opener = null
     const controller = new AbortController()
     const signal = AbortSignal.any([
       controller.signal,
@@ -494,8 +497,28 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       if (print && popup === null) throw new PrintWindowBlockedError()
       const url = URL.createObjectURL(file.blob)
       if (print && popup) {
-        popup.addEventListener('load', () => popup.print(), { once: true })
-        popup.location.href = url
+        // Keep the blank window's document: navigating it to a PDF discards
+        // listeners on the old Window. The frame's load belongs to the PDF.
+        const frame = popup.document.createElement('iframe')
+        popup.document.title = file.filename
+        frame.title = file.filename
+        Object.assign(frame.style, {
+          position: 'fixed',
+          inset: '0',
+          width: '100%',
+          height: '100%',
+          border: '0',
+        })
+        frame.addEventListener(
+          'load',
+          () => {
+            popup.focus()
+            frame.contentWindow?.print()
+          },
+          { once: true },
+        )
+        frame.src = url
+        popup.document.body.replaceChildren(frame)
       } else if (!print) {
         const anchor = document.createElement('a')
         anchor.href = url

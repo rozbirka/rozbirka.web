@@ -112,10 +112,6 @@ export function NewOrderItems({
             focusId.current = part.id
           }}
         />
-        <p className="new-order-items__availability">
-          <Check aria-hidden />
-          {t('availableOnly')}
-        </p>
       </div>
       <div className="grid min-w-0 gap-1.5">
         <span className="rz-label">

@@ -105,6 +105,7 @@ import {
   type HistoryKind,
   historyLabel,
   PIECES_UNIT,
+  partEditingRestriction,
   sourceLabel,
   unitLabel,
 } from './part-labels'
@@ -1510,6 +1511,7 @@ function PartDetailScreen({
   const { locale } = useLocale()
   const format = useFormat()
   const { currency: partCurrency } = useAccountingCurrency()
+  const priceRestriction = partEditingRestriction(detail?.status, locale)
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -2266,6 +2268,8 @@ function PartDetailScreen({
                   canManage && detail.effectiveSalePrice !== null ? (
                     <Button
                       ref={priceTrigger}
+                      disabled={priceRestriction !== null}
+                      title={priceRestriction ?? undefined}
                       size="sm"
                       onClick={() => setPriceOpen(true)}
                     >
@@ -2287,6 +2291,8 @@ function PartDetailScreen({
                     {canManage ? (
                       <Button
                         ref={priceTrigger}
+                        disabled={priceRestriction !== null}
+                        title={priceRestriction ?? undefined}
                         className="justify-self-start"
                         variant="primary"
                         onClick={() => setPriceOpen(true)}
@@ -2351,6 +2357,9 @@ function PartDetailScreen({
                     ) : null}
                   </>
                 )}
+                {priceRestriction ? (
+                  <p className="rz-caption m-0">{priceRestriction}</p>
+                ) : null}
               </Card>
 
               <Card
@@ -4191,6 +4200,7 @@ function PartEdit({
   const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
+  const priceRestriction = partEditingRestriction(detail?.status, locale)
   const [compatState, setCompatState] = useState<{
     partId: string
     data: PartCompatibilities | null
@@ -4313,7 +4323,8 @@ function PartEdit({
     setPending(true)
     setStatus(null)
     setError(null)
-    const pricing = price.hasPrice && !price.disabled
+    const pricing =
+      price.hasPrice && !price.disabled && priceRestriction === null
     const finishSave = () => {
       if (!mountedRef.current) return
       requireLatestMutation({ quota: false })
@@ -4340,9 +4351,10 @@ function PartEdit({
           unit: PIECES_UNIT,
           photoKeys: committedPhotoKeys(mediaItems),
           // Without an accounting currency the price is left as it is.
-          desiredSalePrice: price.disabled
-            ? { isSet: false }
-            : { isSet: true, value: parsed.price ?? null },
+          desiredSalePrice:
+            price.disabled || priceRestriction !== null
+              ? { isSet: false }
+              : { isSet: true, value: parsed.price ?? null },
         },
         { signal: scope.signal },
       )
@@ -4679,12 +4691,12 @@ function PartEdit({
                     </Field>
                     <Field
                       error={errors.desiredSalePrice}
-                      hint={price.hint}
+                      hint={priceRestriction ?? price.hint}
                       label={t('desiredPrice')}
                     >
                       <MoneyInput
                         currency={price.currency}
-                        disabled={price.disabled}
+                        disabled={price.disabled || priceRestriction !== null}
                         inputMode="decimal"
                         name="desiredSalePrice"
                         onChange={(event) =>

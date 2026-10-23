@@ -103,3 +103,12 @@ it('words compatibility problems per locale', () => {
     'Your business’s catalogue has no makes called Lada, ZAZ. Compatibility with them won’t be saved — remove these rows or choose another make.',
   )
 })
+
+it.each(['pcs', 'PCS', ' pcs ', 'szt.'])(
+  'localises the legacy pieces unit %s instead of displaying its stored language',
+  (unit) => {
+    expect(unitLabel(unit, 'uk')).toBe('шт')
+    expect(unitLabel(unit, 'en-GB')).toBe('pcs')
+    expect(unitLabel(unit, 'pl')).toBe('szt.')
+  },
+)

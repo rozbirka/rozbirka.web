@@ -4727,3 +4727,77 @@ it('opens a price-only drawer over the part card, saves and refreshes it without
   expect(within(card).getByText('150,5')).toBeVisible()
   expect(detail.notes).toBe('Зберегти нотатку')
 })
+
+it.each([
+  ['reserved', 100],
+  ['reserved', null],
+  ['sold', 100],
+  ['sold', null],
+] as const)(
+  'disables the part-card price action for %s (price=%s)',
+  async (status, price) => {
+    partMocks.get.mockResolvedValue({
+      id: 'part-1',
+      name: 'Фара ліва',
+      condition: 'good',
+      source: 'free',
+      status,
+      quantityTotal: status === 'sold' ? 0 : 1,
+      quantityAvailable: 0,
+      quantityReserved: status === 'reserved' ? 1 : 0,
+      quantitySoldTotal: status === 'sold' ? 1 : 0,
+      effectiveSalePrice: price,
+      desiredSalePrice: price,
+      photos: [],
+      reservations: [],
+      soldOrders: [],
+      unit: 'шт',
+      createdAt: '2026-10-23T10:00:00Z',
+    })
+    renderInLocale('uk', '/app/yard/parts/part-1', '/app/:tenant/parts/:partId')
+    const card = await screen.findByRole('region', { name: 'Ціна продажу' })
+    const action = within(card).getByRole('button', {
+      name: price === null ? 'Вказати ціну' : 'Змінити',
+    })
+    expect(action).toBeDisabled()
+    fireEvent.click(action)
+    expect(screen.queryByRole('dialog', { name: 'Ціна продажу' })).toBeNull()
+    expect(card).toHaveTextContent(
+      status === 'reserved'
+        ? 'Запчастина у резерві.'
+        : 'Запчастину вже продано.',
+    )
+  },
+)
+
+it.each(['reserved', 'sold'])(
+  'disables the asking price on the separate edit page for %s',
+  async (status) => {
+    partMocks.get.mockResolvedValue({
+      id: 'part-1',
+      name: 'Фара ліва',
+      condition: 'good',
+      source: 'free',
+      status,
+      quantityTotal: status === 'sold' ? 0 : 1,
+      quantityAvailable: 0,
+      quantityReserved: status === 'reserved' ? 1 : 0,
+      quantitySoldTotal: status === 'sold' ? 1 : 0,
+      desiredSalePrice: 100,
+      photos: [],
+      unit: 'шт',
+    })
+    renderInLocale(
+      'uk',
+      '/app/yard/parts/part-1/edit',
+      '/app/:tenant/parts/:partId/edit',
+    )
+    const input = await screen.findByRole('textbox', { name: 'Бажана ціна' })
+    expect(input).toBeDisabled()
+    expect(input).toHaveAccessibleDescription(
+      status === 'reserved'
+        ? 'Запчастина у резерві. Редагування та зміна ціни недоступні.'
+        : 'Запчастину вже продано. Редагування та зміна ціни недоступні.',
+    )
+  },
+)

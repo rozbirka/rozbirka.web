@@ -1936,13 +1936,7 @@ function OrderDetailScreen({
         title={t('confirmTitle', { number: String(order.number) })}
       />
       <ConfirmDialog
-        confirmLabel={
-          summary.paid.length === 0
-            ? tp('refundNothing')
-            : tp('refundLabel', {
-                amounts: moneyList(summary.paid, tp('and'), locale),
-              })
-        }
+        confirmLabel={tp('refundLabel')}
         confirmDisabled={!refundReason.trim()}
         consequence={t('refundConsequence')}
         destructive

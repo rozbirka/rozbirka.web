@@ -11,6 +11,7 @@ import { isLostResponse, lostResponseMessages } from '../lost-response'
 import type { LatestMutationScope } from '../use-latest-mutation-guard'
 import { partDetailMessages } from './part-detail-messages'
 import { partFormMessages } from './part-form-messages'
+import { partEditingRestriction } from './part-labels'
 
 /** Price-only edit over the part card; never resubmits its other fields. */
 export function PartPriceDrawer({
@@ -31,6 +32,7 @@ export function PartPriceDrawer({
   const tc = useT(commonMessages)
   const tl = useT(lostResponseMessages)
   const { locale } = useLocale()
+  const restriction = partEditingRestriction(part.status, locale)
   const guard = useFirstPriceGuard()
   const [value, setValue] = useState(() => {
     const initial = part.desiredSalePrice ?? part.effectiveSalePrice
@@ -64,7 +66,7 @@ export function PartPriceDrawer({
     accepted?: SupportedCurrency | null,
   ) => {
     event?.preventDefault()
-    if (pendingRef.current || price.disabled) return
+    if (pendingRef.current || price.disabled || restriction !== null) return
     setShowErrors(true)
     if (validation) return
     pendingRef.current = true
@@ -146,7 +148,7 @@ export function PartPriceDrawer({
               form="part-price-form"
               type="submit"
               variant="primary"
-              disabled={pending || price.disabled}
+              disabled={pending || price.disabled || restriction !== null}
               aria-busy={pending}
             >
               {pending ? tc('saving') : tc('save')}
@@ -162,12 +164,12 @@ export function PartPriceDrawer({
       >
         <Field
           label={t('salePrice')}
-          hint={price.hint}
+          hint={restriction ?? price.hint}
           error={showErrors ? validation : undefined}
         >
           <MoneyInput
             currency={price.currency}
-            disabled={pending || price.disabled}
+            disabled={pending || price.disabled || restriction !== null}
             numeric
             value={value}
             onChange={(event) => setValue(event.target.value)}

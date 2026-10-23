@@ -1,5 +1,12 @@
+import { partEditErrorMessages } from '@/api/error-messages'
 import type { StatusTone } from '@/components/app'
-import { SOURCE_LOCALE, translate, type Locale, type MessageKey } from '@/i18n'
+import {
+  SOURCE_LOCALE,
+  SUPPORTED_LOCALES,
+  translate,
+  type Locale,
+  type MessageKey,
+} from '@/i18n'
 import { partLabelMessages } from './part-labels-messages'
 
 /**
@@ -108,17 +115,32 @@ export const partStatusPresentation = (
   return { label: status, tone: 'neutral' }
 }
 
+/** Core permits editing only while the part has available stock. */
+export const partEditingRestriction = (
+  status: string | null | undefined,
+  locale: Locale = SOURCE_LOCALE,
+): string | null =>
+  status === 'reserved' || status === 'sold'
+    ? translate(partEditErrorMessages, locale, status)
+    : null
+
 /**
- * The unit every part is counted in. Core stores the Ukrainian «шт», so that
- * value (or none) reads as pieces in the interface language; any other unit
- * the server sends is shown as it came.
+ * Current records use «шт»; legacy records can contain a translated pieces
+ * label. All known pieces labels follow the interface language, while other
+ * units keep the yard's original wording.
  */
 export const PIECES_UNIT = 'шт'
+const piecesLabels = new Set(
+  SUPPORTED_LOCALES.map((locale) => label(locale, 'unitPieces').toLowerCase()),
+)
 
 export const unitLabel = (
   unit: string | null | undefined,
   locale: Locale = SOURCE_LOCALE,
-) => (!unit || unit === PIECES_UNIT ? label(locale, 'unitPieces') : unit)
+) =>
+  !unit || piecesLabels.has(unit.trim().toLowerCase())
+    ? label(locale, 'unitPieces')
+    : unit
 
 /** The dot that stands in for the pill in a filter row. */
 export const partStatusDot = {

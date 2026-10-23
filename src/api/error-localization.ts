@@ -2,7 +2,7 @@ import { requestLocale, SOURCE_LOCALE, translate, type Locale } from '@/i18n'
 import { SUPPORTED_LOCALES } from '@/i18n/locales'
 import { apiMessages } from './api-messages'
 import type { ApiProblemKind } from './contracts'
-import { errorMessages } from './error-messages'
+import { errorMessages, partEditErrorMessages } from './error-messages'
 
 type ErrorCode = keyof typeof errorMessages.uk
 const codes = new Map(
@@ -27,6 +27,22 @@ knownText.set(
   'CUSTOMER_PHONE_EXISTS',
 )
 
+// Match only Core's reviewed status messages, then preserve localisation when
+// the client-normalised problem is normalised again by its screen.
+type PartEditState = keyof typeof partEditErrorMessages.uk
+const partEditStates = new Map<string, PartEditState>([
+  ['Part is reserved and cannot be edited.', 'reserved'],
+  ['Part is sold and cannot be edited.', 'sold'],
+])
+for (const locale of SUPPORTED_LOCALES) {
+  for (const [state, message] of Object.entries(
+    partEditErrorMessages[locale],
+  )) {
+    if (typeof message === 'string')
+      partEditStates.set(message, state as PartEditState)
+  }
+}
+
 export function localizeApiError(
   problem: {
     code?: string | undefined
@@ -36,6 +52,10 @@ export function localizeApiError(
   },
   locale: Locale = requestLocale.get() ?? SOURCE_LOCALE,
 ): string {
+  if (problem.code?.toUpperCase() === 'PART_NOT_EDITABLE') {
+    const state = partEditStates.get(problem.message ?? '') ?? 'unavailable'
+    return translate(partEditErrorMessages, locale, state)
+  }
   const code =
     (problem.code ? codes.get(problem.code.toUpperCase()) : undefined) ??
     (problem.message ? knownText.get(problem.message) : undefined)

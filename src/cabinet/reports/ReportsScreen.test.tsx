@@ -333,7 +333,7 @@ it('downloads or prints a completed report through the authenticated API helper'
 
   await waitFor(() => expect(reportsApi.download).toHaveBeenCalledTimes(2))
   expect(click).toHaveBeenCalledTimes(1)
-  expect(open).toHaveBeenCalledWith('', '_blank', 'noopener')
+  expect(open).toHaveBeenCalledWith('', '_blank')
 })
 
 it('pre-opens a print window synchronously and closes it when download fails', async () => {
@@ -353,7 +353,7 @@ it('pre-opens a print window synchronously and closes it when download fails', a
   await userEvent
     .setup()
     .click(await screen.findByRole('button', { name: 'Друкувати' }))
-  expect(window.open).toHaveBeenCalledWith('', '_blank', 'noopener')
+  expect(window.open).toHaveBeenCalledWith('', '_blank')
 
   pending.reject(new Error('offline'))
   await act(() => pending.promise.catch(() => undefined))
@@ -850,4 +850,64 @@ it('confirms a created report with an ok toast and names its period compactly', 
   ).toBeVisible()
   const period = await screen.findByText(/15\.10\s*[–-]\s*21\.10\.2026/)
   expect(period).toHaveClass('rz-mono')
+})
+
+it('retains the print window handle while detaching its opener before the PDF download', async () => {
+  const pending = deferred<Awaited<ReturnType<typeof reportsApi.download>>>()
+  let loaded: EventListener | undefined
+  const frame = {
+    title: '',
+    src: '',
+    style: {},
+    contentWindow: { print: vi.fn() },
+    addEventListener: vi.fn((_type: string, listener: EventListener) => {
+      loaded = listener
+    }),
+  }
+  const popup = {
+    document: {
+      title: '',
+      body: { replaceChildren: vi.fn() },
+      createElement: vi.fn(() => frame),
+    },
+    opener: window as Window | null,
+    close: vi.fn(),
+    focus: vi.fn(),
+    print: vi.fn(),
+    location: { href: '' },
+  }
+  // Real browsers return null for noopener even when the new window opens.
+  vi.spyOn(window, 'open').mockImplementation((_url, _target, features) =>
+    features?.includes('noopener') ? null : (popup as unknown as Window),
+  )
+  vi.mocked(reportsApi.list).mockResolvedValue({
+    items: [report('completed')],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  })
+  vi.mocked(reportsApi.download).mockReturnValue(pending.promise)
+  render(<ReportsScreen {...screenProps} />)
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: 'Друкувати' }))
+  expect(popup.opener).toBeNull()
+  expect(popup.location.href).toBe('')
+  await act(async () => {
+    pending.resolve({
+      blob: new Blob(['pdf'], { type: 'application/pdf' }),
+      filename: 'sales.pdf',
+    })
+    await pending.promise
+  })
+  await waitFor(() => expect(frame.src).toBe('blob:report'))
+  expect(popup.document.body.replaceChildren).toHaveBeenCalledWith(frame)
+  expect(popup.location.href).toBe('')
+  expect(frame.contentWindow.print).not.toHaveBeenCalled()
+  act(() => loaded?.(new Event('load')))
+  expect(frame.contentWindow.print).toHaveBeenCalledOnce()
+  expect(popup.focus).toHaveBeenCalledOnce()
+  expect(popup.close).not.toHaveBeenCalled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })

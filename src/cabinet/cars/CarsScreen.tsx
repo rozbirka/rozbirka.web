@@ -706,16 +706,7 @@ const CAR_COLOR_KEYS = [
 ] as const
 /** The quick colours in the reader's language: the word is what gets saved. */
 const quickColors = (tf: Translate<(typeof carFormMessages)['uk']>) =>
-  CAR_COLOR_KEYS.map((key) => {
-    const label = tf(key)
-    return {
-      label,
-      swatch: colorSwatch(label),
-      foreground: ['colorWhite', 'colorGrey', 'colorSilver'].includes(key)
-        ? 'var(--rz-on-brand)'
-        : 'var(--rz-on-solid)',
-    }
-  })
+  CAR_COLOR_KEYS.map((key) => ({ label: tf(key) }))
 
 function CarDetail({ base, carId }: { base: string; carId: string }) {
   const { manageDecision, partsView, partsManage, financeView, financeManage } =
@@ -1975,22 +1966,14 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                           values.color.trim().toLowerCase() ===
                           option.label.toLowerCase()
                         return (
-                          <button
+                          <Button
                             aria-pressed={active}
                             className={cn(
-                              'border-app-line-2 inline-flex h-[26px] cursor-pointer items-center rounded-full border px-2.5 text-caption disabled:pointer-events-none',
-                              !active && 'text-app-muted hover:bg-app-hover',
+                              'rounded-full',
+                              active && 'border-brand text-brand-text',
                             )}
                             disabled={busy}
                             key={option.label}
-                            style={
-                              active
-                                ? {
-                                    backgroundColor: option.swatch,
-                                    color: option.foreground,
-                                  }
-                                : undefined
-                            }
                             onClick={() =>
                               setValues((current) => ({
                                 ...current,
@@ -2000,7 +1983,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                             type="button"
                           >
                             {option.label}
-                          </button>
+                          </Button>
                         )
                       })}
                     </div>

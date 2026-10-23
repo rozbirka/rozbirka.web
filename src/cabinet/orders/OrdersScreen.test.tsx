@@ -975,7 +975,7 @@ it('shows the approved empty order layout without an empty item editor or QR cap
   expect(screen.queryByLabelText(/^Кількість /)).toBeNull()
   expect(screen.queryByLabelText(/^Ціна за одиницю /)).toBeNull()
   expect(screen.queryByRole('list', { name: 'Позиції замовлення' })).toBeNull()
-  expect(screen.getByText('Лише наявні запчастини')).toBeVisible()
+  expect(screen.queryByText('Лише наявні запчастини')).toBeNull()
   expect(
     screen.getByText(
       'Позицій ще немає. Знайдіть запчастину за назвою чи артикулом.',
@@ -1794,23 +1794,17 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
-  // Refund is destructive, so it asks in a dialog that carries its own reason
-  // field and names the sum on the confirm button.
+  // The refund dialog keeps its reason and amounts in the body; its action
+  // has a short, stable label.
   const openRefund = () =>
     user.click(screen.getByRole('button', { name: 'Оформити повернення' }))
-  // The sum carries a non-breaking space from the money formatter, and an
-  // accessible name is matched verbatim.
   const submit = () =>
-    user.click(screen.getByRole('button', { name: /^Повернути 250,00/ }))
+    user.click(screen.getByRole('button', { name: 'Повернути' }))
 
   await openRefund()
-  expect(
-    screen.getByRole('button', { name: /^Повернути 250,00/ }),
-  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Повернути' })).toBeDisabled()
   await user.type(screen.getByLabelText('Причина'), 'Помилка каси')
-  expect(
-    screen.getByRole('button', { name: /^Повернути 250,00/ }),
-  ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Повернути' })).toBeEnabled()
   await submit()
   // A lost answer is read back first: not refunded, so the key is kept.
   expect(await screen.findByRole('alert')).toHaveTextContent(
