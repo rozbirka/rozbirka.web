@@ -164,11 +164,18 @@ jobs:
         env:
           BROWSER_ENGINE: ${{ matrix.browser }}
         run: |
+          # GitHub mounts this directory with the runner's UID. Firefox requires
+          # its owner to match the container user; keep the existing HOME path.
+          chown "$(id -u):$(id -g)" "$HOME"
           node <<'NODE'
           const fs = require('node:fs');
           const browser = require('@playwright/test')[process.env.BROWSER_ENGINE];
           fs.accessSync(browser.executablePath(), fs.constants.X_OK);
           console.log(`Playwright ${require('@playwright/test/package.json').version}: ${browser.executablePath()}`);
+          browser.launch().then(instance => instance.close()).catch(error => {
+            console.error(error);
+            process.exitCode = 1;
+          });
           NODE
 
       - if: inputs.run_build
