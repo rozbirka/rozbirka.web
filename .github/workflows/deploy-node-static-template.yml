@@ -115,13 +115,21 @@ jobs:
     if: ${{ !inputs.skip_e2e }}
     name: Browser E2E ${{ inputs.project_name }} (${{ matrix.project }})
     runs-on: ubuntu-latest
-    # Room for one slow apt mirror retry on top of the ~6 minute suite.
+    # Match @playwright/test in package-lock.json. Browser binaries and their
+    # Ubuntu dependencies are bundled, so apt mirror stalls cannot block tests.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    # Includes the image pull, application build and browser suite.
     timeout-minutes: 25
     permissions:
       contents: read
     # The e2e stub server keeps global state, so a run stays on a single worker;
     # parallelism comes from giving each browser project its own runner. One
-    # project also means one engine to install instead of three.
+    # project also keeps each browser result independently visible.
     strategy:
       fail-fast: false
       matrix:
@@ -151,37 +159,17 @@ jobs:
 
       - run: npm ci
 
-      - id: playwright-version
-        name: Resolve Playwright version
-        run: |
-          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
-
-      # System packages come from the runner's apt mirror, which can crawl
-      # (WebKit needs ~126 MB). Retrying apt only races the previous run for
-      # the dpkg lock, so install them once with a long bound; only the
-      # browser download itself is retried.
       - if: inputs.run_build
-        name: Install ${{ matrix.browser }}
-        shell: bash
+        name: Verify bundled ${{ matrix.browser }}
+        env:
+          BROWSER_ENGINE: ${{ matrix.browser }}
         run: |
-          set -euo pipefail
-          # The runner's own background apt run can hold the dpkg lock for a
-          # while; make apt wait for it instead of failing at once.
-          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99-dpkg-lock-timeout >/dev/null
-          timeout 900 npx playwright install-deps ${{ matrix.browser }}
-          for attempt in 1 2 3; do
-            if timeout 300 npx playwright install ${{ matrix.browser }}; then
-              exit 0
-            fi
-            echo "playwright browser download attempt ${attempt} failed or timed out; retrying"
-            sleep 10
-          done
-          exit 1
+          node <<'NODE'
+          const fs = require('node:fs');
+          const browser = require('@playwright/test')[process.env.BROWSER_ENGINE];
+          fs.accessSync(browser.executablePath(), fs.constants.X_OK);
+          console.log(`Playwright ${require('@playwright/test/package.json').version}: ${browser.executablePath()}`);
+          NODE
 
       - if: inputs.run_build
         name: Browser E2E gate
