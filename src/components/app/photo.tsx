@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { useT } from '@/i18n/hooks'
 import { appMessages } from './app-messages'
+import { fullPhotoSource } from './photo-source'
 
 export interface Photo {
   id: string
@@ -46,7 +47,8 @@ export function Thumbnail({
   size?: 'thumbnail' | 'full'
 }) {
   const t = useT(appMessages)
-  const source = size === 'full' ? photo.url : (photo.thumbnailUrl ?? photo.url)
+  const source =
+    size === 'full' ? fullPhotoSource(photo) : (photo.thumbnailUrl ?? photo.url)
   // Load state belongs to one file: a new src starts over, and the reset
   // happens during render rather than in an effect, so nothing renders twice
   // with the previous photo's state.
@@ -173,6 +175,7 @@ function Lightbox({
 
   const photo = photos[index]
   if (!photo) return null
+  const source = fullPhotoSource(photo)
   const alt = photo.alt ?? `${label} ${String(index + 1)}`
 
   return (
@@ -228,7 +231,7 @@ function Lightbox({
               <span />
             )}
             <div className="relative h-full min-h-0 w-full min-w-0">
-              {failedSource === photo.url ? (
+              {failedSource === source ? (
                 <span
                   role="status"
                   className="text-app-muted absolute inset-0 grid place-content-center justify-items-center gap-2"
@@ -238,11 +241,11 @@ function Lightbox({
                 </span>
               ) : (
                 <img
-                  key={photo.url}
+                  key={source}
                   alt={alt}
                   className="absolute inset-0 h-full w-full rounded-control object-contain"
-                  onError={() => setFailedSource(photo.url)}
-                  src={photo.url}
+                  onError={() => setFailedSource(source)}
+                  src={source}
                 />
               )}
             </div>
@@ -409,7 +412,7 @@ export function Gallery({
     )
     for (const photo of neighbours) {
       const preload = new Image()
-      preload.src = photo.url
+      preload.src = fullPhotoSource(photo)
     }
   }, [current, photos])
 
