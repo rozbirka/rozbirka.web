@@ -1,0 +1,145 @@
+@import './location-list-layout.css';
+
+/* Location list composition. DataTable supplies table borders, row density,
+ * hover, selection and responsive semantics, as in the parts directory. */
+.location-browser {
+  min-width: 0;
+}
+
+.location-browser__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: 44px;
+  padding: 8px var(--rz-card-p);
+  border-bottom: 1px solid var(--rz-border);
+}
+
+.location-browser__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  color: var(--rz-text-strong);
+  font-size: var(--rz-fs-body);
+  font-weight: 600;
+}
+
+.location-browser__count-total {
+  color: var(--rz-text-dim);
+  font-weight: 400;
+}
+
+.location-browser__lead {
+  margin: 2px 0 0;
+  color: var(--rz-text-dim);
+  font-size: var(--rz-fs-caption);
+  text-wrap: pretty;
+}
+
+.location-browser__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* DataTable owns the row frame and hover. Links use the same orange name
+ * treatment as the primary link in the parts directory. */
+.location-browser__link {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.location-browser__link:is(:hover, :focus-visible) .location-browser__name {
+  color: var(--rz-brand-text);
+}
+
+.location-browser__label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  padding-block: 4px;
+}
+
+.location-browser__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--rz-text-strong);
+  font-size: var(--rz-fs-body);
+  font-weight: 500;
+}
+
+.location-browser__code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--rz-text-dim);
+  font-family: var(--rz-font-mono);
+  font-size: var(--rz-fs-caption);
+}
+
+.location-browser__arrow {
+  width: var(--rz-icon-sm);
+  height: var(--rz-icon-sm);
+  justify-self: end;
+  color: var(--rz-text-dim);
+}
+
+.location-browser__empty {
+  margin: 0;
+  padding: 32px var(--rz-card-p);
+  color: var(--rz-text-muted);
+  font-size: var(--rz-fs-body);
+  text-align: center;
+}
+
+/* Stand-in for a list that waits on a choice elsewhere on the page. */
+.location-browser__placeholder {
+  min-height: 176px;
+  border: 0;
+  border-radius: 0;
+}
+
+@media (max-width: 767px) {
+  .location-browser__lead {
+    display: none;
+  }
+}
+
+/* Section and shelf cards follow the visible row count within the workspace.
+ * Only the list scrolls on short viewports; the pager stays below the rows. */
+.rz-workspace > .rz-page > .location-browser-layout,
+.rz-workspace .location-browser-card,
+.rz-workspace .location-browser--navigation {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rz-workspace .location-browser-card {
+  overflow: hidden;
+}
+
+.rz-workspace .location-browser--navigation > :not(.location-browser__list) {
+  flex-shrink: 0;
+}
+
+.rz-workspace .location-browser__list {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}

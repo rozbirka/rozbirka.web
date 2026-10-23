@@ -1,22 +1,25 @@
+import { cabinetModules } from '../module-registry'
+import { cabinetPath } from '../cabinet-paths'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { CabinetLoadingContent } from '../loading-screen'
 import {
   Button,
   ErrorState,
   Field,
   Notice,
-  PageBody,
   Pagination,
+  SelectInput,
   Sheet,
-  SkeletonRows,
+  SkeletonFields,
   TextInput,
   Toolbar,
   useOptionalToast,
 } from '@/components/app'
-import { cn } from '@/lib/utils'
 import {
   commonMessages,
   currencyName,
+  parseCurrency,
   SUPPORTED_CURRENCIES,
   useLocale,
   useT,
@@ -31,10 +34,11 @@ import {
   type CashTransactionInput,
 } from '@/api/cash'
 import { useCabinet } from '../CabinetContext'
+import { RedesignShell } from '../redesign-shell'
 import { CashCard } from './cash-card'
 import { useCashText } from './cash-labels'
 import { cashMessages } from './cash-messages'
-import { CashList } from './cash-list'
+import { CashCrumbs, CashList } from './cash-list'
 import { readCashFeed, type CashFeedEntry } from './cash-feed'
 import { CashMovementDrawer } from './CashMovementDrawer'
 import { CashTransferDrawer } from './CashTransferDrawer'
@@ -56,6 +60,20 @@ const problemMessage = (error: unknown, t: CashT) => {
   if (problem.status === 402) return t('needsSubscription')
   if (problem.kind === 'forbidden') return t('forbidden')
   return problem.message
+}
+const removeCurrencyProblemMessage = (
+  error: unknown,
+  currency: string,
+  t: CashT,
+) => {
+  switch (normalizeApiProblem(error).code) {
+    case 'CURRENCY_HAS_TRANSACTIONS':
+      return t('currencyHasTransactions', { code: currency })
+    case 'REGISTER_BALANCE_NOT_ZERO':
+      return t('currencyBalanceNotZero', { code: currency })
+    default:
+      return problemMessage(error, t)
+  }
 }
 type CashReplayOperation = 'movement' | 'transfer'
 const isAmbiguousMutationFailure = (error: unknown) => {
@@ -103,6 +121,17 @@ const canMutate = (
       'mutation',
     ).kind === 'allowed'
   )
+}
+const ordersPathFor = (cabinet: ReturnType<typeof useCabinet>) => {
+  if (cabinet.status !== 'ready' || !cabinet.snapshot || !cabinet.targetTenant)
+    return null
+  const allowed =
+    evaluateModuleAccess(
+      cabinetModules.orders,
+      { status: 'ready', snapshot: cabinet.snapshot, error: null },
+      'view',
+    ).kind === 'allowed'
+  return allowed ? cabinetPath(cabinet.targetTenant.slug, 'orders') : null
 }
 const canTransfer = (
   definition: CabinetModuleScreenProps['definition'],
@@ -162,6 +191,7 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
   const [feed, setFeed] = useState<CashFeedEntry[]>([])
   const [feedTruncated, setFeedTruncated] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState<string | null>(null)
@@ -176,6 +206,7 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
           setRegisters(list)
           setSummary(daily)
           setError(null)
+          setLoaded(true)
           const latest = await readCashFeed(
             list,
             signal ?? new AbortController().signal,
@@ -224,12 +255,19 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
   const activeRegisters = registers.filter((register) => register.isActive)
   return (
     <>
-      {error && <Notice tone="danger">{error}</Notice>}
       <CashList
+        cashHref={`/app/${cabinet.targetTenant?.slug ?? ''}/cash`}
+        ordersPath={ordersPathFor(cabinet)}
         canCreate={mutationsAllowed}
         canTransfer={transferAllowed && activeRegisters.length > 0}
         date={date}
+        error={error}
         feed={feed}
+        loading={!loaded && error === null}
+        onRetry={() => {
+          setError(null)
+          void load()
+        }}
         feedTruncated={feedTruncated}
         onTransfer={() => {
           setTransferError(null)
@@ -271,6 +309,7 @@ function CashRegisterDetail({
   const [movementOpen, setMovementOpen] = useState(false)
   const [movementBusy, setMovementBusy] = useState(false)
   const [movementError, setMovementError] = useState<string | null>(null)
+  const [activateBusy, setActivateBusy] = useState(false)
   const ledgerCurrency = params.get('currency') ?? undefined
   const ledgerFrom = params.get('from') ?? undefined
   const ledgerTo = params.get('to') ?? undefined
@@ -341,17 +380,34 @@ function CashRegisterDetail({
       setMovementBusy(false)
     }
   }
+  const activateRegister = async () => {
+    if (activateBusy || !mutationsAllowed || register?.isActive) return
+    setActivateBusy(true)
+    setError(null)
+    let scope: ReturnType<typeof requireLatestMutation> | null = null
+    try {
+      scope = requireLatestMutation({ quota: false })
+      const activated = await cashApi.activate(registerId)
+      if (scope.signal.aborted) return
+      setRegister(activated)
+      toast?.show({ message: t('tillActivated'), tone: 'ok' })
+    } catch (failure) {
+      if (!scope?.signal.aborted) setError(problemMessage(failure, t))
+    } finally {
+      setActivateBusy(false)
+    }
+  }
   if (error && !register)
     return (
-      <PageBody width="narrow">
+      <RedesignShell crumb={<CashCrumbs />}>
         <ErrorState description={error} title={t('loadFailed')} />
-      </PageBody>
+      </RedesignShell>
     )
   if (!register)
     return (
-      <PageBody width="narrow">
-        <SkeletonRows label={t('loadingTill')} rows={3} />
-      </PageBody>
+      <RedesignShell crumb={<CashCrumbs />}>
+        <CabinetLoadingContent module="cash" label={t('loadingTill')} />
+      </RedesignShell>
     )
   const setFilter = (key: 'currency' | 'from' | 'to', value: string) => {
     const next = new URLSearchParams(params)
@@ -363,8 +419,15 @@ function CashRegisterDetail({
   return (
     <>
       <CashCard
+        ordersPath={ordersPathFor(cabinet)}
         cashHref={`/app/${cabinet.targetTenant?.slug ?? ''}/cash`}
         canManage={mutationsAllowed}
+        activating={activateBusy}
+        onActivate={
+          mutationsAllowed && !register.isActive
+            ? () => void activateRegister()
+            : undefined
+        }
         onNewOperation={
           mutationsAllowed && register.isActive
             ? () => {
@@ -375,12 +438,10 @@ function CashRegisterDetail({
         }
         error={error}
         filters={
-          <Toolbar>
-            <label className="grid min-w-[130px] gap-1 text-[12px] text-app-dim">
-              {t('currency')}
-              <select
+          <Toolbar className="items-end">
+            <Field className="min-w-[130px]" label={t('currency')}>
+              <SelectInput
                 aria-label={t('ledgerCurrency')}
-                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('currency', event.target.value)}
                 value={ledgerCurrency ?? ''}
               >
@@ -390,28 +451,24 @@ function CashRegisterDetail({
                     {currency}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
-              {t('from')}
-              <input
+              </SelectInput>
+            </Field>
+            <Field className="min-w-[150px]" label={t('from')}>
+              <TextInput
                 aria-label={t('operationsFrom')}
-                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('from', event.target.value)}
                 type="date"
                 value={ledgerFrom ?? ''}
               />
-            </label>
-            <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
-              {t('to')}
-              <input
+            </Field>
+            <Field className="min-w-[150px]" label={t('to')}>
+              <TextInput
                 aria-label={t('operationsTo')}
-                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('to', event.target.value)}
                 type="date"
                 value={ledgerTo ?? ''}
               />
-            </label>
+            </Field>
           </Toolbar>
         }
         lastOperationAt={lastOperationAt}
@@ -450,6 +507,8 @@ function CashRegisterEdit({
 }: CabinetModuleScreenProps & { registerId: string }) {
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const { money, registerType } = useCashText()
   const cabinet = useCabinet()
   const location = useLocation()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -490,6 +549,28 @@ function CashRegisterEdit({
       await navigate(detailPath, { replace: true })
     } catch (failure) {
       setError(problemMessage(failure, t))
+      setBusy(false)
+    }
+  }
+  const changeCurrency = async (currency: string, action: 'add' | 'remove') => {
+    if (busy || !mutationsAllowed || register?.type !== 'cash') return
+    setBusy(true)
+    setError(null)
+    let scope: ReturnType<typeof requireLatestMutation> | null = null
+    try {
+      scope = requireLatestMutation({ quota: false })
+      if (action === 'add') await cashApi.addCurrency(registerId, currency)
+      else await cashApi.removeCurrency(registerId, currency)
+      if (scope.signal.aborted) return
+      await load(scope.signal)
+    } catch (failure) {
+      if (!scope?.signal.aborted)
+        setError(
+          action === 'remove'
+            ? removeCurrencyProblemMessage(failure, currency, t)
+            : problemMessage(failure, t),
+        )
+    } finally {
       setBusy(false)
     }
   }
@@ -534,7 +615,7 @@ function CashRegisterEdit({
           title={t('loadFailed')}
         />
       ) : !register ? (
-        <SkeletonRows label={t('loadingTill')} rows={3} />
+        <SkeletonFields count={3} label={t('loadingTill')} />
       ) : (
         <form
           aria-busy={busy}
@@ -552,6 +633,7 @@ function CashRegisterEdit({
             error={named ? null : t('nameEmpty')}
             hint={t('nameHintEdit')}
             label={t('tillName')}
+            required
           >
             <TextInput
               disabled={!mutationsAllowed}
@@ -560,6 +642,69 @@ function CashRegisterEdit({
               value={name}
             />
           </Field>
+          <div className="rz-inset grid gap-1">
+            <p className="rz-muted m-0">
+              {t('tillType', { type: registerType(register.type) })}
+            </p>
+            <p className="rz-caption m-0">{t('typeFixed')}</p>
+          </div>
+          {register.type === 'cash' && (
+            <fieldset className="grid gap-3">
+              <legend className="rz-label mb-2">{t('currencies')}</legend>
+              <div className="grid gap-2">
+                {Object.entries(register.balances).map(([code, balance]) => {
+                  const supportedCode = parseCurrency(code)
+                  const canRemove = mutationsAllowed && balance === 0
+                  return (
+                    <div
+                      className="rz-inset flex items-center justify-between gap-3 py-2"
+                      key={code}
+                    >
+                      <div>
+                        <p className="text-app-strong m-0 font-semibold">
+                          {code} (
+                          {supportedCode
+                            ? currencyName(supportedCode, locale)
+                            : code}
+                          )
+                        </p>
+                        <p className="rz-caption rz-mono m-0">
+                          {money(balance, code)}
+                        </p>
+                      </div>
+                      {canRemove && (
+                        <Button
+                          aria-label={`${t('removeCurrency')} ${code}`}
+                          disabled={busy}
+                          onClick={() => void changeCurrency(code, 'remove')}
+                          type="button"
+                        >
+                          {t('removeCurrency')}
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {mutationsAllowed && (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {SUPPORTED_CURRENCIES.filter(
+                    (code) => !(code in register.balances),
+                  ).map((code) => (
+                    <Button
+                      aria-label={`${t('addCurrency')} ${code}`}
+                      disabled={busy}
+                      key={code}
+                      onClick={() => void changeCurrency(code, 'add')}
+                      type="button"
+                    >
+                      + {code}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+          )}
         </form>
       )}
     </Sheet>
@@ -585,6 +730,7 @@ function CashRegisterForm({
   const [type, setType] = useState('cash')
   const { locale } = useLocale()
   const [currencies, setCurrencies] = useState<string[]>(['UAH'])
+  const effectiveCurrencies = type === 'bank' ? ['UAH'] : currencies
   const [initialBalances, setInitialBalances] = useState<
     Record<string, string>
   >({ UAH: '' })
@@ -618,9 +764,9 @@ function CashRegisterForm({
         : await cashApi.create({
             name: name.trim(),
             type,
-            currencies,
+            currencies: effectiveCurrencies,
             initialBalances: Object.fromEntries(
-              currencies
+              effectiveCurrencies
                 .filter((code) => initialBalances[code]?.trim())
                 .map((code) => [code, Number(initialBalances[code])]),
             ),
@@ -671,7 +817,7 @@ function CashRegisterForm({
         id={CASH_REGISTER_FORM}
         onSubmit={(event) => void save(event)}
       >
-        <Field hint={t('nameHint')} label={t('name')}>
+        <Field hint={t('nameHint')} label={t('name')} required>
           <TextInput
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -679,17 +825,15 @@ function CashRegisterForm({
           />
         </Field>
         {registerId ? (
-          <div className="border-app-line bg-app-canvas rounded-control grid gap-1 border px-3.5 py-3">
-            <p className="text-app-muted text-[14.5px]">
+          <div className="rz-inset grid gap-1">
+            <p className="rz-muted m-0">
               {t('tillType', { type: registerType(type) })}
             </p>
-            <p className="text-app-dim text-[12.5px]">{t('typeFixed')}</p>
+            <p className="rz-caption m-0">{t('typeFixed')}</p>
           </div>
         ) : (
           <fieldset className="grid gap-2">
-            <legend className="text-app-muted text-sm font-semibold">
-              {t('colType')}
-            </legend>
+            <legend className="rz-h-card mb-2">{t('colType')}</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {[
                 {
@@ -703,79 +847,67 @@ function CashRegisterForm({
                   hint: t('bankOptionHint'),
                 },
               ].map((option) => (
-                <button
-                  aria-pressed={type === option.value}
-                  className={cn(
-                    'border-app-line rounded-control grid min-h-20 gap-1 border p-3 text-left',
-                    type === option.value
-                      ? 'border-brand bg-brand/10'
-                      : 'bg-app-input',
-                  )}
-                  key={option.value}
-                  onClick={() => setType(option.value)}
-                  type="button"
-                >
-                  <span className="font-semibold text-white">
-                    {option.label}
+                <label className="rz-choice-card" key={option.value}>
+                  <input
+                    checked={type === option.value}
+                    className="rz-radio mt-0.5 shrink-0"
+                    name="cash-register-type"
+                    onChange={() => setType(option.value)}
+                    type="radio"
+                    value={option.value}
+                  />
+                  <span className="grid min-w-0 gap-0.5">
+                    <span className="rz-strong font-semibold">
+                      {option.label}
+                    </span>
+                    <span className="rz-caption">{option.hint}</span>
                   </span>
-                  <span className="text-app-dim text-xs">{option.hint}</span>
-                </button>
+                </label>
               ))}
             </div>
           </fieldset>
         )}
         {!registerId && (
           <>
-            <fieldset className="grid gap-2">
-              <legend className="text-app-muted text-sm font-semibold">
-                {t('currencies')}
-              </legend>
-              {/* The supported catalog with ISO codes: symbols cannot tell
+            {type !== 'bank' && (
+              <fieldset className="grid gap-2">
+                <legend className="rz-label mb-2">{t('currencies')}</legend>
+                {/* The supported catalog with ISO codes: symbols cannot tell
                   CAD from USD. A till may keep any of them; this is not the
                   accounting currency. */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {SUPPORTED_CURRENCIES.map((code) => {
-                  const selected = currencies.includes(code)
-                  return (
-                    <button
-                      aria-label={`${code} (${currencyName(code, locale)})`}
-                      aria-pressed={selected}
-                      className={cn(
-                        'border-app-line rounded-control grid min-h-14 content-center gap-0.5 border px-3 py-2 text-left',
-                        selected
-                          ? 'border-brand bg-brand/10 text-white'
-                          : 'bg-app-input text-app-muted',
-                      )}
-                      key={code}
-                      onClick={() =>
-                        setCurrencies((current) =>
-                          selected
-                            ? current.length === 1
-                              ? current
-                              : current.filter((item) => item !== code)
-                            : [...current, code],
-                        )
-                      }
-                      type="button"
-                    >
-                      <span className="font-mono text-sm font-bold">
+                <div className="rz-seg grid w-full grid-cols-5">
+                  {SUPPORTED_CURRENCIES.map((code) => {
+                    const selected = currencies.includes(code)
+                    return (
+                      <button
+                        aria-label={`${code} (${currencyName(code, locale)})`}
+                        aria-pressed={selected}
+                        className="justify-center px-1 font-mono font-semibold"
+                        key={code}
+                        onClick={() =>
+                          setCurrencies((current) =>
+                            selected
+                              ? current.length === 1
+                                ? current
+                                : current.filter((item) => item !== code)
+                              : [...current, code],
+                          )
+                        }
+                        title={currencyName(code, locale)}
+                        type="button"
+                      >
                         {code}
-                      </span>
-                      <span className="text-app-dim text-[11px] leading-tight text-pretty">
-                        {currencyName(code, locale)}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+            )}
             <fieldset className="grid gap-3">
-              <legend className="text-app-muted text-sm font-semibold">
-                {t('initialBalances')}
-              </legend>
-              <p className="text-app-dim text-xs">{t('initialBalancesHint')}</p>
+              <legend className="rz-h-card mb-2">{t('initialBalances')}</legend>
+              <p className="rz-hint m-0">{t('initialBalancesHint')}</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                {currencies.map((code) => (
+                {effectiveCurrencies.map((code) => (
                   <Field key={code} label={t('balanceOf', { code })}>
                     <TextInput
                       inputMode="decimal"

@@ -1,7 +1,7 @@
-import { PageBody, PageHeader } from '@/components/app'
 import { useLocale } from '@/i18n'
 import { moduleLabel } from '../module-messages'
 import type { CabinetModuleDefinition } from '../module-registry'
+import { RedesignShell, RedesignTitle } from '../redesign-shell'
 
 export function CabinetModuleScreen({
   definition,
@@ -9,9 +9,10 @@ export function CabinetModuleScreen({
   definition: CabinetModuleDefinition
 }) {
   const { locale } = useLocale()
+  const label = moduleLabel(definition.key, locale)
   return (
-    <PageBody>
-      <PageHeader title={moduleLabel(definition.key, locale)} />
-    </PageBody>
+    <RedesignShell crumb={<span aria-current="page">{label}</span>}>
+      <RedesignTitle title={label} />
+    </RedesignShell>
   )
 }

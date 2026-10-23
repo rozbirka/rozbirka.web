@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}@keyframes rz-spin{to{transform:rotate(360deg)}}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+</helmet>
+<div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B1 · Базові контроли</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Button</h1>
+      <p style="margin:0;max-width:72ch;color:var(--rz-text-muted)">Одна кнопка на весь кабінет. Primary — одна на екран або на панель. Звичайна кнопка має type="button", submit задається явно. Іконкова кнопка завжди має aria-label.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: src/components/app/button.tsx, button-variants.ts · ghost → secondary, quiet → ghost</p>
+    </header>
+
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <section data-theme="{{ t.id }}" style="display:grid;gap:20px;padding:24px;background:var(--rz-bg);color:var(--rz-text);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg)">
+        <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">{{ t.label }}</p>
+
+        <div style="overflow-x:auto">
+          <div style="display:grid;grid-template-columns:96px repeat(6,minmax(128px,1fr));gap:12px 16px;align-items:center;min-width:920px">
+            <span></span>
+            <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Звичайна</span>
+            <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Наведення</span>
+            <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Натиснута</span>
+            <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Фокус</span>
+            <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Вимкнена</span>
+            <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Виконується</span>
+
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">primary</span>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;white-space:nowrap;cursor:pointer;transition:background var(--rz-dur-fast) var(--rz-ease)" style-hover="background:var(--rz-brand-hover)" style-active="transform:translateY(1px)">Зберегти</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand-hover);color:var(--rz-on-brand);font-weight:600;white-space:nowrap">Зберегти</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;white-space:nowrap;transform:translateY(1px)">Зберегти</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;white-space:nowrap;box-shadow:var(--rz-focus)">Зберегти</button></div>
+            <div><button type="button" disabled style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;white-space:nowrap;opacity:0.5;cursor:not-allowed">Зберегти</button></div>
+            <div><button type="button" aria-busy="true" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;white-space:nowrap;opacity:0.75;cursor:wait">{{ spinner }}Зберігаємо…</button></div>
+
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">secondary</span>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;white-space:nowrap;cursor:pointer;transition:background var(--rz-dur-fast) var(--rz-ease)" style-hover="background:var(--rz-fill-hover)" style-active="background:var(--rz-fill-active);transform:translateY(1px)">Скасувати</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-fill-hover);color:var(--rz-text);font-weight:500;white-space:nowrap">Скасувати</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-fill-active);color:var(--rz-text);font-weight:500;white-space:nowrap;transform:translateY(1px)">Скасувати</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;white-space:nowrap;box-shadow:var(--rz-focus)">Скасувати</button></div>
+            <div><button type="button" disabled style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;white-space:nowrap;opacity:0.5;cursor:not-allowed">Скасувати</button></div>
+            <div><button type="button" aria-busy="true" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;white-space:nowrap;opacity:0.75;cursor:wait">{{ spinner }}Оновити</button></div>
+
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">ghost</span>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);font-weight:500;white-space:nowrap;cursor:pointer;transition:background var(--rz-dur-fast) var(--rz-ease)" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)" style-active="background:var(--rz-fill-active)">Редагувати</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-fill-hover);color:var(--rz-text);font-weight:500;white-space:nowrap">Редагувати</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-fill-active);color:var(--rz-text);font-weight:500;white-space:nowrap">Редагувати</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);font-weight:500;white-space:nowrap;box-shadow:var(--rz-focus)">Редагувати</button></div>
+            <div><button type="button" disabled style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);font-weight:500;white-space:nowrap;opacity:0.5;cursor:not-allowed">Редагувати</button></div>
+            <div><button type="button" aria-busy="true" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);font-weight:500;white-space:nowrap;opacity:0.75;cursor:wait">{{ spinner }}Завантаження…</button></div>
+
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">danger</span>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-danger);font-weight:500;white-space:nowrap;cursor:pointer;transition:background var(--rz-dur-fast) var(--rz-ease)" style-hover="background:var(--rz-danger-soft)" style-active="transform:translateY(1px)">Видалити</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger);font-weight:500;white-space:nowrap">Видалити</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:color-mix(in srgb, var(--rz-danger) 22%, transparent);color:var(--rz-danger);font-weight:500;white-space:nowrap;transform:translateY(1px)">Видалити</button></div>
+            <div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-danger);font-weight:500;white-space:nowrap;box-shadow:var(--rz-focus)">Видалити</button></div>
+            <div><button type="button" disabled style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-danger);font-weight:500;white-space:nowrap;opacity:0.5;cursor:not-allowed">Видалити</button></div>
+            <div><button type="button" aria-busy="true" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-danger);font-weight:500;white-space:nowrap;opacity:0.75;cursor:wait">{{ spinner }}Видалити</button></div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:10px;padding-top:16px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Розміри</p>
+          <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px">
+            <div style="display:grid;gap:6px;justify-items:start"><button type="button" style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text);font-size:var(--rz-fs-caption);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">Змінити</button><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">sm · 24 · у рядку таблиці</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-plus" style="font-size:var(--rz-icon)"></i>Додати</button><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">md · control-h</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h-lg);padding:0 12px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-plus" style="font-size:var(--rz-icon)"></i>Додати</button><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">lg · control-h-lg · форми</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><button type="button" style="display:inline-flex;align-items:center;gap:8px;height:var(--rz-target-touch);padding:0 16px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-size:var(--rz-fs-input);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-plus" style="font-size:var(--rz-icon-md)"></i>Додати</button><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">touch · 44 · mobile</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><button type="button" style="display:inline-flex;align-items:center;gap:8px;height:var(--rz-target-glove);padding:0 20px;border:1px solid transparent;border-radius:var(--rz-r-md);background:var(--rz-brand);color:var(--rz-on-brand);font-size:var(--rz-fs-title);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-scan-line" style="font-size:var(--rz-icon-lg)"></i>Сканувати</button><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">glove · 56 · склад, сканер</span></div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:10px;padding-top:16px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Іконкові та композиції</p>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+            <div style="display:flex;gap:4px">
+              <button type="button" aria-label="Редагувати" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-pencil" style="font-size:var(--rz-icon)"></i></button>
+              <button type="button" aria-label="Дії" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-ellipsis" style="font-size:var(--rz-icon-md)"></i></button>
+              <button type="button" aria-label="Закрити" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:var(--rz-icon-md)"></i></button>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-upload" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i>Імпорт запчастин</button>
+              <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-plus" style="font-size:var(--rz-icon)"></i>Додати деталь</button>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)">Скасувати</button>
+              <button type="submit" style="display:inline-flex;align-items:center;gap:8px;height:var(--rz-control-h);padding:0 6px 0 10px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)">Зберегти<span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);padding:0 4px;border-radius:var(--rz-r-xs);background:rgb(0 0 0 / 0.14)">⌘↵</span></button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </sc-for>
+
+    <section style="display:grid;gap:10px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Props</h2>
+      <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden">
+        <sc-for list="{{ props }}" as="p" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:140px 260px minmax(0,1fr);gap:16px;padding:8px 12px;border-top:1px solid var(--rz-border);background:var(--rz-surface)">
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-strong)">{{ p.name }}</span>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">{{ p.type }}</span>
+            <span style="color:var(--rz-text-muted)">{{ p.note }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <h2 style="margin:12px 0 0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Primary — максимум одна в області дій (topbar, footer шторки, діалог).</li>
+        <li>Danger — лише для незворотних дій; завжди веде в ConfirmDialog.</li>
+        <li>Під час виконання кнопка лишається на місці, текст змінюється на «Зберігаємо…», aria-busy="true", повторне натискання ігнорується.</li>
+        <li>Вимкнена кнопка з причиною (немає права, ліміт) має підказку з текстом причини поруч, а не лише tooltip.</li>
+        <li>На pointer: coarse висота автоматично 44px. На складі та в сканері — розмір glove.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      density: this.props.density ?? 'compact',
+      themes: [{ id: 'dark', label: 'Темна тема' }, { id: 'light', label: 'Світла тема' }],
+      spinner: React.createElement('i', { className: 'icon-loader-circle', 'aria-hidden': true, style: { fontSize: 14, display: 'inline-block', animation: 'rz-spin 0.8s linear infinite' } }),
+      props: [
+        { name: 'variant', type: "'primary' | 'secondary' | 'ghost' | 'danger'", note: 'За замовчуванням secondary.' },
+        { name: 'size', type: "'sm' | 'md' | 'lg' | 'touch' | 'glove'", note: 'md = --rz-control-h, залежить від density.' },
+        { name: 'icon', type: 'LucideIcon', note: 'Ліва іконка 14px, колір text-muted (на primary — on-brand).' },
+        { name: 'iconOnly', type: 'boolean', note: 'Квадрат; aria-label обовʼязковий.' },
+        { name: 'loading', type: 'boolean', note: 'Спінер + aria-busy, клік ігнорується.' },
+        { name: 'disabled', type: 'boolean', note: 'opacity 0.5, cursor not-allowed.' },
+        { name: 'shortcut', type: 'string', note: 'Kbd-підказка праворуч (⌘↵), лише на desktop.' },
+        { name: 'type', type: "'button' | 'submit'", note: 'За замовчуванням button.' },
+        { name: 'asChild', type: 'boolean', note: 'Рендерить посилання з виглядом кнопки.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

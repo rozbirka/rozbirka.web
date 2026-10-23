@@ -6,7 +6,7 @@ import {
   useState,
   type ComponentType,
 } from 'react'
-import { Download, Printer, RefreshCw } from 'lucide-react'
+import { Calendar, Download, FileText, Printer, RefreshCw } from 'lucide-react'
 import {
   Button,
   DataTable,
@@ -14,24 +14,31 @@ import {
   EmptyState,
   Field,
   Notice,
-  PageBody,
-  PageHeader,
-  SectionPanel,
   SkeletonRows,
   StatusPill,
   TextInput,
   formatFileSize,
   useOperation,
+  useOptionalToast,
   type StatusTone,
 } from '@/components/app'
 import { reportsApi, type ReportJob } from '@/api/reports'
 import { normalizeApiProblem } from '@/api/errors'
+import { localizeApiError } from '@/api/error-localization'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
+import {
+  commonMessages,
+  intlLocale,
+  translate,
+  useLocale,
+  useT,
+  type Locale,
+} from '@/i18n'
 import { reportsMessages } from './messages'
+import { RecordShell } from '../billing/billing-shell'
 
 type ReportsKey = keyof (typeof reportsMessages)['uk']
 
@@ -122,20 +129,9 @@ const rangeProblems = (range: DateRange, locale: Locale) => ({
       : null,
 })
 
-const localDayBoundaryUtc = (value: string, endOfDay: boolean) => {
-  const year = Number(value.slice(0, 4))
-  const month = Number(value.slice(5, 7))
-  const day = Number(value.slice(8, 10))
-  return new Date(
-    year,
-    month - 1,
-    day,
-    endOfDay ? 23 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 999 : 0,
-  ).toISOString()
-}
+// Core stores calendar dates and applies the report's business time zone itself.
+const calendarBoundary = (value: string, endOfDay: boolean) =>
+  `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`
 
 const statusOf = (report: ReportJob): DisplayStatus => {
   if (
@@ -198,6 +194,61 @@ const progressText = (
     : translate(reportsMessages, locale, 'progressPercent', { percent })
 }
 
+/**
+ * A report period the way the reference writes it — "15.10 – 21.10.2026":
+ * the start drops the year when both ends share it.
+ */
+const periodLabel = (from: string, to: string, locale: Locale) => {
+  const day = (value: string) => new Date(`${value}T00:00:00Z`)
+  const options = { day: '2-digit', month: '2-digit', timeZone: 'UTC' } as const
+  const full = new Intl.DateTimeFormat(intlLocale(locale), {
+    ...options,
+    year: 'numeric',
+  })
+  const start =
+    from.slice(0, 4) === to.slice(0, 4)
+      ? new Intl.DateTimeFormat(intlLocale(locale), options).format(day(from))
+      : full.format(day(from))
+  return `${start} – ${full.format(day(to))}`
+}
+
+/**
+ * A date field with the calendar mark the reference draws inside it; the
+ * native picker keeps the platform's keyboard and screen-reader behaviour.
+ */
+function DateField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <span className="relative block">
+      <Calendar
+        aria-hidden
+        className="text-app-dim pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+      />
+      <TextInput
+        className="cursor-pointer pl-8 font-mono [&::-webkit-calendar-picker-indicator]:hidden"
+        onChange={(event) => onChange(event.target.value)}
+        onClick={(event) => {
+          // The native indicator is hidden in favour of the leading mark;
+          // the whole field opens the picker instead.
+          try {
+            event.currentTarget.showPicker()
+          } catch {
+            // Not supported or not allowed: typing still works.
+          }
+        }}
+        required
+        type="date"
+        value={value}
+      />
+    </span>
+  )
+}
+
 const sameReport = (left: ReportJob, right: ReportJob) =>
   left.id === right.id &&
   left.type === right.type &&
@@ -211,7 +262,9 @@ const sameReport = (left: ReportJob, right: ReportJob) =>
   left.completedAt === right.completedAt &&
   left.expiresAt === right.expiresAt &&
   left.errorMessage === right.errorMessage &&
-  left.fileSizeBytes === right.fileSizeBytes
+  left.fileSizeBytes === right.fileSizeBytes &&
+  left.period?.from === right.period?.from &&
+  left.period?.to === right.period?.to
 
 export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   definition,
@@ -220,6 +273,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   const { locale } = useLocale()
   const t = useT(reportsMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const scope = useMemo<Scope | null>(() => {
     const snapshot = cabinet.snapshot
@@ -237,9 +291,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   const [creatingScopeKey, setCreatingScopeKey] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<ScopedDownload | null>(null)
   /**
-   * The list endpoint does not return the range a job covers, so the period is
-   * known only for jobs this session asked for — in this tenant. Everything
-   * else says the period is unknown rather than guessing one.
+   * Compatibility fallback for jobs created against an older Core version.
+   * Persisted API periods take precedence and survive reopening the screen.
    */
   const [periods, setPeriods] = useState<Record<string, ScopedPeriod>>({})
   const currentScopeRef = useRef(scope?.key ?? null)
@@ -377,8 +430,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         {
           type: 'carSales',
           carSales: {
-            from: localDayBoundaryUtc(range.from, false),
-            to: localDayBoundaryUtc(range.to, true),
+            from: calendarBoundary(range.from, false),
+            to: calendarBoundary(range.to, true),
           },
         },
         { signal },
@@ -394,6 +447,9 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         [created.id]: { key: owner, range: { ...range } },
       }))
       setReportsScopeKey(access.key)
+      // Notifications rule (module 00 §5): an action that went through is a
+      // toast; the row itself then shows the job's progress.
+      toast?.show({ tone: 'ok', message: t('createdToast') })
     } catch {
       if (!signal.aborted && currentScopeRef.current === access.key) {
         setError({
@@ -407,7 +463,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         if (currentScopeRef.current === access.key) setCreatingScopeKey(null)
       }
     }
-  }, [range, requireLatestMutation])
+  }, [range, requireLatestMutation, t, toast])
 
   const transfer = async (print: boolean) => {
     const report = transferRef.current
@@ -420,7 +476,10 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
     ) {
       return
     }
-    const popup = print ? window.open('', '_blank', 'noopener') : null
+    // Keep the handle for PDF navigation/printing: the noopener feature itself
+    // makes open() return null even when the browser opens the window.
+    const popup = print ? window.open('', '_blank') : null
+    if (popup) popup.opener = null
     const controller = new AbortController()
     const signal = AbortSignal.any([
       controller.signal,
@@ -438,8 +497,28 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       if (print && popup === null) throw new PrintWindowBlockedError()
       const url = URL.createObjectURL(file.blob)
       if (print && popup) {
-        popup.addEventListener('load', () => popup.print(), { once: true })
-        popup.location.href = url
+        // Keep the blank window's document: navigating it to a PDF discards
+        // listeners on the old Window. The frame's load belongs to the PDF.
+        const frame = popup.document.createElement('iframe')
+        popup.document.title = file.filename
+        frame.title = file.filename
+        Object.assign(frame.style, {
+          position: 'fixed',
+          inset: '0',
+          width: '100%',
+          height: '100%',
+          border: '0',
+        })
+        frame.addEventListener(
+          'load',
+          () => {
+            popup.focus()
+            frame.contentWindow?.print()
+          },
+          { once: true },
+        )
+        frame.src = url
+        popup.document.body.replaceChildren(frame)
       } else if (!print) {
         const anchor = document.createElement('a')
         anchor.href = url
@@ -487,12 +566,16 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   const transferError = savePdf.error ?? printPdf.error
 
   return (
-    <PageBody aria-labelledby="reports-title" className="gap-5">
-      <PageHeader
-        eyebrow={t('eyebrow')}
-        title={<span id="reports-title">{t('title')}</span>}
-      />
-      <p className="text-app-muted max-w-[60ch] text-sm">{t('lead')}</p>
+    <RecordShell
+      crumb={`${t('eyebrow')} · ${t('title')}`}
+      labelledBy="reports-title"
+    >
+      <div className="rz-page-head">
+        <h1 className="rz-h-page" id="reports-title">
+          {t('title')}
+        </h1>
+        <span className="rz-muted">{t('lead')}</span>
+      </div>
 
       {canManage ? (
         <form
@@ -504,59 +587,54 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
             void createReport()
           }}
         >
-          <SectionPanel
-            description={t('newReportHint')}
-            footer={
-              <Button
-                aria-busy={isCreating}
-                disabled={isCreating || !rangeIsValid}
-                type="submit"
-                variant="primary"
-              >
-                {isCreating ? t('creating') : t('create')}
-              </Button>
-            }
-            title={t('newReport')}
-          >
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field
-                error={problems.from}
-                hint={t('fromHint')}
-                label={t('fromLabel')}
-                required
-              >
-                <TextInput
-                  onChange={(event) =>
-                    setRange((current) => ({
-                      ...current,
-                      from: event.target.value,
-                    }))
-                  }
+          <section aria-labelledby="new-report-title" className="rz-card">
+            <header className="rz-card__head grid content-center gap-0.5 py-2.5">
+              <h2 className="rz-h-card" id="new-report-title">
+                {t('newReport')}
+              </h2>
+              <p className="rz-caption m-0">{t('newReportHint')}</p>
+            </header>
+            <div className="rz-card__body grid gap-3">
+              <div className="grid gap-3 sm:grid-cols-[repeat(2,minmax(0,236px))]">
+                <Field
+                  error={problems.from}
+                  hint={t('fromHint')}
+                  label={t('fromLabel')}
                   required
-                  type="date"
-                  value={range.from}
-                />
-              </Field>
-              <Field
-                error={problems.to}
-                hint={t('toHint')}
-                label={t('toLabel')}
-                required
-              >
-                <TextInput
-                  onChange={(event) =>
-                    setRange((current) => ({
-                      ...current,
-                      to: event.target.value,
-                    }))
-                  }
+                >
+                  <DateField
+                    onChange={(value) =>
+                      setRange((current) => ({ ...current, from: value }))
+                    }
+                    value={range.from}
+                  />
+                </Field>
+                <Field
+                  error={problems.to}
+                  hint={t('toHint')}
+                  label={t('toLabel')}
                   required
-                  type="date"
-                  value={range.to}
-                />
-              </Field>
+                >
+                  <DateField
+                    onChange={(value) =>
+                      setRange((current) => ({ ...current, to: value }))
+                    }
+                    value={range.to}
+                  />
+                </Field>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  aria-busy={isCreating}
+                  disabled={isCreating || !rangeIsValid}
+                  type="submit"
+                  variant="primary"
+                >
+                  {isCreating ? t('creating') : t('create')}
+                </Button>
+              </div>
             </div>
-          </SectionPanel>
+          </section>
         </form>
       ) : (
         <Notice tone="info">{t('viewOnly')}</Notice>
@@ -566,7 +644,12 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       {transferError ? <Notice tone="danger">{transferError}</Notice> : null}
 
       {isLoading ? (
-        <SkeletonRows label={t('loading')} rows={3} />
+        <SkeletonRows
+          columnWidths={['2fr', '1fr', '3fr']}
+          details
+          label={t('loading')}
+          rows={3}
+        />
       ) : (
         <DataTable
           caption={t('list')}
@@ -577,11 +660,20 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
               variant: 'primary',
               cell: (report) => {
                 const known = periods[report.id]
-                const period = known?.key === scopeKey ? known.range : undefined
+                const persisted = report.period
+                const period =
+                  persisted && validRange(persisted)
+                    ? persisted
+                    : known?.key === scopeKey
+                      ? known.range
+                      : undefined
                 if (period === undefined) {
                   return (
                     <>
-                      <span aria-hidden className="text-app-dim">
+                      <span
+                        aria-hidden
+                        className="rz-dim inline-block min-w-44"
+                      >
                         —
                       </span>
                       <span className="sr-only">{t('periodUnknown')}</span>
@@ -589,10 +681,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                   )
                 }
                 return (
-                  <span className="inline-flex flex-wrap items-baseline gap-1">
-                    <DateValue value={period.from} withTime={false} />
-                    <span aria-hidden>—</span>
-                    <DateValue value={period.to} withTime={false} />
+                  <span className="rz-mono inline-block min-w-44">
+                    {periodLabel(period.from, period.to, locale)}
                   </span>
                 )
               },
@@ -600,7 +690,12 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
             {
               key: 'requested',
               label: t('columnCreated'),
-              cell: (report) => <DateValue value={report.requestedAt} />,
+              cell: (report) => (
+                <DateValue
+                  className="rz-mono text-app-muted"
+                  value={report.requestedAt}
+                />
+              ),
             },
             {
               key: 'status',
@@ -610,7 +705,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                 const pill = statusPill[status]
                 const percent = percentOf(report)
                 return (
-                  <span className="grid min-w-0 justify-items-end gap-1.5 md:justify-items-start">
+                  <span className="grid min-w-0 justify-items-end gap-1 py-2 md:justify-items-start">
                     <StatusPill tone={pill.tone}>{t(pill.message)}</StatusPill>
                     {isPollingStatus(status) ? (
                       <span
@@ -618,16 +713,13 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                         className="grid w-full justify-items-end gap-1 md:justify-items-start"
                         role="status"
                       >
-                        <span className="text-app-muted text-[12.5px]">
+                        <span className="rz-caption rz-muted">
                           {progressText(report, status, locale)}
                         </span>
                         {percent === null ? null : (
-                          <span
-                            aria-hidden
-                            className="block h-1 w-24 overflow-hidden rounded-full bg-white/10"
-                          >
+                          <span aria-hidden className="rz-meter w-24">
                             <span
-                              className="bg-brand block h-full transition-all duration-500"
+                              className="bg-state-info transition-[width] duration-[var(--rz-dur-slow)]"
                               style={{ width: `${String(percent)}%` }}
                             />
                           </span>
@@ -635,15 +727,23 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'failed' ? (
-                      <span className="text-app-muted text-[12.5px]">
+                      <span className="rz-caption rz-muted">
                         {report.errorMessage
-                          ? t('failedReason', { reason: report.errorMessage })
+                          ? t('failedReason', {
+                              reason: localizeApiError(
+                                {
+                                  message: report.errorMessage,
+                                  kind: 'server',
+                                },
+                                locale,
+                              ),
+                            })
                           : t('failedUnknown')}{' '}
                         {canManage ? t('replaceHint') : t('askOwner')}
                       </span>
                     ) : null}
                     {status === 'expired' ? (
-                      <span className="text-app-muted text-[12.5px]">
+                      <span className="rz-caption rz-muted">
                         {t('expiredPrefix')}{' '}
                         <DateValue value={report.expiresAt} withTime={false} />,{' '}
                         {t('fileDeleted')}{' '}
@@ -651,7 +751,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'completed' ? (
-                      <span className="text-app-dim text-[12.5px]">
+                      <span className="rz-caption">
                         PDF
                         {report.fileSizeBytes === null
                           ? ''
@@ -674,7 +774,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                 if (status === 'completed') {
                   const active = currentDownloading === report.id
                   return (
-                    <span className="flex w-full flex-wrap justify-end gap-2">
+                    <span className="flex w-full justify-end gap-2 whitespace-nowrap font-(family-name:--rz-font)">
                       <Button
                         aria-busy={savePdf.pending && active}
                         disabled={transferBusy}
@@ -682,7 +782,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                           transferRef.current = report
                           savePdf.run()
                         }}
-                        variant="primary"
+                        size="sm"
                       >
                         <Download aria-hidden />
                         {t('downloadPdf')}
@@ -690,6 +790,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       <Button
                         aria-busy={printPdf.pending && active}
                         disabled={transferBusy}
+                        size="sm"
                         onClick={() => {
                           transferRef.current = report
                           printPdf.run()
@@ -706,10 +807,11 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                   (status === 'failed' || status === 'expired')
                 ) {
                   return (
-                    <span className="flex w-full justify-end">
+                    <span className="flex w-full justify-end font-(family-name:--rz-font)">
                       <Button
                         disabled={isCreating || !rangeIsValid}
                         onClick={() => void createReport()}
+                        size="sm"
                       >
                         <RefreshCw aria-hidden />
                         {status === 'failed'
@@ -725,15 +827,18 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
           ]}
           empty={
             <EmptyState
+              className="min-h-[220px] border-0"
               description={t('emptyDescription')}
+              icon={<FileText aria-hidden />}
               label={t('list')}
               title={t('emptyTitle')}
+              tone="neutral"
             />
           }
           rowKey={(report) => report.id}
           rows={visibleReports}
         />
       )}
-    </PageBody>
+    </RecordShell>
   )
 }

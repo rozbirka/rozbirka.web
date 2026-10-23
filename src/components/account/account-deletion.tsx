@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useAuth } from '@/auth/AuthContext'
 import { credentials } from '@/api/credentials'
 import { profileApi } from '@/api/profile'
 import { tenantPreference } from '@/api/tenant-preference'
 import { Button, Field, Notice, TextInput } from '@/components/app'
 import { commonMessages, useT } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { accountMessages } from './account-messages'
 
 const CONFIRMATION_DELAY_SECONDS = 5
 
-export function AccountDeletion() {
+export function AccountDeletion({ compact = false }: { compact?: boolean }) {
   const auth = useAuth()
   const t = useT(accountMessages)
   const tc = useT(commonMessages)
@@ -19,6 +20,7 @@ export function AccountDeletion() {
   >('idle')
   const [confirmation, setConfirmation] = useState('')
   const [secondsLeft, setSecondsLeft] = useState(CONFIRMATION_DELAY_SECONDS)
+  const titleId = useId()
   const mounted = useRef(true)
   const active = useRef(false)
   useEffect(() => {
@@ -65,14 +67,34 @@ export function AccountDeletion() {
       active.current = false
     }
   }
-  return (
-    <section className="border-state-danger/30 bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-      <h2 className="text-app-ink text-[15px] font-bold">{t('deleteTitle')}</h2>
-      <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
-        {t('deleteBody')}
-      </p>
+  const startButton = (
+    <Button
+      className={compact ? undefined : 'rz-btn--block mt-3'}
+      onClick={() => {
+        setConfirmation('')
+        setSecondsLeft(CONFIRMATION_DELAY_SECONDS)
+        setDeleteState('confirming')
+      }}
+      variant="danger"
+    >
+      {t('deleteTitle')}
+    </Button>
+  )
+  const flow = (
+    <>
+      {(!compact || deleteState !== 'idle') && (
+        <p
+          className={
+            compact
+              ? 'text-app-muted m-0 text-pretty'
+              : 'text-app-muted mt-2 mb-0 text-pretty'
+          }
+        >
+          {t('deleteBody')}
+        </p>
+      )}
       {deleteState === 'error' && (
-        <div className="mt-3">
+        <div className={compact ? undefined : 'mt-3'}>
           <Notice tone="danger">{t('deleteFailed')}</Notice>
         </div>
       )}
@@ -80,14 +102,20 @@ export function AccountDeletion() {
         <div
           aria-labelledby="delete-account-title"
           aria-live="polite"
-          className="border-state-danger/30 rounded-panel mt-3.5 grid gap-3 border p-4"
+          className={cn(
+            'rz-inset bg-state-danger-soft grid gap-3',
+            !compact && 'mt-3',
+          )}
           role="group"
         >
-          <p className="text-sm text-white" id="delete-account-title">
+          <p
+            className="text-app-strong m-0 font-medium"
+            id="delete-account-title"
+          >
             {t('confirmPrompt')}
           </p>
           {deleteState === 'pending' ? (
-            <p className="text-app-muted text-sm" role="status">
+            <p className="text-app-muted m-0" role="status">
               {t('deleting')}
             </p>
           ) : (
@@ -99,12 +127,12 @@ export function AccountDeletion() {
                   value={confirmation}
                 />
               </Field>
-              <p className="text-app-dim text-[12.5px]" role="status">
+              <p className="rz-caption m-0" role="status">
                 {secondsLeft > 0
                   ? t('waitSeconds', { seconds: secondsLeft })
                   : t('waitOver')}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="rz-btn-row">
                 <Button
                   onClick={() => {
                     setDeleteState('idle')
@@ -127,19 +155,37 @@ export function AccountDeletion() {
             </div>
           )}
         </div>
-      ) : (
-        <Button
-          className="mt-3.5 w-full justify-center"
-          onClick={() => {
-            setConfirmation('')
-            setSecondsLeft(CONFIRMATION_DELAY_SECONDS)
-            setDeleteState('confirming')
-          }}
-          variant="danger"
-        >
-          {t('deleteTitle')}
-        </Button>
+      ) : compact ? null : (
+        startButton
       )}
+    </>
+  )
+
+  if (compact) {
+    // In the cabinet the deletion is an aside card, as the module page has
+    // it: the title and the way in on the head band, the consequence and the
+    // confirmation in the body only once it has been asked for.
+    const idle = deleteState === 'idle'
+    return (
+      <section aria-labelledby={titleId} className="rz-card min-w-0">
+        <header className="rz-card__head py-2.5">
+          <h2 className="rz-h-card" id={titleId}>
+            {t('deleteTitle')}
+          </h2>
+          {idle ? startButton : null}
+        </header>
+        {idle ? null : <div className="rz-card__body grid gap-3">{flow}</div>}
+      </section>
+    )
+  }
+
+  return (
+    <section
+      aria-label={t('deleteTitle')}
+      className="rz-card rz-card__body min-w-0"
+    >
+      <h2 className="rz-h-card">{t('deleteTitle')}</h2>
+      {flow}
     </section>
   )
 }

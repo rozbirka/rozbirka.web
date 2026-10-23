@@ -1,7 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { Lock } from 'lucide-react'
-import { Button, Field, Notice, Skeleton } from '@/components/app'
+import {
+  Button,
+  Field,
+  Notice,
+  SkeletonFields,
+  useOptionalToast,
+} from '@/components/app'
 import { businessApi } from '@/api/business'
 import { normalizeApiProblem } from '@/api/errors'
 import { tenantSettings, type TenantSettings } from '@/api/tenant-settings'
@@ -49,6 +55,8 @@ export function AccountingCurrencySection() {
     cabinetModules.business,
   )
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useOptionalToast()
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const [attempt, setAttempt] = useState(0)
@@ -92,16 +100,27 @@ export function AccountingCurrencySection() {
   const view = status === null ? 'unknown' : currencySettingsView(status, owner)
   const current = fresh?.accountingCurrency ?? null
   const busy = save === 'pending' || save === 'checking'
-  const returnPath =
-    save === 'saved'
-      ? currencyReturnPath(searchParams, `/app/${tenant.slug}`)
-      : null
-
   const accept = (settings: TenantSettings) => {
     setFresh(settings)
     setEditing(false)
     setPicked(null)
     setSave('saved')
+    // Saving is confirmed by a toast (module 00 §5). The way back to the price
+    // form the owner came from rides on it and stays until it is used or closed.
+    const returnPath = currencyReturnPath(searchParams, `/app/${tenant.slug}`)
+    toast?.show({
+      tone: 'ok',
+      message: t('saved'),
+      ...(returnPath === null
+        ? {}
+        : {
+            action: {
+              label: t('backToForm'),
+              onAction: () => void navigate(returnPath),
+            },
+            duration: 0,
+          }),
+    })
   }
 
   const verify = async (target: SupportedCurrency) => {
@@ -164,13 +183,13 @@ export function AccountingCurrencySection() {
 
   const value = (code: SupportedCurrency | null) =>
     code === null ? (
-      <p className="text-app-muted text-[15px]">{t('notSet')}</p>
+      <p className="rz-muted m-0 text-title">{t('notSet')}</p>
     ) : (
-      <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="text-app-ink font-mono text-[15px] font-bold">
+      <p className="m-0 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="rz-mono rz-strong text-title font-semibold">
           {code}
         </span>
-        <span className="text-app-ink text-[15px]">
+        <span className="rz-strong text-title">
           {currencyName(code, locale)}
         </span>
       </p>
@@ -178,24 +197,6 @@ export function AccountingCurrencySection() {
 
   const feedback = (() => {
     switch (save) {
-      case 'saved':
-        return (
-          <Notice
-            action={
-              returnPath === null ? undefined : (
-                <Link
-                  className="text-brand font-semibold underline-offset-4 hover:underline"
-                  to={returnPath}
-                >
-                  {t('backToForm')} →
-                </Link>
-              )
-            }
-            tone="ok"
-          >
-            {t('saved')}
-          </Notice>
-        )
       case 'refused':
         return <Notice tone="danger">{t('refused')}</Notice>
       case 'locked-meanwhile':
@@ -226,7 +227,7 @@ export function AccountingCurrencySection() {
 
   const picker = (
     <form
-      className="grid gap-3.5"
+      className="grid gap-3"
       noValidate
       onSubmit={(event) => {
         event.preventDefault()
@@ -245,7 +246,7 @@ export function AccountingCurrencySection() {
           value={picked ?? current}
         />
       </Field>
-      <div className="flex flex-wrap justify-end gap-2.5">
+      <div className="rz-btn-row justify-end">
         {editing ? (
           <Button
             disabled={busy}
@@ -273,13 +274,7 @@ export function AccountingCurrencySection() {
 
   let body
   if (load === 'loading') {
-    body = (
-      <div aria-busy className="grid gap-2" role="status">
-        <span className="sr-only">{t('loading')}</span>
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-4 w-full" />
-      </div>
-    )
+    body = <SkeletonFields count={1} label={t('loading')} />
   } else if (load === 'error' || view === 'unknown') {
     body = (
       <Notice
@@ -298,31 +293,25 @@ export function AccountingCurrencySection() {
       <>
         <div className="flex flex-wrap items-center gap-3">
           {value(current)}
-          <span className="border-app-line-2 text-app-muted inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold">
+          <span className="rz-pill before:hidden">
             <Lock aria-hidden className="size-3" />
             {t('badge')}
           </span>
         </div>
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('lockedHint')}
-        </p>
+        <p className="rz-muted m-0 text-pretty">{t('lockedHint')}</p>
       </>
     )
   } else if (view === 'read-only') {
     body = (
       <>
         {value(current)}
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('noRights')}
-        </p>
+        <p className="rz-muted m-0 text-pretty">{t('noRights')}</p>
       </>
     )
   } else if (view === 'choose' || editing) {
     body = (
       <>
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('hint')}
-        </p>
+        <p className="rz-muted m-0 text-pretty">{t('hint')}</p>
         {picker}
       </>
     )
@@ -342,9 +331,7 @@ export function AccountingCurrencySection() {
             {t('change')}
           </Button>
         </div>
-        <p className="text-state-warn text-[13px] leading-5 text-pretty">
-          {t('hint')}
-        </p>
+        <p className="text-state-warn m-0 text-pretty">{t('hint')}</p>
       </>
     )
   }
@@ -352,20 +339,20 @@ export function AccountingCurrencySection() {
   return (
     <section
       aria-labelledby={titleId}
-      className="border-app-line bg-app-raised min-w-0 scroll-mt-24 rounded-[20px] border px-5 py-5 outline-none"
+      className="rz-card min-w-0 scroll-mt-24 outline-none"
       // Deep-link target (onboarding: /settings/business#accounting-currency).
       id={BUSINESS_SECTION_IDS.accountingCurrency}
       tabIndex={-1}
     >
-      <div className="flex items-center gap-3">
-        <span className="border-app-line text-app-dim inline-flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[11px]">
-          03
-        </span>
-        <h2 className="text-app-ink text-[15px] font-bold" id={titleId}>
-          {t('title')}
-        </h2>
-      </div>
-      <div className="mt-4 grid gap-3.5">
+      <header className="rz-card__head py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="rz-code rz-code--sm">03</span>
+          <h2 className="rz-h-card" id={titleId}>
+            {t('title')}
+          </h2>
+        </div>
+      </header>
+      <div className="rz-card__body grid gap-3">
         {feedback}
         {body}
       </div>

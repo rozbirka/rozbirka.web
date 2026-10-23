@@ -44,20 +44,13 @@ function Step({
   hint: string
 }) {
   return (
-    <li className="flex items-start gap-3.5">
-      <span
-        aria-hidden
-        className="text-app-muted inline-flex size-6.5 flex-none items-center justify-center rounded-full bg-white/[0.06] font-mono text-[12px]"
-      >
+    <li className="flex items-start gap-3">
+      <span aria-hidden className="rz-steps__n mt-px flex-none">
         {num}
       </span>
       <span className="min-w-0">
-        <span className="text-app-ink block text-[15px] font-bold">
-          {title}
-        </span>
-        <span className="text-app-muted mt-1 block text-[14px] leading-6 text-pretty">
-          {hint}
-        </span>
+        <span className="text-app-strong block font-semibold">{title}</span>
+        <span className="text-app-muted mt-0.5 block text-pretty">{hint}</span>
       </span>
     </li>
   )
@@ -73,16 +66,10 @@ function Limit({
   meta: string
 }) {
   return (
-    <div className="border-app-line bg-app-raised rounded-[18px] border px-5.5 pt-5 pb-5.5">
-      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p className="text-app-ink mt-3 text-[20px] font-bold tracking-[-0.02em]">
-        {value}
-      </p>
-      <p className="text-app-dim mt-1.5 text-[13px] leading-5 text-pretty">
-        {meta}
-      </p>
+    <div className="rz-kpi">
+      <p className="rz-kpi__label m-0">{label}</p>
+      <p className="text-app-strong m-0 text-title font-semibold">{value}</p>
+      <p className="rz-kpi__meta m-0 text-pretty">{meta}</p>
     </div>
   )
 }
@@ -120,22 +107,17 @@ export function ImportEmpty({
   }
 
   return (
-    <div className="min-w-0">
-      <section
-        aria-label={t('howItWorks')}
-        className="border-app-line bg-app-raised rounded-[20px] border px-6 py-12 sm:px-8 md:px-12 md:py-14"
-      >
-        <div className="max-w-[560px]">
-          <p className="text-app-dim font-mono text-[11px] tracking-[0.16em] uppercase">
-            {t('noImportsYet')}
-          </p>
-          <h2 className="mt-4.5 text-[26px] leading-[1.12] font-extrabold tracking-[-0.025em] text-pretty text-white sm:text-[30px]">
-            {t('emptyHeadline')}
-          </h2>
-          <p className="text-app-muted mt-3.5 text-[15px] leading-[1.6] text-pretty">
-            {t('emptyLede', { formats })}
-          </p>
-          <ol className="mt-7 grid gap-3.5">
+    <div className="grid min-w-0 gap-3">
+      <section aria-label={t('howItWorks')} className="rz-card">
+        <div className="rz-card__body grid max-w-[560px] gap-4 py-8">
+          <div className="grid gap-2">
+            <p className="rz-eyebrow m-0">{t('noImportsYet')}</p>
+            <h2 className="rz-h-title text-pretty">{t('emptyHeadline')}</h2>
+            <p className="text-app-muted m-0 text-pretty">
+              {t('emptyLede', { formats })}
+            </p>
+          </div>
+          <ol className="m-0 grid list-none gap-3 p-0">
             {STEPS.map((step) => (
               <Step
                 hint={
@@ -152,7 +134,7 @@ export function ImportEmpty({
               />
             ))}
           </ol>
-          <div className="mt-8 flex flex-wrap gap-2.5">
+          <div className="rz-btn-row">
             <Button onClick={onNew} variant="primary">
               {t('uploadFile')}
             </Button>
@@ -161,7 +143,7 @@ export function ImportEmpty({
         </div>
       </section>
 
-      <div className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3.5">
+      <div className="rz-kpis">
         <Limit
           label={t('formats')}
           meta={

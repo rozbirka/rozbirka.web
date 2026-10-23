@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type { Page, RequestOptions } from './contracts'
+import { localizeApiError } from './error-localization'
 
 /**
  * Optional customer address (REQ-LOCALIZATION AC-34/AC-35). Core adds these
@@ -144,8 +145,11 @@ export function readCustomerAddress(raw: unknown): CustomerAddress {
   }
 }
 
-const withAddress = <T extends object>(raw: T): T & CustomerAddress => ({
+const withCustomerFields = <T extends { phone?: string | null }>(
+  raw: T,
+): T & CustomerAddress & { phone: string | null } => ({
   ...raw,
+  phone: raw.phone ?? null,
   ...readCustomerAddress(raw),
 })
 
@@ -199,7 +203,10 @@ export const readCustomerPhoneConflict = (
     customerId: conflict['customerId'],
     customerName: conflict['customerName'],
     isActive: conflict['isActive'],
-    message: conflict['message'],
+    message: localizeApiError({
+      code: 'CUSTOMER_PHONE_EXISTS',
+      kind: 'conflict',
+    }),
   }
 }
 
@@ -214,7 +221,7 @@ export const customersApi = {
         ...requestConfig(options),
       })
     ).data
-    return { ...result, items: result.items.map(withAddress) }
+    return { ...result, items: result.items.map(withCustomerFields) }
   },
   async list(
     params: CustomerListParams = {},
@@ -226,7 +233,7 @@ export const customersApi = {
         ...requestConfig(options),
       })
     ).data
-    return { ...result, items: result.items.map(withAddress) }
+    return { ...result, items: result.items.map(withCustomerFields) }
   },
   async search(
     q: string,
@@ -243,7 +250,7 @@ export const customersApi = {
     id: string,
     options: RequestOptions = {},
   ): Promise<CustomerDetail> {
-    return withAddress(
+    return withCustomerFields(
       (
         await apiClient.get<CustomerDetail>(
           endpoint(id),
@@ -263,7 +270,7 @@ export const customersApi = {
         requestConfig(options),
       )
     ).data
-    return { ...result, customer: withAddress(result.customer) }
+    return { ...result, customer: withCustomerFields(result.customer) }
   },
   async update(id: string, input: CustomerInput, options: RequestOptions = {}) {
     const result = (
@@ -273,13 +280,13 @@ export const customersApi = {
         requestConfig(options),
       )
     ).data
-    return { ...result, customer: withAddress(result.customer) }
+    return { ...result, customer: withCustomerFields(result.customer) }
   },
   async activate(
     id: string,
     options: RequestOptions = {},
   ): Promise<CustomerDetail> {
-    return withAddress(
+    return withCustomerFields(
       (
         await apiClient.patch<CustomerDetail>(
           `${endpoint(id)}/activate`,
@@ -293,7 +300,7 @@ export const customersApi = {
     id: string,
     options: RequestOptions = {},
   ): Promise<CustomerDetail> {
-    return withAddress(
+    return withCustomerFields(
       (
         await apiClient.patch<CustomerDetail>(
           `${endpoint(id)}/deactivate`,

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button,input{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible,input:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+</helmet>
+<div data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:28px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B6 · ERP</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">QuantityStepper · PhotoGrid · Stepper · Timeline · PermissionGate</h1>
+      <p style="margin:0;max-width:76ch;color:var(--rz-text-muted)">Предметні блоки картки запису й складських операцій. Тексти — з part-detail-messages.ts, part-labels-messages.ts, stickers/messages.ts, app-messages.ts, access-messages.ts.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: quantity-stepper.tsx, photo.tsx, stepper.tsx, use-steps.ts, cabinet/parts/part-labels.ts (history*), cabinet/policy.ts</p>
+    </header>
+
+    <section style="display:grid;gap:10px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">QuantityStepper</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-end">
+        <div style="display:grid;gap:6px">
+          <span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Кількість</span>
+          <div style="display:inline-flex;align-items:center;height:var(--rz-control-h-lg);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2)">
+            <button type="button" aria-label="Менше" onClick="{{ dec }}" disabled="{{ atMin }}" style="display:grid;place-items:center;width:var(--rz-control-h-lg);height:100%;border:0;background:transparent;color:var(--rz-text-muted);cursor:pointer;opacity:{{ minOpacity }}" style-hover="color:var(--rz-text)"><i class="icon-minus" style="font-size:var(--rz-icon)"></i></button>
+            <input inputmode="numeric" aria-label="Кількість" value="{{ qty }}" onChange="{{ onQty }}" style="width:48px;height:100%;border:0;border-left:1px solid var(--rz-border);border-right:1px solid var(--rz-border);background:transparent;text-align:center;font-family:var(--rz-font-mono);color:var(--rz-text-strong);font-variant-numeric:tabular-nums;outline:none">
+            <button type="button" aria-label="Більше" onClick="{{ inc }}" style="display:grid;place-items:center;width:var(--rz-control-h-lg);height:100%;border:0;background:transparent;color:var(--rz-text-muted);cursor:pointer" style-hover="color:var(--rz-text)"><i class="icon-plus" style="font-size:var(--rz-icon)"></i></button>
+          </div>
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">md · у формах · min 0 → «−» вимкнено</span>
+        </div>
+        <div style="display:grid;gap:6px">
+          <span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Стікерів</span>
+          <div style="display:inline-flex;align-items:center;height:var(--rz-target-glove);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-surface-2)">
+            <button type="button" aria-label="Зменшити кількість Фара передня ліва" style="display:grid;place-items:center;width:var(--rz-target-glove);height:100%;border:0;background:transparent;color:var(--rz-text-muted)"><i class="icon-minus" style="font-size:var(--rz-icon-lg)"></i></button>
+            <span style="width:64px;text-align:center;font-family:var(--rz-font-mono);font-size:var(--rz-fs-page);color:var(--rz-text-strong)">2</span>
+            <button type="button" aria-label="Збільшити кількість Фара передня ліва" style="display:grid;place-items:center;width:var(--rz-target-glove);height:100%;border:0;background:transparent;color:var(--rz-text-muted)"><i class="icon-plus" style="font-size:var(--rz-icon-lg)"></i></button>
+          </div>
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">glove · склад, стікери, приймання</span>
+        </div>
+        <div style="display:grid;gap:6px;max-width:280px">
+          <div style="display:inline-flex;align-items:center;height:var(--rz-control-h);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);opacity:0.5;width:max-content">
+            <span style="display:grid;place-items:center;width:var(--rz-control-h);color:var(--rz-text-muted)"><i class="icon-minus" style="font-size:var(--rz-icon)"></i></span><span style="width:40px;text-align:center;font-family:var(--rz-font-mono)">0</span><span style="display:grid;place-items:center;width:var(--rz-control-h);color:var(--rz-text-muted)"><i class="icon-plus" style="font-size:var(--rz-icon)"></i></span>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Для цієї запчастини немає доступного залишку.</span>
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">sm · вимкнений з причиною</span>
+        </div>
+      </div>
+    </section>
+
+    <section style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+      <div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">PhotoGrid · Gallery</h2><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">3 знімки</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;max-width:720px">
+        <div style="position:relative;aspect-ratio:4/3;border:1px solid var(--rz-border);border-radius:var(--rz-r-sm);background:repeating-linear-gradient(135deg,var(--rz-surface-2) 0 8px,var(--rz-surface) 8px 16px);display:grid;place-items:center;color:var(--rz-text-dim);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro)">фото 1<span style="position:absolute;left:6px;top:6px;height:18px;padding:0 6px;display:inline-grid;place-items:center;border-radius:var(--rz-r-xs);background:var(--rz-overlay);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-micro);font-weight:600;box-shadow:var(--rz-shadow-popover)">Обкладинка</span></div>
+        <div style="aspect-ratio:4/3;border:1px solid var(--rz-border);border-radius:var(--rz-r-sm);background:repeating-linear-gradient(135deg,var(--rz-surface-2) 0 8px,var(--rz-surface) 8px 16px);display:grid;place-items:center;color:var(--rz-text-dim);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro)">фото 2</div>
+        <div style="aspect-ratio:4/3;border:1px solid var(--rz-border);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);display:grid;place-items:center;align-content:center;gap:4px;color:var(--rz-text-dim);font-size:var(--rz-fs-caption);text-align:center;padding:6px"><i class="icon-image-off" style="font-size:var(--rz-icon-md)"></i>Фото недоступне</div>
+        <button type="button" style="aspect-ratio:4/3;border:1px dashed var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;display:grid;place-items:center;align-content:center;gap:4px;color:var(--rz-text-muted);font-size:var(--rz-fs-caption);cursor:pointer" style-hover="border-color:var(--rz-brand);color:var(--rz-text)"><i class="icon-image-plus" style="font-size:var(--rz-icon-md)"></i>Вибрати фото</button>
+      </div>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Перше фото — обкладинка; ліміт 10 фото перевіряється й на сервері. Порожньо: «Фото цієї деталі ще немає — їх додають під час редагування.» Перегляд на весь екран повертає фокус на мініатюру. Смужки — плейсхолдер замість реальних знімків.</p>
+    </section>
+
+    <section style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Stepper · багатокрокова операція (імпорт, приймання)</h2>
+      <ol aria-label="Кроки" style="margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+        <li style="display:flex;align-items:center;gap:8px;height:28px;padding:0 10px 0 6px;border-radius:var(--rz-r-full);color:var(--rz-text-muted)"><span style="display:grid;place-items:center;width:18px;height:18px;border-radius:var(--rz-r-full);background:var(--rz-ok-soft);color:var(--rz-ok)"><i class="icon-check" style="font-size:var(--rz-icon-sm)"></i></span>Файл</li>
+        <li aria-hidden="true" style="width:16px;height:1px;background:var(--rz-border-strong)"></li>
+        <li style="display:flex;align-items:center;gap:8px;height:28px;padding:0 10px 0 6px;border-radius:var(--rz-r-full);color:var(--rz-text-muted)"><span style="display:grid;place-items:center;width:18px;height:18px;border-radius:var(--rz-r-full);background:var(--rz-ok-soft);color:var(--rz-ok)"><i class="icon-check" style="font-size:var(--rz-icon-sm)"></i></span>Колонки</li>
+        <li aria-hidden="true" style="width:16px;height:1px;background:var(--rz-border-strong)"></li>
+        <li aria-current="step" style="display:flex;align-items:center;gap:8px;height:28px;padding:0 10px 0 6px;border-radius:var(--rz-r-full);background:var(--rz-fill-selected);color:var(--rz-text-strong);font-weight:600"><span style="display:grid;place-items:center;width:18px;height:18px;border-radius:var(--rz-r-full);background:var(--rz-brand);color:var(--rz-on-brand);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro)">3</span>Перевірка</li>
+        <li aria-hidden="true" style="width:16px;height:1px;background:var(--rz-border-strong)"></li>
+        <li style="display:flex;align-items:center;gap:8px;height:28px;padding:0 10px 0 6px;color:var(--rz-text-dim)"><span style="display:grid;place-items:center;width:18px;height:18px;border-radius:var(--rz-r-full);border:1px solid var(--rz-border-strong);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro)">4</span>Результат</li>
+      </ol>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Озвучення: «Крок 3 з 4: Перевірка». Стан помилки — коло danger з «!». Назви кроків — демо (ImportScreen має власний індикатор; у v2 обидва зводяться до цього).</p>
+    </section>
+
+    <section style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px"><h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Timeline · Історія</h2>
+        <div role="radiogroup" aria-label="Що показати в історії" style="display:inline-flex;gap:2px;padding:2px;border:1px solid var(--rz-border);background:var(--rz-surface);border-radius:var(--rz-r-sm)">
+          <sc-for list="{{ histTabs }}" as="h" hint-placeholder-count="4"><button type="button" role="radio" aria-checked="{{ h.checked }}" onClick="{{ h.onClick }}" style="height:22px;padding:0 9px;border:0;border-radius:var(--rz-r-xs);background:{{ h.bg }};color:{{ h.color }};font-size:var(--rz-fs-caption);font-weight:500;cursor:pointer">{{ h.label }}</button></sc-for>
+        </div>
+      </div>
+      <ol style="margin:0;padding:0;list-style:none;display:grid;max-width:640px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <sc-for list="{{ events }}" as="e" hint-placeholder-count="5">
+          <li style="display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;border-top:1px solid var(--rz-border)">
+            <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-full);background:{{ e.soft }};color:{{ e.tone }}"><i class="{{ e.icon }}" style="font-size:var(--rz-icon-sm)"></i></span>
+            <div style="display:grid;gap:2px;min-width:0">
+              <span><span style="color:var(--rz-text-strong);font-weight:500">{{ e.event }}</span> <span style="color:var(--rz-text-dim)">{{ e.who }}</span></span>
+              <sc-if value="{{ e.from }}" hint-placeholder-val="{{ false }}"><span style="display:flex;gap:6px;align-items:center;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption)"><span style="color:var(--rz-text-dim);text-decoration:line-through">{{ e.from }}</span><i class="icon-arrow-right" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i><span style="color:var(--rz-text)">{{ e.to }}</span></span></sc-if>
+              <sc-if value="{{ e.detail }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">{{ e.detail }}</span></sc-if>
+            </div>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim);white-space:nowrap">{{ e.date }}</span>
+          </li>
+        </sc-for>
+        <sc-if value="{{ noEvents }}" hint-placeholder-val="{{ false }}"><li style="padding:20px 12px;text-align:center;color:var(--rz-text-dim)">У цій добірці подій немає.</li></sc-if>
+      </ol>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Пара «було → стало» показується лише коли сервер надіслав обидва значення (historyChange). Ідентифікатори з payload не показуються. Тон: продажі — warn/danger/ok, ціна — info, склад — neutral. Імена й дати — демо.</p>
+    </section>
+
+    <section style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">PermissionGate · три способи показати «не можна»</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px">
+        <div style="display:grid;gap:8px;align-content:start;padding:var(--rz-card-p);border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">1 · приховати</span>
+          <span style="color:var(--rz-text)">Немає права перегляду модуля → пункту немає в навігації й ⌘K. Фіче-флаг вимкнено → кнопки «Імпорт запчастин» немає.</span>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">viewPermission · FeatureGate parts.bulk-import</span>
+        </div>
+        <div style="display:grid;gap:8px;align-content:start;padding:var(--rz-card-p);border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">2 · вимкнути з причиною</span>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><button type="button" disabled style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;opacity:0.5;cursor:not-allowed"><i class="icon-lock" style="font-size:var(--rz-icon)"></i>Додати деталь</button></div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">Ліміт деталей вичерпано.</span>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">mutationPermission · quota · subscription — дія видна, але недоступна</span>
+        </div>
+        <div style="display:grid;gap:8px;align-content:start;padding:var(--rz-card-p);border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">3 · замінити екраном</span>
+          <span style="display:flex;gap:8px;align-items:center"><span style="display:grid;place-items:center;width:28px;height:28px;border-radius:var(--rz-r-sm);background:var(--rz-neutral-soft);color:var(--rz-text-muted)"><i class="icon-lock" style="font-size:var(--rz-icon)"></i></span><strong style="font-weight:600;color:var(--rz-text-strong)">Недостатньо прав</strong></span>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">Пряме посилання на закритий розділ → DeniedState / тариф / ліміт (States).</span>
+        </div>
+      </div>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Клієнтська видимість не замінює перевірку на сервері. Права, тарифні фічі, стан підписки й фіче-флаги — чотири окремі перевірки; не змішувати в UI.</p>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const EVENTS = [
+  { kind: 'sale', event: 'Зарезервовано', who: '· № 358', date: '17.10 14:02', icon: 'icon-bookmark', tone: 'var(--rz-warn)', soft: 'var(--rz-warn-soft)' },
+  { kind: 'price', event: 'Змінено', who: '· ціна', from: '1 600', to: '1 800', date: '15.10 09:41', icon: 'icon-tag', tone: 'var(--rz-info)', soft: 'var(--rz-info-soft)' },
+  { kind: 'stock', event: 'Переміщено', who: '', detail: 'зона C', date: '12.10 17:20', icon: 'icon-arrow-right-left', tone: 'var(--rz-text-muted)', soft: 'var(--rz-neutral-soft)' },
+  { kind: 'sale', event: 'Продано', who: '· № 341', detail: 'кількість 1', date: '10.10 11:05', icon: 'icon-check', tone: 'var(--rz-danger)', soft: 'var(--rz-danger-soft)' },
+  { kind: 'stock', event: 'Створено', who: '', date: '02.10 08:30', icon: 'icon-plus', tone: 'var(--rz-text-muted)', soft: 'var(--rz-neutral-soft)' },
+];
+class Component extends DCLogic {
+  state = { qty: 1, hist: 'all' };
+  renderVals() {
+    const { qty, hist } = this.state;
+    const tabs = [['all', 'Усе'], ['sale', 'Продажі'], ['price', 'Ціна'], ['stock', 'Склад']];
+    const events = EVENTS.filter((e) => hist === 'all' || e.kind === hist).map((e) => ({ from: null, to: null, detail: null, ...e }));
+    return {
+      theme: this.props.theme ?? 'dark',
+      density: this.props.density ?? 'compact',
+      qty, atMin: qty <= 0, minOpacity: qty <= 0 ? 0.4 : 1,
+      dec: () => this.setState((s) => ({ qty: Math.max(0, s.qty - 1) })),
+      inc: () => this.setState((s) => ({ qty: Math.min(9999, s.qty + 1) })),
+      onQty: (e) => { const n = Number(String(e.target.value).replace(/\D/g, '')); this.setState({ qty: Number.isFinite(n) ? Math.min(9999, n) : 0 }); },
+      histTabs: tabs.map(([k, label]) => ({ label, checked: hist === k ? 'true' : 'false', bg: hist === k ? 'var(--rz-fill-selected)' : 'transparent', color: hist === k ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)', onClick: () => this.setState({ hist: k }) })),
+      events, noEvents: events.length === 0,
+    };
+  }
+}
+</script>
+</body>
+</html>

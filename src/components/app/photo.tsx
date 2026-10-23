@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { useT } from '@/i18n/hooks'
 import { appMessages } from './app-messages'
+import { fullPhotoSource } from './photo-source'
 
 export interface Photo {
   id: string
@@ -46,7 +47,8 @@ export function Thumbnail({
   size?: 'thumbnail' | 'full'
 }) {
   const t = useT(appMessages)
-  const source = size === 'full' ? photo.url : (photo.thumbnailUrl ?? photo.url)
+  const source =
+    size === 'full' ? fullPhotoSource(photo) : (photo.thumbnailUrl ?? photo.url)
   // Load state belongs to one file: a new src starts over, and the reset
   // happens during render rather than in an effect, so nothing renders twice
   // with the previous photo's state.
@@ -70,15 +72,34 @@ export function Thumbnail({
   return (
     <span
       className={cn(
-        'bg-app-input border-app-line rounded-panel relative block overflow-hidden border',
+        'bg-app-input border-app-line rounded-control relative block overflow-hidden border',
         ratio === 'square' ? 'aspect-square' : 'aspect-4/3',
         className,
       )}
     >
       {failed ? (
-        <span className="text-app-dim grid h-full place-items-center gap-1 p-2 text-center text-[12px]">
-          <ImageOff aria-hidden className="size-4" />
-          {t('photoUnavailable')}
+        <span
+          className={cn(
+            'text-app-dim absolute inset-0 flex flex-col items-center justify-center text-center whitespace-normal',
+            size === 'thumbnail'
+              ? 'p-0.5 text-[9px] leading-tight'
+              : 'gap-1 p-2 text-caption leading-tight',
+          )}
+        >
+          {size === 'full' ? (
+            <ImageOff aria-hidden className="size-4 shrink-0" />
+          ) : null}
+          <span className="w-full min-w-0 wrap-anywhere">
+            {size === 'thumbnail'
+              ? t('photoUnavailable')
+                  .split(' ')
+                  .map((word, index) => (
+                    <span className="block whitespace-nowrap" key={index}>
+                      {word}
+                    </span>
+                  ))
+              : t('photoUnavailable')}
+          </span>
         </span>
       ) : (
         <>
@@ -154,12 +175,13 @@ function Lightbox({
 
   const photo = photos[index]
   if (!photo) return null
+  const source = fullPhotoSource(photo)
   const alt = photo.alt ?? `${label} ${String(index + 1)}`
 
   return (
     <Dialog.Root onOpenChange={(next) => !next && onClose()} open>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/90" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-app-scrim" />
         <Dialog.Content
           onCloseAutoFocus={(event) => {
             event.preventDefault()
@@ -170,7 +192,7 @@ function Lightbox({
           <Dialog.Title className="sr-only">{label}</Dialog.Title>
           <Dialog.Description className="sr-only">{alt}</Dialog.Description>
           <header className="flex items-center justify-between gap-3">
-            <p className="text-app-muted font-mono text-[12.5px] tabular-nums">
+            <p className="text-app-muted font-mono text-caption tabular-nums">
               {t('photoPosition', {
                 index: String(index + 1),
                 total: String(total),
@@ -209,7 +231,7 @@ function Lightbox({
               <span />
             )}
             <div className="relative h-full min-h-0 w-full min-w-0">
-              {failedSource === photo.url ? (
+              {failedSource === source ? (
                 <span
                   role="status"
                   className="text-app-muted absolute inset-0 grid place-content-center justify-items-center gap-2"
@@ -219,11 +241,11 @@ function Lightbox({
                 </span>
               ) : (
                 <img
-                  key={photo.url}
+                  key={source}
                   alt={alt}
-                  className="absolute inset-0 h-full w-full rounded-lg object-contain"
-                  onError={() => setFailedSource(photo.url)}
-                  src={photo.url}
+                  className="absolute inset-0 h-full w-full rounded-control object-contain"
+                  onError={() => setFailedSource(source)}
+                  src={source}
                 />
               )}
             </div>
@@ -254,7 +276,7 @@ function Lightbox({
                       number: String(position + 1),
                     })}
                     className={cn(
-                      'focus-visible:outline-brand block size-12 shrink-0 overflow-hidden rounded-md border',
+                      'block size-control-lg shrink-0 overflow-hidden rounded-control border',
                       position === index
                         ? 'border-brand'
                         : 'border-app-line opacity-60',
@@ -290,12 +312,18 @@ export function PhotoGrid({
   label,
   emptyLabel,
   className,
+  variant = 'compact',
+  coverLabel,
 }: {
   photos: readonly Photo[]
   /** Names the group, and seeds the alt text of each photo. */
   label: string
   emptyLabel?: string
   className?: string
+  /** Record tiles use a wider frame and keep the shared thumbnail loading. */
+  variant?: 'compact' | 'tiles'
+  /** When supplied, identifies the first photo as the record cover. */
+  coverLabel?: string
 }) {
   const t = useT(appMessages)
   const opener = useRef<HTMLButtonElement | null>(null)
@@ -303,7 +331,7 @@ export function PhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className={cn('text-app-dim text-[13.5px]', className)}>
+      <p className={cn('rz-caption m-0', className)}>
         {emptyLabel ?? t('noPhotos')}
       </p>
     )
@@ -314,7 +342,8 @@ export function PhotoGrid({
       <ul
         aria-label={label}
         className={cn(
-          'grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6',
+          'rz-photos m-0 list-none p-0',
+          variant === 'tiles' && 'rz-photos--tiles',
           className,
         )}
       >
@@ -322,7 +351,7 @@ export function PhotoGrid({
           <li key={photo.id}>
             <button
               aria-label={photo.alt ?? `${label} ${String(index + 1)}`}
-              className="focus-visible:outline-brand block w-full cursor-zoom-in"
+              className="relative block w-full cursor-zoom-in"
               onClick={(event) => {
                 opener.current = event.currentTarget
                 setOpenIndex(index)
@@ -332,7 +361,13 @@ export function PhotoGrid({
               <Thumbnail
                 alt={photo.alt ?? `${label} ${String(index + 1)}`}
                 photo={photo}
+                ratio={variant === 'tiles' ? 'wide' : 'square'}
               />
+              {index === 0 && coverLabel ? (
+                <span className="rz-photo__badge pointer-events-none">
+                  {coverLabel}
+                </span>
+              ) : null}
             </button>
           </li>
         ))}
@@ -393,7 +428,7 @@ export function Gallery({
     )
     for (const photo of neighbours) {
       const preload = new Image()
-      preload.src = photo.url
+      preload.src = fullPhotoSource(photo)
     }
   }, [current, photos])
 
@@ -401,8 +436,8 @@ export function Gallery({
     return (
       <p
         className={cn(
-          'text-app-dim text-[13.5px]',
-          variant === 'framed' && 'px-6 py-5',
+          'rz-caption m-0',
+          variant === 'framed' && 'px-4 py-4',
           className,
         )}
       >
@@ -418,11 +453,11 @@ export function Gallery({
   const pad = (value: number) => String(value).padStart(2, '0')
 
   return (
-    <div className={cn('grid', framed ? 'gap-0' : 'gap-2', className)}>
+    <div className={cn('grid min-w-0', framed ? 'gap-0' : 'gap-2', className)}>
       <div className={cn('relative', framed && 'border-app-line border-y')}>
         <button
           aria-label={t('openFullScreen', { name: nameOf(shown, selected) })}
-          className="focus-visible:outline-brand block w-full cursor-zoom-in"
+          className="block w-full cursor-zoom-in"
           onClick={(event) => {
             opener.current = event.currentTarget
             setOpenIndex(Math.min(current, photos.length - 1))
@@ -440,7 +475,7 @@ export function Gallery({
         {photos.length > 1 ? (
           <span
             aria-hidden
-            className="border-app-line-2 text-app-muted pointer-events-none absolute bottom-3 left-3 rounded-full border bg-black/70 px-3 py-1 font-mono text-[12px] tracking-[0.08em] tabular-nums backdrop-blur-sm"
+            className="rz-photo__badge pointer-events-none top-auto bottom-2 left-2 font-mono tabular-nums"
           >
             {pad(selected + 1)} / {pad(photos.length)}
           </span>
@@ -450,9 +485,9 @@ export function Gallery({
         <ul
           aria-label={label}
           className={cn(
-            'grid',
+            'grid min-w-0',
             framed
-              ? 'auto-cols-fr grid-flow-col gap-2.5 overflow-x-auto p-3.5'
+              ? 'auto-cols-fr grid-flow-col gap-2 overflow-x-auto p-3'
               : 'grid-cols-4 gap-2 sm:grid-cols-5',
           )}
         >
@@ -462,10 +497,8 @@ export function Gallery({
                 aria-current={index === selected ? 'true' : undefined}
                 aria-label={t('showPhoto', { name: nameOf(photo, index) })}
                 className={cn(
-                  'focus-visible:outline-brand block w-full cursor-pointer overflow-hidden transition-opacity',
-                  framed
-                    ? 'rounded-[10px] border-[1.5px]'
-                    : 'rounded-panel border',
+                  'block w-full cursor-pointer overflow-hidden transition-opacity',
+                  'rounded-control border',
                   index === selected
                     ? 'border-brand'
                     : 'border-app-line-2 opacity-70 hover:opacity-100',
@@ -477,7 +510,7 @@ export function Gallery({
                   alt={nameOf(photo, index)}
                   className={cn(
                     'rounded-none border-0',
-                    framed && 'rounded-[9px]',
+                    framed && 'rounded-control',
                   )}
                   photo={photo}
                   ratio="wide"
@@ -537,11 +570,11 @@ export function RecordCard({
     <>
       <span className="flex items-start justify-between gap-3">
         <span className="min-w-0">
-          <span className="block text-sm font-semibold break-words text-white">
+          <span className="text-app-strong block font-semibold break-words">
             {title}
           </span>
           {meta === undefined ? null : (
-            <span className="text-app-dim mt-1 block font-mono text-[12px]">
+            <span className="text-app-dim mt-1 block font-mono text-caption">
               {meta}
             </span>
           )}
@@ -557,15 +590,15 @@ export function RecordCard({
   )
 
   const shell = cn(
-    'border-app-line rounded-panel bg-app-raised flex min-h-11 flex-col gap-2 border p-3 text-left transition-colors',
+    'rz-card flex flex-col gap-2 p-3 text-left transition-colors',
     (href !== undefined || onOpen !== undefined) &&
-      'hover:border-app-line-2 hover:bg-white/[0.02]',
+      'hover:border-app-line-2 hover:bg-app-hover',
     className,
   )
 
   const media =
     photo === undefined ? null : photo === null ? (
-      <span className="bg-app-input rounded-panel text-app-dim mb-1 grid aspect-4/3 place-items-center text-[12px]">
+      <span className="bg-app-input rounded-control text-app-dim mb-1 grid aspect-4/3 place-items-center text-caption">
         <ImageOff aria-hidden className="size-4" />
       </span>
     ) : (

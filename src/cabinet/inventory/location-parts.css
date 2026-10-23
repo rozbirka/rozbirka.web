@@ -1,0 +1,106 @@
+/* Fixed working area with a compact pager, matching the section and shelf lists. */
+.rz-main:has(.rz-workspace) {
+  height: 100dvh;
+  min-height: 0;
+}
+
+.rz-workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+}
+
+.rz-workspace > .rz-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: none;
+  padding-bottom: 20px;
+}
+
+.rz-workspace > .rz-page > * {
+  flex-shrink: 0;
+}
+
+.rz-workspace .location-parts--unassigned,
+.location-parts--unassigned > .location-parts__card,
+.location-parts--unassigned .location-parts__table,
+.location-parts--unassigned .location-parts__table > div {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.location-parts--unassigned > .location-parts__card {
+  overflow: hidden;
+}
+
+.location-parts--unassigned .rz-card__head,
+.location-parts--unassigned .rz-toolbar,
+.location-parts--unassigned .rz-bulk,
+.location-parts--unassigned .location-parts__pager {
+  flex-shrink: 0;
+}
+
+.location-parts--unassigned .rz-table-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.location-parts--unassigned .rz-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--rz-surface);
+}
+
+.location-parts--unassigned .location-parts__pager {
+  background: var(--rz-surface);
+}
+
+@media (max-width: 767px) {
+  .rz-workspace > .rz-page {
+    padding: 12px 12px 16px;
+  }
+}
+
+@media (min-width: 768px) {
+  .location-parts--unassigned .rz-table-scroll {
+    overflow: hidden;
+  }
+
+  .location-parts--unassigned .location-parts__table--full .rz-table {
+    height: 100%;
+  }
+
+  .location-parts--unassigned .rz-table {
+    table-layout: fixed;
+  }
+
+  .location-parts--unassigned .rz-table thead th:nth-last-child(-n + 2) {
+    width: 192px;
+  }
+
+  .location-parts--unassigned .rz-table thead th.rz-num {
+    width: 128px;
+  }
+
+  .location-parts--unassigned .rz-table tbody tr {
+    height: auto;
+  }
+
+  .location-parts--unassigned .rz-table .rz-cell-main {
+    min-width: 0;
+    padding-block: 2px;
+  }
+
+  .location-parts--unassigned .rz-table tbody .rz-btn {
+    height: auto;
+    min-height: 0;
+    padding-block: 0;
+  }
+}

@@ -117,7 +117,11 @@ it('shows the actual provider error instead of calling it an empty result', asyn
   await user.type(screen.getByLabelText(/Населений пункт/), 'Львів')
 
   expect(await screen.findByText('помилка')).toBeVisible()
-  expect(screen.getByText('Нова пошта не прийняла ключ API.')).toBeVisible()
+  expect(
+    screen.getByText(
+      'Нова пошта не прийняла ключ API. Перевірте налаштування інтеграції.',
+    ),
+  ).toBeVisible()
   expect(screen.queryByText('без збігів')).toBeNull()
   expect(
     screen.queryByText(/немає населеного пункту з такою назвою/),

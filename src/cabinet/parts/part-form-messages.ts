@@ -82,7 +82,6 @@ export const partFormMessages = defineMessages({
     name: 'Назва',
     partTypeHint: 'Наприклад: кузов, оптика, двигун',
     partType: 'Тип деталі',
-    oemEditHint: 'OEM-код не змінюється після створення.',
     oemHint: 'Каталожний номер виробника',
     oem: 'OEM-код',
     notesHint: 'Дефекти, комплектність, місце зберігання',
@@ -104,7 +103,7 @@ export const partFormMessages = defineMessages({
     compatDescription:
       'До яких авто підходить деталь. Можна вказати кілька. Необовʼязково.',
     compatFromSourceDescription:
-      'Перший рядок підставлено з авто-джерела. Додайте інші, якщо деталь підходить і до них.',
+      'Сумісність з авто-джерела вже додано. Додайте інші авто, якщо деталь підходить і до них.',
     compatStep: 'Сумісність',
     compatFromSource: 'З вибраного авто-джерела. Змінюється разом із джерелом.',
     addCar: 'Додати ще авто',
@@ -149,11 +148,11 @@ export const partFormMessages = defineMessages({
     openIntake: 'Відкрити приймання',
     describeEditDescription:
       'Як запчастина виглядає у списку складу та в пошуку.',
-    oemServerHint: 'Редагування OEM поки не приймає сервер',
     quantityInStock: 'Кількість на складі',
     readOnly: 'Лише для читання',
     compatReadOnly:
       'Сумісність задана під час створення і доступна лише для читання.',
+    compatLoadFailed: 'Не вдалося завантажити сумісність.',
     photosUploadNow:
       'Нові фото завантажуються одразу після вибору. Зберегти можна, коли всі файли завантажені.',
     buyersSeePhotos: 'Покупці бачать фото у картці деталі.',
@@ -253,7 +252,6 @@ export const partFormMessages = defineMessages({
     name: 'Name',
     partTypeHint: 'For example: body, lights, engine',
     partType: 'Part type',
-    oemEditHint: 'The OEM code can’t be changed after creation.',
     oemHint: 'Manufacturer’s catalogue number',
     oem: 'OEM code',
     notesHint: 'Defects, completeness, storage place',
@@ -275,7 +273,7 @@ export const partFormMessages = defineMessages({
     compatDescription:
       'Which cars the part fits. You can list several. Optional.',
     compatFromSourceDescription:
-      'The first row comes from the source car. Add others if the part fits them too.',
+      'Compatibility with the source car is already included. Add other cars if the part fits them too.',
     compatStep: 'Compatibility',
     compatFromSource:
       'From the chosen source car. Changes along with the source.',
@@ -321,11 +319,11 @@ export const partFormMessages = defineMessages({
     openIntake: 'Open intake',
     describeEditDescription:
       'How the part appears in the warehouse list and in search.',
-    oemServerHint: 'The server doesn’t accept OEM changes yet',
     quantityInStock: 'Quantity in the warehouse',
     readOnly: 'Read-only',
     compatReadOnly:
       'Compatibility was set when the part was created and is read-only.',
+    compatLoadFailed: 'Could not load compatibility.',
     photosUploadNow:
       'New photos upload as soon as you choose them. You can save once all files have uploaded.',
     buyersSeePhotos: 'Buyers see the photos on the part’s page.',
@@ -424,7 +422,6 @@ export const partFormMessages = defineMessages({
     name: 'Nazwa',
     partTypeHint: 'Na przykład: nadwozie, oświetlenie, silnik',
     partType: 'Typ części',
-    oemEditHint: 'Kodu OEM nie można zmienić po utworzeniu.',
     oemHint: 'Numer katalogowy producenta',
     oem: 'Kod OEM',
     notesHint: 'Wady, kompletność, miejsce przechowywania',
@@ -445,7 +442,7 @@ export const partFormMessages = defineMessages({
     compatDescription:
       'Do jakich aut pasuje część. Możesz podać kilka. Opcjonalnie.',
     compatFromSourceDescription:
-      'Pierwszy wiersz pochodzi z auta źródłowego. Dodaj inne, jeśli część do nich też pasuje.',
+      'Kompatybilność z autem źródłowym jest już dodana. Dodaj inne auta, jeśli część do nich też pasuje.',
     compatStep: 'Kompatybilność',
     compatFromSource:
       'Z wybranego auta źródłowego. Zmienia się razem ze źródłem.',
@@ -491,11 +488,11 @@ export const partFormMessages = defineMessages({
     openIntake: 'Otwórz przyjęcie',
     describeEditDescription:
       'Jak część wygląda na liście magazynu i w wyszukiwaniu.',
-    oemServerHint: 'Serwer nie przyjmuje jeszcze zmian kodu OEM',
     quantityInStock: 'Ilość w magazynie',
     readOnly: 'Tylko do odczytu',
     compatReadOnly:
       'Kompatybilność ustalono podczas tworzenia i jest tylko do odczytu.',
+    compatLoadFailed: 'Nie udało się wczytać kompatybilności.',
     photosUploadNow:
       'Nowe zdjęcia są przesyłane od razu po wybraniu. Zapisać można, gdy wszystkie pliki zostaną przesłane.',
     buyersSeePhotos: 'Kupujący widzą zdjęcia na karcie części.',

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}a{color:var(--rz-brand-text);text-decoration:none}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" style="min-height:100vh;padding:40px 24px 80px">
+  <div style="max-width:1040px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <span class="rz-eyebrow">Rozbirka v2 · модулі</span>
+      <h1 class="rz-h-page" style="font-size:var(--rz-fs-display)">Кабінет по модулях</h1>
+      <p class="rz-muted" style="margin:0;max-width:72ch;text-wrap:pretty">Одна сторінка — один модуль. На сторінці всі його екрани по порядку: список, картка, форма, шторки, діалоги, тости — кожен стан окремим кадром 1280×800. Модулі не посилаються один на одного; спільні лише <span class="rz-mono">tokens.css</span> і <span class="rz-mono">kit.css</span>.</p>
+    </header>
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+      <section style="display:grid;gap:8px">
+        <h2 class="rz-th-label">{{ g.title }}</h2>
+        <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface);overflow:hidden">
+          <sc-for list="{{ g.items }}" as="m" hint-placeholder-count="3">
+            <a href="{{ m.href }}" style="display:grid;grid-template-columns:48px minmax(0,1fr) 320px 120px;align-items:center;gap:12px;min-height:48px;padding:6px 16px;border-top:1px solid var(--rz-border);color:var(--rz-text)" style-hover="background:var(--rz-fill-hover)">
+              <span class="rz-mono" style="color:var(--rz-brand-text)">{{ m.num }}</span>
+              <span style="display:grid"><span class="rz-strong" style="font-weight:600">{{ m.title }}</span><span class="rz-caption">{{ m.scope }}</span></span>
+              <span class="rz-mono rz-dim" style="font-size:var(--rz-fs-caption)">{{ m.route }}</span>
+              <span class="{{ m.pill }}" style="justify-self:end">{{ m.status }}</span>
+            </a>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+    <p class="rz-caption" style="margin:0">Старі збірні сторінки (features/List, Record, Drawers, Board) перенесено в <span class="rz-mono">v2/archive/</span> — не використовувати для нових екранів.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;,&quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}}">
+const M = [
+  ['Вхід і старт', [['00', 'Вхід, запрошення, онбординг', 'вхід за телефоном, код, запрошення, нова розбірка, політика', '/login · /invite/:code · /privacy'], ['01', 'Головна', 'KPI, окупність авто, каси, останні замовлення', '/app/:t/dashboard']]],
+  ['Склад', [['10', 'Автомобілі', 'список, картка, форма, витрати, діалоги', '/app/:t/cars', '10 Автомобілі.dc.html'], ['11', 'Запчастини', 'список, peek, картка, форма, шторки, імпорт', '/app/:t/parts', '11 Запчастини.dc.html'], ['12', 'Склади', 'склади, зони, секції й полиці, без зони, розміщення, QR-етикетки', '/app/:t/warehouses'], ['13', 'Інвентаризація', 'сесії, сканер, результати, аудит', '/app/:t/inventory'], ['14', 'Приймання', 'партії, додавання партією', '/app/:t/intakes'], ['15', 'Стікери', 'друк стікерів і етикеток', '/app/:t/stickers']]],
+  ['Продажі', [['20', 'Замовлення', 'список, картка, позиції, клієнт, оплата, доставка НП, повернення', '/app/:t/orders'], ['21', 'Клієнти', 'список, картка, форма', '/app/:t/customers']]],
+  ['Гроші', [['30', 'Фінанси · каси', 'каси, журнал, операція, переказ, нова каса', '/app/:t/cash'], ['31', 'Звіти', 'звіти й тарифне обмеження', '/app/:t/reports']]],
+  ['Налаштування', [['40', 'Команда', 'учасники, запрошення, права', '/app/:t/team'], ['41', 'Підписка', 'підписка, тарифи, платежі', '/app/:t/settings/billing'], ['42', 'Інтеграції · Нова пошта', 'підключення, точки відправлення, webhook', '/app/:t/settings/integrations'], ['43', 'Бізнес', 'реквізити, склади, регіон', '/app/:t/settings/business'], ['44', 'Профіль і акаунт', 'профіль, безпека, видалення', '/app/:t/settings/profile · /account']]],
+];
+const FILES = { '00': '00 Вхід і старт.dc.html', '01': '01 Головна.dc.html', '12': '12 Склади.dc.html', '13': '13 Інвентаризація.dc.html', '14': '14 Приймання.dc.html', '15': '15 Стікери.dc.html', '20': '20 Замовлення.dc.html', '21': '21 Клієнти.dc.html', '30': '30 Фінанси.dc.html', '31': '31 Звіти.dc.html', '40': '40 Команда.dc.html', '41': '41 Підписка.dc.html', '42': '42 Інтеграції.dc.html', '43': '43 Бізнес.dc.html', '44': '44 Профіль.dc.html' };
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      theme: this.props.theme ?? 'dark',
+      groups: M.map(([title, items]) => ({ title, items: items.map(([num, t, scope, route, f0]) => { const file = f0 || FILES[num]; return { num, title: t, scope, route, href: file ? './' + encodeURI(file) : '#', status: file ? 'Готово' : 'Заплановано', pill: file ? 'rz-pill rz-pill--ok' : 'rz-pill' }; }) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -10,11 +10,7 @@ export function Panel({
 }: ComponentProps<'div'> & { padded?: boolean }) {
   return (
     <div
-      className={cn(
-        'border-app-line rounded-panel bg-app-raised border',
-        padded && 'p-4',
-        className,
-      )}
+      className={cn('rz-card', padded && 'rz-card__body', className)}
       {...props}
     >
       {children}
@@ -37,19 +33,19 @@ export function StatCard({
   accent?: boolean
 }) {
   return (
-    <Panel
-      className={cn(accent && 'border-brand/30 bg-brand/[0.06]')}
-      padded={false}
-    >
-      <div className="p-4">
-        <p className="text-app-dim text-[13.5px]">{label}</p>
-        <p className="mt-1.5 text-[25px] leading-tight font-light tracking-[-0.02em] tabular-nums text-white">
-          {value}
-        </p>
+    <Panel padded={false}>
+      <div
+        className={cn(
+          'rz-kpi',
+          accent && 'shadow-[inset_2px_0_0_var(--rz-brand)]',
+        )}
+      >
+        <p className="rz-kpi__label">{label}</p>
+        <p className="rz-display">{value}</p>
         {delta === undefined ? null : (
           <p
             className={cn(
-              'mt-1 font-mono text-[12.5px]',
+              'rz-kpi__meta font-mono',
               tone === 'up' && 'text-state-ok',
               tone === 'down' && 'text-state-danger',
               tone === 'neutral' && 'text-app-dim',
@@ -70,13 +66,11 @@ export function StatStrip({
   items: readonly { label: string; value: ReactNode }[]
 }) {
   return (
-    <dl className="flex flex-wrap gap-x-6 gap-y-2 px-0.5">
+    <dl className="rz-totals">
       {items.map((item) => (
         <div className="flex items-baseline gap-1.5" key={item.label}>
-          <dd className="text-[18px] font-semibold tabular-nums text-white">
-            {item.value}
-          </dd>
-          <dt className="text-app-dim text-[13.5px]">{item.label}</dt>
+          <dt>{item.label}</dt>
+          <dd>{item.value}</dd>
         </div>
       ))}
     </dl>

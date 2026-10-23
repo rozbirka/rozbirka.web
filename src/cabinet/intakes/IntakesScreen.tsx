@@ -1,3 +1,4 @@
+import { CabinetLoadingContent } from '../loading-screen'
 import {
   useEffect,
   useId,
@@ -14,17 +15,24 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
-import { FeatureGate } from '../FeatureFlags'
+import { FormPage } from '../form-page'
+import { PartsStockCard } from '../parts/PartsStockCard'
+import { useFeatureFlag } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
+  ArrowLeft,
   Check,
   ChevronLeft,
-  PackagePlus,
+  ChevronRight,
+  Lock,
+  Inbox,
+  Pencil,
   Plus,
   Printer,
-  ScanLine,
+  RefreshCw,
+  SearchX,
   Trash2,
-  X,
+  Upload,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -32,17 +40,15 @@ import {
   Card,
   ConfirmDialog,
   DataTable,
-  EmptyState,
   ErrorState,
   Field,
+  NotesCard,
   Notice,
-  PageBody,
   Pagination,
-  PillGroup,
   QuantityStepper,
   SearchInput,
-  SelectInput,
-  SkeletonRows,
+  SectionPanel,
+  StateScreen,
   StatusPill,
   type StatusTone,
   TextArea,
@@ -57,7 +63,11 @@ import {
   type IntakeListParams,
   isIntakeStatus,
 } from '@/api/intakes'
-import { inventoryApi, type InventoryZone } from '@/api/inventory'
+import { inventoryApi } from '@/api/inventory'
+import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
+import { emptyPartPlacement } from '../inventory/part-placement-state'
+import { usePlacementOptions } from '../inventory/usePlacementOptions'
+import { placementMessages } from '../inventory/part-placement-messages'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
@@ -66,8 +76,20 @@ import { formatDay } from '../cars/day'
 import { intakeFormMessages } from './intake-form-messages'
 import { intakesMessages } from './messages'
 import { useCabinet } from '../CabinetContext'
+import { Kpi, KpiStrip } from '../redesign-kpi'
+import { Crumbs, RedesignShell, RedesignTitle } from '../redesign-shell'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { MediaPicker } from '../cars/CarsScreen'
+import { CompatibilityRowCard, ConditionTile } from '../parts/PartFormChoices'
+import { partFormMessages } from '../parts/part-form-messages'
+import { conditionLabel } from '../parts/part-labels'
+import {
+  emptyRow,
+  resolveCompatibility,
+  rowsProblem,
+  unknownBrandsMessage,
+  type CompatibilityRow,
+} from '../parts/compatibility-rows'
 import type { MediaUploadResult } from '@/api/media'
 import { cabinetModules } from '../module-registry'
 import { evaluateModuleAccess } from '../policy'
@@ -119,15 +141,6 @@ const unitLabel = (
   t: Translate<(typeof intakesMessages)['uk']>,
   unit: string,
 ) => (unit === PIECES ? t('pcs') : unit)
-
-/** Two initials for the avatar chip; a single word gives one. */
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?'
 
 function useIntakeAccess() {
   const cabinet = useCabinet()
@@ -225,9 +238,23 @@ function Denied({ decision }: { decision: ModuleAccessDecision }) {
         ? t('deniedSubscription')
         : t('deniedPermission')
   return (
-    <Notice role="alert" tone="warn">
-      {message}
-    </Notice>
+    <RedesignShell
+      crumb={
+        <>
+          <span>{t('eyebrow')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <StateScreen
+        className="min-h-[420px]"
+        icon={<Lock aria-hidden />}
+        role="alert"
+        title={message}
+        tone="warn"
+      />
+    </RedesignShell>
   )
 }
 
@@ -246,17 +273,6 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   const tenant = params.tenant ?? cabinet.targetTenant?.slug ?? ''
   const base = `/app/${tenant}/intakes`
   const intakeId = params.intakeId
-  if (location.pathname.endsWith('/parts/batch')) {
-    if (manageDecision.kind !== 'allowed')
-      return <Denied decision={manageDecision} />
-    if (partCreateDecision.kind !== 'allowed')
-      return <Denied decision={partCreateDecision} />
-    return intakeId ? (
-      <BatchPartsForm canManageFinance={financeManage} intakeId={intakeId} />
-    ) : (
-      <Denied decision={{ kind: 'permission-denied' }} />
-    )
-  }
   if (location.pathname.endsWith('/parts/new')) {
     if (manageDecision.kind !== 'allowed')
       return <Denied decision={manageDecision} />
@@ -293,7 +309,8 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
       />
     )
   }
-  if (intakeId) return <IntakeDetail base={base} intakeId={intakeId} />
+  if (intakeId)
+    return <IntakeDetail base={base} intakeId={intakeId} key={intakeId} />
   return <IntakesList base={base} />
 }
 
@@ -340,6 +357,7 @@ function IntakesList({ base }: { base: string }) {
     [searchParams],
   )
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
+  const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState<{
     page: Awaited<ReturnType<typeof intakesApi.list>> | null
     error: string | null
@@ -357,7 +375,7 @@ function IntakesList({ base }: { base: string }) {
       },
     )
     return () => controller.abort()
-  }, [selection])
+  }, [selection, attempt])
   const updateSearch = () => {
     const next = new URLSearchParams(searchParams)
     const value = query.trim()
@@ -377,133 +395,97 @@ function IntakesList({ base }: { base: string }) {
     state.page?.pageSize ?? selection.pageSize ?? defaultPageSize
   const totalPages = state.page?.totalPages ?? 1
   const items = state.page?.items ?? []
-  const positions = items.reduce((total, item) => total + item.partsCount, 0)
-  const sold = items.reduce((total, item) => total + item.soldCount, 0)
-  const cost = items.reduce((total, item) => total + (item.totalCost ?? 0), 0)
+
+  const filtered =
+    (selection.search ?? '') !== '' || selection.status !== undefined
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+    <RedesignShell
+      actions={
+        createDecision.kind === 'allowed' ? (
+          <Button asChild variant="primary">
+            <Link to={`${base}/new`}>
+              <Plus aria-hidden />
+              {t('newIntake')}
+            </Link>
+          </Button>
+        ) : undefined
+      }
+      crumb={
+        <>
           <span>{t('eyebrow')}</span>
-          <span aria-hidden className="text-white/20">
-            /
-          </span>
-          <span className="text-app-muted">{t('title')}</span>
-        </p>
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
-          <form
-            className="min-w-[180px] flex-[0_1_320px]"
-            onSubmit={(event) => {
-              event.preventDefault()
-              updateSearch()
-            }}
-          >
-            <SearchInput
-              aria-label={t('searchLabel')}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('searchPlaceholder')}
-              value={query}
-            />
-          </form>
-          {createDecision.kind === 'allowed' ? (
-            <Button
-              asChild
-              className="px-5 text-sm font-bold"
-              variant="primary"
-            >
-              <Link to={`${base}/new`}>
-                <Plus aria-hidden />
-                {t('newIntake')}
-              </Link>
-            </Button>
-          ) : null}
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <RedesignTitle title={t('title')} />
+
+      <div className="rz-toolbar" role="search">
+        <form
+          className="flex min-w-0 flex-[1_1_240px] sm:max-w-[360px]"
+          onSubmit={(event) => {
+            event.preventDefault()
+            updateSearch()
+          }}
+        >
+          <SearchInput
+            aria-label={t('searchLabel')}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('searchPlaceholder')}
+            value={query}
+          />
+        </form>
+        <div
+          aria-label={t('segmentsLabel')}
+          className="rz-seg flex-wrap"
+          role="radiogroup"
+        >
+          {INTAKE_SEGMENTS.map((option) => {
+            const active = (selection.status ?? '') === option.value
+            return (
+              <button
+                aria-checked={active}
+                key={option.value}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams)
+                  if (option.value) next.set('status', option.value)
+                  else next.delete('status')
+                  next.set('page', '1')
+                  setSearchParams(next)
+                }}
+                role="radio"
+                type="button"
+              >
+                {t(option.label)}
+                {/* Only the chosen segment has a count: the list endpoint
+                    totals what it returns, not the segments beside it. */}
+                {active ? (
+                  <span className="rz-count">{state.page?.total ?? 0}</span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-            {t('title')}
-          </h1>
-          <p className="text-app-muted mt-3 text-[15px]">{t('subtitle')}</p>
-        </div>
-
-        {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
-
-        <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
-          <IntakeStat
-            label={t('statIntakes')}
-            meta={t('statTotalFiltered')}
-            value={String(state.page?.total ?? 0)}
-          />
-          <IntakeStat
-            label={t('statPositions')}
-            meta={t('statThisPage')}
-            unit={t('pcs')}
-            value={String(positions)}
-          />
-          <IntakeStat
-            label={t('statSold')}
-            meta={t('statThisPage')}
-            unit={t('pcs')}
-            value={String(sold)}
-          />
-          {financeView ? (
-            <IntakeStat
-              label={t('statCost')}
-              meta={t('statThisPage')}
-              value={money(cost)}
-            />
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div
-            aria-label={t('segmentsLabel')}
-            className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
-            role="radiogroup"
-          >
-            {INTAKE_SEGMENTS.map((option) => {
-              const active = (selection.status ?? '') === option.value
-              return (
-                <button
-                  aria-checked={active}
-                  className={cn(
-                    'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
-                    active
-                      ? 'text-app-ink bg-white/[0.08]'
-                      : 'text-app-muted hover:text-app-ink',
-                  )}
-                  key={option.value}
-                  onClick={() => {
-                    const next = new URLSearchParams(searchParams)
-                    if (option.value) next.set('status', option.value)
-                    else next.delete('status')
-                    next.set('page', '1')
-                    setSearchParams(next)
-                  }}
-                  role="radio"
-                  type="button"
-                >
-                  {t(option.label)}
-                  {/* Only the chosen segment has a count: the list endpoint
-                      totals what it returns, not the segments beside it. */}
-                  {active ? (
-                    <span className="text-app-dim font-mono text-[11px] font-medium">
-                      {state.page?.total ?? 0}
-                    </span>
-                  ) : null}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <section
-          aria-label={t('listLabel')}
-          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-        >
+      {state.error !== null && state.page === null ? (
+        <ErrorState
+          description={state.error}
+          onRetry={() => {
+            setState({ page: null, error: null })
+            setAttempt((current) => current + 1)
+          }}
+        />
+      ) : state.page === null ? (
+        <CabinetLoadingContent
+          module="intakes"
+          heading={false}
+          label={t('listLabel')}
+        />
+      ) : (
+        <section aria-label={t('listLabel')} className="min-w-0">
+          {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
           <DataTable
             caption={t('listLabel')}
             columns={[
@@ -513,15 +495,10 @@ function IntakesList({ base }: { base: string }) {
                 variant: 'primary',
                 cell: (intake) => (
                   <Link
-                    className="hover:text-brand grid gap-0.5"
+                    className="rz-strong block min-w-0 truncate"
                     to={`${base}/${intake.id}`}
                   >
-                    <span className="font-semibold text-white">
-                      {intake.name ?? t('untitled')}
-                    </span>
-                    <span className="text-app-muted text-[13px]">
-                      {intake.createdBy.displayName}
-                    </span>
+                    {intake.name ?? t('untitled')}
                   </Link>
                 ),
               },
@@ -529,7 +506,7 @@ function IntakesList({ base }: { base: string }) {
                 key: 'date',
                 label: t('columnDate'),
                 cell: (intake) => (
-                  <span className="text-app-muted font-mono text-[13px]">
+                  <span className="rz-mono rz-dim text-caption">
                     {day(intake.purchasedAt ?? intake.createdAt)}
                   </span>
                 ),
@@ -539,9 +516,7 @@ function IntakesList({ base }: { base: string }) {
                 label: t('columnPositions'),
                 align: 'end',
                 cell: (intake) => (
-                  <span className="font-mono text-white tabular-nums">
-                    {intake.partsCount}
-                  </span>
+                  <span className="rz-strong">{intake.partsCount}</span>
                 ),
               },
               ...(financeView
@@ -550,20 +525,16 @@ function IntakesList({ base }: { base: string }) {
                       key: 'cost',
                       label: t('columnCost'),
                       align: 'end' as const,
-                      cell: (intake: IntakeListItem) => (
-                        <span className="font-mono font-bold text-white tabular-nums">
-                          {intake.totalCost === null
-                            ? '—'
-                            : money(intake.totalCost)}
-                        </span>
-                      ),
+                      cell: (intake: IntakeListItem) =>
+                        intake.totalCost === null
+                          ? '—'
+                          : money(intake.totalCost),
                     },
                   ]
                 : []),
               {
                 key: 'status',
                 label: t('columnStatus'),
-                align: 'end',
                 cell: (intake) => {
                   const sale = intakeSaleState(intake)
                   return (
@@ -573,109 +544,65 @@ function IntakesList({ base }: { base: string }) {
               },
             ]}
             empty={
-              <EmptyState
+              <StateScreen
+                className="border-0"
                 description={
-                  (selection.search ?? '') === '' &&
-                  selection.status === undefined
-                    ? t('emptyDescription')
-                    : t('emptyFilteredDescription')
+                  filtered
+                    ? t('emptyFilteredDescription')
+                    : t('emptyDescription')
                 }
-                title={
-                  (selection.search ?? '') === '' &&
-                  selection.status === undefined
-                    ? t('emptyTitle')
-                    : t('emptyFilteredTitle')
+                icon={
+                  filtered ? <SearchX aria-hidden /> : <Inbox aria-hidden />
                 }
+                title={filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
+                tone={filtered ? 'neutral' : 'brand'}
               />
             }
-            embedded
             footer={
-              <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
-                <p className="text-app-dim text-[13px]">
-                  {t('shownOfIntakes', {
-                    shown: items.length,
-                    count: state.page?.total ?? 0,
-                  })}
-                </p>
+              <ListFooter
+                summary={t('shownOfIntakes', {
+                  shown: items.length,
+                  count: state.page?.total ?? 0,
+                })}
+              >
                 <Pagination
                   label={t('paginationLabel')}
                   onPage={(nextPage) => updatePage(nextPage, currentPageSize)}
                   page={currentPage}
                   totalPages={totalPages}
                 />
-              </div>
+              </ListFooter>
             }
             rowKey={(intake) => intake.id}
             rows={items}
           />
         </section>
-      </div>
-    </div>
+      )}
+    </RedesignShell>
   )
 }
 
-/** The three ways a yard looks at the positions of one batch. */
-const INTAKE_PART_FILTERS = [
-  { value: 'all', label: 'partFilterAll' },
-  { value: 'available', label: 'partFilterAvailable' },
-  { value: 'sold', label: 'partFilterSold' },
-] as const
-
-type IntakePartFilter = (typeof INTAKE_PART_FILTERS)[number]['value']
-
-/** Known statuses in the reader's language; an unknown one is shown as sent. */
-const partStatusPill = (
-  t: Translate<(typeof intakesMessages)['uk']>,
-  status: string,
-): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: t('partAvailable'), tone: 'ok' }
-  if (status === 'reserved') return { label: t('partReserved'), tone: 'warn' }
-  if (status === 'sold') return { label: t('partSold'), tone: 'danger' }
-  return { label: status, tone: 'neutral' }
-}
-
-/** One cell of the strip under the title: a figure with its unit and a note. */
-function IntakeStat({
-  label,
-  value,
-  unit,
-  meta,
-  tone,
+/**
+ * The foot of a list: what is shown, then the pager. `Pagination` draws its
+ * own `.rz-pager`; here it sits inside the row that also carries the summary.
+ */
+function ListFooter({
+  summary,
+  children,
 }: {
-  label: string
-  value: string
-  unit?: string
-  meta?: string
-  tone?: 'ok'
+  summary: ReactNode
+  children: ReactNode
 }) {
   return (
-    <div className="bg-app-raised px-6 pt-[22px] pb-6">
-      <p className="text-app-muted font-mono text-[11px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p className="mt-3.5 flex items-baseline gap-2">
-        <span
-          className={cn(
-            'text-[30px] leading-none font-extrabold tracking-[-0.03em]',
-            tone === 'ok' ? 'text-state-ok' : 'text-white',
-          )}
-        >
-          {value}
-        </span>
-        {unit === undefined ? null : (
-          <span className="text-app-muted font-mono text-[13px] font-medium">
-            {unit}
-          </span>
-        )}
-      </p>
-      {meta === undefined ? null : (
-        <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
-      )}
+    <div className="rz-pager [&_.rz-pager]:min-h-0 [&_.rz-pager]:flex-1 [&_.rz-pager]:border-0 [&_.rz-pager]:p-0">
+      <p className="m-0">{summary}</p>
+      {children}
     </div>
   )
 }
 
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
+  const { pathname } = useLocation()
   const money = useWholeMoney(useAccountingCurrency().currency)
   const {
     cabinet,
@@ -693,22 +620,27 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   const [problem, setProblem] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [filter, setFilter] = useState<IntakePartFilter>('all')
-  const [partsPage, setPartsPage] = useState(1)
+  const [attempt, setAttempt] = useState(0)
+  const importEnabled = useFeatureFlag(FEATURE_FLAGS.partsBulkImport)
   const canPrintStickers = allowedToView(cabinetModules.stickers, cabinet)
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.intakes,
   )
+  // The record stays mounted behind the add-part drawer. Reload its parts
+  // when navigation returns here, including after saving several positions.
   useEffect(() => {
     const controller = new AbortController()
-    void intakesApi
-      .get(intakeId, { signal: controller.signal })
-      .then(setIntake, (error: unknown) => {
+    void intakesApi.get(intakeId, { signal: controller.signal }).then(
+      (next) => {
+        if (!controller.signal.aborted) setIntake(next)
+      },
+      (error: unknown) => {
         if (!controller.signal.aborted)
           setProblem(normalizeApiProblem(error).message)
-      })
+      },
+    )
     return () => controller.abort()
-  }, [intakeId])
+  }, [intakeId, attempt, pathname])
   const remove = async () => {
     if (busy) return
     setConfirmDelete(false)
@@ -722,47 +654,63 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
       setBusy(false)
     }
   }
+  const crumb = (
+    <Crumbs
+      items={[
+        t('eyebrow'),
+        <Link className="text-app-muted" key="list" to={base}>
+          {t('title')}
+        </Link>,
+        ...(intake
+          ? [
+              <span
+                className="inline-block max-w-[9rem] truncate align-bottom sm:max-w-none"
+                key="intake"
+              >
+                {intake.name ?? t('untitledIntake')}
+              </span>,
+            ]
+          : []),
+      ]}
+    />
+  )
   if (!intake && problem)
     return (
-      <PageBody width="narrow">
+      <RedesignShell crumb={crumb} width="record">
         <ErrorState
           actions={
-            <Button asChild>
-              <Link to={base}>{t('backToList')}</Link>
-            </Button>
+            <>
+              <Button asChild>
+                <Link to={base}>
+                  <ArrowLeft aria-hidden />
+                  {t('backToList')}
+                </Link>
+              </Button>
+              <Button
+                onClick={() => {
+                  setProblem(null)
+                  setAttempt((current) => current + 1)
+                }}
+                variant="primary"
+              >
+                <RefreshCw aria-hidden />
+                {tc('retry')}
+              </Button>
+            </>
           }
           description={problem}
           title={t('loadFailed')}
         />
-      </PageBody>
+      </RedesignShell>
     )
   if (!intake)
     return (
-      <PageBody width="narrow">
-        <SkeletonRows label={t('loading')} rows={3} />
-      </PageBody>
+      <RedesignShell crumb={crumb} width="record">
+        <CabinetLoadingContent module="intakes" label={t('loading')} />
+      </RedesignShell>
     )
 
   const units = intake.parts.reduce((total, part) => total + part.quantity, 0)
-  const sold = intake.parts.filter((part) => part.status === 'sold')
-  const available = intake.parts.filter((part) => part.status !== 'sold')
-  const counts: Record<IntakePartFilter, number> = {
-    all: intake.parts.length,
-    available: available.length,
-    sold: sold.length,
-  }
-  const filteredRows =
-    filter === 'all' ? intake.parts : filter === 'sold' ? sold : available
-  const partsPageSize = 20
-  const partsTotalPages = Math.max(
-    1,
-    Math.ceil(filteredRows.length / partsPageSize),
-  )
-  const currentPartsPage = Math.min(partsPage, partsTotalPages)
-  const rows = filteredRows.slice(
-    (currentPartsPage - 1) * partsPageSize,
-    currentPartsPage * partsPageSize,
-  )
   const partsBase = base.replace(/\/intakes$/, '/parts')
   const profit = intake.profitability ?? null
   const saleState = intakeSaleState(intake)
@@ -803,433 +751,283 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
           .join('&')}`
       : null
 
+  const soldPercent =
+    intake.partsCount === 0
+      ? 0
+      : Math.round((intake.soldCount / intake.partsCount) * 100)
+
   return (
-    <div
-      aria-busy={busy}
-      className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10"
-      role="main"
-    >
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={base}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToIntakes')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('eyebrow')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('title')}</span>
-          </p>
-        </div>
-        {manage ? (
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to={`${base}/${intake.id}/edit`}>{tc('edit')}</Link>
-            </Button>
-            {/* Import is a parts mutation, the same gate as the parts list. */}
-            {partCreateDecision.kind === 'allowed' && partsMediaManage ? (
-              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
-                <Button asChild>
-                  <Link
-                    to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
-                  >
-                    {t('importParts')}
-                  </Link>
-                </Button>
-              </FeatureGate>
-            ) : null}
-            {partCreateDecision.kind === 'allowed' ? (
-              <Button
-                asChild
-                className="px-5 text-sm font-bold"
-                variant="primary"
-              >
-                <Link to={`${base}/${intake.id}/parts/new`}>
-                  {t('addPart')}
-                </Link>
-              </Button>
-            ) : null}
-            <ActionMenu
-              actions={[
-                ...(canPrintStickers
-                  ? [
-                      {
-                        key: 'stickers',
-                        label: t('printStickers'),
-                        icon: <Printer aria-hidden />,
-                        disabled: stickerHref === null,
-                        onSelect: () => {
-                          if (stickerHref !== null) void navigate(stickerHref)
-                        },
-                      },
-                    ]
-                  : []),
-                ...(partCreateDecision.kind === 'allowed'
-                  ? [
-                      {
-                        key: 'batch',
-                        label: t('addBatch'),
-                        icon: <PackagePlus aria-hidden />,
-                        onSelect: () =>
-                          void navigate(`${base}/${intake.id}/parts/batch`),
-                      },
-                    ]
-                  : []),
-                {
-                  key: 'delete',
-                  label: t('deleteIntake'),
-                  icon: <Trash2 aria-hidden />,
-                  destructive: true,
-                  disabled: busy,
-                  onSelect: () => setConfirmDelete(true),
-                },
-              ]}
-              label={t('moreActions')}
-            />
-          </div>
-        ) : null}
-      </div>
-
-      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-4">
-            <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              {intake.name ?? t('untitledIntake')}
-            </h1>
-            <StatusPill tone={saleState.tone}>{t(saleState.label)}</StatusPill>
-          </div>
-          <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px]">
-            <span>
-              {intake.purchasedAt === null
-                ? t('noPurchaseDate')
-                : day(intake.purchasedAt)}
-            </span>
-            <span aria-hidden className="text-white/20">
-              ·
-            </span>
-            <span>
-              {t('createdBy', {
-                name: intake.createdBy.displayName,
-                date: day(intake.createdAt),
-              })}
-            </span>
-          </p>
-        </div>
-
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
-
-        <div className="bg-app-line border-app-line grid gap-px overflow-hidden rounded-[20px] border sm:grid-cols-2 lg:grid-cols-4">
-          <IntakeStat
-            label={t('statPositions')}
-            meta={t('statUnits', { count: units })}
-            unit={t('statPositionsUnit')}
-            value={String(intake.partsCount)}
-          />
-          <IntakeStat
-            label={t('statSold')}
-            meta={t('statStillInStock', {
-              count: intake.partsCount - intake.soldCount,
-            })}
-            unit={t('statOf', { count: intake.partsCount })}
-            value={String(intake.soldCount)}
-          />
-          {financeView ? (
+    <div aria-busy={busy} className="grid content-start" role="main">
+      <RedesignShell
+        actions={
+          manage ? (
             <>
-              <IntakeStat
-                label={t('statInvested')}
-                meta={t('statBatchCost')}
-                value={money(profit?.invested ?? intake.totalCost ?? 0)}
-              />
-              <IntakeStat
-                label={t('statRecouped')}
-                meta={
-                  profit?.recoupedPercent === null ||
-                  profit?.recoupedPercent === undefined
-                    ? t('statNothingBack')
-                    : t('statRecoupedShare', {
-                        percent: profit.recoupedPercent,
-                      })
-                }
-                tone="ok"
-                value={money(profit?.recouped ?? 0)}
-              />
-            </>
-          ) : null}
-        </div>
-
-        {/* wrap-reverse puts the rail above the list on narrow screens; it also
-            flips the cross axis, so items-end is what pins both to the top. */}
-        <div className="flex flex-wrap-reverse items-end gap-6">
-          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            {partsView ? (
-              <section
-                aria-label={t('positionsTitle')}
-                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-              >
-                <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-b px-6 pt-5 pb-4">
-                  <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                    {t('positionsTitle')}
-                  </h2>
-                  <div
-                    aria-label={t('partFiltersLabel')}
-                    className="border-app-line bg-app-input flex gap-1 rounded-[10px] border p-1"
-                    role="radiogroup"
-                  >
-                    {INTAKE_PART_FILTERS.map((option) => {
-                      const active = option.value === filter
-                      return (
-                        <button
-                          aria-checked={active}
-                          className={cn(
-                            'focus-visible:outline-brand flex min-h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-bold',
-                            active
-                              ? 'text-app-ink bg-white/[0.08]'
-                              : 'text-app-muted hover:text-app-ink',
-                          )}
-                          key={option.value}
-                          onClick={() => {
-                            setFilter(option.value)
-                            setPartsPage(1)
-                          }}
-                          role="radio"
-                          type="button"
-                        >
-                          {t(option.label)}
-                          <span className="text-app-dim font-mono text-[11px] font-medium">
-                            {counts[option.value]}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-                <DataTable
-                  caption={t('positionsTitle')}
-                  columns={[
-                    {
-                      key: 'qr',
-                      label: t('columnCode'),
-                      cell: (part) => (
-                        <span className="text-app-muted font-mono text-[13px]">
-                          {part.qrCode}
-                        </span>
-                      ),
-                    },
-                    {
-                      key: 'name',
-                      label: t('columnName'),
-                      variant: 'primary',
-                      cell: (part) => (
-                        <Link
-                          className="hover:text-brand grid gap-0.5"
-                          to={`${partsBase}/${part.id}`}
-                        >
-                          <span className="font-semibold text-white">
-                            {part.name}
-                          </span>
-                          <span className="text-app-dim font-mono text-[12px]">
-                            {part.partType ?? t('noType')}
-                          </span>
-                        </Link>
-                      ),
-                    },
-                    {
-                      key: 'quantity',
-                      label: t('columnQuantity'),
-                      align: 'end',
-                      cell: (part) => (
-                        <span className="text-app-muted font-mono tabular-nums">
-                          {t('quantityWithUnit', {
-                            count: part.quantity,
-                            unit: unitLabel(t, part.unit),
-                          })}
-                        </span>
-                      ),
-                    },
-                    {
-                      key: 'status',
-                      label: t('columnState'),
-                      align: 'end',
-                      cell: (part) => {
-                        const pill = partStatusPill(t, part.status)
-                        return (
-                          <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
-                        )
-                      },
-                    },
-                  ]}
-                  empty={
-                    <EmptyState
-                      description={
-                        filter === 'all'
-                          ? t('partsEmptyDescription')
-                          : t('partsEmptyFilteredDescription')
-                      }
-                      title={
-                        filter === 'all'
-                          ? t('partsEmptyTitle')
-                          : t('partsEmptyFilteredTitle')
-                      }
-                    />
-                  }
-                  embedded
-                  footer={
-                    filteredRows.length > partsPageSize ? (
-                      <div className="border-app-line flex items-center justify-between gap-4 border-t px-6 py-4">
-                        <p className="text-app-dim text-[13px]">
-                          {t('shownOf', {
-                            shown: rows.length,
-                            total: filteredRows.length,
-                          })}
-                        </p>
-                        <Pagination
-                          label={t('partsPaginationLabel')}
-                          onPage={setPartsPage}
-                          page={currentPartsPage}
-                          totalPages={partsTotalPages}
-                        />
-                      </div>
-                    ) : null
-                  }
-                  rowKey={(part) => part.id}
-                  rows={rows}
-                />
-              </section>
-            ) : null}
-
-            <Card
-              aside={
-                <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                  {t('historyCount', { count: history.length })}
-                </span>
-              }
-              bodyClassName="p-0"
-              title={t('historyTitle')}
-            >
-              <ul className="divide-app-line grid divide-y">
-                {history.map((event) => (
-                  <li
-                    className="flex items-center gap-3.5 px-6 py-3.5"
-                    key={event.id}
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'size-[7px] shrink-0 rounded-full',
-                        event.tone === 'ok' ? 'bg-state-ok' : 'bg-app-dim',
-                      )}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-white">
-                        {event.title}
-                      </span>
-                      <span className="text-app-muted mt-0.5 block text-xs">
-                        {event.meta}
-                      </span>
-                    </span>
-                    <span className="text-app-muted font-mono text-[13px] whitespace-nowrap">
-                      {event.value}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-
-            {intake.notes === null ? null : (
-              <Card title={t('notesTitle')}>
-                <p className="text-app-muted text-sm leading-[1.6] whitespace-pre-line">
-                  {intake.notes}
-                </p>
-              </Card>
-            )}
-
-            {intake.photos.length > 0 ? (
-              <Card title={t('photosTitle')}>
-                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {intake.photos.map((photo, index) => (
-                    <li key={photo.url}>
-                      <a
-                        className="border-app-line block overflow-hidden rounded-[14px] border"
-                        href={photo.url}
-                      >
-                        <img
-                          alt={t('photoAlt', { number: index + 1 })}
-                          className="aspect-4/3 w-full object-cover"
-                          src={photo.thumbnailUrl || photo.url}
-                        />
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ) : null}
-          </div>
-
-          <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_340px] gap-5">
-            <Card title={t('salesTitle')}>
-              <p className="flex items-baseline gap-2.5">
-                <span className="text-[26px] leading-none font-extrabold tracking-[-0.03em] text-white">
-                  {intake.soldCount}
-                </span>
-                <span className="text-app-muted font-mono text-[13px]">
-                  {t('ofPositions', { count: intake.partsCount })}
-                </span>
-              </p>
-              <span
-                aria-label={t('soldProgress')}
-                aria-valuemax={100}
-                aria-valuemin={0}
-                aria-valuenow={
-                  intake.partsCount === 0
-                    ? 0
-                    : Math.round((intake.soldCount / intake.partsCount) * 100)
-                }
-                className="bg-app-line-2 mt-3.5 block h-2 overflow-hidden rounded-full"
-                role="progressbar"
-              >
-                <span
-                  className="bg-state-ok block h-full rounded-full"
-                  style={{
-                    width: `${String(
-                      intake.partsCount === 0
-                        ? 0
-                        : Math.round(
-                            (intake.soldCount / intake.partsCount) * 100,
-                          ),
-                    )}%`,
-                  }}
-                />
-              </span>
-              <p className="text-app-muted mt-3 text-[13px]">
-                {profit === null
-                  ? t('positionsInStock', {
-                      count: intake.partsCount - intake.soldCount,
-                    })
-                  : t('availableAndSold', {
-                      available: profit.partsAvailable,
-                      sold: profit.partsSold,
-                    })}
-              </p>
               {partCreateDecision.kind === 'allowed' ? (
-                <Button
-                  asChild
-                  className="mt-4.5 min-h-11 w-full text-sm font-bold"
-                  variant="primary"
-                >
+                <Button asChild variant="primary">
                   <Link to={`${base}/${intake.id}/parts/new`}>
+                    <Plus aria-hidden />
                     {t('addPart')}
                   </Link>
                 </Button>
               ) : null}
-            </Card>
-          </aside>
+              <ActionMenu
+                actions={[
+                  {
+                    key: 'edit',
+                    label: tc('edit'),
+                    icon: <Pencil aria-hidden />,
+                    onSelect: () => void navigate(`${base}/${intake.id}/edit`),
+                  },
+                  // Import is a parts mutation, the same gate as the parts list.
+                  ...(partCreateDecision.kind === 'allowed' &&
+                  partsMediaManage &&
+                  importEnabled
+                    ? [
+                        {
+                          key: 'import',
+                          label: t('importParts'),
+                          icon: <Upload aria-hidden />,
+                          onSelect: () =>
+                            void navigate(
+                              `${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`,
+                            ),
+                        },
+                      ]
+                    : []),
+                  ...(canPrintStickers
+                    ? [
+                        {
+                          key: 'stickers',
+                          label: t('printStickers'),
+                          icon: <Printer aria-hidden />,
+                          disabled: stickerHref === null,
+                          onSelect: () => {
+                            if (stickerHref !== null) void navigate(stickerHref)
+                          },
+                        },
+                      ]
+                    : []),
+                  {
+                    key: 'delete',
+                    label: t('deleteIntake'),
+                    icon: <Trash2 aria-hidden />,
+                    destructive: true,
+                    disabled: busy,
+                    onSelect: () => setConfirmDelete(true),
+                  },
+                ]}
+                label={t('moreActions')}
+              />
+            </>
+          ) : undefined
+        }
+        crumb={crumb}
+        width="record"
+      >
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="rz-h-page">
+                {intake.name ?? t('untitledIntake')}
+              </h1>
+              <span className="rz-caption">
+                {t('createdBy', {
+                  name: intake.createdBy.displayName,
+                  date: day(intake.createdAt),
+                })}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone={saleState.tone}>
+                {t(saleState.label)}
+              </StatusPill>
+              <span className="rz-caption">
+                {intake.purchasedAt === null
+                  ? t('noPurchaseDate')
+                  : day(intake.purchasedAt)}
+              </span>
+            </div>
+          </div>
+
+          {problem ? <Notice tone="danger">{problem}</Notice> : null}
+
+          <KpiStrip>
+            <Kpi
+              label={t('statPositions')}
+              meta={t('statUnits', { count: units })}
+              unit={t('statPositionsUnit')}
+              value={String(intake.partsCount)}
+            />
+            <Kpi
+              label={t('statSold')}
+              meta={t('statStillInStock', {
+                count: intake.partsCount - intake.soldCount,
+              })}
+              unit={t('statOf', { count: intake.partsCount })}
+              value={String(intake.soldCount)}
+            />
+            {financeView ? (
+              <>
+                <Kpi
+                  label={t('statInvested')}
+                  meta={t('statBatchCost')}
+                  value={money(profit?.invested ?? intake.totalCost ?? 0)}
+                />
+                <Kpi
+                  label={t('statRecouped')}
+                  meta={
+                    profit?.recoupedPercent === null ||
+                    profit?.recoupedPercent === undefined
+                      ? t('statNothingBack')
+                      : t('statRecoupedShare', {
+                          percent: profit.recoupedPercent,
+                        })
+                  }
+                  value={money(profit?.recouped ?? 0)}
+                />
+              </>
+            ) : null}
+          </KpiStrip>
+
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+              {partsView ? (
+                <PartsStockCard
+                  title={t('positionsTitle')}
+                  description={t('partsFromIntake', {
+                    count: intake.partsCount,
+                  })}
+                  emptyMessage={t('partsEmptyTitle')}
+                  partsHref={`${partsBase}?origin=batch&intake_ids=${encodeURIComponent(intake.id)}`}
+                  partsTotal={intake.partsCount}
+                  partsSold={intake.soldCount}
+                  partsAvailable={intake.partsCount - intake.soldCount}
+                />
+              ) : null}
+
+              <Card
+                aside={
+                  <span className="rz-eyebrow">
+                    {t('historyCount', { count: history.length })}
+                  </span>
+                }
+                bodyClassName="p-0"
+                title={t('historyTitle')}
+              >
+                <ol className="rz-timeline">
+                  {history.map((event) => (
+                    <li key={event.id}>
+                      <span aria-hidden className="rz-timeline__icon">
+                        <span
+                          className={cn(
+                            'rz-dot',
+                            event.tone === 'ok' && 'rz-dot--ok',
+                          )}
+                        />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="rz-strong block truncate">
+                          {event.title}
+                        </span>
+                        <span className="rz-caption block">{event.meta}</span>
+                      </span>
+                      <span className="rz-timeline__date">{event.value}</span>
+                    </li>
+                  ))}
+                </ol>
+              </Card>
+
+              <NotesCard
+                busy={busy}
+                canEdit={manage}
+                key={intake.id}
+                maxLength={1000}
+                onSave={async (value) => {
+                  const scope = requireLatestMutation({ quota: false })
+                  const updated = await intakesApi.update(
+                    intake.id,
+                    { notes: value },
+                    { signal: scope.signal },
+                  )
+                  requireLatestMutation({ quota: false })
+                  return updated.notes ?? null
+                }}
+                onSaved={(notes) => {
+                  setIntake((current) =>
+                    current?.id === intake.id ? { ...current, notes } : current,
+                  )
+                }}
+                readBack={async () => {
+                  const scope = requireLatestMutation({ quota: false })
+                  const latest = await intakesApi.get(intake.id, {
+                    signal: scope.signal,
+                  })
+                  requireLatestMutation({ quota: false })
+                  return latest.notes ?? null
+                }}
+                value={intake.notes}
+              />
+
+              {intake.photos.length > 0 ? (
+                <Card title={t('photosTitle')}>
+                  <ul className="rz-photos m-0 list-none p-0">
+                    {intake.photos.map((photo, index) => (
+                      <li key={photo.url}>
+                        <a className="rz-photo" href={photo.url}>
+                          <img
+                            alt={t('photoAlt', { number: index + 1 })}
+                            src={photo.thumbnailUrl || photo.url}
+                          />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ) : null}
+            </div>
+
+            <aside className="grid min-w-0 flex-[1_1_280px] gap-4 lg:sticky lg:top-[calc(var(--rz-topbar-h)+16px)] lg:max-w-[380px]">
+              <Card title={t('salesTitle')}>
+                <div className="grid gap-3">
+                  <p className="rz-kpi__value m-0">
+                    <span className="rz-display">{intake.soldCount}</span>
+                    <span className="rz-kpi__unit">
+                      {t('ofPositions', { count: intake.partsCount })}
+                    </span>
+                  </p>
+                  <span
+                    aria-label={t('soldProgress')}
+                    aria-valuemax={100}
+                    aria-valuemin={0}
+                    aria-valuenow={soldPercent}
+                    className="rz-meter"
+                    role="progressbar"
+                  >
+                    <span style={{ width: `${String(soldPercent)}%` }} />
+                  </span>
+                  <p className="rz-muted m-0">
+                    {profit === null
+                      ? t('positionsInStock', {
+                          count: intake.partsCount - intake.soldCount,
+                        })
+                      : t('availableAndSold', {
+                          available: profit.partsAvailable,
+                          sold: profit.partsSold,
+                        })}
+                  </p>
+                  {partCreateDecision.kind === 'allowed' ? (
+                    <Button asChild size="wide">
+                      <Link to={`${base}/${intake.id}/parts/new`}>
+                        {t('addPart')}
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
+              </Card>
+            </aside>
+          </div>
         </div>
-      </div>
+      </RedesignShell>
 
       <ConfirmDialog
         confirmLabel={intake.partsCount > 0 ? t('understood') : tc('delete')}
@@ -1251,6 +1049,21 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         }
       />
     </div>
+  )
+}
+
+/**
+ * The way back, at the head of the breadcrumb: a quiet small button, so the
+ * crumb trail after it still reads as the path.
+ */
+function BackLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Button asChild size="sm" variant="quiet">
+      <Link to={to}>
+        <ChevronLeft aria-hidden />
+        {children}
+      </Link>
+    </Button>
   )
 }
 
@@ -1443,98 +1256,90 @@ function IntakeForm({
   ]
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={backTo}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {intakeId ? tf('backToIntake') : t('backToIntakes')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('eyebrow')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('title')}</span>
-            {named ? (
-              <>
-                <span aria-hidden className="text-white/20">
-                  /
-                </span>
-                <span className="text-app-muted max-w-40 truncate normal-case">
-                  {values.name}
-                </span>
-              </>
-            ) : null}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button asChild className="px-[18px] text-sm font-semibold">
-            <Link to={backTo}>{tc('cancel')}</Link>
-          </Button>
-          <Button
-            aria-busy={busy}
-            className="px-5 text-sm font-bold"
-            disabled={busy}
-            form="intake-form"
-            type="submit"
-            variant="primary"
-          >
-            {saveLabel}
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            {title}
-          </h1>
-          {intakeId === undefined ? (
-            <p className="text-app-muted mt-3.5 text-[15px]">{tf('intro')}</p>
-          ) : (
-            <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px] font-medium">
-              <span className="text-app-ink font-mono">
-                {values.name || t('untitled')}
-              </span>
-              {intake ? (
+    <div className="grid content-start">
+      <RedesignShell
+        actions={
+          <>
+            <Button asChild>
+              <Link to={backTo}>{tc('cancel')}</Link>
+            </Button>
+            <Button
+              aria-busy={busy}
+              disabled={busy}
+              form="intake-form"
+              type="submit"
+              variant="primary"
+            >
+              <Check aria-hidden />
+              {saveLabel}
+            </Button>
+          </>
+        }
+        crumb={
+          <>
+            <BackLink to={backTo}>
+              {intakeId ? tf('backToIntake') : t('backToIntakes')}
+            </BackLink>
+            <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
+              <span>{t('eyebrow')}</span>
+              <ChevronRight aria-hidden className="size-3" />
+              <span>{t('title')}</span>
+              {named ? (
                 <>
-                  <span aria-hidden className="text-white/20">
-                    ·
-                  </span>
-                  <span>
-                    {tf('positionsCount', { count: positions })} ·{' '}
-                    {t('quantityWithUnit', { count: units, unit: t('pcs') })}
-                  </span>
-                  <span aria-hidden className="text-white/20">
-                    ·
-                  </span>
-                  <span>
-                    {tf('createdOnBy', {
-                      date: day(intake.createdAt),
-                      name: intake.createdBy.displayName,
-                    })}
+                  <ChevronRight aria-hidden className="size-3" />
+                  <span aria-current="page" className="max-w-40">
+                    {values.name}
                   </span>
                 </>
               ) : null}
-            </p>
-          )}
-        </div>
+            </span>
+          </>
+        }
+      >
+        <div className="grid max-w-[1240px] gap-4">
+          <div className="grid gap-2">
+            <h1 className="rz-h-page">{title}</h1>
+            {intakeId === undefined ? (
+              <p className="rz-muted m-0">{tf('intro')}</p>
+            ) : (
+              <p className="rz-muted m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="rz-mono rz-strong">
+                  {values.name || t('untitled')}
+                </span>
+                {intake ? (
+                  <>
+                    <span aria-hidden className="rz-dim">
+                      ·
+                    </span>
+                    <span>
+                      {tf('positionsCount', { count: positions })} ·{' '}
+                      {t('quantityWithUnit', { count: units, unit: t('pcs') })}
+                    </span>
+                    <span aria-hidden className="rz-dim">
+                      ·
+                    </span>
+                    <span>
+                      {tf('createdOnBy', {
+                        date: day(intake.createdAt),
+                        name: intake.createdBy.displayName,
+                      })}
+                    </span>
+                  </>
+                ) : null}
+              </p>
+            )}
+          </div>
 
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
+          {problem ? <Notice tone="danger">{problem}</Notice> : null}
 
-        <form
-          aria-busy={busy}
-          className="flex flex-wrap items-start gap-6"
-          id="intake-form"
-          onSubmit={(event) => void save(event)}
-        >
-          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <FormCard step="01" title={tf('basicsTitle')}>
-              <div className="grid gap-4">
+          <form
+            aria-busy={busy}
+            className="flex flex-wrap items-start gap-4"
+            id="intake-form"
+            onSubmit={(event) => void save(event)}
+          >
+            <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+              <FormCard step="01" title={tf('basicsTitle')}>
                 <Field hint={tf('nameHint')} label={tf('nameLabel')}>
                   <TextInput
                     autoComplete="off"
@@ -1544,215 +1349,180 @@ function IntakeForm({
                     value={values.name}
                   />
                 </Field>
-              </div>
-            </FormCard>
+              </FormCard>
 
-            <FormCard step="02" title={tf('dateOwnerTitle')}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={tf('intakeDate')}>
-                  <TextInput
-                    name="purchasedAt"
-                    onChange={update('purchasedAt')}
-                    type="date"
-                    value={values.purchasedAt.slice(0, 10)}
-                  />
-                </Field>
-              </div>
-              <Field hint={tf('ownerHint')} label={tf('ownerLabel')}>
-                {intake ? (
-                  <p className="border-app-line-2 text-app-ink inline-flex w-fit min-h-11 items-center gap-2.5 rounded-full border py-1.5 pr-4 pl-2 text-sm font-semibold">
-                    <span className="text-app-muted grid size-7 place-items-center rounded-full bg-white/[0.06] text-xs font-bold">
-                      {initials(intake.createdBy.displayName)}
-                    </span>
-                    {intake.createdBy.displayName}
-                  </p>
-                ) : (
-                  <p className="text-app-dim text-sm">{tf('ownerOnCreate')}</p>
-                )}
-              </Field>
-            </FormCard>
-
-            <FormCard
-              description={
-                positions > 0
-                  ? tf('costSplitNow', { count: positions })
-                  : tf('costSplit')
-              }
-              step="03"
-              title={tf('costTitle')}
-            >
-              {canManageFinance ? (
-                <div className="grid gap-4">
-                  <Field
-                    error={fieldErrors.totalCost}
-                    hint={
-                      price.hint === undefined
-                        ? tf('totalCostHint')
-                        : `${tf('totalCostHint')}. ${price.hint}`
-                    }
-                    label={tf('totalCost')}
-                  >
-                    <MoneyInput
-                      className="font-mono"
-                      currency={price.currency}
-                      disabled={price.disabled}
-                      inputMode="decimal"
-                      name="totalCost"
-                      onChange={update('totalCost')}
-                      placeholder="6120"
-                      value={values.totalCost}
+              <FormCard step="02" title={tf('dateTitle')}>
+                <div className="rz-form-grid">
+                  <Field label={tf('intakeDate')}>
+                    <TextInput
+                      name="purchasedAt"
+                      onChange={update('purchasedAt')}
+                      type="date"
+                      value={values.purchasedAt.slice(0, 10)}
                     />
                   </Field>
-                  {price.note}
                 </div>
-              ) : null}
-              <Field hint={tf('commentHint')} label={tf('commentLabel')}>
-                <TextArea
-                  name="notes"
-                  onChange={update('notes')}
-                  placeholder={tf('commentPlaceholder')}
-                  rows={2}
-                  value={values.notes}
-                />
-              </Field>
-            </FormCard>
-
-            {!intakeId ? (
-              <FormCard step="04" title={tf('photosTitle')}>
-                <MediaPicker
-                  entityType="intakes"
-                  items={media}
-                  onChange={setMedia}
-                />
               </FormCard>
-            ) : null}
-          </div>
 
-          <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-            <Card
-              title={
-                intakeId === undefined
-                  ? tf('beforeCreateTitle')
-                  : tf('summaryTitle')
-              }
-            >
-              <div className="border-app-line bg-app-input rounded-[14px] border p-4">
-                <p
-                  className={cn(
-                    'text-[17px] font-bold tracking-[-0.015em]',
-                    named ? 'text-white' : 'text-app-dim',
-                  )}
-                >
-                  {named ? values.name : tf('nameMissing')}
-                </p>
-                <p className="text-app-muted mt-1.5 text-sm">
-                  {[
-                    values.purchasedAt ? day(values.purchasedAt) : null,
-                    intake?.createdBy.displayName ?? null,
-                  ]
-                    .filter((part) => part !== null)
-                    .join(' · ') || tf('dateMissing')}
-                </p>
-                <p className="text-app-dim mt-3 font-mono text-[12px]">
-                  {intakeId === undefined
-                    ? tf('numberAssigned')
-                    : `${values.name || tf('untitledLower')} · ${tf('positionsCount', { count: positions })}`}
-                </p>
-              </div>
-              {canManageFinance ? (
-                <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {tf('summaryCost')}
-                  </dt>
-                  <dd
-                    className={cn(
-                      'font-mono text-[15px] tabular-nums',
-                      hasCost ? 'text-white' : 'text-app-dim',
-                    )}
-                  >
-                    {hasCost && cost !== null ? money(cost) : '—'}
-                  </dd>
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {tf('summaryExpenses')}
-                  </dt>
-                  <dd
-                    className="text-app-dim font-mono text-[15px] tabular-nums"
-                    title={tf('expensesNotStored')}
-                  >
-                    —
-                  </dd>
-                  <div className="bg-app-line col-span-2 my-1 h-px" />
-                  <dt className="text-[15px] font-bold text-white">
-                    {tf('summaryTotal')}
-                  </dt>
-                  <dd className="font-mono text-[20px] text-white tabular-nums">
-                    {money(hasCost && cost !== null ? cost : 0)}
-                  </dd>
-                </dl>
+              <FormCard
+                description={
+                  positions > 0
+                    ? tf('costSplitNow', { count: positions })
+                    : tf('costSplit')
+                }
+                step="03"
+                title={tf('costTitle')}
+              >
+                {canManageFinance ? (
+                  <div className="grid gap-3">
+                    <Field
+                      error={fieldErrors.totalCost}
+                      hint={
+                        price.hint === undefined
+                          ? tf('totalCostHint')
+                          : `${tf('totalCostHint')}. ${price.hint}`
+                      }
+                      label={tf('totalCost')}
+                    >
+                      <MoneyInput
+                        className="font-mono"
+                        currency={price.currency}
+                        disabled={price.disabled}
+                        inputMode="decimal"
+                        name="totalCost"
+                        onChange={update('totalCost')}
+                        placeholder="6120"
+                        value={values.totalCost}
+                      />
+                    </Field>
+                    {price.note}
+                  </div>
+                ) : null}
+                <Field hint={tf('commentHint')} label={tf('commentLabel')}>
+                  <TextArea
+                    name="notes"
+                    onChange={update('notes')}
+                    placeholder={tf('commentPlaceholder')}
+                    rows={2}
+                    value={values.notes}
+                  />
+                </Field>
+              </FormCard>
+
+              {!intakeId ? (
+                <FormCard step="04" title={tf('photosTitle')}>
+                  <MediaPicker
+                    entityType="intakes"
+                    items={media}
+                    onChange={setMedia}
+                  />
+                </FormCard>
               ) : null}
-              <ul className="border-app-line mt-5 grid gap-2.5 border-t pt-4.5">
-                {checks.map((item) => (
-                  <li
-                    className={cn(
-                      'flex items-center gap-2.5 text-[13px] font-semibold',
-                      item.done ? 'text-app-ink' : 'text-app-dim',
-                    )}
-                    key={item.label}
-                  >
-                    <span
-                      aria-hidden
+            </div>
+
+            <aside className="grid min-w-0 flex-[1_1_280px] gap-4 lg:sticky lg:top-[calc(var(--rz-topbar-h)+16px)] lg:max-w-[380px]">
+              <Card
+                title={
+                  intakeId === undefined
+                    ? tf('beforeCreateTitle')
+                    : tf('summaryTitle')
+                }
+              >
+                <div className="grid gap-4">
+                  <div className="rz-inset grid gap-1">
+                    <p
                       className={cn(
-                        'grid size-4.5 shrink-0 place-items-center rounded-full',
-                        item.done
-                          ? 'bg-state-ok-soft text-state-ok'
-                          : 'bg-white/[0.06]',
+                        'm-0 font-semibold',
+                        named ? 'rz-strong' : 'rz-dim',
                       )}
                     >
-                      {item.done ? <Check className="size-3" /> : null}
-                    </span>
-                    {item.label}
-                  </li>
-                ))}
-              </ul>
-              {canManageFinance ? (
-                <div className="mt-5 empty:hidden">{price.saveNotes}</div>
-              ) : null}
-              <Button
-                aria-busy={busy}
-                className="mt-5 min-h-12 w-full text-[16px] font-bold"
-                disabled={busy}
-                type="submit"
-                variant="primary"
-              >
-                {saveLabel}
-              </Button>
-              <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
-                {intakeId === undefined ? tf('nextOnCreate') : tf('nextOnEdit')}
-              </p>
-            </Card>
-
-            {intakeId ? (
-              <Card title={tf('deleteIntake')}>
-                <p className="text-app-muted text-[13px] leading-[1.5]">
-                  {tf('deleteInfo', { count: positions })}{' '}
-                  {positions > 0
-                    ? tf('deleteInfoBlocked')
-                    : tf('deleteInfoFree')}
-                </p>
-                <Button
-                  className="mt-3 min-h-10 w-full text-[13px] font-bold"
-                  disabled={busy || positions > 0}
-                  onClick={() => setConfirmDelete(true)}
-                  type="button"
-                  variant="danger"
-                >
-                  {tf('deleteIntake')}
-                </Button>
+                      {named ? values.name : tf('nameMissing')}
+                    </p>
+                    <p className="rz-muted m-0">
+                      {[
+                        values.purchasedAt ? day(values.purchasedAt) : null,
+                        intake?.createdBy.displayName ?? null,
+                      ]
+                        .filter((part) => part !== null)
+                        .join(' · ') || tf('dateMissing')}
+                    </p>
+                    <p className="rz-caption rz-mono m-0">
+                      {intakeId === undefined
+                        ? tf('numberAssigned')
+                        : `${values.name || tf('untitledLower')} · ${tf('positionsCount', { count: positions })}`}
+                    </p>
+                  </div>
+                  {canManageFinance ? (
+                    <dl className="m-0 grid grid-cols-[1fr_auto] items-baseline gap-y-2">
+                      <dt className="rz-muted">{tf('summaryCost')}</dt>
+                      <dd
+                        className={cn(
+                          'rz-mono m-0',
+                          hasCost ? 'rz-strong' : 'rz-dim',
+                        )}
+                      >
+                        {hasCost && cost !== null ? money(cost) : '—'}
+                      </dd>
+                      <div className="bg-app-line col-span-2 my-1 h-px" />
+                      <dt className="rz-strong font-semibold">
+                        {tf('summaryTotal')}
+                      </dt>
+                      <dd className="rz-mono rz-strong m-0 text-title">
+                        {money(hasCost && cost !== null ? cost : 0)}
+                      </dd>
+                    </dl>
+                  ) : null}
+                  <ChecksList
+                    items={checks.map((item) => ({
+                      state: item.done ? 'ok' : 'idle',
+                      label: item.label,
+                    }))}
+                  />
+                  {canManageFinance ? (
+                    <div className="empty:hidden">{price.saveNotes}</div>
+                  ) : null}
+                  <Button
+                    aria-busy={busy}
+                    disabled={busy}
+                    size="wide"
+                    type="submit"
+                    variant="primary"
+                  >
+                    {saveLabel}
+                  </Button>
+                  <p className="rz-caption m-0">
+                    {intakeId === undefined
+                      ? tf('nextOnCreate')
+                      : tf('nextOnEdit')}
+                  </p>
+                </div>
               </Card>
-            ) : null}
-          </aside>
-        </form>
-      </div>
+
+              {intakeId ? (
+                <Card title={tf('deleteIntake')}>
+                  <div className="grid gap-3">
+                    <p className="rz-muted m-0">
+                      {tf('deleteInfo', { count: positions })}{' '}
+                      {positions > 0
+                        ? tf('deleteInfoBlocked')
+                        : tf('deleteInfoFree')}
+                    </p>
+                    <Button
+                      disabled={busy || positions > 0}
+                      onClick={() => setConfirmDelete(true)}
+                      size="wide"
+                      type="button"
+                      variant="danger"
+                    >
+                      {tf('deleteIntake')}
+                    </Button>
+                  </div>
+                </Card>
+              ) : null}
+            </aside>
+          </form>
+        </div>
+      </RedesignShell>
 
       <ConfirmDialog
         confirmLabel={tc('delete')}
@@ -1767,18 +1537,52 @@ function IntakeForm({
   )
 }
 
-/** The four states a yard actually sorts parts into, mapped to the server enum. */
-const INTAKE_CONDITIONS = [
-  { value: 'good', label: 'conditionUsed' },
-  { value: 'refurbished', label: 'conditionRefurbished' },
-  { value: 'new', label: 'conditionNew' },
-  { value: 'scrap', label: 'conditionForRebuild' },
-] as const
-const conditionOptions = (tf: Translate<(typeof intakeFormMessages)['uk']>) =>
-  INTAKE_CONDITIONS.map((option) => ({
-    value: option.value,
-    label: tf(option.label),
-  }))
+/**
+ * A short checklist before saving: a tick, a warning mark or an empty ring,
+ * always with its sentence — the mark only repeats what the text says.
+ */
+function ChecksList({
+  items,
+}: {
+  items: readonly { state: 'ok' | 'warn' | 'idle'; label: string }[]
+}) {
+  return (
+    <ul className="m-0 grid list-none gap-2 p-0">
+      {items.map((item) => (
+        <li
+          className={cn(
+            'flex items-start gap-2',
+            item.state === 'ok'
+              ? 'text-app-ink'
+              : item.state === 'warn'
+                ? 'text-state-warn'
+                : 'rz-dim',
+          )}
+          key={item.label}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              'mt-px grid size-4 shrink-0 place-items-center rounded-full text-micro font-bold',
+              item.state === 'ok'
+                ? 'bg-state-ok-soft text-state-ok'
+                : item.state === 'warn'
+                  ? 'bg-state-warn-soft text-state-warn'
+                  : 'bg-app-hover',
+            )}
+          >
+            {item.state === 'ok' ? (
+              <Check className="size-3" />
+            ) : item.state === 'warn' ? (
+              '!'
+            ) : null}
+          </span>
+          {item.label}
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 /** A part added in this sitting, kept only for the session's own recap. */
 interface AddedPart {
@@ -1800,9 +1604,14 @@ function PartForm({
   const cabinet = useCabinet()
   const t = useT(intakesMessages)
   const tf = useT(intakeFormMessages)
+  const tc = useT(commonMessages)
+  const tp = useT(partFormMessages)
+  const tPlacement = useT(placementMessages)
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
+  const canPlace =
+    allowedToView(cabinetModules.inventory, cabinet) &&
+    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
   const emptyPosition = {
     name: '',
     partType: '',
@@ -1811,7 +1620,7 @@ function PartForm({
     quantity: 1,
     unit: PIECES,
     price: '',
-    zoneId: '',
+    placement: emptyPartPlacement,
     notes: '',
   }
   // The position typed before leaving for the currency setting comes back.
@@ -1823,14 +1632,19 @@ function PartForm({
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({})
   const [intake, setIntake] = useState<Intake | null>(null)
-  const [zones, setZones] = useState<InventoryZone[]>([])
+  const placementOptions = usePlacementOptions(
+    canPlace,
+    cabinet.targetTenant?.id,
+  )
   const [added, setAdded] = useState<AddedPart[]>([])
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>([])
+  const nextCompatibilityKey = useRef(0)
+  const pendingCreatedId = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const partMutation = useLatestMutationGuard(cabinetModules.parts)
   const guard = useFirstPriceGuard()
   const { locale } = useLocale()
-  const money = useWholeMoney(guard.currency)
   const lastAnother = useRef(false)
 
   useEffect(() => {
@@ -1844,43 +1658,17 @@ function PartForm({
     return () => controller.abort()
   }, [intakeId])
 
-  useEffect(() => {
-    if (!canPlace) return
-    const controller = new AbortController()
-    void inventoryApi
-      .getZones({ activeOnly: true, signal: controller.signal })
-      .then(
-        (next) => {
-          if (!controller.signal.aborted) setZones(next)
-        },
-        () => {
-          // Without zones the cell simply stays unset — the part is still added.
-        },
-      )
-    return () => controller.abort()
-  }, [canPlace])
-
   const update = (key: keyof typeof values, value: string | number) =>
     setValues((current) => ({ ...current, [key]: value }))
 
-  /**
-   * What one piece of this batch cost: the price of the whole intake spread
-   * over the positions already in it. It is the yard's own arithmetic, shown
-   * so the sale price is set against something rather than guessed.
-   */
-  const unitCost =
-    intake && intake.totalCost !== null && intake.partsCount > 0
-      ? intake.totalCost / intake.partsCount
-      : null
   const price = Number(values.price.replace(',', '.'))
   const hasPrice =
     values.price.trim() !== '' && Number.isFinite(price) && price > 0
-  const margin =
-    hasPrice && unitCost !== null
-      ? Math.round(((price - unitCost) / price) * 100)
-      : null
   const named = values.name.trim().length > 0
-  const zone = zones.find((item) => item.id === values.zoneId) ?? null
+  const zone =
+    placementOptions.zones.find(
+      (item) => item.id === values.placement?.zoneId,
+    ) ?? null
   // Only a positive price is sent, so only that one can lock the currency.
   const priceSlots = usePriceSlots(guard, {
     values: hasPrice ? [values.price] : [],
@@ -1911,16 +1699,21 @@ function PartForm({
       setProblem(pricePrecision)
       return
     }
+    const compatibilityProblem = rowsProblem(compatRows, locale)
+    if (compatibilityProblem !== null) {
+      setProblem(compatibilityProblem)
+      return
+    }
     setFieldErrors({})
     const request: AddIntakePartRequest = {
       name: values.name.trim(),
       partType: values.partType.trim() || null,
+      oemCode: values.oemCode.trim() || null,
       condition: values.condition || null,
       quantity: values.quantity,
       unit: values.unit || null,
       notes: values.notes.trim() || null,
       photoKeys: media.map((item) => item.storageKey),
-      ...(values.zoneId ? { inventoryZoneIds: [values.zoneId] } : {}),
     }
     setBusy(true)
     try {
@@ -1933,30 +1726,72 @@ function PartForm({
       }
       const intakeScope = intakeMutation.requireLatestMutation({ quota: false })
       partMutation.requireLatestMutation({ permission: 'parts.view' })
-      const created = await intakesApi.addPart(intakeId, request, {
+      const resolved = await resolveCompatibility(compatRows, {
         signal: intakeScope.signal,
       })
+      if (resolved.kind === 'unknown') {
+        setProblem(unknownBrandsMessage(resolved.brands, locale))
+        setBusy(false)
+        return
+      }
+      const needsPartManage = pricing || resolved.kind === 'ready'
+      const partScope = needsPartManage
+        ? partMutation.requireLatestMutation({
+            permission: 'parts.manage',
+            quota: false,
+          })
+        : null
+      const createdId =
+        pendingCreatedId.current ??
+        (
+          await intakesApi.addPart(intakeId, request, {
+            signal: intakeScope.signal,
+          })
+        ).id
+      pendingCreatedId.current = createdId
+      if (resolved.kind === 'ready') {
+        const current = await partsApi.compatibilities(createdId, {
+          signal: partScope!.signal,
+        })
+        await partsApi.replaceCompatibilities(
+          createdId,
+          current.version,
+          resolved.items,
+        )
+      }
       // The intake endpoint carries no price, so the asking price is set on the
       // part it just created — one call, right after, before anyone sees it.
       if (pricing) {
-        const priceScope = partMutation.requireLatestMutation({
-          permission: 'parts.manage',
-          quota: false,
-        })
         await partsApi.update(
-          created.id,
+          createdId,
           { desiredSalePrice: { isSet: true, value: price } },
-          { signal: priceScope.signal },
+          { signal: partScope!.signal },
         )
         guard.afterSave(true)
       }
+      if (canPlace && values.placement?.zoneId) {
+        try {
+          await inventoryApi.replacePartZones(
+            createdId,
+            [values.placement.zoneId],
+            { signal: intakeScope.signal },
+            values.placement.shelfId || undefined,
+            values.placement.sectionId || undefined,
+          )
+        } catch {
+          setProblem(tPlacement('retrySave'))
+          setBusy(false)
+          return
+        }
+      }
+      pendingCreatedId.current = null
       if (!andAnother) {
         void navigate(`${base}/${intakeId}`)
         return
       }
       setAdded((current) => [
         {
-          id: created.id,
+          id: createdId,
           name: request.name,
           quantity: values.quantity,
           unit: values.unit || PIECES,
@@ -1974,6 +1809,7 @@ function PartForm({
         notes: '',
       }))
       setMedia([])
+      setCompatRows([])
       setIntake(
         (current) =>
           current && { ...current, partsCount: current.partsCount + 1 },
@@ -1989,28 +1825,25 @@ function PartForm({
   const saveNote = named ? tf('saveNoteNamed') : tf('saveNoteUnnamed')
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={backTo}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {tf('backToIntake')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('eyebrow')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('title')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+    <FormPage
+      backTo={backTo}
+      busy={busy}
+      description={
+        <>
+          {tf('partInIntake')} {intake?.name ?? '…'}
+          {intake
+            ? ` · ${tf('alreadyPositions', { count: intake.partsCount })}`
+            : ''}
+        </>
+      }
+      context={`${t('eyebrow')} · ${t('title')}`}
+      actions={
+        <div className="flex w-full flex-wrap items-center gap-2.5">
+          <Button disabled={busy} onClick={() => void navigate(backTo)}>
+            {tc('cancel')}
+          </Button>
           <Button
             aria-busy={busy}
-            className="px-[18px] text-sm font-semibold"
             disabled={busy || !named}
             onClick={(event) => void save(event, true)}
           >
@@ -2018,915 +1851,302 @@ function PartForm({
           </Button>
           <Button
             aria-busy={busy}
-            className="px-5 text-sm font-bold"
             disabled={busy || !named}
-            onClick={(event) => void save(event)}
-            variant="primary"
-          >
-            {tf('addPart')}
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            {tf('addPart')}
-          </h1>
-          <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
-            <span>
-              {tf('partInIntake')}{' '}
-              <span className="text-app-ink font-semibold">
-                {intake?.name ?? '…'}
-              </span>
-            </span>
-            {intake ? (
-              <>
-                <span aria-hidden className="text-white/20">
-                  ·
-                </span>
-                <span>
-                  {tf('alreadyPositions', { count: intake.partsCount })}
-                </span>
-              </>
-            ) : null}
-          </p>
-        </div>
-
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
-
-        <form
-          aria-busy={busy}
-          className="flex flex-wrap items-start gap-6"
-          onSubmit={(event) => void save(event)}
-        >
-          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <FormCard step="01" title={tf('descriptionTitle')}>
-              <Field
-                error={fieldErrors.name}
-                hint={tf('partNameHint')}
-                label={tf('nameLabel')}
-                required
-              >
-                <TextInput
-                  autoComplete="off"
-                  name="name"
-                  onChange={(event) => update('name', event.target.value)}
-                  placeholder={tf('partNamePlaceholder')}
-                  required
-                  value={values.name}
-                />
-              </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={tf('partType')}>
-                  <TextInput
-                    autoComplete="off"
-                    name="partType"
-                    onChange={(event) => update('partType', event.target.value)}
-                    placeholder={tf('partTypePlaceholder')}
-                    value={values.partType}
-                  />
-                </Field>
-                <Field hint={tf('oemHint')} label={tf('oemLabel')}>
-                  <TextInput
-                    className="font-mono"
-                    disabled
-                    name="oemCode"
-                    placeholder="1RV-8820-02"
-                    value=""
-                  />
-                </Field>
-              </div>
-              <Field label={tf('conditionLabel')}>
-                <PillGroup
-                  label={tf('conditionGroup')}
-                  onChange={(next) => update('condition', next)}
-                  options={conditionOptions(tf)}
-                  value={values.condition}
-                />
-              </Field>
-            </FormCard>
-
-            <FormCard
-              description={
-                unitCost === null
-                  ? tf('unitCostPending')
-                  : tf('unitCostFromBatch', { amount: money(unitCost) })
-              }
-              step="02"
-              title={tf('quantityPriceTitle')}
-            >
-              <div className="grid items-start gap-4 sm:grid-cols-3">
-                <Field label={tf('quantity')} required>
-                  <QuantityStepper
-                    label={tf('quantityStepper')}
-                    min={1}
-                    onChange={(next) => update('quantity', next)}
-                    value={values.quantity}
-                  />
-                </Field>
-                <Field hint={tf('unitHint')} label={tf('unitLabel')}>
-                  <TextInput
-                    autoComplete="off"
-                    name="unit"
-                    readOnly
-                    value={unitLabel(t, values.unit)}
-                  />
-                </Field>
-                <Field
-                  hint={priceSlots.hint ?? tf('desiredPriceHint')}
-                  label={tf('salePrice')}
-                >
-                  <MoneyInput
-                    currency={priceSlots.currency}
-                    disabled={priceSlots.disabled}
-                    inputMode="decimal"
-                    name="price"
-                    onChange={(event) => update('price', event.target.value)}
-                    placeholder="0"
-                    value={values.price}
-                  />
-                </Field>
-              </div>
-              {priceSlots.note}
-            </FormCard>
-
-            {canPlace ? (
-              <FormCard
-                description={tf('placementHint')}
-                step="03"
-                title={tf('placementTitle')}
-              >
-                <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <Field label={tf('cell')}>
-                    <SelectInput
-                      name="zoneId"
-                      onChange={(event) => update('zoneId', event.target.value)}
-                      value={values.zoneId}
-                    >
-                      <option value="">{tf('noCell')}</option>
-                      {zones.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.code} · {item.name}
-                        </option>
-                      ))}
-                    </SelectInput>
-                  </Field>
-                  <Button
-                    className="min-h-11"
-                    disabled
-                    title={tf('scanUnavailable')}
-                    type="button"
-                  >
-                    <ScanLine aria-hidden />
-                    {tf('scan')}
-                  </Button>
-                </div>
-              </FormCard>
-            ) : null}
-
-            <FormCard
-              step={canPlace ? '04' : '03'}
-              title={tf('photosNotesTitle')}
-            >
-              {canUploadMedia ? (
-                <MediaPicker
-                  beforeDispatch={() => {
-                    intakeMutation.requireLatestMutation({ quota: false })
-                    partMutation.requireLatestMutation({
-                      permission: 'parts.view',
-                      quota: false,
-                    })
-                  }}
-                  entityType="parts"
-                  items={media}
-                  onChange={setMedia}
-                />
-              ) : null}
-              <Field label={tf('notes')}>
-                <TextArea
-                  name="notes"
-                  onChange={(event) => update('notes', event.target.value)}
-                  placeholder={tf('notesPlaceholder')}
-                  rows={2}
-                  value={values.notes}
-                />
-              </Field>
-            </FormCard>
-          </div>
-
-          <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-            <Card title={tf('newPosition')}>
-              <div className="border-app-line bg-app-input rounded-[14px] border p-4">
-                <p
-                  className={cn(
-                    'text-[17px] font-bold tracking-[-0.015em]',
-                    named ? 'text-white' : 'text-app-dim',
-                  )}
-                >
-                  {named ? values.name : tf('partNameFallback')}
-                </p>
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <StatusPill tone={zone ? 'ok' : 'warn'}>
-                    {zone
-                      ? tf('availableInCell', { code: zone.code })
-                      : tf('noCell')}
-                  </StatusPill>
-                  <span className="text-app-muted font-mono text-[13px]">
-                    {t('quantityWithUnit', {
-                      count: values.quantity,
-                      unit: unitLabel(t, values.unit || PIECES),
-                    })}
-                  </span>
-                </div>
-              </div>
-              <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                <dt className="text-app-muted text-sm font-semibold">
-                  {tf('unitCost')}
-                </dt>
-                <dd className="font-mono text-[16px] text-white tabular-nums">
-                  {unitCost === null ? '—' : money(unitCost)}
-                </dd>
-                <dt className="text-app-muted text-sm font-semibold">
-                  {tf('salePrice')}
-                </dt>
-                <dd
-                  className={cn(
-                    'font-mono text-[16px] tabular-nums',
-                    hasPrice ? 'text-white' : 'text-app-dim',
-                  )}
-                >
-                  {hasPrice ? money(price) : '—'}
-                </dd>
-                <div className="bg-app-line col-span-2 my-1 h-px" />
-                <dt className="text-[16px] font-bold text-white">
-                  {tf('margin')}
-                </dt>
-                <dd
-                  className={cn(
-                    'font-mono text-[20px] tabular-nums',
-                    margin === null
-                      ? 'text-app-dim'
-                      : margin >= 30
-                        ? 'text-state-ok'
-                        : margin > 0
-                          ? 'text-state-warn'
-                          : 'text-state-danger',
-                  )}
-                >
-                  {margin === null ? '—' : `${String(margin)}%`}
-                </dd>
-              </dl>
-              <div className="mt-5 empty:hidden">{priceSlots.saveNotes}</div>
-              <Button
-                aria-busy={busy}
-                className="mt-5 min-h-12 w-full text-[16px] font-bold"
-                disabled={busy || !named}
-                type="submit"
-                variant="primary"
-              >
-                {tf('addPart')}
-              </Button>
-              <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
-                {saveNote}
-              </p>
-            </Card>
-
-            {added.length > 0 ? (
-              <Card
-                aside={
-                  <span className="text-app-muted font-mono text-[12px]">
-                    {added.length}
-                  </span>
-                }
-                bodyClassName="p-0"
-                title={tf('justAdded')}
-              >
-                <ul className="divide-app-line grid divide-y">
-                  {added.map((item) => (
-                    <li
-                      className="flex items-center gap-3 px-6 py-3"
-                      key={item.id}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-white">
-                          {item.name}
-                        </span>
-                        <span className="text-app-muted mt-0.5 block font-mono text-[13px]">
-                          {item.zone ?? tf('noCellLower')}
-                        </span>
-                      </span>
-                      <span className="text-app-muted font-mono text-[14px] whitespace-nowrap">
-                        {t('quantityWithUnit', {
-                          count: item.quantity,
-                          unit: unitLabel(t, item.unit),
-                        })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ) : null}
-          </aside>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-/** One line of the batch sheet, before it becomes a part. */
-interface BatchRow {
-  key: string
-  name: string
-  quantity: string
-  price: string
-  zoneId: string
-}
-
-let batchRowSeq = 0
-const emptyBatchRow = (): BatchRow => ({
-  key: `row-${String(++batchRowSeq)}`,
-  name: '',
-  quantity: '1',
-  price: '',
-  zoneId: '',
-})
-
-const batchNumber = (value: string) => {
-  const parsed = Number(value.replace(',', '.').replace(/[^\d.]/g, ''))
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
-/**
- * A whole delivery typed as a sheet. The server takes one part per call, so the
- * screen sends them in order and says how far it got — a row that fails leaves
- * everything before it booked in, which is what a yard wants when the van is
- * already unloaded.
- */
-function BatchPartsForm({
-  intakeId,
-  canManageFinance,
-}: {
-  intakeId: string
-  canManageFinance: boolean
-}) {
-  const navigate = useNavigate()
-  const cabinet = useCabinet()
-  const t = useT(intakesMessages)
-  const tf = useT(intakeFormMessages)
-  const params = useParams<{ tenant: string }>()
-  const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
-  // The rows typed before leaving for the currency setting come back.
-  const draft = useCurrencyDraft<{
-    rows: BatchRow[]
-    condition: string
-    sharedZoneId: string
-  }>(`intake-batch:${intakeId}`)
-  const [rows, setRows] = useState<BatchRow[]>(
-    () =>
-      // Fresh keys: the stored ones may clash with rows made after a reload.
-      draft.initial?.rows.map((row) => ({
-        ...row,
-        key: emptyBatchRow().key,
-      })) ?? [
-        emptyBatchRow(),
-        emptyBatchRow(),
-        emptyBatchRow(),
-        emptyBatchRow(),
-      ],
-  )
-  const [condition, setCondition] = useState(
-    () => draft.initial?.condition ?? 'good',
-  )
-  const [sharedZoneId, setSharedZoneId] = useState(
-    () => draft.initial?.sharedZoneId ?? '',
-  )
-  const [intake, setIntake] = useState<Intake | null>(null)
-  const [zones, setZones] = useState<InventoryZone[]>([])
-  const [problem, setProblem] = useState<string | null>(null)
-  const [saved, setSaved] = useState(0)
-  const [busy, setBusy] = useState(false)
-  const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
-  const partMutation = useLatestMutationGuard(cabinetModules.parts)
-  const guard = useFirstPriceGuard()
-  const { locale } = useLocale()
-  const money = useWholeMoney(guard.currency)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void intakesApi.get(intakeId, { signal: controller.signal }).then(
-      (next) => {
-        if (!controller.signal.aborted) setIntake(next)
-      },
-      () => undefined,
-    )
-    return () => controller.abort()
-  }, [intakeId])
-
-  useEffect(() => {
-    if (!canPlace) return
-    const controller = new AbortController()
-    void inventoryApi
-      .getZones({ activeOnly: true, signal: controller.signal })
-      .then(
-        (next) => {
-          if (!controller.signal.aborted) setZones(next)
-        },
-        () => {
-          // Without zones the positions are simply booked in without a cell.
-        },
-      )
-    return () => controller.abort()
-  }, [canPlace])
-
-  const update = (key: string, field: keyof BatchRow, value: string) =>
-    setRows((current) =>
-      current.map((row) =>
-        row.key === key ? { ...row, [field]: value } : row,
-      ),
-    )
-  const filled = rows.filter((row) => row.name.trim() !== '')
-  const units = filled.reduce(
-    (total, row) => total + batchNumber(row.quantity),
-    0,
-  )
-  const priceSum = filled.reduce(
-    (total, row) => total + batchNumber(row.quantity) * batchNumber(row.price),
-    0,
-  )
-  const withoutCell = filled.filter(
-    (row) => (row.zoneId || sharedZoneId) === '',
-  ).length
-  const withoutPrice = filled.filter(
-    (row) => batchNumber(row.price) === 0,
-  ).length
-  // Only positive prices are sent, so only those can lock the currency.
-  const priceSlots = usePriceSlots(guard, {
-    values: filled
-      .filter((row) => batchNumber(row.price) > 0)
-      .map((row) => row.price),
-    onAccept: (accepted) => void save(undefined, accepted),
-    draftKept: true,
-    onLeave: () => draft.keep({ rows, condition, sharedZoneId }),
-  })
-  const pricing = priceSlots.hasPrice && !priceSlots.disabled
-  const fillDown = () =>
-    setRows((current) => {
-      const source = current.find((row) => row.zoneId !== '')
-      if (!source) return current
-      return current.map((row) =>
-        row.name.trim() !== '' && row.zoneId === ''
-          ? { ...row, zoneId: source.zoneId }
-          : row,
-      )
-    })
-
-  const save = async (
-    event?: React.FormEvent,
-    accepted?: SupportedCurrency | null,
-  ) => {
-    event?.preventDefault()
-    if (busy || filled.length === 0) return
-    const rowPrecision = pricing
-      ? (filled
-          .map((row) => batchNumber(row.price))
-          .filter((price) => price > 0)
-          .map((price) => amountPrecisionError(price, guard.currency, locale))
-          .find((message) => message !== null) ?? null)
-      : null
-    if (rowPrecision !== null) {
-      setProblem(rowPrecision)
-      return
-    }
-    setProblem(null)
-    setSaved(0)
-    setBusy(true)
-    if (
-      guard.needsCheck(pricing) &&
-      !(await guard.beforeSave(pricing, accepted))
-    ) {
-      setBusy(false)
-      return
-    }
-    for (const [index, row] of filled.entries()) {
-      const zoneId = row.zoneId || sharedZoneId
-      const price = batchNumber(row.price)
-      const request: AddIntakePartRequest = {
-        name: row.name.trim(),
-        partType: null,
-        condition,
-        quantity: Math.max(1, Math.round(batchNumber(row.quantity)) || 1),
-        unit: PIECES,
-        notes: null,
-        photoKeys: [],
-        ...(zoneId ? { inventoryZoneIds: [zoneId] } : {}),
-      }
-      try {
-        const scope = intakeMutation.requireLatestMutation({ quota: false })
-        partMutation.requireLatestMutation({ permission: 'parts.view' })
-        const created = await intakesApi.addPart(intakeId, request, {
-          signal: scope.signal,
-        })
-        if (price > 0 && !priceSlots.disabled) {
-          const priceScope = partMutation.requireLatestMutation({
-            permission: 'parts.manage',
-            quota: false,
-          })
-          await partsApi.update(
-            created.id,
-            { desiredSalePrice: { isSet: true, value: price } },
-            { signal: priceScope.signal },
-          )
-          guard.afterSave(true)
-        }
-        setSaved(index + 1)
-      } catch (error: unknown) {
-        setProblem(
-          tf('batchFailed', {
-            error: normalizeApiProblem(error).message,
-            done: index,
-            total: filled.length,
-          }),
-        )
-        setRows(filled.slice(index))
-        setBusy(false)
-        return
-      }
-    }
-    void navigate(`${base}/${intakeId}`)
-  }
-
-  const backTo = `${base}/${intakeId}`
-  const ready = filled.length > 0
-  const saveLabel = ready
-    ? tf('acceptPositions', { count: filled.length })
-    : tf('acceptBatch')
-
-  return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={backTo}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {tf('backToIntake')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('title')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span className="text-app-muted">{tf('batchCrumb')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button disabled title={tf('draftsUnavailable')}>
-            {tf('saveDraft')}
-          </Button>
-          <Button
-            aria-busy={busy}
-            className="px-5 text-sm font-bold"
-            disabled={busy || !ready}
-            form="batch-parts"
+            form={INTAKE_PART_FORM}
             type="submit"
             variant="primary"
           >
-            {saveLabel}
+            {tf('addPart')}
           </Button>
         </div>
-      </div>
+      }
+      footerNote={
+        <div className="grid gap-2">
+          <p className="rz-caption m-0">{saveNote}</p>
+          {priceSlots.saveNotes}
+        </div>
+      }
+      title={tf('addPart')}
+    >
+      <form
+        aria-busy={busy}
+        className="grid gap-5"
+        id={INTAKE_PART_FORM}
+        onSubmit={(event) => void save(event)}
+      >
+        {problem ? <Notice tone="danger">{problem}</Notice> : null}
+        <div className="grid gap-5">
+          <SectionPanel
+            title={<NumberedTitle number="01" title={tf('descriptionTitle')} />}
+            variant="panel"
+          >
+            <Field
+              error={fieldErrors.name}
+              hint={tf('partNameHint')}
+              label={tf('nameLabel')}
+              required
+            >
+              <TextInput
+                autoComplete="off"
+                name="name"
+                onChange={(event) => update('name', event.target.value)}
+                placeholder={tf('partNamePlaceholder')}
+                required
+                value={values.name}
+              />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={tf('partType')}>
+                <TextInput
+                  autoComplete="off"
+                  name="partType"
+                  onChange={(event) => update('partType', event.target.value)}
+                  placeholder={tf('partTypePlaceholder')}
+                  value={values.partType}
+                />
+              </Field>
+              <Field hint={tf('oemHint')} label={tf('oemLabel')}>
+                <TextInput
+                  autoComplete="off"
+                  className="font-mono"
+                  maxLength={100}
+                  name="oemCode"
+                  onChange={(event) => update('oemCode', event.target.value)}
+                  placeholder="1RV-8820-02"
+                  value={values.oemCode}
+                />
+              </Field>
+            </div>
+          </SectionPanel>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-            {tf('batchTitle')}
-          </h1>
-          <p className="text-app-muted mt-3 text-[15px]">
-            {intake?.name ?? tf('untitledIntake')}
-            {intake ? ' · ' : null}
-            {tf('batchSubtitle')}
-          </p>
+          <SectionPanel
+            description={tp('conditionDescription')}
+            title={<NumberedTitle number="02" title={tp('conditionStep')} />}
+            variant="panel"
+          >
+            <div
+              aria-label={tp('conditionStep')}
+              className="grid gap-2 sm:grid-cols-3"
+              role="radiogroup"
+            >
+              {(['good', 'fair', 'scrap'] as const).map((condition) => (
+                <ConditionTile
+                  key={condition}
+                  label={conditionLabel(condition, locale)}
+                  onPick={() => update('condition', condition)}
+                  picked={values.condition === condition}
+                  value={condition}
+                />
+              ))}
+            </div>
+            <p className="rz-caption m-0 text-pretty">
+              {tp('conditionVisible')}
+            </p>
+          </SectionPanel>
+
+          <SectionPanel
+            description={tp('quantityDescription')}
+            title={
+              <NumberedTitle number="03" title={tf('quantityPriceTitle')} />
+            }
+            variant="panel"
+          >
+            <div className="grid items-start gap-3 sm:grid-cols-3">
+              <Field label={tf('quantity')} required>
+                <QuantityStepper
+                  label={tf('quantityStepper')}
+                  min={1}
+                  onChange={(next) => update('quantity', next)}
+                  value={values.quantity}
+                />
+              </Field>
+              <Field hint={tf('unitHint')} label={tf('unitLabel')}>
+                <TextInput
+                  autoComplete="off"
+                  name="unit"
+                  readOnly
+                  value={unitLabel(t, values.unit)}
+                />
+              </Field>
+              <Field
+                hint={priceSlots.hint ?? tf('desiredPriceHint')}
+                label={tf('salePrice')}
+              >
+                <MoneyInput
+                  currency={priceSlots.currency}
+                  disabled={priceSlots.disabled}
+                  inputMode="decimal"
+                  name="price"
+                  onChange={(event) => update('price', event.target.value)}
+                  placeholder="0"
+                  value={values.price}
+                />
+              </Field>
+            </div>
+            {priceSlots.note}
+          </SectionPanel>
+
+          <SectionPanel
+            description={tp('compatDescription')}
+            title={<NumberedTitle number="04" title={tp('compatStep')} />}
+            variant="panel"
+          >
+            <div className="grid gap-2.5">
+              {compatRows.map((row, index) => (
+                <CompatibilityRowCard
+                  index={index + 1}
+                  key={row.key}
+                  onChange={(patch) =>
+                    setCompatRows((current) =>
+                      current.map((item) =>
+                        item.key === row.key ? { ...item, ...patch } : item,
+                      ),
+                    )
+                  }
+                  onRemove={() =>
+                    setCompatRows((current) =>
+                      current.filter((item) => item.key !== row.key),
+                    )
+                  }
+                  row={row}
+                />
+              ))}
+              <Button
+                onClick={() => {
+                  nextCompatibilityKey.current += 1
+                  setCompatRows((current) => [
+                    ...current,
+                    emptyRow(`row-${String(nextCompatibilityKey.current)}`),
+                  ])
+                }}
+                size="wide"
+                type="button"
+              >
+                <Plus aria-hidden />
+                {tp('addCar')}
+              </Button>
+            </div>
+            <Notice tone="warn">{tp('compatOnlyOnCreate')}</Notice>
+          </SectionPanel>
+
+          {canPlace ? (
+            <SectionPanel
+              description={tPlacement('hint')}
+              title={<NumberedTitle number="05" title={tf('placementTitle')} />}
+              variant="panel"
+            >
+              <PartPlacementPicker
+                value={values.placement ?? emptyPartPlacement}
+                onChange={(placement) =>
+                  setValues((current) => ({ ...current, placement }))
+                }
+                options={placementOptions}
+              />
+            </SectionPanel>
+          ) : null}
+
+          <SectionPanel
+            title={
+              <NumberedTitle
+                number={canPlace ? '06' : '05'}
+                title={tf('photosNotesTitle')}
+              />
+            }
+            variant="panel"
+          >
+            {canUploadMedia ? (
+              <MediaPicker
+                beforeDispatch={() => {
+                  intakeMutation.requireLatestMutation({ quota: false })
+                  partMutation.requireLatestMutation({
+                    permission: 'parts.view',
+                    quota: false,
+                  })
+                }}
+                entityType="parts"
+                items={media}
+                onChange={setMedia}
+              />
+            ) : null}
+            <Field label={tf('notes')}>
+              <TextArea
+                name="notes"
+                onChange={(event) => update('notes', event.target.value)}
+                placeholder={tf('notesPlaceholder')}
+                rows={2}
+                value={values.notes}
+              />
+            </Field>
+          </SectionPanel>
         </div>
 
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
-
-        <form
-          aria-busy={busy}
-          className="flex flex-wrap items-start gap-6"
-          id="batch-parts"
-          onSubmit={(event) => void save(event)}
-        >
-          <div className="grid min-w-[360px] flex-[1_1_620px] gap-5">
-            <section
-              aria-label={tf('batchPositions')}
-              className="border-app-line bg-app-raised overflow-hidden rounded-[18px] border"
+        <SectionPanel title={tf('newPosition')} variant="panel">
+          <div className="rz-inset grid gap-2">
+            <p
+              className={cn(
+                'm-0 font-semibold',
+                named ? 'rz-strong' : 'rz-dim',
+              )}
             >
-              <div className="flex flex-wrap items-center justify-between gap-4 px-6 pt-[18px] pb-4">
-                <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                  {tf('batchPositions')}
-                </h2>
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                    {tf('rowsCount', { count: rows.length })}
-                  </span>
-                  {canPlace ? (
-                    <Button
-                      className="min-h-9 px-3 text-xs font-semibold"
-                      onClick={fillDown}
-                      type="button"
-                    >
-                      {tf('fillCellDown')}
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <div
-                aria-hidden
-                className={cn(
-                  'border-app-line text-app-muted hidden gap-3 border-t border-b px-6 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase sm:grid',
-                  canPlace
-                    ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
-                    : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
-                )}
-              >
-                <span>{tf('columnName')}</span>
-                <span className="text-right">{tf('columnQuantity')}</span>
-                <span className="text-right">
-                  {guard.currency === null
-                    ? tf('columnPrice')
-                    : tf('columnPriceIn', { code: guard.currency })}
-                </span>
-                {canPlace ? <span>{tf('cell')}</span> : null}
-                <span />
-              </div>
-              <ul className="divide-app-line border-app-line grid divide-y border-t sm:border-t-0">
-                {rows.map((row, index) => (
-                  <li
-                    className={cn(
-                      'grid items-center gap-3 px-6 py-2.5',
-                      canPlace
-                        ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
-                        : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
-                    )}
-                    key={row.key}
-                  >
-                    <TextInput
-                      aria-label={tf('rowName', { number: index + 1 })}
-                      autoComplete="off"
-                      onChange={(event) =>
-                        update(row.key, 'name', event.target.value)
-                      }
-                      placeholder={tf('rowNamePlaceholder', {
-                        number: index + 1,
-                      })}
-                      value={row.name}
-                    />
-                    <TextInput
-                      aria-label={tf('rowQuantity', { number: index + 1 })}
-                      inputMode="numeric"
-                      numeric
-                      onChange={(event) =>
-                        update(row.key, 'quantity', event.target.value)
-                      }
-                      value={row.quantity}
-                    />
-                    <TextInput
-                      aria-label={
-                        guard.currency === null
-                          ? tf('rowPrice', { number: index + 1 })
-                          : tf('rowPriceIn', {
-                              number: index + 1,
-                              code: guard.currency,
-                            })
-                      }
-                      className="font-mono"
-                      disabled={priceSlots.disabled}
-                      inputMode="decimal"
-                      numeric
-                      onChange={(event) =>
-                        update(row.key, 'price', event.target.value)
-                      }
-                      placeholder="—"
-                      value={row.price}
-                    />
-                    {canPlace ? (
-                      <SelectInput
-                        aria-label={tf('rowCell', { number: index + 1 })}
-                        onChange={(event) =>
-                          update(row.key, 'zoneId', event.target.value)
-                        }
-                        value={row.zoneId}
-                      >
-                        <option value="">
-                          {sharedZoneId === ''
-                            ? tf('noCell')
-                            : tf('sameAsBatch')}
-                        </option>
-                        {zones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.code}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    ) : null}
-                    <Button
-                      aria-label={tf('removeRow', { number: index + 1 })}
-                      className="min-w-11 px-0"
-                      disabled={rows.length <= 1}
-                      onClick={() =>
-                        setRows((current) =>
-                          current.filter((item) => item.key !== row.key),
-                        )
-                      }
-                      type="button"
-                    >
-                      <X aria-hidden />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
-                <Button
-                  onClick={() =>
-                    setRows((current) => [...current, emptyBatchRow()])
-                  }
-                  type="button"
-                >
-                  <Plus aria-hidden />
-                  {tf('addRow')}
-                </Button>
-                <p className="text-app-dim text-[13px]">
-                  {tf('emptyRowsSkipped')}
-                </p>
-              </div>
-            </section>
-
-            <Card title={tf('sharedTitle')}>
-              <p className="text-app-muted -mt-1 text-sm">{tf('sharedHint')}</p>
-              <PillGroup
-                className="mt-4 w-fit"
-                label={tf('sharedCondition')}
-                onChange={setCondition}
-                options={conditionOptions(tf)}
-                value={condition}
-              />
-              {canPlace && zones.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <button
-                    aria-pressed={sharedZoneId === ''}
-                    className={cn(
-                      'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-semibold',
-                      sharedZoneId === ''
-                        ? 'border-app-line-2 bg-app-input text-white'
-                        : 'border-app-line text-app-muted hover:text-app-ink',
-                    )}
-                    onClick={() => setSharedZoneId('')}
-                    type="button"
-                  >
-                    {tf('noCell')}
-                  </button>
-                  {zones.map((zone) => (
-                    <button
-                      aria-pressed={sharedZoneId === zone.id}
-                      className={cn(
-                        'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 font-mono text-[13px] font-semibold',
-                        sharedZoneId === zone.id
-                          ? 'border-app-line-2 bg-app-input text-white'
-                          : 'border-app-line text-app-muted hover:text-app-ink',
-                      )}
-                      key={zone.id}
-                      onClick={() => setSharedZoneId(zone.id)}
-                      type="button"
-                    >
-                      {zone.code}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </Card>
+              {named ? values.name : tf('partNameFallback')}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone={zone ? 'ok' : 'warn'}>
+                {zone
+                  ? tf('availableInCell', { code: zone.code })
+                  : tf('noCell')}
+              </StatusPill>
+              <span className="rz-mono rz-muted">
+                {t('quantityWithUnit', {
+                  count: values.quantity,
+                  unit: unitLabel(t, values.unit || PIECES),
+                })}
+              </span>
+            </div>
           </div>
+        </SectionPanel>
 
-          <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_320px] gap-5">
-            <Card title={tf('batchCard')}>
-              <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                <dt className="text-app-muted text-sm font-semibold">
-                  {tf('positions')}
-                </dt>
-                <dd className="font-mono text-[15px] text-white tabular-nums">
-                  {filled.length}
-                </dd>
-                <dt className="text-app-muted text-sm font-semibold">
-                  {tf('units')}
-                </dt>
-                <dd className="font-mono text-[15px] text-white tabular-nums">
-                  {t('quantityWithUnit', { count: units, unit: t('pcs') })}
-                </dd>
-                {canManageFinance ? (
-                  <>
-                    <dt className="text-app-muted text-sm font-semibold">
-                      {tf('priceSum')}
-                    </dt>
-                    <dd
-                      className={cn(
-                        'font-mono text-[15px] tabular-nums',
-                        priceSum > 0 ? 'text-white' : 'text-app-dim',
-                      )}
-                    >
-                      {priceSum > 0 ? money(priceSum) : '—'}
-                    </dd>
-                  </>
-                ) : null}
-              </dl>
-              <div className="mt-5 grid gap-2 empty:hidden">
-                {priceSlots.note}
-                {priceSlots.saveNotes}
-              </div>
-              <Button
-                aria-busy={busy}
-                className="mt-5 min-h-11 w-full text-sm font-bold"
-                disabled={busy || !ready}
-                type="submit"
-                variant="primary"
-              >
-                {saveLabel}
-              </Button>
-              <p className="text-app-dim mt-2.5 text-xs leading-[1.5]">
-                {busy
-                  ? tf('batchProgress', { saved, total: filled.length })
-                  : ready
-                    ? tf('batchReady')
-                    : tf('batchNotReady')}
-              </p>
-            </Card>
-
-            <Card title={tf('checkTitle')}>
-              <ul className="grid gap-2.5">
-                {[
-                  {
-                    state: ready ? 'ok' : 'idle',
-                    label: ready
-                      ? tf('readyPositions', { count: filled.length })
-                      : tf('nothingFilled'),
-                  },
-                  ...(canPlace
-                    ? [
-                        {
-                          state: withoutCell === 0 && ready ? 'ok' : 'warn',
-                          label:
-                            withoutCell === 0 && ready
-                              ? tf('allHaveCell')
-                              : tf('withoutCell', { count: withoutCell }),
-                        },
-                      ]
-                    : []),
-                  {
-                    state: withoutPrice === 0 && ready ? 'ok' : 'warn',
-                    label:
-                      withoutPrice === 0 && ready
-                        ? tf('pricesSet')
-                        : tf('withoutPrice', { count: withoutPrice }),
-                  },
-                ].map((check) => (
-                  <li
-                    className={cn(
-                      'flex items-start gap-2.5 text-[13px] leading-[1.45] font-semibold',
-                      check.state === 'ok'
-                        ? 'text-app-ink'
-                        : check.state === 'warn'
-                          ? 'text-state-warn'
-                          : 'text-app-dim',
-                    )}
-                    key={check.label}
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'mt-px grid size-4.5 shrink-0 place-items-center rounded-full text-[11px] font-extrabold',
-                        check.state === 'ok'
-                          ? 'bg-state-ok-soft text-state-ok'
-                          : check.state === 'warn'
-                            ? 'bg-state-warn-soft text-state-warn'
-                            : 'bg-white/[0.06]',
-                      )}
-                    >
-                      {check.state === 'ok' ? (
-                        <Check className="size-3" />
-                      ) : check.state === 'warn' ? (
-                        '!'
-                      ) : null}
+        {added.length > 0 ? (
+          <SectionPanel
+            aside={added.length}
+            title={tf('justAdded')}
+            variant="panel"
+          >
+            <ul className="divide-app-line border-app-line m-0 grid list-none divide-y rounded-panel border p-0">
+              {added.map((item) => (
+                <li className="flex items-center gap-3 px-3 py-2" key={item.id}>
+                  <span className="min-w-0 flex-1">
+                    <span className="rz-strong block truncate">
+                      {item.name}
                     </span>
-                    {check.label}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </aside>
-        </form>
-      </div>
-    </div>
+                    <span className="rz-caption rz-mono block">
+                      {item.zone ?? tf('noCellLower')}
+                    </span>
+                  </span>
+                  <span className="rz-mono rz-muted whitespace-nowrap">
+                    {t('quantityWithUnit', {
+                      count: item.quantity,
+                      unit: unitLabel(t, item.unit),
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </SectionPanel>
+        ) : null}
+      </form>
+    </FormPage>
+  )
+}
+
+const INTAKE_PART_FORM = 'intake-part-form'
+
+function NumberedTitle({ number, title }: { number: string; title: string }) {
+  return (
+    <span className="flex items-baseline gap-2.5">
+      <span className="text-app-dim font-mono text-micro">{number}</span>
+      {title}
+    </span>
   )
 }
 
@@ -2947,24 +2167,18 @@ function FormCard({
 }) {
   const titleId = useId()
   return (
-    <section
-      aria-labelledby={titleId}
-      className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
-    >
-      <div className="flex items-baseline gap-2.5">
-        <span className="text-app-dim font-mono text-[12px]">{step}</span>
-        <h2
-          className="text-[17px] font-bold tracking-[-0.01em] text-white"
-          id={titleId}
-        >
+    <section aria-labelledby={titleId} className="rz-card">
+      <header className="rz-card__head justify-start py-2.5">
+        <span className="rz-mono rz-dim text-caption">{step}</span>
+        <h2 className="rz-h-card" id={titleId}>
           {title}
         </h2>
         {aside}
-      </div>
-      {description === undefined ? null : (
-        <p className="text-app-muted mt-1.5 text-sm">{description}</p>
-      )}
-      <div className="mt-5 grid gap-4">{children}</div>
+        {description === undefined ? null : (
+          <p className="rz-caption m-0 w-full">{description}</p>
+        )}
+      </header>
+      <div className="rz-card__body grid gap-4">{children}</div>
     </section>
   )
 }

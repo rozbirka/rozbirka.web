@@ -115,6 +115,7 @@ it('creates the first tenant, hydrates, and hands over to the dashboard checklis
 it('asks only for what creating the yard stores', () => {
   renderOnboarding()
 
+  expect(screen.getByText('Крок 2 з 2')).toBeVisible()
   expect(screen.getByLabelText('Назва розбірки')).toBeVisible()
   expect(screen.getByLabelText(/Місто/)).toBeVisible()
   // Accounting currency is an onboarding step on the dashboard now, chosen
@@ -142,7 +143,8 @@ it('names the missing yard at its own field instead of calling the API', async (
 it('keeps the failure reason on screen and creates the yard on retry', async () => {
   create.mockRejectedValueOnce({
     kind: 'conflict',
-    message: 'Розбірка з такою назвою вже існує.',
+    code: 'TENANT_EXISTS',
+    message: 'A business with this name already exists.',
   })
   create.mockResolvedValueOnce({
     tenantId: 'tenant-new',
@@ -159,7 +161,7 @@ it('keeps the failure reason on screen and creates the yard on retry', async () 
   await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Не вдалося створити розбірку. Розбірка з такою назвою вже існує.',
+    'Не вдалося створити розбірку. Бізнес з такою назвою вже існує.',
   )
   expect(hydrate).not.toHaveBeenCalled()
 

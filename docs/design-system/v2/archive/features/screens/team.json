@@ -1,0 +1,72 @@
+{
+ "id": "C13",
+ "module": "team",
+ "eyebrow": "Налаштування",
+ "title": "Команда",
+ "icon": "icon-user-round-cog",
+ "route": "/app/:tenant/team",
+ "source": "team/messages.ts",
+ "unverified": "ролі, статуси, emptyBody, searchPlaceholder/дії, яких немає в пошуку по коду",
+ "searchLabel": "Пошук користувачів",
+ "searchPlaceholder": "Імʼя або телефон",
+ "emptyTitle": "У команді лише ви",
+ "emptyBody": "Запросіть колег — права задаються роллю.",
+ "actions": [
+  {
+   "label": "Запросити",
+   "icon": "icon-user-plus",
+   "href": "#"
+  }
+ ],
+ "filters": [
+  "Роль"
+ ],
+ "columns": [
+  {
+   "key": "name",
+   "label": "Користувач",
+   "sub": "phone"
+  },
+  {
+   "key": "role",
+   "label": "Роль"
+  },
+  {
+   "key": "activity",
+   "label": "Активність",
+   "mono": true
+  },
+  {
+   "key": "status",
+   "label": "Статус",
+   "pill": {
+    "Активний": "rz-pill rz-pill--ok",
+    "Запрошено": "rz-pill rz-pill--info",
+    "Вимкнено": "rz-pill"
+   }
+  }
+ ],
+ "rows": [
+  {
+   "name": "Олег Коваленко",
+   "phone": "+380 67 000 00 10",
+   "role": "Власник",
+   "activity": "сьогодні",
+   "status": "Активний"
+  },
+  {
+   "name": "Ірина Мельник",
+   "phone": "+380 50 000 00 11",
+   "role": "Менеджер",
+   "activity": "вчора",
+   "status": "Активний"
+  },
+  {
+   "name": "Сергій Бондар",
+   "phone": "+380 93 000 00 12",
+   "role": "Комірник",
+   "activity": "—",
+   "status": "Запрошено"
+  }
+ ]
+}

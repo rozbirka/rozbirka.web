@@ -33,7 +33,7 @@ export const teamMessages = defineMessages({
     groupCustomers: 'Клієнти',
     groupFinance: 'Фінанси',
     groupIntakes: 'Приймання',
-    groupInventory: 'Інвентаризація',
+    groupInventory: 'Склади та інвентаризація',
     groupStickers: 'Стікери',
     groupReports: 'Звіти',
     groupTeam: 'Команда',
@@ -52,12 +52,8 @@ export const teamMessages = defineMessages({
     invitationExpired: 'Прострочено',
     invitationActive: 'Активне',
 
-    noLastSeen:
-      'Останній вхід учасника не зберігається — відома лише дата приєднання.',
     noEmail:
       'Пошти в учасника немає — кабінет знає імʼя й телефон, а телефон тут не вказано.',
-    noEmailInvite:
-      'Листів кабінет не надсилає й пошти не питає: запрошення — це код, який ви передаєте людині самі. Місце в тарифі рахується за учасниками, а не за виданими кодами.',
 
     searchMembers: 'Пошук учасників',
     searchPlaceholder: 'Імʼя або телефон',
@@ -98,11 +94,23 @@ export const teamMessages = defineMessages({
     columnUser: 'Користувач',
     columnRole: 'Роль',
     columnActivity: 'Активність',
+    activityToday: 'Сьогодні',
+    activityYesterday: 'Вчора',
+    activityUnknown: 'Ще немає даних про активність.',
+    roleFilter: 'Фільтр за роллю',
+    allRoles: 'Усі ролі',
+    roles: 'Ролі',
+    searchRoles: 'Пошук ролі',
+    roleOptions: 'Доступні ролі',
+    noMatchingRoles: 'Ролей не знайдено.',
+    roleResultsCount: '{shown} з {total}',
+    membersPagination: 'Пагінація учасників',
     columnStatus: 'Статус',
     itsYou: 'це ви',
     noContact: 'пошти й телефону не вказано',
     roleFor: 'Роль для {name}',
-    inTeamSince: 'у команді з',
+    changeRole: 'Змінити роль',
+    changeRoleDescription: 'Оберіть нову роль для {name}.',
     memberActive: 'Активний',
     memberOff: 'Вимкнений',
     permissions: 'Права',
@@ -127,14 +135,15 @@ export const teamMessages = defineMessages({
       'Не вдалося видалити учасника. Перевірте зв’язок і спробуйте ще раз.',
     deleted: 'Учасника видалено.',
     memberActions: 'Дії з учасником {name}',
-    lastSeenNote:
-      'Останній вхід не зберігається — у колонці «Активність» лише дата приєднання.',
     seatsNoteUnknown: 'Скільки місць дає тариф, зараз невідомо.',
     seatsNoteUnlimited: 'Зайнято {used} — тариф не обмежує кількість людей.',
     seatsNote: 'Зайнято {used} з {max} місць тарифу.',
     raiseLimit: 'Збільшити ліміт',
     invitations: 'Запрошення',
     invitationsLead: 'Передайте активний код людині для реєстрації.',
+    copyInvitationCode: 'Копіювати код запрошення {code}',
+    invitationCodeCopied: 'Код запрошення скопійовано.',
+    invitationCodeCopyFailed: 'Не вдалося скопіювати код запрошення.',
     noActive: 'жодного активного',
     activeInvitations: {
       one: '{count} діє',
@@ -154,10 +163,14 @@ export const teamMessages = defineMessages({
     noActiveInvitations: 'Активних запрошень немає.',
     hideHistory: 'Сховати історію',
     invitationHistory: 'Історія запрошень ({count})',
-    newInvitationDescription:
-      'Оберіть роль. Після створення передайте код людині — він знадобиться їй під час реєстрації.',
+    newInvitationDescription: 'Оберіть роль для нового учасника команди.',
     createInvitation: 'Створити запрошення',
     newInvitation: 'Нове запрошення',
+    invitationCodeTitle: 'Запрошення за кодом',
+    invitationCodeDescription:
+      'Скопіюйте створений код і передайте учаснику для реєстрації. Листи автоматично не надсилаються.',
+    invitationSeatsHint:
+      'Місця в тарифі рахуються за учасниками, а не за запрошеннями.',
     invitationRoleHint: 'Новий учасник отримає права цієї ролі.',
     invitationRole: 'Роль для запрошення',
     permissionsDescription:
@@ -168,6 +181,7 @@ export const teamMessages = defineMessages({
     userPermissions: 'Права користувача',
     rolePermissions: 'Права ролі',
     selectedCount: '{legend} — обрано {selected} з {total}',
+    permissionFraction: '{selected} з {total}',
     confirm: 'Підтвердити',
   },
   'en-GB': {
@@ -202,7 +216,7 @@ export const teamMessages = defineMessages({
     groupCustomers: 'Customers',
     groupFinance: 'Finance',
     groupIntakes: 'Intake',
-    groupInventory: 'Stocktake',
+    groupInventory: 'Warehouses and stocktakes',
     groupStickers: 'Stickers',
     groupReports: 'Reports',
     groupTeam: 'Team',
@@ -221,12 +235,8 @@ export const teamMessages = defineMessages({
     invitationExpired: 'Expired',
     invitationActive: 'Active',
 
-    noLastSeen:
-      'A member’s last sign-in isn’t stored — only the date they joined.',
     noEmail:
       'Members have no email — the account knows their name and phone, and no phone is given here.',
-    noEmailInvite:
-      'The account doesn’t send emails or ask for addresses: an invitation is a code you pass on yourself. Plan seats count members, not issued codes.',
 
     searchMembers: 'Search members',
     searchPlaceholder: 'Name or phone',
@@ -255,11 +265,23 @@ export const teamMessages = defineMessages({
     columnUser: 'User',
     columnRole: 'Role',
     columnActivity: 'Activity',
+    activityToday: 'Today',
+    activityYesterday: 'Yesterday',
+    activityUnknown: 'No activity recorded yet.',
+    roleFilter: 'Filter by role',
+    allRoles: 'All roles',
+    roles: 'Roles',
+    searchRoles: 'Search roles',
+    roleOptions: 'Available roles',
+    noMatchingRoles: 'No roles found.',
+    roleResultsCount: '{shown} of {total}',
+    membersPagination: 'Member pagination',
     columnStatus: 'Status',
     itsYou: 'you',
     noContact: 'no email or phone given',
     roleFor: 'Role for {name}',
-    inTeamSince: 'in the team since',
+    changeRole: 'Change role',
+    changeRoleDescription: 'Choose a new role for {name}.',
     memberActive: 'Active',
     memberOff: 'Deactivated',
     permissions: 'Permissions',
@@ -284,8 +306,6 @@ export const teamMessages = defineMessages({
       'Couldn’t remove the member. Check your connection and try again.',
     deleted: 'Member removed.',
     memberActions: 'Actions for {name}',
-    lastSeenNote:
-      'Last sign-in isn’t stored — the Activity column only shows the join date.',
     seatsNoteUnknown: 'It’s not known how many seats the plan gives.',
     seatsNoteUnlimited:
       '{used} taken — the plan doesn’t limit the number of people.',
@@ -293,6 +313,9 @@ export const teamMessages = defineMessages({
     raiseLimit: 'Raise the limit',
     invitations: 'Invitations',
     invitationsLead: 'Give an active code to the person so they can sign up.',
+    copyInvitationCode: 'Copy invitation code {code}',
+    invitationCodeCopied: 'Invitation code copied.',
+    invitationCodeCopyFailed: 'Couldn’t copy the invitation code.',
     noActive: 'none active',
     activeInvitations: { one: '{count} active', other: '{count} active' },
     validUntil: '{role} · valid until',
@@ -307,10 +330,13 @@ export const teamMessages = defineMessages({
     noActiveInvitations: 'No active invitations.',
     hideHistory: 'Hide history',
     invitationHistory: 'Invitation history ({count})',
-    newInvitationDescription:
-      'Choose a role. Once it’s created, give the code to the person — they’ll need it to sign up.',
+    newInvitationDescription: 'Choose a role for the new team member.',
     createInvitation: 'Create invitation',
     newInvitation: 'New invitation',
+    invitationCodeTitle: 'Invite with a code',
+    invitationCodeDescription:
+      'Copy the created code and share it with the new member to sign up. Emails are not sent automatically.',
+    invitationSeatsHint: 'Plan seats count members, not invitations.',
     invitationRoleHint: 'The new member gets this role’s permissions.',
     invitationRole: 'Role for the invitation',
     permissionsDescription:
@@ -321,6 +347,7 @@ export const teamMessages = defineMessages({
     userPermissions: 'User permissions',
     rolePermissions: 'Role permissions',
     selectedCount: '{legend} — {selected} of {total} selected',
+    permissionFraction: '{selected} of {total}',
     confirm: 'Confirm',
   },
   pl: {
@@ -355,7 +382,7 @@ export const teamMessages = defineMessages({
     groupCustomers: 'Klienci',
     groupFinance: 'Finanse',
     groupIntakes: 'Przyjęcia',
-    groupInventory: 'Inwentaryzacja',
+    groupInventory: 'Magazyny i inwentaryzacja',
     groupStickers: 'Naklejki',
     groupReports: 'Raporty',
     groupTeam: 'Zespół',
@@ -374,12 +401,8 @@ export const teamMessages = defineMessages({
     invitationExpired: 'Wygasłe',
     invitationActive: 'Aktywne',
 
-    noLastSeen:
-      'Ostatnie logowanie nie jest zapisywane — znana jest tylko data dołączenia.',
     noEmail:
       'Członek zespołu nie ma e-maila — konto zna imię i telefon, a telefonu tu nie podano.',
-    noEmailInvite:
-      'Konto nie wysyła e-maili ani o nie nie pyta: zaproszenie to kod, który przekazujesz osobie sam. Miejsca w planie liczą się według członków zespołu, nie wydanych kodów.',
 
     searchMembers: 'Szukaj członków zespołu',
     searchPlaceholder: 'Imię lub telefon',
@@ -420,11 +443,23 @@ export const teamMessages = defineMessages({
     columnUser: 'Użytkownik',
     columnRole: 'Rola',
     columnActivity: 'Aktywność',
+    activityToday: 'Dzisiaj',
+    activityYesterday: 'Wczoraj',
+    activityUnknown: 'Brak zapisanej aktywności.',
+    roleFilter: 'Filtruj według roli',
+    allRoles: 'Wszystkie role',
+    roles: 'Role',
+    searchRoles: 'Szukaj roli',
+    roleOptions: 'Dostępne role',
+    noMatchingRoles: 'Nie znaleziono ról.',
+    roleResultsCount: '{shown} z {total}',
+    membersPagination: 'Strony członków zespołu',
     columnStatus: 'Status',
     itsYou: 'to Ty',
     noContact: 'nie podano e-maila ani telefonu',
     roleFor: 'Rola dla: {name}',
-    inTeamSince: 'w zespole od',
+    changeRole: 'Zmień rolę',
+    changeRoleDescription: 'Wybierz nową rolę dla: {name}.',
     memberActive: 'Aktywny',
     memberOff: 'Wyłączony',
     permissions: 'Uprawnienia',
@@ -449,14 +484,15 @@ export const teamMessages = defineMessages({
       'Nie udało się usunąć członka zespołu. Sprawdź połączenie i spróbuj ponownie.',
     deleted: 'Członek zespołu usunięty.',
     memberActions: 'Działania: {name}',
-    lastSeenNote:
-      'Ostatnie logowanie nie jest zapisywane — kolumna „Aktywność” pokazuje tylko datę dołączenia.',
     seatsNoteUnknown: 'Nie wiadomo, ile miejsc daje plan.',
     seatsNoteUnlimited: 'Zajęte: {used} — plan nie ogranicza liczby osób.',
     seatsNote: 'Zajęte {used} z {max} miejsc w planie.',
     raiseLimit: 'Zwiększ limit',
     invitations: 'Zaproszenia',
     invitationsLead: 'Przekaż aktywny kod osobie do rejestracji.',
+    copyInvitationCode: 'Kopiuj kod zaproszenia {code}',
+    invitationCodeCopied: 'Kod zaproszenia skopiowano.',
+    invitationCodeCopyFailed: 'Nie udało się skopiować kodu zaproszenia.',
     noActive: 'brak aktywnych',
     activeInvitations: {
       one: '{count} aktywne',
@@ -476,10 +512,14 @@ export const teamMessages = defineMessages({
     noActiveInvitations: 'Brak aktywnych zaproszeń.',
     hideHistory: 'Ukryj historię',
     invitationHistory: 'Historia zaproszeń ({count})',
-    newInvitationDescription:
-      'Wybierz rolę. Po utworzeniu przekaż kod osobie — będzie go potrzebować podczas rejestracji.',
+    newInvitationDescription: 'Wybierz rolę dla nowego członka zespołu.',
     createInvitation: 'Utwórz zaproszenie',
     newInvitation: 'Nowe zaproszenie',
+    invitationCodeTitle: 'Zaproszenie z kodem',
+    invitationCodeDescription:
+      'Skopiuj utworzony kod i przekaż go nowemu członkowi zespołu do rejestracji. E-maile nie są wysyłane automatycznie.',
+    invitationSeatsHint:
+      'Miejsca w planie liczą członków zespołu, nie zaproszenia.',
     invitationRoleHint: 'Nowy członek zespołu otrzyma uprawnienia tej roli.',
     invitationRole: 'Rola dla zaproszenia',
     permissionsDescription:
@@ -490,6 +530,7 @@ export const teamMessages = defineMessages({
     userPermissions: 'Uprawnienia użytkownika',
     rolePermissions: 'Uprawnienia roli',
     selectedCount: '{legend} — wybrano {selected} z {total}',
+    permissionFraction: '{selected} z {total}',
     confirm: 'Potwierdź',
   },
 })

@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest'
+import { cabinetModules } from './module-registry'
+import { loadingLayout, loadingModule, loadingPreview } from './loading-layout'
+
+describe('route-specific loading layouts', () => {
+  it('recognises every registered module, including nested settings routes', () => {
+    for (const module of Object.values(cabinetModules)) {
+      const pathname = `/app/demo${module.routeSegment}`
+      expect(loadingModule(pathname)).toBe(module.key)
+      expect(
+        loadingLayout(module.key, pathname).columns.length,
+      ).toBeGreaterThan(0)
+    }
+  })
+
+  it('distinguishes lists, records and forms within the same module', () => {
+    expect(loadingLayout('cars', '/app/demo/cars').kind).toBe('list')
+    expect(loadingLayout('cars', '/app/demo/cars/car-1').kind).toBe('record')
+    expect(loadingLayout('cars', '/app/demo/cars/new').kind).toBe('form')
+    expect(loadingLayout('cars', '/app/demo/cars/car-1/edit').kind).toBe('form')
+    expect(loadingLayout('parts', '/app/demo/parts/part-1').photo).toBe(true)
+    expect(
+      loadingLayout('parts', '/app/demo/parts/part-1/inventory').kind,
+    ).toBe('form')
+  })
+
+  it('adapts the warehouse hierarchy and unassigned parts separately', () => {
+    const warehouses = loadingLayout('warehouses', '/app/demo/warehouses')
+    const sections = loadingLayout(
+      'warehouses',
+      '/app/demo/warehouses/zones/zone-1',
+    )
+    const shelves = loadingLayout(
+      'warehouses',
+      '/app/demo/warehouses/sections/section-1',
+    )
+    const parts = loadingLayout(
+      'warehouses',
+      '/app/demo/warehouses/main/unassigned',
+    )
+    expect(warehouses.stats).toBeGreaterThan(0)
+    expect(sections.stats).toBe(0)
+    expect(sections.columns).toEqual(shelves.columns)
+    expect(sections.columns).not.toEqual(warehouses.columns)
+    expect(parts.thumbnails).toBe(true)
+  })
+
+  it('keeps import history and import settings distinct from a part record', () => {
+    expect(loadingLayout('parts', '/app/demo/parts/imports').kind).toBe('list')
+    const form = loadingLayout('parts', '/app/demo/parts/imports/import-1')
+    expect(form.kind).toBe('form')
+    expect(form.photo).toBe(false)
+  })
+
+  it('matches each carrier tab rather than using the same settings placeholder', () => {
+    const base = '/app/demo/settings/integrations'
+    expect(loadingLayout('integrations', base).kind).toBe('list')
+    expect(loadingLayout('integrations', `${base}/np-1`).kind).toBe('settings')
+    expect(
+      loadingLayout('integrations', `${base}/np-1/dispatch-points`).kind,
+    ).toBe('list')
+    expect(loadingLayout('integrations', `${base}/np-1/webhook`).kind).toBe(
+      'dashboard',
+    )
+    expect(loadingLayout('integrations', `${base}/np-1/settings`).kind).toBe(
+      'form',
+    )
+  })
+})
+
+describe('local loading preview', () => {
+  it('accepts a held state or a bounded duration in development', () => {
+    expect(loadingPreview('?loadingPreview=hold', true)).toBe('hold')
+    expect(loadingPreview('?loadingPreview=3000&status=active', true)).toBe(
+      3000,
+    )
+    for (const value of ['', '0', '-1', '999999', 'Infinity', 'NaN', 'abc'])
+      expect(loadingPreview(`?loadingPreview=${value}`, true)).toBeNull()
+  })
+
+  it('ignores every preview request outside development', () => {
+    expect(loadingPreview('?loadingPreview=hold', false)).toBeNull()
+    expect(loadingPreview('?loadingPreview=3000', false)).toBeNull()
+  })
+})

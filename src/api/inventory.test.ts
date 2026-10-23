@@ -94,3 +94,70 @@ it('exposes scans as read-only management data without scan mutations', () => {
   expect(inventoryApi).not.toHaveProperty('acquireLease')
   expect(inventoryApi).not.toHaveProperty('completeZone')
 })
+
+it('reads one location and scopes shelf listing by its section and zone', async () => {
+  const requests = capture()
+  await inventoryApi.getSection('section/1')
+  await inventoryApi.getShelf('shelf/1')
+  await inventoryApi.getShelves('zone-1', {}, 'section-1')
+  expect(requests.map(({ url }) => url)).toEqual([
+    '/inventory/sections/section%2F1',
+    '/inventory/shelves/shelf%2F1',
+    '/inventory/shelves',
+  ])
+  expect(requests[2]?.params).toEqual({
+    zoneId: 'zone-1',
+    sectionId: 'section-1',
+    includePartCounts: false,
+  })
+})
+
+it('omits part counts for every location list and allows explicit detail consumers to opt in', async () => {
+  const requests = capture()
+  await inventoryApi.getSections('zone-1', { includePartCounts: false })
+  await inventoryApi.getShelves(
+    'zone-1',
+    { includePartCounts: false },
+    'section-1',
+  )
+  await inventoryApi.getSections('zone-1')
+  await inventoryApi.getShelves(undefined, { includePartCounts: true })
+  expect(requests.map(({ params }) => params as unknown)).toEqual([
+    { zoneId: 'zone-1', includePartCounts: false },
+    { zoneId: 'zone-1', sectionId: 'section-1', includePartCounts: false },
+    { zoneId: 'zone-1', includePartCounts: false },
+    { includePartCounts: true },
+  ])
+})
+
+it('requests archived locations explicitly and restores through tenant-scoped endpoints', async () => {
+  const requests = capture()
+  const controller = new AbortController()
+  await inventoryApi.getZones({
+    warehouseId: 'w',
+    archivedOnly: true,
+    signal: controller.signal,
+  })
+  await inventoryApi.getSections('z', {
+    archivedOnly: true,
+    signal: controller.signal,
+  })
+  await inventoryApi.restoreZone('zone/old', { signal: controller.signal })
+  await inventoryApi.restoreSection('section/old', {
+    signal: controller.signal,
+  })
+  expect(requests.map(({ method, url }) => [method, url])).toEqual([
+    ['get', '/inventory/zones'],
+    ['get', '/inventory/sections'],
+    ['post', '/inventory/zones/zone%2Fold/restore'],
+    ['post', '/inventory/sections/section%2Fold/restore'],
+  ])
+  expect(requests[0]?.params).toMatchObject({
+    warehouseId: 'w',
+    archivedOnly: true,
+  })
+  expect(requests[1]?.params).toMatchObject({ zoneId: 'z', archivedOnly: true })
+  expect(requests.every(({ signal }) => signal?.aborted === false)).toBe(true)
+  controller.abort()
+  expect(requests.every(({ signal }) => signal?.aborted === true)).toBe(true)
+})

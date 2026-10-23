@@ -1,10 +1,12 @@
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { act, render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { intakesApi } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { partsApi } from '@/api/parts'
+import { equipmentApi } from '@/api/equipment'
+import { inventoryApi } from '@/api/inventory'
 import type { PlanUsageDto } from '@/api/types'
 import { useCabinet } from '../CabinetContext'
 import { IntakesScreen } from './IntakesScreen'
@@ -25,12 +27,29 @@ vi.mock('@/api/intakes', () => ({
 vi.mock('@/api/parts', () => ({
   partsApi: {
     update: vi.fn(),
+    compatibilities: vi.fn(),
+    replaceCompatibilities: vi.fn(),
+  },
+}))
+vi.mock('@/api/equipment', () => ({
+  equipmentApi: {
+    types: vi.fn(),
+    makes: vi.fn(),
+    models: vi.fn(),
   },
 }))
 vi.mock('@/api/media', () => ({
   mediaApi: {
     upload: vi.fn(),
     remove: vi.fn(),
+  },
+}))
+vi.mock('@/api/inventory', () => ({
+  inventoryApi: {
+    getZones: vi.fn(),
+    getSections: vi.fn(),
+    getShelves: vi.fn(),
+    replacePartZones: vi.fn(),
   },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
@@ -50,6 +69,13 @@ vi.mock('../module-registry', () => ({
       viewPermission: 'parts.view',
       mutationPermission: 'parts.manage',
       quotaResource: 'parts',
+      allowedSubscriptionStates: ['active'],
+    },
+    inventory: {
+      key: 'inventory',
+      routeSegment: '/inventory',
+      viewPermission: 'inventory.view',
+      mutationPermission: 'inventory.zones.manage',
       allowedSubscriptionStates: ['active'],
     },
   },
@@ -179,6 +205,54 @@ beforeEach(() => {
     url: 'https://cdn.example/part.jpg',
   })
   vi.mocked(mediaApi.remove).mockResolvedValue(undefined)
+  vi.mocked(equipmentApi.types).mockResolvedValue([
+    { id: 'type-car', code: 'passenger_car', name: 'Passenger car' },
+  ])
+  vi.mocked(equipmentApi.makes).mockResolvedValue([
+    { id: 'make-vw', equipmentTypeId: 'type-car', name: 'Volkswagen' },
+  ])
+  vi.mocked(equipmentApi.models).mockResolvedValue([])
+  vi.mocked(partsApi.compatibilities).mockResolvedValue({
+    partId: 'part-new',
+    version: 'v1',
+    items: [],
+  })
+  vi.mocked(partsApi.replaceCompatibilities).mockResolvedValue({
+    partId: 'part-new',
+    version: 'v2',
+    items: [],
+  })
+  vi.mocked(inventoryApi.getZones).mockResolvedValue([
+    {
+      id: 'system',
+      warehouseId: 'warehouse',
+      warehouseName: 'Основний склад',
+      name: 'Без зони',
+      isSystemUnassigned: true,
+      isActive: true,
+    },
+    {
+      id: 'zone',
+      warehouseId: 'warehouse',
+      warehouseName: 'Основний склад',
+      name: 'Контейнер',
+      isSystemUnassigned: false,
+      isActive: true,
+    },
+  ] as never)
+  vi.mocked(inventoryApi.getSections).mockResolvedValue([
+    { id: 'section', zoneId: 'zone', name: 'Стелаж', isActive: true },
+  ] as never)
+  vi.mocked(inventoryApi.getShelves).mockResolvedValue([
+    {
+      id: 'shelf',
+      sectionId: 'section',
+      zoneId: 'zone',
+      name: 'Полиця',
+      isActive: true,
+    },
+  ] as never)
+  vi.mocked(inventoryApi.replacePartZones).mockResolvedValue([])
 })
 
 it('loads the URL search and status list state through the server adapter', async () => {
@@ -198,6 +272,7 @@ it('loads the URL search and status list state through the server adapter', asyn
     await screen.findByRole('heading', { name: 'Приймання', level: 1 }),
   ).toBeVisible()
   expect(screen.getByText('Липнева партія')).toBeVisible()
+  expect(screen.queryByText('Олена')).not.toBeInTheDocument()
   expect(intakesApi.list).toHaveBeenCalledWith(
     { search: 'Липнева', status: 'active', page: 2, pageSize: 20 },
     expect.anything(),
@@ -366,7 +441,7 @@ it('keeps intake detail visible and reports a normalized delete failure after pe
   rejectRemove({ kind: 'conflict', message: 'Приймання містить запчастини.' })
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Приймання містить запчастини.',
+    'Не вдалося виконати дію через конфлікт даних.',
   )
   expect(screen.getByRole('heading', { name: 'Липнева партія' })).toBeVisible()
 })
@@ -396,7 +471,7 @@ it('shows photos and creator but gates linked parts and warehouse actions with p
   ).not.toBeInTheDocument()
 })
 
-it('opens intake positions as part cards and does not expose suppliers in the web UI', async () => {
+it('opens intake positions in the parts list and does not expose suppliers in the web UI', async () => {
   vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
   render(
     <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
@@ -409,9 +484,9 @@ it('opens intake positions as part cards and does not expose suppliers in the we
     </MemoryRouter>,
   )
 
-  expect(await screen.findByRole('link', { name: /Бампер/ })).toHaveAttribute(
+  expect(await screen.findByRole('link', { name: 'Усі 2 →' })).toHaveAttribute(
     'href',
-    '/app/demo/parts/part-1',
+    '/app/demo/parts?origin=batch&intake_ids=intake-1',
   )
   expect(screen.queryByText('Постачальник')).not.toBeInTheDocument()
 })
@@ -439,8 +514,7 @@ it('does not show intake cost or per-position cost on the intake card', async ()
   expect(screen.queryByText(/на позицію/i)).toBeNull()
 })
 
-it('paginates positions inside an intake', async () => {
-  const user = userEvent.setup()
+it('keeps the intake summary compact for more than one page of positions', async () => {
   vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
   vi.mocked(intakesApi.get).mockResolvedValue({
     ...detail,
@@ -462,17 +536,19 @@ it('paginates positions inside an intake', async () => {
     </MemoryRouter>,
   )
 
+  const card = await screen.findByRole('region', { name: 'Позиції приймання' })
+  expect(within(card).getByRole('link', { name: 'Усі 21 →' })).toBeVisible()
   expect(
-    await screen.findByRole('link', { name: 'Деталь 1Кузов' }),
+    within(card).getByText('21 запчастина з цього приймання'),
   ).toBeVisible()
+  expect(within(card).getByText('20')).toBeVisible()
+  expect(within(card).queryByRole('table')).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('link', { name: 'Деталь 21Кузов' }),
+    screen.queryByRole('button', { name: 'Наступна сторінка' }),
   ).not.toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
-  expect(screen.getByRole('link', { name: 'Деталь 21Кузов' })).toBeVisible()
 })
 
-it('renders every linked intake part for parts.view without requiring parts.manage', async () => {
+it('shows intake stock for parts.view without requiring parts.manage', async () => {
   vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
   render(
     <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
@@ -485,10 +561,9 @@ it('renders every linked intake part for parts.view without requiring parts.mana
     </MemoryRouter>,
   )
 
-  const partRow = await screen.findByRole('rowheader', { name: /Бампер/ })
-  expect(partRow).toBeVisible()
-  expect(screen.getByRole('cell', { name: '2 шт' })).toBeVisible()
-  expect(screen.getByRole('cell', { name: 'Доступна' })).toBeVisible()
+  const parts = await screen.findByRole('region', { name: 'Позиції приймання' })
+  expect(within(parts).getByRole('link', { name: 'Усі 2 →' })).toBeVisible()
+  expect(within(parts).getByText('на складі')).toBeVisible()
   expect(
     screen.queryByRole('link', { name: 'Додати деталь' }),
   ).not.toBeInTheDocument()
@@ -555,7 +630,7 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
   expect(screen.queryByLabelText('Додати фото')).not.toBeInTheDocument()
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
   await user.click(
-    within(screen.getByRole('region', { name: 'Нова позиція' })).getByRole(
+    within(screen.getByRole('region', { name: 'Додати деталь' })).getByRole(
       'button',
       { name: 'Додати деталь' },
     ),
@@ -565,6 +640,7 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
     {
       name: 'Бампер',
       partType: null,
+      oemCode: null,
       condition: 'good',
       quantity: 1,
       unit: 'шт',
@@ -592,6 +668,450 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
   )
 
   expect(await screen.findByLabelText('Додати фото')).toBeEnabled()
+})
+
+it('uses the standard condition choices and compatibility section without invented part costs', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart).mockResolvedValue({ id: 'part-new' } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const condition = await screen.findByRole('radiogroup', {
+    name: 'Стан деталі',
+  })
+  expect(within(condition).getAllByRole('radio')).toHaveLength(3)
+  expect(
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  ).toBeVisible()
+  expect(screen.getByRole('heading', { name: /Сумісність/ })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Додати ще авто' })).toBeVisible()
+  expect(screen.queryByText('Собівартість')).not.toBeInTheDocument()
+  expect(screen.queryByText('Маржа')).not.toBeInTheDocument()
+  await user.click(
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  )
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(intakesApi.addPart).toHaveBeenCalledWith(
+      'intake-1',
+      expect.objectContaining({ condition: 'fair' }),
+      expect.anything(),
+    ),
+  )
+})
+
+it.each(['save', 'save-and-add-another'] as const)(
+  'refreshes intake parts after %s and returning from the drawer',
+  async (mode) => {
+    const user = userEvent.setup()
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+    )
+    let serverDetail = detail
+    vi.mocked(intakesApi.get).mockImplementation(() =>
+      Promise.resolve(serverDetail),
+    )
+    vi.mocked(intakesApi.addPart).mockImplementation(() => {
+      serverDetail = {
+        ...detail,
+        partsCount: detail.partsCount + 1,
+        parts: [
+          {
+            ...detail.parts[0]!,
+            id: 'part-new',
+            name: 'Нова фара',
+            qrCode: 'QR-NEW',
+          },
+          ...detail.parts,
+        ],
+      }
+      return Promise.resolve({ id: 'part-new' } as never)
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/intakes/:intakeId/*"
+            element={<IntakesScreen />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('link', { name: 'Усі 2 →' })
+    await user.click(screen.getAllByRole('link', { name: 'Додати деталь' })[0]!)
+    const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
+    await user.type(
+      within(drawer).getByRole('textbox', { name: 'Назва' }),
+      'Нова фара',
+    )
+    await user.type(
+      within(drawer).getByRole('textbox', { name: 'OEM-код' }),
+      '001RV-8820-02',
+    )
+    await user.click(
+      within(drawer).getByRole('button', {
+        name: mode === 'save' ? 'Додати деталь' : 'Зберегти й додати ще',
+      }),
+    )
+    if (mode === 'save-and-add-another') {
+      await waitFor(() =>
+        expect(
+          within(drawer).getByRole('textbox', { name: 'Назва' }),
+        ).toHaveValue(''),
+      )
+      await user.click(
+        within(drawer).getByRole('button', { name: 'Скасувати' }),
+      )
+    }
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('region', { name: 'Додати деталь' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(await screen.findByRole('link', { name: 'Усі 3 →' })).toBeVisible()
+    const parts = screen.getByRole('region', { name: 'Позиції приймання' })
+    expect(
+      within(parts).getByText('3 запчастини з цього приймання'),
+    ).toBeVisible()
+    expect(screen.getByText('Додано «Нова фара»')).toBeVisible()
+    expect(screen.getByText('Додано «Бампер»')).toBeVisible()
+    expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
+  },
+)
+
+it('cancels a filled intake part without creating it', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart).mockReset()
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/*"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Не зберігати',
+  )
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'OEM-код' }),
+    'CANCEL-TEST',
+  )
+  await user.click(within(drawer).getByRole('button', { name: 'Скасувати' }))
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(intakesApi.addPart).not.toHaveBeenCalled()
+  expect(
+    screen.queryByRole('link', { name: /Не зберігати/ }),
+  ).not.toBeInTheDocument()
+})
+
+it('limits pasted OEM to 100 characters and saves the complete allowed value', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart).mockResolvedValue({
+    id: 'part-long-oem',
+  } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/*"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Довгий OEM',
+  )
+  const oem = within(drawer).getByRole('textbox', { name: 'OEM-код' })
+  await user.click(oem)
+  await user.paste('0'.repeat(101))
+  expect(oem).toHaveValue('0'.repeat(100))
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Зберегти й додати ще' }),
+  )
+  await waitFor(() =>
+    expect(intakesApi.addPart).toHaveBeenCalledWith(
+      'intake-1',
+      expect.objectContaining({ oemCode: '0'.repeat(100) }),
+      expect.anything(),
+    ),
+  )
+})
+
+it('keeps name and OEM when Add part fails offline and creates it on retry', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart)
+    .mockReset()
+    .mockRejectedValueOnce({ kind: 'network', message: 'Немає мережі' })
+    .mockResolvedValueOnce({ id: 'part-retried' } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/*"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
+  const name = within(drawer).getByRole('textbox', { name: 'Назва' })
+  const oem = within(drawer).getByRole('textbox', { name: 'OEM-код' })
+  await user.type(name, 'Тест OEM — Фара')
+  await user.type(oem, '001RV-8820-02')
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Додати деталь' }),
+  )
+  expect(await within(drawer).findByRole('alert')).toHaveTextContent(
+    'Немає з’єднання з мережею.',
+  )
+  expect(name).toHaveValue('Тест OEM — Фара')
+  expect(oem).toHaveValue('001RV-8820-02')
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Додати деталь' }),
+  )
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(2)
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({
+      name: 'Тест OEM — Фара',
+      oemCode: '001RV-8820-02',
+    }),
+    expect.anything(),
+  )
+})
+
+it('keeps OEM after a failed intake save and clears it only after saving and adding another', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart)
+    .mockReset()
+    .mockRejectedValueOnce({ kind: 'network', message: 'Network unavailable' })
+    .mockResolvedValueOnce({ id: 'part-new' } as never)
+    .mockResolvedValueOnce({ id: 'part-next' } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const oem = await screen.findByRole('textbox', { name: 'OEM-код' })
+  expect(oem).toBeEnabled()
+  expect(oem).toHaveAttribute('maxlength', '100')
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Фара')
+  await user.type(oem, '  001RV-8820-02  ')
+  await user.click(saveButton('Зберегти й додати ще'))
+  await screen.findByText('Немає з’єднання з мережею.')
+  expect(oem).toHaveValue('  001RV-8820-02  ')
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({ oemCode: '001RV-8820-02' }),
+    expect.anything(),
+  )
+
+  await user.click(saveButton('Зберегти й додати ще'))
+  await waitFor(() => expect(oem).toHaveValue(''))
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(2)
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({ oemCode: '001RV-8820-02' }),
+    expect.anything(),
+  )
+
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Двері')
+  await user.click(saveButton('Зберегти й додати ще'))
+  await waitFor(() => expect(intakesApi.addPart).toHaveBeenCalledTimes(3))
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({ oemCode: null }),
+    expect.anything(),
+  )
+})
+
+it('saves intake part location through zone, section, and shelf and retries without creating a duplicate', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet([
+      'intakes.view',
+      'intakes.manage',
+      'parts.view',
+      'inventory.view',
+      'inventory.zones.manage',
+    ]),
+  )
+  vi.mocked(intakesApi.addPart).mockResolvedValue({ id: 'part-new' } as never)
+  vi.mocked(inventoryApi.replacePartZones)
+    .mockRejectedValueOnce(new Error('Temporary failure'))
+    .mockResolvedValueOnce([])
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Фара')
+  for (const [label, option] of [
+    ['Пошук складу', 'Основний склад'],
+    ['Пошук зони', 'Контейнер'],
+    ['Пошук секції', 'Стелаж'],
+    ['Пошук полиці', 'Полиця'],
+  ] as const) {
+    await user.click(await screen.findByRole('searchbox', { name: label }))
+    await user.click(screen.getByRole('option', { name: option }))
+  }
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(inventoryApi.replacePartZones).toHaveBeenCalledWith(
+      'part-new',
+      ['zone'],
+      expect.anything(),
+      'shelf',
+      'section',
+    ),
+  )
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(inventoryApi.replacePartZones).toHaveBeenCalledTimes(2),
+  )
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
+})
+
+it('saves intake part compatibility and retries without adding a duplicate part', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view', 'parts.manage']),
+  )
+  vi.mocked(intakesApi.addPart).mockResolvedValue({ id: 'part-new' } as never)
+  vi.mocked(partsApi.replaceCompatibilities)
+    .mockRejectedValueOnce(new Error('Temporary failure'))
+    .mockResolvedValueOnce({ partId: 'part-new', version: 'v2', items: [] })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({ Results: [{ MakeId: 1, MakeName: 'Volkswagen' }] }),
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Фара')
+  await user.click(screen.getByRole('button', { name: 'Додати ще авто' }))
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('option', { name: 'Volkswagen' }))
+  await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2018')
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(partsApi.replaceCompatibilities).toHaveBeenCalledTimes(1),
+  )
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
+  expect(partsApi.replaceCompatibilities).toHaveBeenCalledWith(
+    'part-new',
+    'v1',
+    [
+      {
+        equipmentTypeId: 'type-car',
+        makeId: 'make-vw',
+        modelId: null,
+        yearFrom: 2018,
+        yearTo: 2018,
+      },
+    ],
+  )
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(partsApi.replaceCompatibilities).toHaveBeenCalledTimes(2),
+  )
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
+  vi.unstubAllGlobals()
+})
+
+it('opens add-part as a standalone page and returns to the intake', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await user.click(
+    (await screen.findAllByRole('link', { name: 'Додати деталь' }))[0]!,
+  )
+  const drawer = await screen.findByRole('region', { name: 'Додати деталь' })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('heading', { name: 'Липнева партія' }),
+  ).not.toBeInTheDocument()
+  await user.click(within(drawer).getByRole('button', { name: 'Назад' }))
+  expect(screen.queryByRole('region', { name: 'Додати деталь' })).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Липнева партія' })).toBeVisible()
 })
 
 it('rechecks parts.view before uploading intake-part media', async () => {
@@ -648,17 +1168,20 @@ it('locks add-part submit, prevents duplicates, normalizes conflict, and retains
 
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
   const save = within(
-    screen.getByRole('region', { name: 'Нова позиція' }),
+    screen.getByRole('region', { name: 'Додати деталь' }),
   ).getByRole('button', { name: 'Додати деталь' })
   await user.click(save)
   expect(save).toBeDisabled()
-  expect(save.closest('form')).toHaveAttribute('aria-busy', 'true')
+  expect(document.querySelector('#intake-part-form')).toHaveAttribute(
+    'aria-busy',
+    'true',
+  )
   await user.click(save)
   expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
   rejectPart({ kind: 'conflict', message: 'QR-код уже використано.' })
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'QR-код уже використано.',
+    'Не вдалося виконати дію через конфлікт даних.',
   )
   expect(screen.getByRole('textbox', { name: 'Назва' })).toHaveValue('Бампер')
 })
@@ -858,99 +1381,9 @@ it('locks intake edit submission, normalizes permission failure, and retains the
   rejectUpdate({ kind: 'forbidden', message: 'Редагування заборонено.' })
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Редагування заборонено.',
+    'У вас немає доступу до цієї дії.',
   )
   expect(name).toHaveValue('Липнева партія')
-})
-
-it('books a batch sheet in one row at a time and prices the rows that carry one', async () => {
-  const user = userEvent.setup()
-  vi.mocked(useCabinet).mockReturnValue(
-    cabinet(['intakes.view', 'intakes.manage', 'parts.view', 'parts.manage']),
-  )
-  vi.mocked(intakesApi.addPart)
-    .mockResolvedValueOnce({ id: 'part-a' } as never)
-    .mockResolvedValueOnce({ id: 'part-b' } as never)
-  vi.mocked(partsApi.update).mockResolvedValue({} as never)
-  render(
-    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/batch']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/intakes/:intakeId/parts/batch"
-          element={<IntakesScreen />}
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  expect(
-    await screen.findByRole('heading', { name: 'Приймання партією' }),
-  ).toBeVisible()
-  expect(screen.queryByText(/собівартість/i)).toBeNull()
-  expect(screen.queryByText('На позицію')).toBeNull()
-  await user.type(screen.getByLabelText('Назва позиції 1'), 'Фара права')
-  await user.type(screen.getByLabelText('Ціна в рядку 1'), '120')
-  await user.type(screen.getByLabelText('Назва позиції 2'), 'Бампер')
-  await user.click(saveButton('Прийняти 2 позиції'))
-
-  await waitFor(() => expect(intakesApi.addPart).toHaveBeenCalledTimes(2))
-  expect(intakesApi.addPart).toHaveBeenNthCalledWith(
-    1,
-    'intake-1',
-    expect.objectContaining({ name: 'Фара права', quantity: 1, unit: 'шт' }),
-    expect.objectContaining({
-      signal: expect.any(AbortSignal) as AbortSignal,
-    }),
-  )
-  expect(intakesApi.addPart).toHaveBeenNthCalledWith(
-    2,
-    'intake-1',
-    expect.objectContaining({ name: 'Бампер' }),
-    expect.objectContaining({
-      signal: expect.any(AbortSignal) as AbortSignal,
-    }),
-  )
-  // Only the priced row reaches the parts endpoint.
-  expect(partsApi.update).toHaveBeenCalledTimes(1)
-  expect(partsApi.update).toHaveBeenCalledWith(
-    'part-a',
-    { desiredSalePrice: { isSet: true, value: 120 } },
-    expect.objectContaining({
-      signal: expect.any(AbortSignal) as AbortSignal,
-    }),
-  )
-})
-
-it('keeps the unbooked rows in the sheet when a batch row fails', async () => {
-  const user = userEvent.setup()
-  vi.mocked(useCabinet).mockReturnValue(
-    cabinet(['intakes.view', 'intakes.manage', 'parts.view', 'parts.manage']),
-  )
-  vi.mocked(intakesApi.addPart)
-    .mockResolvedValueOnce({ id: 'part-a' } as never)
-    .mockRejectedValueOnce({ kind: 'conflict', message: 'Ліміт вичерпано.' })
-  render(
-    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/batch']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/intakes/:intakeId/parts/batch"
-          element={<IntakesScreen />}
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  expect(
-    await screen.findByRole('heading', { name: 'Приймання партією' }),
-  ).toBeVisible()
-  await user.type(screen.getByLabelText('Назва позиції 1'), 'Фара права')
-  await user.type(screen.getByLabelText('Назва позиції 2'), 'Бампер')
-  await user.click(saveButton('Прийняти 2 позиції'))
-
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Прийнято 1 з 2 позицій',
-  )
-  expect(screen.getByLabelText('Назва позиції 1')).toHaveValue('Бампер')
 })
 
 it('explains that an intake with parts cannot be deleted before asking the server', async () => {
@@ -981,51 +1414,268 @@ it('explains that an intake with parts cannot be deleted before asking the serve
   expect(intakesApi.remove).not.toHaveBeenCalled()
 })
 
-it('prices batch rows in the accounting currency and blocks them without one', async () => {
-  const withCurrency = (
-    accountingCurrency: 'GBP' | null,
-    currencyLocked: boolean,
-  ) => {
-    const base = cabinet([
-      'intakes.view',
-      'intakes.manage',
-      'parts.view',
-      'parts.manage',
-    ])
-    return {
-      ...base,
-      targetTenant: {
-        ...base.targetTenant,
-        accountingCurrency,
-        currencyLocked,
-      },
-    }
-  }
-  const renderBatch = () =>
-    render(
-      <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/batch']}>
-        <Routes>
-          <Route
-            path="/app/:tenant/intakes/:intakeId/parts/batch"
-            element={<IntakesScreen />}
-          />
-        </Routes>
-      </MemoryRouter>,
+const renderIntakeNotes = () =>
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+it('summarizes sold and stocked positions without finance access and opens this intake’s parts', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+        <Route path="/app/:tenant/parts" element={<p>Запчастини партії</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const card = await screen.findByRole('region', { name: 'Позиції приймання' })
+  const all = within(card).getByRole('link', { name: 'Усі 2 →' })
+  expect(all).toHaveAttribute(
+    'href',
+    '/app/demo/parts?origin=batch&intake_ids=intake-1',
+  )
+  expect(within(card).queryByRole('radiogroup')).not.toBeInTheDocument()
+  expect(within(card).queryByRole('table')).not.toBeInTheDocument()
+  expect(within(card).getByText('2 запчастини з цього приймання')).toBeVisible()
+  expect(within(card).getByText('продано')).toBeVisible()
+  expect(within(card).getByText('на складі')).toBeVisible()
+  expect(within(card).getAllByText('1')).toHaveLength(2)
+  expect(within(card).getAllByText('50 %')).toHaveLength(2)
+  await user.click(all)
+  expect(await screen.findByText('Запчастини партії')).toBeVisible()
+})
+
+it.each([
+  { total: 0, sold: 0, available: 0 },
+  { total: 2, sold: 2, available: 0 },
+])(
+  'summarizes an intake with $total positions and $sold sold',
+  async ({ total, sold, available }) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(['intakes.view', 'parts.view']),
     )
+    vi.mocked(intakesApi.get).mockResolvedValue({
+      ...detail,
+      partsCount: total,
+      soldCount: sold,
+      profitability: null,
+      parts: [],
+    })
+    renderIntakeNotes()
+    const card = await screen.findByRole('region', {
+      name: 'Позиції приймання',
+    })
+    expect(
+      within(card).getByRole('link', { name: `Усі ${String(total)} →` }),
+    ).toHaveAttribute(
+      'href',
+      '/app/demo/parts?origin=batch&intake_ids=intake-1',
+    )
+    if (total === 0) {
+      expect(
+        within(card).getByText('У прийманні ще немає запчастин'),
+      ).toBeVisible()
+      expect(within(card).queryByText('продано')).not.toBeInTheDocument()
+    } else {
+      expect(within(card).getByText(String(sold))).toBeVisible()
+      expect(within(card).getByText(String(available))).toBeVisible()
+      expect(within(card).getByText('100 %')).toBeVisible()
+      expect(within(card).getByText('0 %')).toBeVisible()
+    }
+  },
+)
 
-  vi.mocked(useCabinet).mockReturnValue(withCurrency('GBP', true))
-  const view = renderBatch()
-  expect(await screen.findByText('Ціна, GBP')).toBeInTheDocument()
-  expect(screen.getByLabelText('Ціна в рядку 1, GBP')).toBeEnabled()
-  view.unmount()
+it('hides the parts summary without parts access', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view']))
+  renderIntakeNotes()
+  await screen.findByRole('heading', { name: 'Липнева партія' })
+  expect(
+    screen.queryByRole('region', { name: 'Позиції приймання' }),
+  ).not.toBeInTheDocument()
+})
 
-  vi.mocked(useCabinet).mockReturnValue(withCurrency(null, false))
-  renderBatch()
-  expect(await screen.findByLabelText('Ціна в рядку 1')).toBeDisabled()
+it('edits intake notes inline with only notes in the request and preserves its parts', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.update).mockResolvedValue({
+    ...detail,
+    notes: 'Нова нотатка',
+    parts: [],
+  })
+  const user = userEvent.setup()
+  renderIntakeNotes()
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', { name: 'Нотатки' })
+  await user.clear(input)
+  await user.type(input, '  Нова нотатка  ')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+
+  await waitFor(() => expect(intakesApi.update).toHaveBeenCalledOnce())
+  expect(intakesApi.update).toHaveBeenCalledWith(
+    'intake-1',
+    { notes: 'Нова нотатка' },
+    expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
+  )
+  await waitFor(() =>
+    expect(within(card).queryByRole('textbox')).not.toBeInTheDocument(),
+  )
+  expect(within(card).getByText('Нова нотатка')).toBeVisible()
+  const parts = screen.getByRole('region', { name: 'Позиції приймання' })
+  expect(within(parts).getByRole('link', { name: 'Усі 2 →' })).toBeVisible()
+  expect(screen.getByText('Додано «Бампер»')).toBeVisible()
+})
+
+it('keeps the intake notes card when empty and allows adding the first note', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage']),
+  )
+  vi.mocked(intakesApi.get).mockResolvedValue({ ...detail, notes: null })
+  vi.mocked(intakesApi.update).mockResolvedValue({
+    ...detail,
+    notes: 'Перша нотатка',
+  })
+  const user = userEvent.setup()
+  renderIntakeNotes()
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  expect(within(card).getByText('Нотаток немає.')).toBeVisible()
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(card).getByRole('textbox', { name: 'Нотатки' }),
+    'Перша нотатка',
+  )
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() =>
+    expect(within(card).getByText('Перша нотатка')).toBeVisible(),
+  )
+  expect(intakesApi.update).toHaveBeenCalledWith(
+    'intake-1',
+    { notes: 'Перша нотатка' },
+    expect.anything(),
+  )
+})
+
+it('clears an intake note with an empty string while keeping the card editable', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage']),
+  )
+  vi.mocked(intakesApi.update).mockResolvedValue({ ...detail, notes: null })
+  const user = userEvent.setup()
+  renderIntakeNotes()
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.clear(within(card).getByRole('textbox', { name: 'Нотатки' }))
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() =>
+    expect(within(card).getByText('Нотаток немає.')).toBeVisible(),
+  )
+  expect(intakesApi.update).toHaveBeenCalledWith(
+    'intake-1',
+    { notes: '' },
+    expect.anything(),
+  )
+})
+
+it('retains an unsaved intake note after failure and cancels without a second mutation', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage']),
+  )
+  vi.mocked(intakesApi.update).mockRejectedValue(
+    new Error('Не вдалося зберегти'),
+  )
+  const user = userEvent.setup()
+  renderIntakeNotes()
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', { name: 'Нотатки' })
+  await user.clear(input)
+  await user.type(input, 'Чернетка')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  await within(card).findByRole('alert')
+  expect(input).toHaveValue('Чернетка')
+  await user.click(within(card).getByRole('button', { name: 'Скасувати' }))
+  expect(within(card).getByText('Перевірено')).toBeVisible()
+  expect(intakesApi.update).toHaveBeenCalledOnce()
+})
+
+it('shows intake notes read-only without intakes.manage', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view']))
+  renderIntakeNotes()
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  expect(within(card).getByText('Перевірено')).toBeVisible()
   expect(
-    screen.getByText('Перед збереженням ціни оберіть валюту обліку'),
-  ).toBeVisible()
+    within(card).queryByRole('button', { name: 'Редагувати' }),
+  ).not.toBeInTheDocument()
+})
+
+it('unmounts a pending intake note editor immediately when navigating to another intake', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage']),
+  )
+  const user = userEvent.setup()
+  let finishSave!: (value: typeof detail) => void
+  let finishNextLoad!: (value: typeof detail) => void
+  const saveResponse = new Promise<typeof detail>((resolve) => {
+    finishSave = resolve
+  })
+  const nextResponse = new Promise<typeof detail>((resolve) => {
+    finishNextLoad = resolve
+  })
+  vi.mocked(intakesApi.update).mockReturnValue(saveResponse)
+  vi.mocked(intakesApi.get)
+    .mockResolvedValueOnce(detail)
+    .mockReturnValueOnce(nextResponse)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Link to="/app/demo/intakes/intake-2">Next intake</Link>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const first = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(first).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(first).getByRole('textbox', { name: 'Нотатки' }),
+    ' чернетка',
+  )
+  await user.click(within(first).getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() => expect(intakesApi.update).toHaveBeenCalledOnce())
+  await user.click(screen.getByRole('link', { name: 'Next intake' }))
+  expect(first).not.toBeInTheDocument()
   expect(
-    screen.getByText('Зверніться до власника розбірки, щоб він обрав валюту.'),
-  ).toBeVisible()
+    screen.queryByRole('textbox', { name: 'Нотатки' }),
+  ).not.toBeInTheDocument()
+  await act(async () => {
+    finishNextLoad({
+      ...detail,
+      id: 'intake-2',
+      name: 'Інше приймання',
+      notes: 'Інша нотатка',
+    })
+    await nextResponse
+  })
+  expect(await screen.findByText('Інша нотатка')).toBeVisible()
+  await act(async () => {
+    finishSave({ ...detail, notes: 'Перевірено чернетка' })
+    await saveResponse
+  })
+  expect(screen.getByText('Інша нотатка')).toBeVisible()
+  expect(screen.queryByText('Перевірено чернетка')).not.toBeInTheDocument()
 })

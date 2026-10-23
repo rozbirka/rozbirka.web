@@ -1,35 +1,25 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import {
-  ArrowLeft,
-  ArrowRight,
-  Ban,
-  CheckCircle2,
-  Clock,
-  RefreshCw,
-  SearchX,
-  ShieldAlert,
-} from 'lucide-react'
+import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { invitationsApi, type InvitationInfo } from '@/api/invitations'
 import { normalizeApiProblem } from '@/api/errors'
 import { tenantPreference } from '@/api/tenant-preference'
 import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
 import { cabinetPath } from '@/cabinet/cabinet-paths'
-import { BrandLogo } from '@/components/site/brand-logo'
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
+import { AuthBrand } from './auth-brand'
 import { commonMessages, useT, type MessageKey } from '@/i18n'
 import { inviteMessages } from './invite-messages'
 import {
   Button,
   DateValue,
-  DeniedState,
   ErrorState,
-  Fact,
-  FactList,
+  FactRows,
   Notice,
   SkeletonRows,
-  StateScreen,
   StatusPill,
   useOperation,
+  type NoticeTone,
   type StateTone,
 } from '@/components/app'
 
@@ -67,43 +57,35 @@ const stateContent: Record<
   InvitationState,
   {
     tone: StateTone
-    icon: ReactNode
     resolution: Resolution
   }
 > = {
   expired: {
     tone: 'warn',
-    icon: <Clock aria-hidden />,
     resolution: 'home',
   },
   used: {
     tone: 'neutral',
-    icon: <CheckCircle2 aria-hidden />,
     resolution: 'login',
   },
   revoked: {
     tone: 'warn',
-    icon: <Ban aria-hidden />,
     resolution: 'home',
   },
   'not-found': {
     tone: 'neutral',
-    icon: <SearchX aria-hidden />,
     resolution: 'home',
   },
   invalid: {
     tone: 'warn',
-    icon: <ShieldAlert aria-hidden />,
     resolution: 'home',
   },
   'wrong-account': {
     tone: 'neutral',
-    icon: <ShieldAlert aria-hidden />,
     resolution: 'login',
   },
   unknown: {
     tone: 'danger',
-    icon: <RefreshCw aria-hidden />,
     resolution: 'retry',
   },
 }
@@ -136,6 +118,7 @@ const acceptFailureMessage = (error: unknown): string =>
   normalizeApiProblem(error).message
 
 export function InviteScreen() {
+  useDesignSystemRoot()
   const { code = '' } = useParams<{ code: string }>()
   const auth = useAuth()
   const navigate = useNavigate()
@@ -255,20 +238,17 @@ export function InviteScreen() {
   }
 
   return (
-    <div className="bg-app-canvas text-app-ink flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-10">
-        <BrandLogo />
-        <Link
-          className="text-app-muted hover:text-app-ink -mr-2 inline-flex min-h-11 items-center gap-2 rounded-control px-2 text-[13px] transition-colors"
-          to="/"
-        >
-          <ArrowLeft aria-hidden className="size-4" />
+    <div className="rz flex min-h-screen flex-col">
+      <header className="flex items-center justify-end px-4 pt-4">
+        <Link className="rz-btn rz-btn--ghost" to="/">
+          <ArrowLeft aria-hidden />
           {t('toHome')}
         </Link>
       </header>
 
-      <main className="flex flex-1 justify-center px-4 pt-4 pb-16 sm:px-6 sm:pt-10">
-        <div className="w-full max-w-[480px] min-w-0">
+      <main className="grid flex-1 content-start justify-items-center px-4 pt-2 pb-6 sm:pt-4">
+        <div className="grid w-full max-w-[420px] min-w-0 gap-5">
+          <AuthBrand />
           {loading && (
             <>
               <h1 className="sr-only">{t('heading')}</h1>
@@ -278,7 +258,9 @@ export function InviteScreen() {
 
           {!loading && errorState && (
             <>
-              <h1 className="sr-only">{t('heading')}</h1>
+              {stateContent[errorState].resolution === 'retry' ? (
+                <h1 className="sr-only">{t('heading')}</h1>
+              ) : null}
               <InvitationOutcome
                 loginHref={loginHref}
                 onRetry={reloadInvitation}
@@ -332,73 +314,56 @@ function InvitationCard({
   const tc = useT(commonMessages)
 
   return (
-    <section className="border-app-line rounded-sheet bg-app-raised border p-5 sm:p-7">
-      <p className="text-app-dim font-mono text-[10.5px] tracking-[0.12em] uppercase">
-        {t('eyebrow')}
-      </p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] break-words text-white">
-        {info.tenantName}
-      </h1>
-      <p className="text-app-muted mt-2 text-[13.5px] leading-6">{t('lead')}</p>
+    <section className="grid gap-5">
+      <div className="grid gap-1.5">
+        <p className="rz-eyebrow m-0">{t('eyebrow')}</p>
+        <h1 className="rz-h-page break-words">{info.tenantName}</h1>
+        <p className="text-app-muted m-0">{t('lead')}</p>
+      </div>
 
-      <div className="border-app-line rounded-panel bg-app-canvas/60 mt-5 border p-4">
-        <FactList columns={2}>
-          <Fact label={t('role')}>
-            <StatusPill tone="info">{info.roleName}</StatusPill>
-          </Fact>
-          <Fact label={t('invitedBy')}>{info.createdByName}</Fact>
-          <Fact label={t('validUntil')}>
-            <DateValue value={info.expiresAt} />
-          </Fact>
-        </FactList>
+      <div className="rz-card">
+        <FactRows
+          className="px-4"
+          rows={[
+            {
+              label: t('role'),
+              value: <StatusPill tone="info">{info.roleName}</StatusPill>,
+            },
+            { label: t('invitedBy'), value: info.createdByName },
+            {
+              label: t('validUntil'),
+              value: <DateValue value={info.expiresAt} />,
+            },
+          ]}
+        />
       </div>
 
       {authStatus === 'guest' ? (
         <>
-          <Notice className="mt-5" tone="info">
-            {t('signInFirst')}
-          </Notice>
-          <Button
-            asChild
-            className="mt-4 w-full"
-            size="touch"
-            variant="primary"
-          >
-            <Link to={loginHref}>
-              {t('accept')}
-              <ArrowRight aria-hidden />
-            </Link>
+          <Notice tone="info">{t('signInFirst')}</Notice>
+          <Button asChild className="rz-btn--block" size="lg" variant="primary">
+            <Link to={loginHref}>{t('accept')}</Link>
           </Button>
         </>
       ) : accepted ? (
         <>
-          <Notice className="mt-5" tone="ok">
-            {t('accepted')}
-          </Notice>
-          <Button
-            asChild
-            className="mt-4 w-full"
-            size="touch"
-            variant="primary"
-          >
-            <Link to="/account">
-              {t('toCabinet')}
-              <ArrowRight aria-hidden />
-            </Link>
+          <Notice tone="ok">{t('accepted')}</Notice>
+          <Button asChild className="rz-btn--block" size="lg" variant="primary">
+            <Link to="/account">{t('toCabinet')}</Link>
           </Button>
         </>
       ) : (
         <>
           {failed && accepting.error !== null && (
-            <Notice block className="mt-5" tone="danger">
+            <Notice block tone="danger">
               <p>{accepting.error}</p>
               <p className="text-app-muted mt-1">{t('acceptFailedHint')}</p>
             </Notice>
           )}
           <Button
-            className="mt-5 w-full"
+            className="rz-btn--block"
+            size="lg"
             onClick={accepting.run}
-            size="touch"
             variant="primary"
             {...accepting.triggerProps}
             disabled={accepting.pending || busy || authStatus === 'loading'}
@@ -445,38 +410,36 @@ function InvitationOutcome({
     )
   }
 
+  // A dead end keeps the auth column's own layout: the heading names what
+  // happened, one notice says why, one action resolves it.
   const action =
     content.resolution === 'login' ? (
-      <Button asChild variant="primary">
+      <Button asChild className="rz-btn--block" size="lg" variant="primary">
         <Link to={loginHref}>
           {state === 'wrong-account' ? t('signInOther') : t('signInPhone')}
         </Link>
       </Button>
     ) : (
-      <Button asChild>
+      <Button asChild className="rz-btn--block" size="lg" variant="primary">
         <Link to="/">{t('backHome')}</Link>
       </Button>
     )
 
-  if (state === 'wrong-account') {
-    return (
-      <DeniedState
-        actions={action}
-        description={description}
-        label={t('state')}
-        title={title}
-      />
-    )
-  }
-
   return (
-    <StateScreen
-      actions={action}
-      description={description}
-      icon={content.icon}
-      label={t('state')}
-      title={title}
-      tone={content.tone}
-    />
+    <section aria-label={t('state')} className="grid gap-5">
+      <div className="grid gap-1.5">
+        <p className="rz-eyebrow m-0">{t('eyebrow')}</p>
+        <h1 className="rz-h-page break-words">{title}</h1>
+      </div>
+      <Notice tone={NOTICE_TONE[content.tone]}>{description}</Notice>
+      {action}
+    </section>
   )
 }
+
+const NOTICE_TONE = {
+  neutral: 'info',
+  brand: 'info',
+  warn: 'warn',
+  danger: 'danger',
+} as const satisfies Record<StateTone, NoticeTone>

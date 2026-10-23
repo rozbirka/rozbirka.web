@@ -1,0 +1,88 @@
+{
+ "id": "C33",
+ "module": "profile",
+ "crumbs": [],
+ "title": "Особистий акаунт",
+ "route": "/account · /account/security",
+ "source": "components/account/account-messages.ts, screens/account-security.tsx",
+ "unverified": "усі рядки безпеки",
+ "states": [
+  [
+   "data",
+   "Акаунт"
+  ],
+  [
+   "security",
+   "Безпека"
+  ],
+  [
+   "delete",
+   "Видалення"
+  ]
+ ],
+ "actions": [],
+ "main": [
+  {
+   "type": "facts",
+   "title": "Акаунт",
+   "rows": [
+    [
+     "Телефон",
+     "+380 67 000 00 10",
+     true
+    ],
+    [
+     "Мова",
+     "Українська"
+    ]
+   ]
+  }
+ ],
+ "aside": [
+  {
+   "type": "text",
+   "title": "Розбірки",
+   "text": "Демо-розбірка · Власник"
+  }
+ ],
+ "overrides": {
+  "security": {
+   "main": [
+    {
+     "type": "table",
+     "title": "Сеанси",
+     "columns": [
+      {
+       "label": "Пристрій"
+      },
+      {
+       "label": "Останній вхід",
+       "mono": true
+      }
+     ],
+     "rows": [
+      [
+       "Chrome · macOS",
+       "сьогодні"
+      ],
+      [
+       "Safari · iPhone",
+       "вчора"
+      ]
+     ]
+    }
+   ]
+  },
+  "delete": {
+   "main": [
+    {
+     "type": "notice",
+     "tone": "danger",
+     "icon": "icon-trash-2",
+     "text": "Видалення акаунта незворотне. Керування акаунтом доступне поза тарифними обмеженнями.",
+     "action": "Видалити акаунт"
+    }
+   ]
+  }
+ }
+}

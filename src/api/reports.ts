@@ -27,6 +27,8 @@ export interface ReportJob {
   expiresAt: string
   errorMessage: string | null
   fileSizeBytes: number | null
+  /** Persisted calendar dates; optional while older Core versions are supported. */
+  period?: { from: string; to: string } | null
 }
 
 export interface CreateReportRequest {

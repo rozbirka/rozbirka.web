@@ -3,6 +3,7 @@ import { defineMessages } from '@/i18n'
 /** Where one part lies: warehouse, zones and placement history. */
 export const placementMessages = defineMessages({
   uk: {
+    partDetails: 'Дані запчастини',
     backToPart: 'До деталі',
     crumbParts: 'Запчастини',
     scanUnavailable:
@@ -16,21 +17,32 @@ export const placementMessages = defineMessages({
     saved: 'Розміщення збережено',
     warehouseHint: 'Фізичне приміщення, де лежить запчастина.',
     warehouse: 'Склад',
+    warehouseOnly: 'Зберегти тільки на рівні складу',
+    noActiveWarehouses:
+      'Немає активних складів. Створіть склад, потім додайте зону.',
     legendEmpty: 'порожня',
     legendFilled: 'є позиції',
     legendBusiest: 'найзавантаженіша',
     zoneHint:
-      'Зона — найдрібніше місце в нашій системі: саме її і сканують. Можна вибрати кілька.',
+      'Виберіть зону складу або створіть нову. За потреби далі вкажіть конкретну полицю.',
     zone: 'Зона',
+    section: 'Секція / стелаж',
+    sectionSearch: 'Пошук секції',
+    shelfSearch: 'Пошук полиці',
+    sectionHint: 'Секцію можна вказати після зони або зберегти деталь у зоні.',
+    noSection: 'Без секції — залишити в зоні',
+    shelf: 'Місце/полиця',
+    shelfHint: 'Місце належить секції вибраної зони й має власний QR-код.',
+    noShelf: 'Без полиці',
     zoneSearch: 'Пошук зони',
     zoneSearchPlaceholder: 'Назва або код зони, наприклад A1',
     noActiveZones: 'На цьому складі немає активних зон.',
     noZonesFound:
       'Зон за запитом не знайдено. Перевірте код або виберіть інший склад.',
-    quantityHint: 'Скільки одиниць кладемо у вибрану зону.',
+    quantityHint: 'Кількість запчастини в обраних місцях.',
     quantity: 'Кількість',
     notSplitTitle:
-      'Залишок між зонами не ділиться — запчастина лежить у зоні цілком',
+      'Залишок між зонами не ділиться — запчастина лежить у зонах цілком',
     notSplit:
       'Залишок між зонами не ділиться: запчастина лежить у вибраних зонах цілком, тому кількість тут не редагується.',
     records: {
@@ -43,19 +55,24 @@ export const placementMessages = defineMessages({
     historyHidden: 'Історію видно тим, хто має право «parts.view».',
     neverMoved: 'Запчастину ще не переміщували.',
     newPlacement: 'Нове розміщення',
-    noZonesPicked: 'Зони не вибрані',
+    noLocationSelected: 'Виберіть склад або зону.',
+    locationLevel: 'Рівень',
+    warehouseLevel: 'Лише склад',
+    noZonesPicked: 'Виберіть зону',
     zonesPicked: 'Зон вибрано',
     before: 'Було',
     capacityNotCounted: 'Місткість зони не рахується',
     capacity: 'Місткість зони',
     savePlacement: 'Зберегти розміщення',
-    pickOne:
-      'Виберіть хоча б одну зону — запчастина не може лишитися без місця.',
+    pickPhysicalZone:
+      'Виберіть зону для запчастини. За потреби уточніть секцію та полицю.',
+    pickOne: 'Виберіть одну зону — запчастина не може лишитися без місця.',
     replacesAll:
       'Збереження замінить увесь набір зон цієї запчастини, а не тільки вибраний склад.',
     unchanged: 'Нічого не змінилося — набір зон уже такий.',
   },
   'en-GB': {
+    partDetails: 'Part details',
     backToPart: 'Back to part',
     crumbParts: 'Parts',
     scanUnavailable:
@@ -70,20 +87,32 @@ export const placementMessages = defineMessages({
     saved: 'Location saved',
     warehouseHint: 'The physical room where the part is kept.',
     warehouse: 'Warehouse',
+    warehouseOnly: 'Store at warehouse level only',
+    noActiveWarehouses:
+      'There are no active warehouses. Create one, then add a zone.',
     legendEmpty: 'empty',
     legendFilled: 'has items',
     legendBusiest: 'busiest',
     zoneHint:
-      'A zone is the smallest place in our system — it’s what gets scanned. You can pick several.',
+      'Choose a warehouse zone or create a new one. You can then select a specific shelf.',
     zone: 'Zone',
+    section: 'Section / rack',
+    sectionSearch: 'Search sections',
+    shelfSearch: 'Search shelves',
+    sectionHint: 'Select a section after a zone, or save the part in the zone.',
+    noSection: 'No section — keep in zone',
+    shelf: 'Location/shelf',
+    shelfHint:
+      'A location belongs to a section in the selected zone and has its own QR code.',
+    noShelf: 'No shelf',
     zoneSearch: 'Search zones',
     zoneSearchPlaceholder: 'Zone name or code, e.g. A1',
     noActiveZones: 'This warehouse has no active zones.',
     noZonesFound: 'No zones match. Check the code or choose another warehouse.',
-    quantityHint: 'How many units go into the selected zone.',
+    quantityHint: 'The part quantity at the selected locations.',
     quantity: 'Quantity',
     notSplitTitle:
-      'Stock isn’t split between zones — the whole part lies in the zone',
+      'Stock isn’t split between zones — the whole part lies in each zone',
     notSplit:
       'Stock isn’t split between zones: the whole part lies in the selected zones, so the quantity can’t be edited here.',
     records: { one: '{count} entry', other: '{count} entries' },
@@ -92,18 +121,24 @@ export const placementMessages = defineMessages({
       'History is visible to those with the “parts.view” permission.',
     neverMoved: 'This part hasn’t been moved yet.',
     newPlacement: 'New location',
-    noZonesPicked: 'No zones selected',
+    noLocationSelected: 'Choose a warehouse or zone.',
+    locationLevel: 'Level',
+    warehouseLevel: 'Warehouse only',
+    noZonesPicked: 'Choose a zone',
     zonesPicked: 'Zones selected',
     before: 'Before',
     capacityNotCounted: 'Zone capacity isn’t tracked',
     capacity: 'Zone capacity',
     savePlacement: 'Save location',
-    pickOne: 'Select at least one zone — a part can’t be left without a place.',
+    pickPhysicalZone:
+      'Choose a zone for the part. You can also specify a section and shelf.',
+    pickOne: 'Select one zone — a part can’t be left without a place.',
     replacesAll:
       'Saving replaces this part’s whole set of zones, not just the selected warehouse.',
     unchanged: 'Nothing has changed — the zones are already set like this.',
   },
   pl: {
+    partDetails: 'Dane części',
     backToPart: 'Do części',
     crumbParts: 'Części',
     scanUnavailable:
@@ -117,20 +152,33 @@ export const placementMessages = defineMessages({
     saved: 'Lokalizację zapisano',
     warehouseHint: 'Fizyczne pomieszczenie, w którym leży część.',
     warehouse: 'Magazyn',
+    warehouseOnly: 'Przechowuj tylko w magazynie',
+    noActiveWarehouses:
+      'Brak aktywnych magazynów. Utwórz magazyn, a potem dodaj strefę.',
     legendEmpty: 'pusta',
     legendFilled: 'są pozycje',
     legendBusiest: 'najbardziej zajęta',
     zoneHint:
-      'Strefa to najmniejsze miejsce w naszym systemie — to ją się skanuje. Można wybrać kilka.',
+      'Wybierz strefę magazynu lub utwórz nową, a następnie konkretną półkę, jeśli potrzeba.',
     zone: 'Strefa',
+    section: 'Sekcja / regał',
+    sectionSearch: 'Szukaj sekcji',
+    shelfSearch: 'Szukaj półki',
+    sectionHint:
+      'Po wybraniu strefy można wybrać sekcję lub zapisać część w strefie.',
+    noSection: 'Bez sekcji — pozostaw w strefie',
+    shelf: 'Miejsce/półka',
+    shelfHint:
+      'Miejsce należy do sekcji w wybranej strefie i ma własny kod QR.',
+    noShelf: 'Bez półki',
     zoneSearch: 'Szukaj strefy',
     zoneSearchPlaceholder: 'Nazwa lub kod strefy, np. A1',
     noActiveZones: 'W tym magazynie nie ma aktywnych stref.',
     noZonesFound: 'Nie znaleziono stref. Sprawdź kod lub wybierz inny magazyn.',
-    quantityHint: 'Ile sztuk odkładamy do wybranej strefy.',
+    quantityHint: 'Liczba sztuk części w wybranych miejscach.',
     quantity: 'Ilość',
     notSplitTitle:
-      'Stan nie dzieli się między strefy — część leży w strefie w całości',
+      'Stan nie dzieli się między strefy — część leży w strefach w całości',
     notSplit:
       'Stan nie dzieli się między strefy: część leży w wybranych strefach w całości, dlatego ilości nie można tu edytować.',
     records: {
@@ -143,14 +191,18 @@ export const placementMessages = defineMessages({
     historyHidden: 'Historię widzą osoby z uprawnieniem „parts.view”.',
     neverMoved: 'Część nie była jeszcze przenoszona.',
     newPlacement: 'Nowa lokalizacja',
-    noZonesPicked: 'Nie wybrano stref',
+    noLocationSelected: 'Wybierz magazyn lub strefę.',
+    locationLevel: 'Poziom',
+    warehouseLevel: 'Tylko magazyn',
+    noZonesPicked: 'Wybierz strefę',
     zonesPicked: 'Wybrane strefy',
     before: 'Było',
     capacityNotCounted: 'Pojemność strefy nie jest liczona',
     capacity: 'Pojemność strefy',
     savePlacement: 'Zapisz lokalizację',
-    pickOne:
-      'Wybierz co najmniej jedną strefę — część nie może zostać bez miejsca.',
+    pickPhysicalZone:
+      'Wybierz strefę dla części. Możesz też wskazać sekcję i półkę.',
+    pickOne: 'Wybierz jedną strefę — część nie może zostać bez miejsca.',
     replacesAll:
       'Zapis zastąpi cały zestaw stref tej części, a nie tylko wybrany magazyn.',
     unchanged: 'Nic się nie zmieniło — zestaw stref już taki jest.',

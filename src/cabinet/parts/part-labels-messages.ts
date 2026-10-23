@@ -41,6 +41,7 @@ export const partLabelMessages = defineMessages({
     fieldCondition: 'стан',
     fieldZone: 'зона',
     fieldLocation: 'місце',
+    locationReleased: 'Звільнено місце',
     unitPieces: 'шт',
   },
   'en-GB': {
@@ -82,6 +83,7 @@ export const partLabelMessages = defineMessages({
     fieldCondition: 'condition',
     fieldZone: 'zone',
     fieldLocation: 'location',
+    locationReleased: 'Location released',
     unitPieces: 'pcs',
   },
   pl: {
@@ -123,6 +125,7 @@ export const partLabelMessages = defineMessages({
     fieldCondition: 'stan',
     fieldZone: 'strefa',
     fieldLocation: 'miejsce',
+    locationReleased: 'Zwolniono miejsce',
     unitPieces: 'szt.',
   },
 })

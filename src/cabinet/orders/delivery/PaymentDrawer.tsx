@@ -214,7 +214,7 @@ export function PaymentDrawer({
       })}
       footer={
         <>
-          <p className="text-app-muted min-w-0 flex-1 truncate text-[13px]">
+          <p className="rz-muted m-0 min-w-0 flex-1 truncate">
             {mode === 'record'
               ? t('tillFooter', { name: registerName })
               : t('linkFooter')}
@@ -242,7 +242,7 @@ export function PaymentDrawer({
       title={mode === 'record' ? t('recordPayment') : t('linkTransaction')}
     >
       <form
-        className="grid gap-5"
+        className="grid gap-4"
         id={FORM_ID}
         noValidate
         onSubmit={(event) => {
@@ -253,7 +253,7 @@ export function PaymentDrawer({
         <div className="grid gap-2">
           <div
             aria-label={t('paymentMethod')}
-            className="border-app-line bg-app-input grid grid-cols-2 gap-1 rounded-[12px] border p-1"
+            className="rz-seg flex w-full"
             role="group"
           >
             {(
@@ -264,12 +264,7 @@ export function PaymentDrawer({
             ).map(([value, label]) => (
               <button
                 aria-pressed={mode === value}
-                className={cn(
-                  'flex h-11 items-center justify-center rounded-[9px] text-[14px] font-bold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/40',
-                  mode === value
-                    ? 'bg-white/[0.09] text-white'
-                    : 'text-app-muted hover:bg-white/[0.04]',
-                )}
+                className="flex-1 justify-center"
                 key={value}
                 onClick={() => {
                   setMode(value)
@@ -281,7 +276,7 @@ export function PaymentDrawer({
               </button>
             ))}
           </div>
-          <p className="text-app-muted text-[12px] leading-5 text-pretty">
+          <p className="rz-caption m-0 text-pretty">
             {mode === 'record' ? t('recordExplained') : t('linkExplained')}
           </p>
         </div>
@@ -291,42 +286,44 @@ export function PaymentDrawer({
         )}
 
         {registers !== null && registers.length > 0 && (
-          <fieldset className="grid gap-2">
-            <legend className="text-app-ink mb-2 text-[13px] font-bold">
+          <fieldset className="m-0 grid min-h-fit gap-2 border-0 p-0">
+            <legend className="rz-label mb-2 p-0">
               {mode === 'record' ? t('recordInto') : t('receiptTill')}
             </legend>
-            {registers.map((register) => {
-              const chosen = (registerId ?? registers[0]!.id) === register.id
-              return (
-                <label
-                  className={cn(
-                    'flex min-h-11 cursor-pointer items-center gap-3 rounded-[11px] border px-3.5 py-3 transition-colors',
-                    chosen
-                      ? 'border-app-line-2 bg-white/[0.05]'
-                      : 'border-app-line bg-app-input hover:border-app-line-2',
-                  )}
-                  key={register.id}
-                >
-                  <input
-                    checked={chosen}
-                    className="accent-brand size-4 shrink-0"
-                    name="delivery-payment-register"
-                    onChange={() => {
-                      setRegisterId(register.id)
-                      setReceiptId(null)
-                    }}
-                    type="radio"
-                    value={register.id}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-white">
-                    {register.name}
-                  </span>
-                  <span className="text-app-muted font-mono text-[12px] whitespace-nowrap tabular-nums">
-                    {held(register, locale)}
-                  </span>
-                </label>
-              )
-            })}
+            <div className="border-app-line grid overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)">
+              {registers.map((register) => {
+                const chosen = (registerId ?? registers[0]!.id) === register.id
+                return (
+                  <label
+                    className={cn(
+                      'border-app-line flex min-h-11 cursor-pointer items-center gap-3 border-t px-3 py-2 first:border-t-0',
+                      chosen
+                        ? 'bg-(--rz-row-selected) shadow-[inset_2px_0_0_var(--rz-brand)]'
+                        : 'hover:bg-app-hover',
+                    )}
+                    key={register.id}
+                  >
+                    <input
+                      checked={chosen}
+                      className="rz-radio shrink-0"
+                      name="delivery-payment-register"
+                      onChange={() => {
+                        setRegisterId(register.id)
+                        setReceiptId(null)
+                      }}
+                      type="radio"
+                      value={register.id}
+                    />
+                    <span className="rz-strong min-w-0 flex-1 truncate font-semibold">
+                      {register.name}
+                    </span>
+                    <span className="rz-strong font-mono whitespace-nowrap tabular-nums">
+                      {held(register, locale)}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
           </fieldset>
         )}
 
@@ -334,11 +331,9 @@ export function PaymentDrawer({
           <>
             <Field label={t('grossAmount')}>
               <TextInput
-                className={cn(
-                  'h-[52px] rounded-[12px] px-4 font-mono text-[22px] tabular-nums',
-                  amount === null ? 'border-brand/55' : '',
-                )}
+                className="h-12 text-page"
                 inputMode="decimal"
+                numeric
                 onChange={(event) => setAmountDraft(event.target.value)}
                 placeholder="0,00"
                 value={amountDraft}
@@ -346,7 +341,7 @@ export function PaymentDrawer({
             </Field>
 
             {suggested === null ? null : (
-              <div className="-mt-3 flex flex-wrap gap-1.5">
+              <div className="-mt-2 flex flex-wrap gap-1.5">
                 <Preset
                   onPick={() => setAmountDraft(editable(suggested, locale))}
                 >
@@ -369,8 +364,8 @@ export function PaymentDrawer({
               label={t('tillFee')}
             >
               <TextInput
-                className="font-mono tabular-nums"
                 inputMode="decimal"
+                numeric
                 onChange={(event) => setFeeDraft(event.target.value)}
                 value={feeDraft}
               />
@@ -378,14 +373,12 @@ export function PaymentDrawer({
           </>
         ) : (
           <>
-            <fieldset className="grid gap-2">
-              <legend className="text-app-ink mb-2 text-[13px] font-bold">
-                {t('receipts')}
-              </legend>
+            <fieldset className="m-0 grid min-h-fit gap-2 border-0 p-0">
+              <legend className="rz-label mb-2 p-0">{t('receipts')}</legend>
               {receiptsError ? (
                 <Notice tone="danger">{t('receiptsFailed')}</Notice>
               ) : options.length === 0 ? (
-                <p className="text-app-muted border-app-line bg-app-input rounded-[11px] border px-3.5 py-3.5 text-[13px] leading-5 text-pretty">
+                <p className="rz-inset text-app-muted m-0 text-pretty">
                   {t('noReceipts')}
                 </p>
               ) : (
@@ -395,31 +388,30 @@ export function PaymentDrawer({
                     <button
                       aria-pressed={chosen}
                       className={cn(
-                        'flex min-h-11 items-center gap-3 rounded-[11px] border px-3.5 py-3 text-left transition-colors',
-                        chosen
-                          ? 'border-app-line-2 bg-white/[0.05]'
-                          : 'border-app-line bg-app-input hover:border-app-line-2',
+                        'border-app-line flex min-h-11 w-full items-center gap-3 rounded-rz-md border bg-(--rz-sheet-field) px-3 py-2 text-left',
+                        chosen &&
+                          'border-brand bg-(--rz-row-selected) shadow-[inset_2px_0_0_var(--rz-brand)]',
                       )}
                       key={item.id}
                       onClick={() => setReceiptId(item.id)}
                       type="button"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14px] font-semibold text-white">
+                        <span className="rz-strong block truncate font-medium">
                           {item.note ?? t('receiptNoNote')}
                         </span>
-                        <span className="text-app-muted mt-0.5 block font-mono text-[11.5px]">
+                        <span className="rz-dim block font-mono text-micro">
                           {when(item.createdAt)} · {item.createdByName}
                         </span>
                       </span>
-                      <span className="text-app-ink font-mono text-[14px] whitespace-nowrap tabular-nums">
+                      <span className="rz-mono rz-strong whitespace-nowrap">
                         {uah(item.amount, locale)}
                       </span>
                     </button>
                   )
                 })
               )}
-              <p className="text-app-muted text-[12px] leading-5 text-pretty">
+              <p className="rz-caption m-0 text-pretty">
                 {t('receiptsExplained')}
               </p>
             </fieldset>
@@ -433,8 +425,8 @@ export function PaymentDrawer({
               label={t('transactionFee')}
             >
               <TextInput
-                className="font-mono tabular-nums"
                 inputMode="decimal"
+                numeric
                 onChange={(event) => setFeeDraft(event.target.value)}
                 value={feeDraft}
               />
@@ -444,45 +436,34 @@ export function PaymentDrawer({
 
         {error !== null && <Notice tone="danger">{error}</Notice>}
 
-        <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 rounded-[14px] border px-[18px] py-4 text-[14px]">
+        <dl className="rz-inset m-0 grid min-h-fit grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2">
           <dt className="text-app-muted">{t('agreed')}</dt>
-          <dd className="text-right font-mono tabular-nums">
-            {uah(delivery.agreedTotalUah, locale)}
-          </dd>
+          <dd className="rz-num m-0">{uah(delivery.agreedTotalUah, locale)}</dd>
           <dt className="text-app-muted">{t('due')}</dt>
-          <dd className="text-right font-mono tabular-nums">
-            {uah(delivery.outstandingUah, locale)}
-          </dd>
+          <dd className="rz-num m-0">{uah(delivery.outstandingUah, locale)}</dd>
           <dt className="text-app-muted">{t('thisPayment')}</dt>
-          <dd
-            className={cn(
-              'text-right font-mono tabular-nums',
-              gross > 0 ? 'text-state-ok' : 'text-app-dim',
-            )}
-          >
+          <dd className={cn('rz-num m-0', gross > 0 ? 'rz-strong' : 'rz-dim')}>
             {gross > 0 ? uah(gross, locale) : '—'}
           </dd>
           <span aria-hidden className="bg-app-line col-span-2 h-px" />
-          <dt className="font-bold">
+          <dt className="rz-strong font-semibold">
             {outcome.over ? t('overpayment') : t('remaining')}
           </dt>
           <dd
             className={cn(
-              'text-right font-mono text-[16px] tabular-nums',
+              'rz-num m-0 font-semibold',
               outcome.over
                 ? 'text-state-danger'
                 : gross === 0
                   ? 'text-app-muted'
-                  : outcome.remaining === 0
-                    ? 'text-state-ok'
-                    : 'text-white',
+                  : 'text-app-strong',
             )}
           >
             {outcome.over
               ? uah(gross - delivery.outstandingUah, locale)
               : uah(outcome.remaining, locale)}
           </dd>
-          <p className="col-span-2 -mt-1 grid gap-0.5 text-[12px] text-pretty">
+          <p className="col-span-2 m-0 grid gap-0.5 text-caption text-pretty">
             <span
               className={cn(
                 'font-semibold',
@@ -495,7 +476,7 @@ export function PaymentDrawer({
             >
               {outcomeTitle}
             </span>
-            <span className="text-app-muted leading-5">{outcomeNote}</span>
+            <span className="text-app-muted">{outcomeNote}</span>
           </p>
         </dl>
       </form>
@@ -511,12 +492,12 @@ function Preset({
   onPick: () => void
 }) {
   return (
-    <button
-      className="border-app-line text-app-muted hover:text-app-ink relative h-[30px] rounded-full border px-3 text-[12px] font-semibold whitespace-nowrap transition-colors hover:border-white/24 after:absolute after:inset-x-0 after:-inset-y-1.5 after:content-['']"
+    <Button
+      className="relative after:absolute after:inset-x-0 after:-inset-y-2 after:content-['']"
       onClick={onPick}
-      type="button"
+      size="sm"
     >
       {children}
-    </button>
+    </Button>
   )
 }

@@ -28,10 +28,7 @@ export function PillGroup({
   return (
     <div
       aria-label={label}
-      className={cn(
-        'border-app-line bg-app-raised flex shrink-0 items-center gap-1 rounded-[14px] border p-1.5',
-        className,
-      )}
+      className={cn('rz-seg shrink-0', className)}
       role="radiogroup"
     >
       {options.map((option) => {
@@ -39,12 +36,6 @@ export function PillGroup({
         return (
           <button
             aria-checked={active}
-            className={cn(
-              'focus-visible:outline-brand min-h-9 cursor-pointer rounded-[10px] px-4 text-sm transition-colors',
-              active
-                ? 'bg-app-input font-bold text-white'
-                : 'text-app-muted hover:text-app-ink font-medium',
-            )}
             key={option.value}
             onClick={() => onChange(option.value)}
             role="radio"

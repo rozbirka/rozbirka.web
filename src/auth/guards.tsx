@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { commonMessages, useT } from '@/i18n'
 import { useAuth } from './AuthContext'
+import { needsOwnerName } from './owner-name'
 import { resolvePostLoginDestination } from './post-login'
 
 function FullScreenLoader() {
@@ -43,8 +44,7 @@ export function RedirectIfAuth({
   const location = useLocation()
 
   if (status === 'loading') return <FullScreenLoader />
-  const mustCompleteName =
-    status === 'authenticated' && Boolean(authenticatedUserWithoutName(user))
+  const mustCompleteName = status === 'authenticated' && needsOwnerName(user)
   if (status === 'authenticated' && !mustCompleteName) {
     const fallback = (location.state as { from?: string } | null)?.from ?? to
     return (
@@ -55,10 +55,4 @@ export function RedirectIfAuth({
     )
   }
   return <>{children}</>
-}
-
-function authenticatedUserWithoutName(
-  user: ReturnType<typeof useAuth>['user'],
-) {
-  return user && user.displayName.trim().length < 2
 }

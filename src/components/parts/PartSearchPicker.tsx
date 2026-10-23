@@ -1,32 +1,34 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { partsApi, type PartListItem, type PartSearchItem } from '@/api/parts'
-import { cn } from '@/lib/utils'
-import { formatMoney, translate, useLocale, useT, type Locale } from '@/i18n'
+import { Button, SkeletonRows, StatusPill } from '@/components/app'
+import {
+  SearchPicker,
+  SearchPickerOption,
+  SearchPickerOptions,
+} from '@/components/app/search-picker'
+import { formatMoney, useLocale, useT, type Locale } from '@/i18n'
 import { partPickerMessages } from './part-picker-messages'
-
-type PartPickerFilter = 'all' | 'available' | 'reserved'
+import './part-search-picker.css'
 
 export interface PartPickerItem extends PartListItem {
   effectiveSalePrice: number | null
 }
 
 interface PartSearchPickerProps {
-  value: PartPickerItem | null
+  value: Pick<PartPickerItem, 'id'> | null
   query: string
   onQueryChange: (query: string) => void
   onSelect: (part: PartPickerItem) => void
   onClear: () => void
   disabled?: boolean
+  /** Compact order drawer results: code under name, stock and price alongside. */
+  compact?: boolean
+  /** Existing order lines cannot be added again. */
+  takenPartIds?: readonly string[]
   /** The accounting currency of the prices; `null` shows bare numbers. */
   currency?: string | null
 }
 
-const filterOptions: readonly PartPickerFilter[] = [
-  'all',
-  'available',
-  'reserved',
-]
 const PAGE_SIZE = 6
 
 const price = (
@@ -34,33 +36,6 @@ const price = (
   currency: string | null,
   locale: Locale,
 ) => (value === null ? '—' : (formatMoney(value, currency, locale) ?? '—'))
-
-const statusPresentation = (part: PartPickerItem, locale: Locale) => {
-  if (part.status === 'reserved')
-    return {
-      label: translate(partPickerMessages, locale, 'reserved'),
-      className: 'border-state-warn/35 bg-state-warn-soft text-state-warn',
-    }
-  if (part.status === 'available' || part.quantityAvailable > 0)
-    return {
-      label: translate(partPickerMessages, locale, 'inStock', {
-        count: part.quantityAvailable,
-      }),
-      className: 'border-state-ok/35 bg-state-ok-soft text-state-ok',
-    }
-  if (part.quantityReserved > 0)
-    return {
-      label: translate(partPickerMessages, locale, 'reserved'),
-      className: 'border-state-warn/35 bg-state-warn-soft text-state-warn',
-    }
-  return {
-    label: translate(partPickerMessages, locale, 'none'),
-    className: 'border-state-danger/35 bg-state-danger-soft text-state-danger',
-  }
-}
-
-const filterStatus = (filter: PartPickerFilter) =>
-  filter === 'all' ? undefined : filter
 
 const fromSearchItem = (item: PartSearchItem): PartListItem => ({
   id: item.id,
@@ -86,75 +61,22 @@ export function PartSearchPicker({
   onSelect,
   onClear,
   disabled = false,
+  compact = false,
+  takenPartIds = [],
   currency = null,
 }: PartSearchPickerProps) {
-  const inputId = useId()
-  const rootRef = useRef<HTMLDivElement>(null)
   const listRequestRef = useRef(0)
-  const countRequestRef = useRef(0)
   const priceCacheRef = useRef(new Map<string, number | null>())
   const [open, setOpen] = useState(false)
-  const [filter, setFilter] = useState<PartPickerFilter>('all')
   const [page, setPage] = useState(1)
   const [items, setItems] = useState<PartPickerItem[]>([])
-  const [counts, setCounts] = useState<Record<PartPickerFilter, number>>({
-    all: 0,
-    available: 0,
-    reserved: 0,
-  })
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<boolean>(false)
+  const [attempt, setAttempt] = useState(0)
   const { locale } = useLocale()
   const t = useT(partPickerMessages)
-
-  useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !rootRef.current?.contains(event.target)
-      )
-        setOpen(false)
-    }
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    document.addEventListener('keydown', escape)
-    return () => {
-      document.removeEventListener('pointerdown', close)
-      document.removeEventListener('keydown', escape)
-    }
-  }, [])
-
-  useEffect(() => {
-    const q = query.trim()
-    if (!open || !q) return
-    const request = ++countRequestRef.current
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      void partsApi
-        .facets({ query: q }, ['status'], { signal: controller.signal })
-        .then((facets) => {
-          if (controller.signal.aborted || request !== countRequestRef.current)
-            return
-          const statuses = new Map(
-            facets.statuses.map((item) => [item.id.toLowerCase(), item.count]),
-          )
-          setCounts({
-            all: facets.statuses.reduce((sum, item) => sum + item.count, 0),
-            available: statuses.get('available') ?? 0,
-            reserved: statuses.get('reserved') ?? 0,
-          })
-        })
-        .catch(() => undefined)
-    }, 250)
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [open, query])
 
   useEffect(() => {
     const q = query.trim()
@@ -164,21 +86,23 @@ export function PartSearchPicker({
     const timer = window.setTimeout(() => {
       setLoading(true)
       setError(false)
-      const status = filterStatus(filter)
       void partsApi
         .search(
           {
             query: q,
             page,
             pageSize: PAGE_SIZE,
-            ...(status ? { statuses: [status] } : {}),
+            statuses: ['available'],
           },
           { signal: controller.signal },
         )
         .then(async (result) => {
           if (controller.signal.aborted || request !== listRequestRef.current)
             return
-          const baseItems = result.items.map((searchItem) => {
+          const availableItems = result.items.filter(
+            (item) => item.quantityAvailable > 0,
+          )
+          const baseItems = availableItems.map((searchItem) => {
             const item = fromSearchItem(searchItem)
             return {
               ...item,
@@ -196,7 +120,7 @@ export function PartSearchPicker({
           setTotal(result.total)
           setTotalPages(Math.max(1, result.totalPages))
 
-          const uncached = result.items.filter(
+          const uncached = availableItems.filter(
             (item) => !priceCacheRef.current.has(item.id),
           )
           const details = await Promise.allSettled(
@@ -239,198 +163,162 @@ export function PartSearchPicker({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [filter, open, page, query])
+  }, [open, page, query, attempt])
 
   const shown = Math.min(items.length, total)
   const hasMore = page < totalPages
 
   return (
-    <div className="relative" ref={rootRef}>
-      <label className="sr-only" htmlFor={inputId}>
-        {t('label')}
-      </label>
-      <div className="relative">
-        <Search
-          aria-hidden
-          className="text-app-dim pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2"
-        />
-        <input
-          aria-controls={`${inputId}-results`}
-          aria-expanded={open}
-          autoComplete="off"
-          className={cn(
-            'bg-app-input text-app-ink placeholder:text-app-dim border-app-line-2 h-14 w-full rounded-[16px] border pr-4 pl-12 text-[15px] outline-none transition-colors hover:border-white/20 focus-visible:border-brand',
-            value?.name === query && 'border-brand/40',
-          )}
-          disabled={disabled}
-          id={inputId}
-          onChange={(event) => {
-            onQueryChange(event.target.value)
-            setPage(1)
-            setOpen(true)
-            setItems([])
-            setTotal(0)
-            setTotalPages(1)
-            setLoading(false)
-            onClear()
-          }}
-          onFocus={() => setOpen(true)}
-          placeholder={t('placeholder')}
-          role="searchbox"
-          value={query}
-        />
-      </div>
-
-      {open && query.trim() ? (
-        <div
-          aria-label={t('results')}
-          className="border-app-line bg-app-raised absolute top-[calc(100%+8px)] right-0 left-0 z-40 overflow-hidden rounded-[18px] border shadow-2xl"
-          id={`${inputId}-results`}
-          role="dialog"
-        >
-          <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3">
-            <div className="flex flex-wrap gap-2">
-              {filterOptions
-                .map((value) => ({ value, label: t(value) }))
-                .map((option) => (
-                  <button
-                    aria-pressed={filter === option.value}
-                    className={cn(
-                      'flex min-h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors',
-                      option.value === 'all' &&
-                        (filter === option.value
-                          ? 'border-app-line-2 bg-white/[0.09] text-white'
-                          : 'border-app-line-2 text-app-muted hover:bg-white/[0.04]'),
-                      option.value === 'available' &&
-                        (filter === option.value
-                          ? 'border-state-ok/35 bg-state-ok-soft text-state-ok'
-                          : 'border-state-ok/25 text-state-ok hover:bg-state-ok-soft/50'),
-                      option.value === 'reserved' &&
-                        (filter === option.value
-                          ? 'border-state-warn/35 bg-state-warn-soft text-state-warn'
-                          : 'border-state-warn/25 text-state-warn hover:bg-state-warn-soft/50'),
-                    )}
-                    key={option.value}
-                    onClick={() => {
-                      setFilter(option.value)
-                      setPage(1)
-                      setItems([])
-                      setTotal(0)
-                      setTotalPages(1)
-                      setError(false)
-                    }}
-                    type="button"
-                  >
-                    {option.label}
-                    <span className="text-app-dim font-mono text-xs">
-                      {counts[option.value]}
-                    </span>
-                  </button>
-                ))}
-            </div>
-            <p className="text-app-dim font-mono text-xs tabular-nums">
-              {t('shownOf', { shown: String(shown), total: String(total) })}
-            </p>
-          </div>
-
-          <div className="max-h-[min(52vh,460px)] overflow-y-auto overscroll-contain">
-            {error && items.length === 0 ? (
-              <p
-                className="text-state-danger px-5 py-8 text-center text-sm"
-                role="alert"
-              >
-                {t('loadFailed')}
-              </p>
-            ) : loading && items.length === 0 ? (
-              <p
-                className="text-app-muted px-5 py-8 text-center text-sm"
-                role="status"
-              >
-                {t('searching')}
-              </p>
-            ) : items.length === 0 ? (
-              <p className="text-app-muted px-5 py-8 text-center text-sm">
-                {t('nothing')}
-              </p>
-            ) : (
-              <ul
-                aria-label={t('found')}
-                className="divide-app-line grid divide-y"
-                role="listbox"
-              >
-                {items.map((part) => {
-                  const presentation = statusPresentation(part, locale)
-                  const car = part.car
-                    ? `${part.car.make} ${part.car.model} · ${part.car.year}`
-                    : t('noCar')
-                  return (
-                    <li key={part.id}>
-                      <button
-                        aria-label={t('choose', { name: part.name })}
-                        className="hover:bg-white/[0.035] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors"
-                        onClick={() => {
-                          setOpen(false)
-                          onSelect(part)
-                        }}
-                        role="option"
-                        type="button"
-                      >
-                        <span className="min-w-0">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-[15px] font-bold text-white">
-                              {part.name}
-                            </span>
-                            <span
-                              className={cn(
-                                'rounded-full border px-2.5 py-1 text-xs font-semibold',
-                                presentation.className,
-                              )}
-                            >
-                              {presentation.label}
-                            </span>
-                          </span>
-                          <span className="text-app-muted mt-1 block truncate text-[13px]">
-                            {car}
-                          </span>
-                        </span>
-                        <span className="grid justify-items-end gap-1 pl-2">
-                          <span className="font-mono text-[15px] font-bold text-white tabular-nums">
-                            {price(part.effectiveSalePrice, currency, locale)}
-                          </span>
-                          <span className="text-app-dim font-mono text-xs">
-                            {part.externalCode ?? '—'}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-            {error && items.length > 0 && (
-              <p
-                className="text-state-danger px-4 py-3 text-center text-xs"
-                role="alert"
-              >
-                {t('loadFailed')}
-              </p>
-            )}
-            {hasMore && (
-              <div className="border-app-line border-t p-3">
-                <button
-                  aria-busy={loading}
-                  className="border-app-line-2 text-brand hover:bg-brand/5 min-h-11 w-full rounded-[10px] border text-sm font-semibold disabled:opacity-55"
-                  disabled={loading}
-                  onClick={() => setPage((current) => current + 1)}
-                  type="button"
-                >
-                  {loading ? t('loading') : t('showMore')}
-                </button>
-              </div>
-            )}
-          </div>
+    <SearchPicker
+      compact={compact}
+      headerHidden={compact}
+      count={t('shownOf', { shown: String(shown), total: String(total) })}
+      disabled={disabled}
+      heading={t('available')}
+      label={t('label')}
+      onOpenChange={setOpen}
+      onQueryChange={(next) => {
+        onQueryChange(next)
+        setPage(1)
+        setItems([])
+        setTotal(0)
+        setTotalPages(1)
+        setLoading(Boolean(next.trim()))
+        setError(false)
+        onClear()
+      }}
+      open={open}
+      placeholder={t('placeholder')}
+      query={query}
+      resultsLabel={t('results')}
+    >
+      {error && items.length === 0 ? (
+        <div className="grid justify-items-center gap-2 px-4 py-6">
+          <p className="text-state-danger m-0 text-center" role="alert">
+            {t('loadFailed')}
+          </p>
+          <Button
+            onClick={() => {
+              setError(false)
+              setLoading(true)
+              setAttempt((value) => value + 1)
+            }}
+            size="sm"
+          >
+            {t('retry')}
+          </Button>
         </div>
-      ) : null}
-    </div>
+      ) : loading && items.length === 0 ? (
+        <SkeletonRows embedded label={t('searching')} rows={3} />
+      ) : items.length === 0 ? (
+        <p className="rz-muted m-0 px-4 py-6 text-center">{t('nothing')}</p>
+      ) : (
+        <SearchPickerOptions label={t('found')}>
+          {items.map((part) => {
+            const taken = takenPartIds.includes(part.id)
+            const car = part.car
+              ? `${part.car.make} ${part.car.model} · ${part.car.year}`
+              : compact
+                ? null
+                : t('noCar')
+            const metadata =
+              compact && part.externalCode?.trim()
+                ? part.externalCode.trim()
+                : car
+            return (
+              <SearchPickerOption
+                key={part.id}
+                className={compact ? 'part-search-picker__option' : undefined}
+                disabled={taken || loading}
+                label={t('choose', { name: part.name })}
+                selected={value?.id === part.id}
+                onSelect={() => {
+                  setOpen(false)
+                  onSelect(part)
+                }}
+                aside={
+                  compact ? (
+                    <span className="part-search-picker__aside">
+                      <span className="part-search-picker__stock">
+                        <StatusPill tone={taken ? 'neutral' : 'ok'}>
+                          {taken ? t('inOrder') : t('available')}
+                        </StatusPill>
+                        <span className="part-search-picker__quantity rz-mono rz-muted">
+                          {t('stockQuantity', {
+                            count: part.quantityAvailable,
+                          })}
+                        </span>
+                      </span>
+                      <span className="part-search-picker__price rz-num rz-strong">
+                        {price(part.effectiveSalePrice, currency, locale)}
+                      </span>
+                    </span>
+                  ) : (
+                    <>
+                      <span className="rz-num rz-strong">
+                        {price(part.effectiveSalePrice, currency, locale)}
+                      </span>
+                      <span className="rz-dim font-mono text-caption">
+                        {part.externalCode ?? '—'}
+                      </span>
+                    </>
+                  )
+                }
+              >
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={
+                        compact
+                          ? 'part-search-picker__name rz-strong font-semibold'
+                          : 'rz-strong truncate font-medium'
+                      }
+                    >
+                      {part.name}
+                    </span>
+                    {!compact && (
+                      <StatusPill tone={taken ? 'neutral' : 'ok'}>
+                        {taken
+                          ? t('inOrder')
+                          : t('inStock', { count: part.quantityAvailable })}
+                      </StatusPill>
+                    )}
+                  </span>
+                  {compact ? (
+                    metadata ? (
+                      <span className="part-search-picker__meta">
+                        {metadata}
+                      </span>
+                    ) : null
+                  ) : (
+                    <span className="rz-caption block truncate">{car}</span>
+                  )}
+                </span>
+              </SearchPickerOption>
+            )
+          })}
+        </SearchPickerOptions>
+      )}
+      {error && items.length > 0 && (
+        <p
+          className="text-state-danger m-0 px-4 py-3 text-center text-caption"
+          role="alert"
+        >
+          {t('loadFailed')}
+        </p>
+      )}
+      {hasMore && (
+        <div className="border-app-line border-t p-2">
+          <Button
+            aria-busy={loading}
+            disabled={loading}
+            onClick={() => setPage((current) => current + 1)}
+            size="wide"
+          >
+            {loading ? t('loading') : t('showMore')}
+          </Button>
+        </div>
+      )}
+    </SearchPicker>
   )
 }

@@ -1,12 +1,14 @@
-import { lazy, Suspense, type ComponentType, type ReactNode } from 'react'
-import { Link } from 'react-router'
-import { AlertTriangle } from 'lucide-react'
 import {
-  Button,
-  DeniedState,
-  SkeletonRows,
-  StateScreen,
-} from '@/components/app'
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router'
+import { AlertTriangle, Gauge } from 'lucide-react'
+import { Button, DeniedState, Notice, StateScreen } from '@/components/app'
 import { useT } from '@/i18n'
 import { accessMessages } from './access-messages'
 import { cabinetPath } from './cabinet-paths'
@@ -22,6 +24,9 @@ import {
   SubscriptionStateScreen,
 } from './screens/module-unavailable'
 import type { TenantAccessState } from './access-types'
+import { CabinetLoadingScreen } from './loading-screen'
+import { loadingPreview } from './loading-layout'
+import { loadingPreviewMessages } from './loading-preview-messages'
 
 export interface CabinetModuleScreenProps {
   definition: CabinetModuleDefinition
@@ -53,13 +58,96 @@ export function ModuleBoundary({
 
   if (decision.kind === 'allowed') {
     return (
-      <Suspense fallback={<SkeletonRows label={t('loadingModule')} />}>
-        <Screen definition={definition} />
-      </Suspense>
+      <AllowedModule
+        definition={definition}
+        screen={Screen}
+        label={t('loadingModule')}
+      />
     )
   }
 
   return <DecisionScreen decision={decision} definition={definition} />
+}
+
+function AllowedModule({
+  definition,
+  screen: Screen,
+  label,
+}: {
+  definition: CabinetModuleDefinition
+  screen: ComponentType<CabinetModuleScreenProps>
+  label: string
+}) {
+  const location = useLocation()
+  const preview = import.meta.env.DEV
+    ? loadingPreview(location.search, true)
+    : null
+  const screen = (
+    <Suspense
+      fallback={<CabinetLoadingScreen module={definition.key} label={label} />}
+    >
+      <Screen definition={definition} />
+    </Suspense>
+  )
+  if (preview !== null)
+    return (
+      <LoadingPreview
+        key={`${location.pathname}:${preview}`}
+        duration={preview}
+        module={definition.key}
+      >
+        {screen}
+      </LoadingPreview>
+    )
+  return screen
+}
+
+function LoadingPreview({
+  duration,
+  module,
+  children,
+}: {
+  duration: number | 'hold'
+  module: CabinetModuleKey
+  children: ReactNode
+}) {
+  const t = useT(loadingPreviewMessages)
+  const [, setSearchParams] = useSearchParams()
+  const [released, setReleased] = useState(false)
+  useEffect(() => {
+    if (duration === 'hold') return
+    const timer = window.setTimeout(() => setReleased(true), duration)
+    return () => window.clearTimeout(timer)
+  }, [duration])
+  if (released) return children
+  return (
+    <>
+      <div className="px-4 pt-3">
+        <Notice
+          action={
+            <Button
+              onClick={() => {
+                setReleased(true)
+                setSearchParams(
+                  (current) => {
+                    const next = new URLSearchParams(current)
+                    next.delete('loadingPreview')
+                    return next
+                  },
+                  { replace: true },
+                )
+              }}
+            >
+              {t('showScreen')}
+            </Button>
+          }
+        >
+          {t('preview')}
+        </Notice>
+      </div>
+      <CabinetLoadingScreen module={module} />
+    </>
+  )
 }
 
 function cabinetAccessState(
@@ -87,7 +175,9 @@ function DecisionScreen({
       return <FeatureUnavailableScreen definition={definition} />
     case 'permission-denied':
       return (
-        <DeniedState description={t('deniedBody')} title={t('deniedTitle')} />
+        <div className="rz-page">
+          <DeniedState description={t('deniedBody')} title={t('deniedTitle')} />
+        </div>
       )
     case 'subscription-blocked':
       return (
@@ -100,6 +190,7 @@ function DecisionScreen({
       return (
         <BoundaryStateScreen
           action={<BillingLink label={t('comparePlans')} module="plans" />}
+          icon={<Gauge aria-hidden />}
           description={t('quotaBody', {
             used: decision.used,
             max: decision.max,
@@ -118,7 +209,12 @@ function DecisionScreen({
         />
       )
     case 'access-loading':
-      return <SkeletonRows label={t('checkingAccess')} />
+      return (
+        <CabinetLoadingScreen
+          module={definition.key}
+          label={t('checkingAccess')}
+        />
+      )
   }
 }
 
@@ -143,24 +239,28 @@ function BoundaryStateScreen({
   title,
   description,
   action,
+  icon = <AlertTriangle aria-hidden />,
   role = 'status',
   tone = 'neutral',
 }: {
   title: string
   description: string
   action?: ReactNode
+  icon?: ReactNode
   role?: 'alert' | 'status'
   tone?: 'neutral' | 'warn' | 'danger'
 }) {
   return (
-    <StateScreen
-      actions={action}
-      className="min-h-[50dvh] content-center"
-      description={description}
-      icon={<AlertTriangle aria-hidden />}
-      role={role}
-      title={title}
-      tone={tone}
-    />
+    <div className="rz-page">
+      <StateScreen
+        actions={action}
+        className="min-h-[50dvh]"
+        description={description}
+        icon={icon}
+        role={role}
+        title={title}
+        tone={tone}
+      />
+    </div>
   )
 }

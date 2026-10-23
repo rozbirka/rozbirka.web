@@ -6,6 +6,7 @@ describe('integrated cabinet module release registry', () => {
     'cars',
     'intakes',
     'parts',
+    'warehouses',
     'inventory',
     'stickers',
     'customers',

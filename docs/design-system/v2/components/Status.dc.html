@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B2 · Статуси</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">StatusPill · Counter · Meter</h1>
+      <p style="margin:0;max-width:72ch;color:var(--rz-text-muted)">Стан завжди має текст: самого кольору недостатньо. П’ять тонів — ok, warn, danger, info, neutral. Brand не є статусом.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: status-pill.tsx, meter.tsx, cabinet/parts/part-labels.ts (partStatusPresentation)</p>
+    </header>
+
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <section data-theme="{{ t.id }}" style="display:grid;gap:24px;padding:24px;background:var(--rz-bg);color:var(--rz-text);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg)">
+        <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">{{ t.label }}</p>
+
+        <div style="display:grid;gap:12px">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">StatusPill · pill (20px) і dot (для щільних таблиць)</p>
+          <div style="display:grid;grid-template-columns:80px repeat(5,minmax(110px,max-content));gap:12px 20px;align-items:center;overflow-x:auto">
+            <span></span>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">ok</span>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">warn</span>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">danger</span>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">info</span>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">neutral</span>
+
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">pill</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-ok-soft);color:var(--rz-ok);font-size:var(--rz-fs-caption);font-weight:500;white-space:nowrap;justify-self:start"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>Доступна</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-warn-soft);color:var(--rz-warn);font-size:var(--rz-fs-caption);font-weight:500;white-space:nowrap;justify-self:start"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>У резерві</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-danger-soft);color:var(--rz-danger);font-size:var(--rz-fs-caption);font-weight:500;white-space:nowrap;justify-self:start"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>Продана</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-info-soft);color:var(--rz-info);font-size:var(--rz-fs-caption);font-weight:500;white-space:nowrap;justify-self:start"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>Завантажується…</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-neutral-soft);color:var(--rz-text-muted);font-size:var(--rz-fs-caption);font-weight:500;white-space:nowrap;justify-self:start"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>Не розміщена</span>
+
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">dot</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text);white-space:nowrap"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-ok)"></span>Доступна</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text);white-space:nowrap"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-warn)"></span>У резерві</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text);white-space:nowrap"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-danger)"></span>Продана</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text);white-space:nowrap"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-info)"></span>Завантажується…</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text-muted);white-space:nowrap"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-text-dim)"></span>Не розміщена</span>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Мапа статусу деталі з коду: available → ok, reserved → warn, sold → danger, невідомий → neutral. Тон для «завантажується» — демо.</span>
+        </div>
+
+        <div style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Counter · у навігації, вкладках, фільтрах</p>
+          <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+            <span style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);background:var(--rz-fill-selected);color:var(--rz-text-strong);font-weight:600;min-width:200px"><i class="icon-clipboard-list" style="font-size:var(--rz-icon-md);color:var(--rz-brand)"></i><span style="flex:1">Замовлення</span><span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">12</span></span>
+            <span style="display:inline-flex;align-items:center;gap:6px">У резерві<span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">96</span></span>
+            <span style="display:inline-flex;align-items:center;gap:6px">Інтеграції<span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-danger);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);font-weight:500;color:var(--rz-on-solid)">1</span></span>
+            <span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text-muted)"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-brand)"></span>нове</span>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Нейтральний лічильник — кількість. Червоний — лише те, що потребує дії (помилка інтеграції). У коді лічильників у навігації немає; це пропозиція v2.</span>
+        </div>
+
+        <div style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Meter · 4px, значення завжди текстом</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px">
+            <div style="display:grid;gap:6px;padding:12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+              <div style="display:flex;justify-content:space-between;gap:8px"><span style="color:var(--rz-text-muted)">Повернено від вкладеного</span><span style="font-family:var(--rz-font-mono);color:var(--rz-text-strong)">62%</span></div>
+              <span role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100" style="display:flex;height:4px;border-radius:var(--rz-r-full);background:var(--rz-border-strong);overflow:hidden"><span style="width:62%;background:var(--rz-ok)"></span></span>
+              <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">74 400 ₴ з 120 000 ₴</span>
+            </div>
+            <div style="display:grid;gap:6px;padding:12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+              <div style="display:flex;justify-content:space-between;gap:8px"><span style="color:var(--rz-text-muted)">Деталі за тарифом</span><span style="font-family:var(--rz-font-mono);color:var(--rz-warn)">94%</span></div>
+              <span role="progressbar" aria-valuenow="94" aria-valuemin="0" aria-valuemax="100" style="display:flex;height:4px;border-radius:var(--rz-r-full);background:var(--rz-border-strong);overflow:hidden"><span style="width:94%;background:var(--rz-warn)"></span></span>
+              <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">1 410 з 1 500</span>
+            </div>
+            <div style="display:grid;gap:6px;padding:12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+              <div style="display:flex;justify-content:space-between;gap:8px"><span style="color:var(--rz-text-muted)">Повернено від вкладеного</span><span style="font-family:var(--rz-font-mono);color:var(--rz-ok)">153%</span></div>
+              <span role="progressbar" aria-valuenow="153" aria-valuemin="0" aria-valuemax="100" style="display:flex;height:4px;border-radius:var(--rz-r-full);background:var(--rz-border-strong);overflow:hidden"><span style="width:65.4%;background:var(--rz-ok)"></span><span style="width:2px;background:var(--rz-surface)"></span><span style="width:34.6%;background:var(--rz-ok);opacity:0.6"></span></span>
+              <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">понад ліміт — шкала 0..153, межа видима</span>
+            </div>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Поведінку понад 100% збережено з meter.tsx. Суми й підпис «Деталі за тарифом» — демо.</span>
+        </div>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      density: this.props.density ?? 'compact',
+      themes: [{ id: 'dark', label: 'Темна тема' }, { id: 'light', label: 'Світла тема' }],
+    };
+  }
+}
+</script>
+</body>
+</html>

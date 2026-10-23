@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { intakesApi } from '@/api/intakes'
@@ -160,7 +160,11 @@ it('renders the intake detail with English units, statuses and history', async (
     await screen.findByRole('heading', { name: 'July batch', level: 1 }),
   ).toBeVisible()
   expect(screen.getByText('Created by Olena, 2 Aug 2026')).toBeVisible()
-  expect(screen.getByRole('cell', { name: '2 pcs' })).toBeVisible()
+  const parts = screen.getByRole('region', { name: 'Intake items' })
+  expect(within(parts).getByText('2 parts from this intake')).toBeVisible()
+  expect(within(parts).getByText('sold')).toBeVisible()
+  expect(within(parts).getByText('in stock')).toBeVisible()
+  expect(within(parts).getAllByText('50%')).toHaveLength(2)
   expect(screen.getByText('Added “Bumper”')).toBeVisible()
   expect(screen.getByText('2 events')).toBeVisible()
   expect(screen.getByText('1 item still in stock')).toBeVisible()

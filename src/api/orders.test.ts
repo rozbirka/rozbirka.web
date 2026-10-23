@@ -128,3 +128,21 @@ it.each([undefined, null, 'customer-1'])(
     }
   },
 )
+
+it('passes the tenant cancellation signal with a notes-only update', async () => {
+  const controller = new AbortController()
+  const put = vi
+    .spyOn(apiClient, 'put')
+    .mockResolvedValue({ data: { id: 'order-1', notes: null } })
+  await ordersApi.updateNotes('order-1', '', { signal: controller.signal })
+  expect(put).toHaveBeenCalledWith(
+    '/orders/order-1/notes',
+    { notes: '' },
+    { signal: controller.signal },
+  )
+})
+
+it('normalizes a cleared note omitted by Core to an explicit null', async () => {
+  vi.spyOn(apiClient, 'put').mockResolvedValue({ data: { id: 'order-1' } })
+  expect((await ordersApi.updateNotes('order-1', '')).notes).toBeNull()
+})

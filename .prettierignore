@@ -13,3 +13,6 @@ worker-configuration.d.ts
 src/api/generated/*.ts
 
 docs/superpowers/
+docs/design-system/
+src/styles/rz-tokens.css
+src/styles/rz-kit.css

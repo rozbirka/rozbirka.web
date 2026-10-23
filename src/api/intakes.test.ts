@@ -120,6 +120,7 @@ describe('intakesApi', () => {
     const payload = {
       name: 'Бампер',
       partType: 'Кузов',
+      oemCode: '001RV-8820-02',
       condition: 'good',
       quantity: 2,
       unit: 'шт',
@@ -143,6 +144,7 @@ describe('intakesApi', () => {
     expect(JSON.parse(request.data as string)).toEqual({
       name: 'Бампер',
       partType: 'Кузов',
+      oemCode: '001RV-8820-02',
       condition: 'good',
       quantity: 2,
       unit: 'шт',

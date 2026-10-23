@@ -1,5 +1,12 @@
+import { partEditErrorMessages } from '@/api/error-messages'
 import type { StatusTone } from '@/components/app'
-import { SOURCE_LOCALE, translate, type Locale, type MessageKey } from '@/i18n'
+import {
+  SOURCE_LOCALE,
+  SUPPORTED_LOCALES,
+  translate,
+  type Locale,
+  type MessageKey,
+} from '@/i18n'
 import { partLabelMessages } from './part-labels-messages'
 
 /**
@@ -108,17 +115,32 @@ export const partStatusPresentation = (
   return { label: status, tone: 'neutral' }
 }
 
+/** Core permits editing only while the part has available stock. */
+export const partEditingRestriction = (
+  status: string | null | undefined,
+  locale: Locale = SOURCE_LOCALE,
+): string | null =>
+  status === 'reserved' || status === 'sold'
+    ? translate(partEditErrorMessages, locale, status)
+    : null
+
 /**
- * The unit every part is counted in. Core stores the Ukrainian «шт», so that
- * value (or none) reads as pieces in the interface language; any other unit
- * the server sends is shown as it came.
+ * Current records use «шт»; legacy records can contain a translated pieces
+ * label. All known pieces labels follow the interface language, while other
+ * units keep the yard's original wording.
  */
 export const PIECES_UNIT = 'шт'
+const piecesLabels = new Set(
+  SUPPORTED_LOCALES.map((locale) => label(locale, 'unitPieces').toLowerCase()),
+)
 
 export const unitLabel = (
   unit: string | null | undefined,
   locale: Locale = SOURCE_LOCALE,
-) => (!unit || unit === PIECES_UNIT ? label(locale, 'unitPieces') : unit)
+) =>
+  !unit || piecesLabels.has(unit.trim().toLowerCase())
+    ? label(locale, 'unitPieces')
+    : unit
 
 /** The dot that stands in for the pill in a filter row. */
 export const partStatusDot = {
@@ -188,7 +210,7 @@ export const historyDetails = (
     return [trimmed]
   }
   if (typeof parsed !== 'object' || parsed === null) return [trimmed]
-  return Object.entries(parsed as Record<string, unknown>)
+  const details = Object.entries(parsed as Record<string, unknown>)
     .filter(
       ([key, value]) =>
         value !== null &&
@@ -198,6 +220,22 @@ export const historyDetails = (
         key !== 'order_number',
     )
     .map(([key, value]) => `${fieldLabel(key, locale)} ${String(value)}`)
+  const placements = (parsed as Record<string, unknown>)['released_placements']
+  if (Array.isArray(placements)) {
+    for (const placement of placements) {
+      if (typeof placement !== 'object' || placement === null) continue
+      const entry = placement as Record<string, unknown>
+      const path = ['warehouse_name', 'zone_name', 'section_name', 'shelf_name']
+        .map((key) => entry[key])
+        .filter(
+          (value): value is string =>
+            typeof value === 'string' && value.trim().length > 0,
+        )
+        .join(' → ')
+      if (path) details.push(`${label(locale, 'locationReleased')}: ${path}`)
+    }
+  }
+  return details
 }
 
 /**

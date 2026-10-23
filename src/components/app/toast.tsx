@@ -6,10 +6,11 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'
+import { CircleCheck, Info, TriangleAlert, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   ToastContext,
+  toastDuration,
   type ToastApi,
   type ToastRequest,
   type ToastTone,
@@ -21,9 +22,10 @@ interface ActiveToast extends ToastRequest {
   id: number
 }
 
+/** Module 00 §5: icon-circle-check / icon-info / icon-triangle-alert. */
 const toneIcon: Record<ToastTone, typeof Info> = {
-  ok: CheckCircle2,
-  danger: AlertTriangle,
+  ok: CircleCheck,
+  danger: TriangleAlert,
   info: Info,
 }
 
@@ -33,7 +35,8 @@ const toneColor: Record<ToastTone, string> = {
   info: 'text-state-info',
 }
 
-const DEFAULT_DURATION = 6000
+/** At most three at once; the newest joins at the bottom, the oldest leaves. */
+const MAX_TOASTS = 3
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ActiveToast[]>([])
@@ -53,8 +56,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback(
     (request: ToastRequest) => {
       const id = nextId.current++
-      setToasts((current) => [...current.slice(-2), { ...request, id }])
-      const duration = request.duration ?? DEFAULT_DURATION
+      setToasts((current) => {
+        const kept = current.slice(-(MAX_TOASTS - 1))
+        // A toast pushed out of the stack must not keep a live timer.
+        for (const gone of current.slice(0, current.length - kept.length)) {
+          const timer = timers.current.get(gone.id)
+          if (timer !== undefined) clearTimeout(timer)
+          timers.current.delete(gone.id)
+        }
+        return [...kept, { ...request, id }]
+      })
+      const duration = toastDuration(request)
       if (duration > 0) {
         timers.current.set(
           id,
@@ -78,24 +90,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[70] grid justify-items-center gap-2 md:inset-x-auto md:right-6 md:bottom-6 md:justify-items-end">
+      <div className="rz-toasts pointer-events-none max-md:right-3 max-md:bottom-[calc(76px+env(safe-area-inset-bottom))] max-md:left-3 max-md:justify-items-center">
         {toasts.map((toast) => {
           const tone = toast.tone ?? 'info'
           const Icon = toneIcon[tone]
           return (
             <div
-              className="bg-app-overlay border-app-line-2 rounded-control text-app-ink pointer-events-auto flex w-full max-w-md items-center gap-2.5 border px-3.5 py-2.5 text-[14.5px] shadow-2xl"
+              className="rz-toast text-app-ink pointer-events-auto"
               key={toast.id}
               role={tone === 'danger' ? 'alert' : 'status'}
             >
               <Icon
                 aria-hidden
-                className={cn('size-4 shrink-0', toneColor[tone])}
+                className={cn('size-icon-md shrink-0', toneColor[tone])}
               />
-              <span className="min-w-0 flex-1">{toast.message}</span>
+              <span className="rz-toast__msg">{toast.message}</span>
               {toast.action === undefined ? null : (
                 <button
-                  className="text-brand shrink-0 text-[13.5px] underline underline-offset-4"
+                  className="rz-toast__action shrink-0"
                   onClick={() => {
                     toast.action?.onAction()
                     dismiss(toast.id)
@@ -107,11 +119,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               )}
               <button
                 aria-label={t('closeNotification')}
-                className="text-app-dim hover:text-app-ink grid size-6 shrink-0 place-items-center"
+                className="rz-btn rz-btn--ghost rz-btn--sm rz-btn--icon size-6 pointer-coarse:size-control"
                 onClick={() => dismiss(toast.id)}
                 type="button"
               >
-                <X aria-hidden className="size-4" />
+                <X aria-hidden />
               </button>
             </div>
           )

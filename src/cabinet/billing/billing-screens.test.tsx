@@ -1080,7 +1080,9 @@ it('renders the subscription in English (UK) with UK dates', async () => {
   // Server plan names stay as received.
   expect(screen.getByRole('heading', { name: 'Pro' })).toBeVisible()
   expect(screen.getByText('Active')).toBeInTheDocument()
-  expect(screen.getByText(/^Next charge/)).toHaveTextContent('21/08/2026')
+  expect(screen.getByText(/^Next charge/).closest('.rz-kpi')).toHaveTextContent(
+    '21/08/2026',
+  )
   expect(screen.getByRole('heading', { name: 'Plan limits' })).toBeVisible()
   expect(
     screen.getByRole('button', { name: 'Cancel subscription' }),

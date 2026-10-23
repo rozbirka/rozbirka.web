@@ -210,6 +210,8 @@ const isRecognizedReportsPath = (path: string) =>
 
 const isRecognizedInventoryPath = (path: string) =>
   path === '/api/v1/warehouses' ||
+  path === '/api/v1/inventory/sections' ||
+  path === '/api/v1/inventory/shelves' ||
   path === '/api/v1/inventory/sessions' ||
   /^\/api\/v1\/inventory\/sessions\/[^/]+(?:\/(?:results|audit))?$/.test(path)
 
@@ -591,6 +593,14 @@ async function installCabinetApiBoundary(
           updatedAt: '2026-09-02T09:00:00.000Z',
         },
       ])
+      return
+    }
+    if (
+      (path === '/api/v1/inventory/sections' ||
+        path === '/api/v1/inventory/shelves') &&
+      request.method() === 'GET'
+    ) {
+      await fulfillData(route, [])
       return
     }
     if (path === '/api/v1/inventory/sessions' && request.method() === 'GET') {
@@ -1620,11 +1630,16 @@ test('uses mobile, tablet, and desktop cabinet presentations at their breakpoint
   }
 })
 
-test('inventory overview remains usable at mobile and desktop widths @cabinet-smoke', async ({
+test('warehouses and stocktake remain separate at mobile and desktop widths @cabinet-smoke', async ({
   page,
-}) => {
+}, testInfo) => {
   await installCabinetApiBoundary(page)
   await loginFrom(page)
+  const stocktakeRequests: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/v1/inventory/sessions')
+      stocktakeRequests.push(request.url())
+  })
 
   for (const width of [320, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 })
@@ -1632,12 +1647,54 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
     await expect(
       page.getByRole('heading', { name: 'Інвентаризація' }),
     ).toBeVisible()
-    // The warehouse names both the running session and its own card, so the
-    // list of warehouses is where it has to be visible.
+    await expect(page.getByRole('region', { name: 'Склади' })).toHaveCount(0)
+    await expect(page.getByText('INV-001')).toBeVisible()
+    if (width === 1440)
+      await page.screenshot({
+        path: testInfo.outputPath('stocktake-separated.png'),
+        animations: 'disabled',
+      })
+    const requestsBeforeWarehouses = stocktakeRequests.length
+    const activeNavigation = page.getByRole('navigation', {
+      name:
+        width < 768
+          ? 'Мобільна навігація'
+          : width < 1024
+            ? 'Навігація планшета'
+            : 'Навігація кабінету',
+    })
+    await activeNavigation
+      .getByRole('link', { name: 'Склади', exact: true })
+      .click()
+    await expect(page).toHaveURL('/app/koval/warehouses')
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Склади' }),
+    ).toBeVisible()
     await expect(
       page.getByRole('region', { name: 'Склади' }).getByText('Основний склад'),
     ).toBeVisible()
-    await expect(page.getByText('INV-001')).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Сесії інвентаризації' }),
+    ).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Нова сесія' })).toHaveCount(0)
+    expect(stocktakeRequests).toHaveLength(requestsBeforeWarehouses)
+    await expect(page.getByText('Перевірка триває')).toHaveCount(0)
+    if (width === 1440) {
+      const navigation = page.getByRole('navigation', {
+        name: 'Навігація кабінету',
+      })
+      await expect(
+        navigation.getByRole('link', { name: 'Склади', exact: true }),
+      ).toHaveAttribute('aria-current', 'page')
+      await expect(
+        navigation.getByRole('link', { name: 'Інвентаризація', exact: true }),
+      ).not.toHaveAttribute('aria-current')
+    }
+    if (width === 1440)
+      await page.screenshot({
+        path: testInfo.outputPath('warehouses-separated.png'),
+        animations: 'disabled',
+      })
     // Font swapping changes intrinsic text widths after the content is visible.
     await page.evaluate(() => document.fonts.ready.then(() => undefined))
     const layout = await page.evaluate(() => ({
@@ -1663,6 +1720,11 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
     ).toBeLessThanOrEqual(layout.width)
   }
 
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/app/koval/inventory/warehouses/warehouse-1?labels=1#queue')
+  await expect(page).toHaveURL(
+    '/app/koval/warehouses/warehouse-1?labels=1#queue',
+  )
   await page.goto('/app/koval/inventory/sessions/session-1')
   await expect(page.getByRole('heading', { name: 'INV-001' })).toBeVisible()
   await expect(page.getByText(/увімкнути камеру/i)).toHaveCount(0)
@@ -1671,6 +1733,285 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
     page.getByRole('heading', { name: 'Результати сесії' }),
   ).toBeVisible()
   await expect(page.getByText('Крило')).toBeVisible()
+})
+
+test('compact location browser searches and pages large shelf lists @location-browser', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  await installCabinetApiBoundary(page, { partsManage: true })
+  const sections = Array.from({ length: 21 }, (_, index) => ({
+    id: `section-${index}`,
+    zoneId: 'zone-1',
+    zoneName: 'Зона А',
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: `Секція ${index + 1}`,
+    code: `S${index + 1}`,
+    qrCode: `inventory-section:${index}`,
+    isActive: true,
+    partCount: 100,
+  }))
+  const shelves = sections.flatMap((section) =>
+    Array.from({ length: 100 }, (_, index) => ({
+      id: `${section.id}-shelf-${index}`,
+      sectionId: section.id,
+      sectionName: section.name,
+      zoneId: section.zoneId,
+      zoneName: section.zoneName,
+      warehouseId: section.warehouseId,
+      warehouseName: section.warehouseName,
+      name: `Полиця ${index + 1}`,
+      code: `${section.code}-P${index + 1}`,
+      qrCode: `inventory-shelf:${index}`,
+      isActive: true,
+      partCount: index,
+    })),
+  )
+  await page.route('**/api/v1/warehouses/warehouse-1', (route) =>
+    fulfillData(route, {
+      id: 'warehouse-1',
+      name: 'Основний склад',
+      code: 'main',
+      qrCode: 'inventory-warehouse:1',
+      isActive: true,
+      isSystemDefault: true,
+      unassignedPartCount: 0,
+      zones: [
+        {
+          id: 'zone-1',
+          name: 'Зона А',
+          code: 'A',
+          isActive: true,
+          isSystemUnassigned: false,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/v1/inventory/zones/zone-1', (route) =>
+    fulfillData(route, {
+      id: 'zone-1',
+      warehouseId: 'warehouse-1',
+      warehouseName: 'Основний склад',
+      name: 'Зона А',
+      code: 'A',
+      qrCode: 'inventory-zone:1',
+      isActive: true,
+      isSystemUnassigned: false,
+    }),
+  )
+  await page.route('**/api/v1/inventory/sections*', (route) =>
+    fulfillData(route, sections),
+  )
+  await page.route('**/api/v1/inventory/sections/*', (route) =>
+    fulfillData(
+      route,
+      sections.find(
+        (item) => item.id === route.request().url().split('/').at(-1),
+      ),
+    ),
+  )
+  await page.route('**/api/v1/inventory/shelves*', (route) => {
+    const params = new URL(route.request().url()).searchParams
+    return fulfillData(
+      route,
+      shelves.filter((item) => item.sectionId === params.get('sectionId')),
+    )
+  })
+  await page.route('**/api/v1/inventory/shelves/*', (route) =>
+    fulfillData(
+      route,
+      shelves.find(
+        (item) => item.id === route.request().url().split('/').at(-1),
+      ),
+    ),
+  )
+  await page.route('**/api/v1/parts/search/facets', (route) =>
+    fulfillData(route, {
+      statuses: [{ id: 'available', name: 'available', count: 50 }],
+      warehouses: [{ id: 'warehouse-1', name: 'Основний склад', count: 50 }],
+      zones: [{ id: 'zone-1', name: 'Зона А', count: 50 }],
+      conditions: [],
+      equipmentTypes: [],
+      makes: [],
+      models: [],
+      generations: [],
+      origins: [],
+      qualityFlags: [],
+      inventoryLocks: [],
+      discrepancies: [],
+    }),
+  )
+  const contentRequests: Record<string, unknown>[] = []
+  const contentsParts = Array.from({ length: 50 }, (_, index) => ({
+    id: `contents-part-${index + 1}`,
+    name:
+      index === 0
+        ? 'Тестова фара'
+        : `Запчастина ${index + 1} — корпус фари з кріпленнями та довгою назвою для перевірки перенесення`,
+    quantity: 1 + (index % 5),
+    quantityTotal: 1 + (index % 5),
+    quantityAvailable: 1 + (index % 5),
+    quantityReserved: 0,
+    status: index % 3 === 0 ? 'reserved' : 'available',
+    thumbnailUrl: null,
+    car: { make: 'Tesla', model: 'Y', year: 2023 },
+  }))
+  await page.route('**/api/v1/parts/search', (route) => {
+    const request = route.request().postDataJSON() as Record<string, unknown>
+    contentRequests.push(request)
+    const partPage = Number(request.page ?? 1)
+    const partPageSize = Number(request.pageSize ?? 30)
+    return fulfillData(route, {
+      items: contentsParts.slice(
+        (partPage - 1) * partPageSize,
+        partPage * partPageSize,
+      ),
+      page: partPage,
+      pageSize: partPageSize,
+      total: contentsParts.length,
+      totalPages: Math.ceil(contentsParts.length / partPageSize),
+    })
+  })
+  await page.route('**/api/v1/warehouses', (route) =>
+    fulfillData(route, [
+      {
+        id: 'warehouse-1',
+        name: 'Основний склад',
+        code: 'main',
+        isActive: true,
+      },
+    ]),
+  )
+  await page.route('**/api/v1/inventory/zones?*', (route) =>
+    fulfillData(route, [
+      {
+        id: 'zone-1',
+        warehouseId: 'warehouse-1',
+        name: 'Зона А',
+        code: 'A',
+        isActive: true,
+      },
+    ]),
+  )
+  await loginFrom(page)
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/app/koval/warehouses/warehouse-1')
+    await page.getByRole('link', { name: 'Зона А', exact: true }).click()
+    await expect(
+      page.getByRole('link', { name: 'Секція 1, S1', exact: true }),
+    ).toBeVisible()
+    const sectionPager = page.getByRole('navigation', {
+      name: 'Сторінки секцій',
+    })
+    await sectionPager.getByRole('button', { name: /Наступна/ }).click()
+    await expect(
+      page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
+    ).toBeVisible()
+    await page.reload()
+    await expect(
+      page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
+    ).toBeVisible()
+    await page.getByRole('searchbox', { name: 'Пошук секції' }).fill('S7')
+    await page.getByRole('link', { name: 'Секція 7, S7', exact: true }).click()
+    await expect(page).toHaveURL(/warehouses\/sections\/section-6$/)
+    const table = page.getByRole('table', { name: 'Полиці: Секція 7' })
+    await expect(table.getByRole('row')).toHaveCount(16)
+    await page
+      .getByRole('navigation', { name: 'Сторінки полиць' })
+      .getByRole('button', { name: /Наступна/ })
+      .click()
+    await expect(page.getByText('S7-P16', { exact: true })).toBeVisible()
+    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('S7-P100')
+    await page
+      .getByRole('link', {
+        name: 'Переглянути запчастини: Полиця 100',
+        exact: true,
+      })
+      .click()
+    await expect(page).toHaveURL(
+      /\/parts\?warehouse=warehouse-1&zone=zone-1&section=section-6&shelf=section-6-shelf-99$/,
+    )
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(
+      page.getByRole('table', { name: 'Деталі на складі' }).getByRole('row'),
+    ).toHaveCount(31)
+    // Shared location pickers live in the "Склад" filter popover.
+    await page.getByRole('button', { name: /^Склад:/ }).click()
+    await expect(
+      page.getByRole('button', { name: 'Склад', exact: true }),
+    ).toHaveText('Основний склад')
+    await expect(
+      page.getByRole('button', { name: 'Зона', exact: true }),
+    ).toHaveText('Зона А')
+    await expect(
+      page.getByRole('button', { name: 'Секція', exact: true }),
+    ).toHaveText('Секція 7')
+    await expect(
+      page.getByRole('button', { name: 'Полиця', exact: true }),
+    ).toHaveText('Полиця 100')
+    await expect
+      .poll(() => contentRequests.at(-1))
+      .toMatchObject({
+        warehouseIds: ['warehouse-1'],
+        zoneIds: ['zone-1'],
+        sectionIds: ['section-6'],
+        shelfIds: ['section-6-shelf-99'],
+        pageSize: 30,
+      })
+    await page.getByRole('button', { name: /^Склад:/ }).click()
+    const pager = page.getByRole('navigation', { name: 'Пагінація деталей' })
+    await pager.getByRole('button', { name: 'Наступна сторінка' }).click()
+    await expect(
+      pager.getByText('Сторінка 2 з 2', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      pager.getByRole('button', { name: 'Наступна сторінка' }),
+    ).toBeDisabled()
+    await expect(
+      page.getByRole('link', { name: /Запчастина 50/ }),
+    ).toBeVisible()
+    await page.reload()
+    await page.getByRole('button', { name: /^Склад:/ }).click()
+    await expect(
+      page.getByRole('button', { name: 'Полиця', exact: true }),
+    ).toHaveText('Полиця 100')
+    await page.getByRole('button', { name: 'Полиця', exact: true }).click()
+    await page.getByRole('option', { name: 'Полиця 99', exact: true }).click()
+    await expect(page).toHaveURL(/shelf=section-6-shelf-98/)
+    await expect
+      .poll(() => contentRequests.at(-1))
+      .toMatchObject({
+        shelfIds: ['section-6-shelf-98'],
+        page: 1,
+        pageSize: 30,
+      })
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true)
+    // Direct "without shelf / without section" rows were removed from the
+    // location lists (3928f0c); the section's all-parts link stays.
+    await page.goto('/app/koval/warehouses/sections/section-6')
+    await page
+      .getByRole('link', { name: 'Усі запчастини секції', exact: true })
+      .click()
+    await page.getByRole('button', { name: /^Склад:/ }).click()
+    await expect(
+      page.getByRole('button', { name: 'Полиця', exact: true }),
+    ).toHaveText('Усі полиці')
+    await expect
+      .poll(() => {
+        const request = contentRequests.at(-1)
+        return {
+          sectionIds: request?.sectionIds,
+          hasMissingShelf: Object.hasOwn(request ?? {}, 'missingShelf'),
+        }
+      })
+      .toEqual({ sectionIds: ['section-6'], hasMissingShelf: false })
+  }
 })
 
 test('inventory hides management actions when manage permission is absent @cabinet-smoke', async ({
@@ -1838,7 +2179,7 @@ test('renders an unknown cabinet route inside the branded shell', async ({
     page.getByRole('heading', { name: 'Сторінку не знайдено' }),
   ).toBeVisible()
   await expect(
-    page.getByRole('link', { name: 'rozbirka — на головну' }),
+    page.getByRole('navigation', { name: 'Навігація кабінету' }),
   ).toBeVisible()
   await expect(
     page.getByRole('link', { name: 'На головну', exact: true }),
@@ -1895,7 +2236,9 @@ for (const path of releasedAccessPaths) {
 
 test('released Team dialogs and Reports actions keep 44px targets', async ({
   page,
-}) => {
+}, testInfo) => {
+  // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+  test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
   await page.setViewportSize({ width: 320, height: 900 })
   await installCabinetApiBoundary(page)
   await loginFrom(page)
@@ -1970,7 +2313,9 @@ test('released Team dialogs and Reports actions keep 44px targets', async ({
 
 test('visible mobile cabinet controls meet the 44px target minimum', async ({
   page,
-}) => {
+}, testInfo) => {
+  // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+  test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
   await page.setViewportSize({ width: 320, height: 900 })
   await installCabinetApiBoundary(page)
   await loginFrom(page)
@@ -2010,7 +2355,9 @@ test('visible mobile cabinet controls meet the 44px target minimum', async ({
 for (const width of [320, 768]) {
   test(`over-quota upgrade keeps a 44px computed target at ${width}px`, async ({
     page,
-  }) => {
+  }, testInfo) => {
+    // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+    test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
     await page.setViewportSize({ width, height: 900 })
     await installCabinetApiBoundary(page, { overQuota: true })
     await loginFrom(page)
@@ -2026,7 +2373,9 @@ for (const width of [320, 768]) {
 
   test(`pending payment wraps without overflow and keeps 44px actions at ${width}px`, async ({
     page,
-  }) => {
+  }, testInfo) => {
+    // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+    test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
     await page.setViewportSize({ width, height: 900 })
     await installCabinetApiBoundary(page, { pendingPayment: true })
     await loginFrom(page)
@@ -2153,10 +2502,10 @@ test('logs out normally from the cabinet shell @cabinet-smoke', async ({
       logoutSettled = true
     })
     await page
-      .getByRole('navigation', { name: 'Навігація кабінету' })
-      .locator('..')
-      .getByRole('button', { name: 'Вийти' })
+      .locator('#cabinet-navigation')
+      .getByRole('button', { name: 'Олена Коваль' })
       .click()
+    await page.getByRole('menuitem', { name: 'Вийти' }).click()
 
     await expect(page).toHaveURL('/')
     await expect
@@ -2198,7 +2547,7 @@ test('requires a source before creating a part', async ({ page }) => {
   )
   await loginFrom(page)
   await page.goto('/app/koval/parts/new')
-  const drawer = page.getByRole('dialog')
+  const drawer = page.getByRole('region', { name: 'Нова деталь', exact: true })
   await expect(drawer).toBeVisible()
   await expect(drawer.getByRole('button', { name: /Вільна/ })).toHaveCount(0)
   await drawer.getByLabel('Назва', { exact: true }).fill('Фара')
@@ -2206,8 +2555,9 @@ test('requires a source before creating a part', async ({ page }) => {
   await expect(drawer.getByRole('alert')).toContainText('Деталь не створено')
   const source = drawer.getByLabel('Автомобіль-джерело', { exact: true })
   await expect(source).toBeVisible()
-  await source.selectOption('car-1')
-  await expect(source).toHaveValue('car-1')
+  await source.click()
+  await page.getByRole('option', { name: /Ford Focus/ }).click()
+  await expect(source).toContainText('Ford Focus')
   await source.focus()
   await expect(source).toBeFocused()
   await page.setViewportSize({ width: 375, height: 812 })
@@ -2444,6 +2794,158 @@ test('contains a long inventory QR at mobile width in the browser @hardening', a
   ).toBe(true)
 })
 
+test('creates and places a zone from an empty warehouse without QR scanning @hardening', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page)
+  let zones: Record<string, unknown>[] = []
+  let placement: string[] = []
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/inventory/zones') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON() as {
+          warehouseId: string
+          name: string
+          code: string
+        }
+        zones = [
+          {
+            id: 'zone-new',
+            tenantId: 'tenant-1',
+            warehouseId: input.warehouseId,
+            warehouseName: 'Основний склад',
+            name: input.name,
+            code: input.code,
+            qrCode: 'ZONE-NEW',
+            isActive: true,
+            isSystemUnassigned: false,
+            createdAt: '2026-10-14T10:00:00Z',
+            updatedAt: '2026-10-14T10:00:00Z',
+          },
+        ]
+        return fulfillData(route, zones[0], 201)
+      }
+      return fulfillData(route, zones)
+    }
+    if (path === '/api/v1/parts/part-empty/inventory-zones') {
+      if (request.method() === 'PUT') {
+        placement = (request.postDataJSON() as { zoneIds: string[] }).zoneIds
+        return fulfillData(route, [])
+      }
+      return fulfillData(
+        route,
+        placement.map((zoneId) => ({
+          zoneId,
+          warehouseId: 'warehouse-1',
+          warehouseName: 'Основний склад',
+          zoneName: 'Стелаж A1',
+          zoneCode: 'A1',
+          zoneQrCode: 'ZONE-NEW',
+          isSystemUnassigned: false,
+        })),
+      )
+    }
+    await route.fallback()
+  })
+  await loginFrom(page)
+  await page.goto('/app/koval/parts/part-empty/inventory')
+
+  await expect(
+    page.getByRole('radio', { name: /Основний склад/ }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Сканувати зону' }),
+  ).toHaveCount(0)
+  await page.getByRole('button', { name: 'Додати зону' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Нова зона' })
+  await dialog.getByRole('textbox', { name: 'Назва' }).fill('Стелаж A1')
+  await dialog.getByRole('textbox', { name: 'Код' }).fill('A1')
+  await dialog.getByRole('button', { name: 'Додати зону' }).click()
+  await expect(
+    page.getByRole('radio', { name: 'Основний склад · Стелаж A1' }),
+  ).toBeChecked()
+  await page.getByRole('button', { name: 'Зберегти розміщення' }).click()
+  await expect.poll(() => placement).toEqual(['zone-new'])
+  await expect(page.getByText('Розміщення збережено')).toBeVisible()
+})
+
+test('creates a warehouse before a zone when placement has no warehouses @hardening', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page)
+  let warehouse: Record<string, unknown> | null = null
+  let zone: Record<string, unknown> | null = null
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/warehouses') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON() as { name: string; code: string }
+        warehouse = {
+          id: 'warehouse-new',
+          tenantId: 'tenant-1',
+          name: input.name,
+          code: input.code,
+          isActive: true,
+          isSystemDefault: true,
+          zoneCount: 0,
+          createdAt: '2026-10-14T10:00:00Z',
+          updatedAt: '2026-10-14T10:00:00Z',
+        }
+        return fulfillData(route, warehouse, 201)
+      }
+      return fulfillData(route, warehouse ? [warehouse] : [])
+    }
+    if (path === '/api/v1/inventory/zones') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON() as {
+          name: string
+          code: string
+          warehouseId: string
+        }
+        zone = {
+          id: 'zone-new',
+          tenantId: 'tenant-1',
+          warehouseId: input.warehouseId,
+          warehouseName: 'Новий склад',
+          name: input.name,
+          code: input.code,
+          qrCode: 'ZONE-NEW',
+          isActive: true,
+          isSystemUnassigned: false,
+          createdAt: '2026-10-14T10:00:00Z',
+          updatedAt: '2026-10-14T10:00:00Z',
+        }
+        return fulfillData(route, zone, 201)
+      }
+      return fulfillData(route, zone ? [zone] : [])
+    }
+    if (path === '/api/v1/parts/part-no-house/inventory-zones')
+      return fulfillData(route, [])
+    await route.fallback()
+  })
+  await loginFrom(page)
+  await page.goto('/app/koval/parts/part-no-house/inventory')
+
+  await page.getByRole('button', { name: 'Додати склад' }).click()
+  const warehouseDialog = page.getByRole('dialog', { name: 'Новий склад' })
+  await warehouseDialog
+    .getByRole('textbox', { name: 'Назва' })
+    .fill('Новий склад')
+  await warehouseDialog.getByRole('textbox', { name: 'Код' }).fill('NEW')
+  await warehouseDialog.getByRole('button', { name: 'Додати склад' }).click()
+
+  const zoneDialog = page.getByRole('dialog', { name: 'Нова зона' })
+  await zoneDialog.getByRole('textbox', { name: 'Назва' }).fill('Полиця A1')
+  await zoneDialog.getByRole('textbox', { name: 'Код' }).fill('A1')
+  await zoneDialog.getByRole('button', { name: 'Додати зону' }).click()
+  await expect(
+    page.getByRole('radio', { name: 'Новий склад · Полиця A1' }),
+  ).toBeChecked()
+})
+
 for (const viewport of [
   { width: 1280, height: 800 },
   { width: 375, height: 812 },
@@ -2531,14 +3033,12 @@ for (const viewport of [
     page.on('pageerror', (error) => errors.push(error.message))
     await loginFrom(page)
     await page.goto('/app/koval/cars')
+    // v2: the list is a table without covers; photos live on the record.
     const card = page
-      .getByRole('list', { name: 'Список автомобілів' })
-      .getByRole('link')
+      .getByRole('table')
+      .getByRole('link', { name: /BMW X5/ })
       .first()
     await expect(card).toBeVisible()
-    const cardPhoto = await card.locator('img').boundingBox()
-    expect(cardPhoto).not.toBeNull()
-    expect(cardPhoto!.height / cardPhoto!.width).toBeCloseTo(0.75, 1)
     await card.click()
     const opener = page.getByRole('button', { name: /відкрити на весь екран/ })
     await opener.click()
@@ -2584,3 +3084,171 @@ for (const viewport of [
     expect(errors).toEqual([])
   })
 }
+
+test('placement drawer searches large section and shelf choices without moving the page @placement-picker', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { partsManage: true })
+  const sectionData = Array.from({ length: 100 }, (_, index) => ({
+    id: `section-${index + 1}`,
+    zoneId: 'zone-1',
+    zoneName: 'Зона А',
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: `Секція ${index + 1}`,
+    code: `S${index + 1}`,
+    isActive: true,
+    qrCode: `section:${index}`,
+  }))
+  const shelfData = Array.from({ length: 100 }, (_, index) => ({
+    id: `shelf-${index + 1}`,
+    sectionId: 'section-100',
+    sectionName: 'Секція 100',
+    zoneId: 'zone-1',
+    zoneName: 'Зона А',
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: `Полиця ${index + 1}`,
+    code: `P${index + 1}`,
+    isActive: true,
+    qrCode: `shelf:${index}`,
+  }))
+  let saved: Record<string, unknown> | null = null
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/parts/part-picker')
+      return fulfillData(route, {
+        id: 'part-picker',
+        name: 'Тестова фара',
+        qrCode: 'part:picker',
+        unit: 'шт',
+        quantityTotal: 1,
+        quantityAvailable: 1,
+        quantityReserved: 0,
+        quantitySold: 0,
+        status: 'available',
+        condition: 'good',
+        photos: [],
+        source: 'batch',
+        car: null,
+        intake: null,
+        desiredSalePrice: null,
+        createdAt: '2026-10-16T10:00:00Z',
+        createdBy: { name: 'Тест' },
+      })
+    if (path === '/api/v1/parts/part-picker/history')
+      return fulfillData(route, { events: [] })
+    if (path === '/api/v1/parts/part-picker/inventory-zones') {
+      if (request.method() === 'PUT')
+        saved = request.postDataJSON() as Record<string, unknown>
+      return fulfillData(route, [
+        {
+          zoneId: 'zone-1',
+          zoneName: 'Зона А',
+          warehouseId: 'warehouse-1',
+          warehouseName: 'Основний склад',
+          zoneCode: 'A',
+          zoneQrCode: 'zone:1',
+          isSystemUnassigned: false,
+        },
+      ])
+    }
+    if (path === '/api/v1/inventory/zones')
+      return fulfillData(route, [
+        {
+          id: 'zone-1',
+          name: 'Зона А',
+          code: 'A',
+          warehouseId: 'warehouse-1',
+          warehouseName: 'Основний склад',
+          qrCode: 'zone:1',
+          isActive: true,
+          isSystemUnassigned: false,
+        },
+      ])
+    if (path === '/api/v1/inventory/sections')
+      return fulfillData(route, sectionData)
+    if (path === '/api/v1/inventory/shelves')
+      return fulfillData(route, shelfData)
+    if (path === '/api/v1/parts/facets')
+      return fulfillData(route, {
+        zones: [],
+        warehouses: [],
+        origins: [],
+        makes: [],
+        models: [],
+        statuses: [],
+        conditions: [],
+      })
+    await route.fallback()
+  })
+  await loginFrom(page)
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/app/koval/parts/part-picker')
+    await page.getByRole('button', { name: 'Перемістити', exact: true }).click()
+    const drawer = page.getByRole('dialog', { name: 'Розміщення на складі' })
+    const sectionTrigger = drawer.getByRole('searchbox', {
+      name: 'Пошук секції',
+    })
+    await expect(sectionTrigger).toBeVisible()
+    const pageScroll = await page.evaluate(() => scrollY)
+    await expect(page.getByRole('option')).toHaveCount(0)
+    await sectionTrigger.click()
+    const initialList = page.locator('[data-search-picker-scroll]')
+    const initialMetrics = await initialList.evaluate((el) => ({
+      height: el.clientHeight,
+      scrollHeight: el.scrollHeight,
+    }))
+    expect(initialMetrics.height).toBeLessThanOrEqual(460)
+    expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.height)
+    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
+    await sectionSearch.fill('s100')
+    await expect(page.getByRole('option')).toHaveCount(2)
+    await page.getByRole('option', { name: /Секція 100/ }).click()
+    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+    await expect(page.getByRole('option')).toHaveCount(2)
+    const popup = page.getByRole('listbox')
+    const bounds = await popup.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds!.width).toBeLessThanOrEqual(width)
+    expect(bounds!.height).toBeLessThanOrEqual(460)
+    await page.keyboard.press('Escape')
+    await expect(drawer).toBeVisible()
+    await expect(page.getByRole('listbox')).toHaveCount(0)
+    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+    await page.keyboard.press('Enter')
+    await expect(
+      drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
+    ).toHaveValue('Полиця 100')
+    const overflow = await page.evaluate(() => ({
+      width: innerWidth,
+      scroll: document.documentElement.scrollWidth,
+      nodes: [...document.querySelectorAll('body *')]
+        .filter((el) => {
+          const r = el.getBoundingClientRect()
+          return r.width > 0 && r.right > innerWidth + 1
+        })
+        .slice(-12)
+        .map((el) => ({
+          tag: el.tagName,
+          class: el.className,
+          right: el.getBoundingClientRect().right,
+          text: el.textContent?.slice(0, 60),
+        })),
+    }))
+    expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(width)
+    expect(await page.evaluate(() => scrollY)).toBe(pageScroll)
+    await drawer.getByRole('button', { name: 'Зберегти розміщення' }).click()
+    await expect(drawer).toHaveCount(0)
+    expect(saved).toEqual({
+      zoneIds: ['zone-1'],
+      sectionId: 'section-100',
+      shelfId: 'shelf-100',
+    })
+    await expect(page).toHaveURL(/\/parts\/part-picker$/)
+  }
+})

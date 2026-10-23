@@ -1,8 +1,9 @@
 import {
   BadgeDollarSign,
-  BarChart3,
   Building2,
   Car,
+  ChartColumn,
+  CircleUser,
   ClipboardCheck,
   ClipboardList,
   CreditCard,
@@ -12,10 +13,10 @@ import {
   ReceiptText,
   ScanLine,
   Sticker,
-  UserRound,
   UserRoundCog,
   Users,
   WalletCards,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -30,6 +31,7 @@ export type CabinetModuleKey =
   | 'dashboard'
   | 'cars'
   | 'parts'
+  | 'warehouses'
   | 'inventory'
   | 'orders'
   | 'customers'
@@ -62,7 +64,12 @@ export interface CabinetNavigationItem {
    */
   label: string
   icon: LucideIcon
-  placement: 'primary' | 'account'
+  /**
+   * `nested` pages stay reachable (routes, Cmd+K) but live inside another
+   * module's tabs, not in the sidebar — v2 puts Тарифи and Платежі under
+   * Підписка.
+   */
+  placement: 'primary' | 'account' | 'nested'
   group: CabinetNavigationGroup
   /**
    * Order in the mobile tab bar, lowest first; the first few fit, the rest move
@@ -133,6 +140,20 @@ export const cabinetModules: Readonly<
       mobilePriority: 2,
     },
   },
+  warehouses: {
+    key: 'warehouses',
+    routeSegment: '/warehouses',
+    viewPermission: 'inventory.view',
+    mutationPermission: 'inventory.zones.manage',
+    allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
+    navigation: {
+      label: 'Склади',
+      icon: Warehouse,
+      placement: 'primary',
+      group: 'stock',
+      mobilePriority: 7,
+    },
+  },
   inventory: {
     key: 'inventory',
     routeSegment: '/inventory',
@@ -144,7 +165,7 @@ export const cabinetModules: Readonly<
       icon: ClipboardCheck,
       placement: 'primary',
       group: 'stock',
-      mobilePriority: 7,
+      mobilePriority: 8,
     },
   },
   orders: {
@@ -244,7 +265,7 @@ export const cabinetModules: Readonly<
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
     navigation: {
       label: 'Звіти',
-      icon: BarChart3,
+      icon: ChartColumn,
       placement: 'primary',
       group: 'money',
       mobilePriority: 9,
@@ -271,7 +292,7 @@ export const cabinetModules: Readonly<
       label: 'Тарифи',
       group: 'settings',
       icon: BadgeDollarSign,
-      placement: 'account',
+      placement: 'nested',
     },
   },
   payments: {
@@ -283,17 +304,7 @@ export const cabinetModules: Readonly<
       label: 'Платежі',
       group: 'settings',
       icon: ReceiptText,
-      placement: 'account',
-    },
-  },
-  profile: {
-    key: 'profile',
-    routeSegment: '/settings/profile',
-    navigation: {
-      label: 'Профіль',
-      group: 'settings',
-      icon: UserRound,
-      placement: 'account',
+      placement: 'nested',
     },
   },
   integrations: {
@@ -321,6 +332,16 @@ export const cabinetModules: Readonly<
       label: 'Бізнес',
       group: 'settings',
       icon: Building2,
+      placement: 'account',
+    },
+  },
+  profile: {
+    key: 'profile',
+    routeSegment: '/settings/profile',
+    navigation: {
+      label: 'Профіль',
+      group: 'settings',
+      icon: CircleUser,
       placement: 'account',
     },
   },

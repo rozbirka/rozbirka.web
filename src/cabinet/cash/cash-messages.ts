@@ -116,6 +116,8 @@ export const cashMessages = defineMessages({
     operationsTo: 'Операції до',
     ledgerPages: 'Сторінки журналу',
     saveChanges: 'Зберегти зміни',
+    activateTill: 'Активувати касу',
+    tillActivated: 'Касу активовано.',
     editTitle: 'Редагування каси',
     editNoRight:
       'Зберегти не вдасться: бракує права finance.manage. Попросіть власника кабінету відкрити доступ.',
@@ -131,6 +133,11 @@ export const cashMessages = defineMessages({
     cashOptionHint: 'Готівка в касі',
     bankOptionHint: 'Банківський рахунок',
     currencies: 'Валюти',
+    addCurrency: 'Додати',
+    removeCurrency: 'Видалити',
+    currencyHasTransactions:
+      'Валюту {code} не можна видалити, оскільки з нею вже були операції.',
+    currencyBalanceNotZero: 'Спочатку обнуліть баланс {code}.',
     initialBalances: 'Початкові баланси',
     initialBalancesHint: 'Необов’язково. Порожнє поле означає нульовий баланс.',
     balanceOf: 'Баланс {code}',
@@ -264,6 +271,8 @@ export const cashMessages = defineMessages({
     operationsTo: 'Transactions to',
     ledgerPages: 'Ledger pages',
     saveChanges: 'Save changes',
+    activateTill: 'Activate till',
+    tillActivated: 'Till activated.',
     editTitle: 'Edit till',
     editNoRight:
       'You can’t save: the finance.manage permission is missing. Ask the account owner for access.',
@@ -280,6 +289,11 @@ export const cashMessages = defineMessages({
     cashOptionHint: 'Cash in the till',
     bankOptionHint: 'Bank account',
     currencies: 'Currencies',
+    addCurrency: 'Add',
+    removeCurrency: 'Remove',
+    currencyHasTransactions:
+      'You cannot remove {code} because it has transaction history.',
+    currencyBalanceNotZero: 'Set the {code} balance to zero first.',
     initialBalances: 'Opening balances',
     initialBalancesHint: 'Optional. An empty field means a zero balance.',
     balanceOf: '{code} balance',
@@ -437,6 +451,8 @@ export const cashMessages = defineMessages({
     operationsTo: 'Operacje do',
     ledgerPages: 'Strony dziennika',
     saveChanges: 'Zapisz zmiany',
+    activateTill: 'Aktywuj kasę',
+    tillActivated: 'Kasa aktywowana.',
     editTitle: 'Edycja kasy',
     editNoRight:
       'Nie można zapisać: brak uprawnienia finance.manage. Poproś właściciela konta o dostęp.',
@@ -452,6 +468,11 @@ export const cashMessages = defineMessages({
     cashOptionHint: 'Gotówka w kasie',
     bankOptionHint: 'Rachunek bankowy',
     currencies: 'Waluty',
+    addCurrency: 'Dodaj',
+    removeCurrency: 'Usuń',
+    currencyHasTransactions:
+      'Nie można usunąć waluty {code}, ponieważ ma historię operacji.',
+    currencyBalanceNotZero: 'Najpierw wyzeruj saldo {code}.',
     initialBalances: 'Salda początkowe',
     initialBalancesHint: 'Opcjonalnie. Puste pole oznacza saldo zerowe.',
     balanceOf: 'Saldo {code}',

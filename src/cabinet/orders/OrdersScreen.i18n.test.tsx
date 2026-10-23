@@ -163,7 +163,8 @@ describe('in British English', () => {
     expect(within(list).getByText('Pending')).toBeVisible()
     // 22:30 UTC is already the next day in Kyiv, the business's own zone.
     expect(within(list).getByText('22/09/2026')).toBeVisible()
-    expect(within(list).getByText('1 order')).toBeVisible()
+    // The count sits in the page head next to the title (v2 `.rz-page-head`).
+    expect(screen.getByText('1 order')).toBeVisible()
   })
 
   it('renders the order page with its history in the business time zone', async () => {
@@ -172,7 +173,11 @@ describe('in British English', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Order #41' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Back to orders' })).toBeVisible()
+    // The breadcrumb's «Orders» leads back to the list.
+    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute(
+      'href',
+      '/app/garage/orders',
+    )
     expect(screen.getByText('Created 22/09/2026, 01:30 · Olena')).toBeVisible()
     const history = screen.getByRole('list', { name: 'Order history' })
     expect(within(history).getByText('Order created')).toBeVisible()
@@ -248,7 +253,7 @@ describe('pure helpers', () => {
     expect(phoneExample(null)).toBe('+380 67 123 45 67')
   })
 
-  it('maps the country refusal and passes other messages through', () => {
+  it('maps the country refusal and localises unknown failures', () => {
     const refusal = {
       kind: 'conflict',
       status: 409,
@@ -266,14 +271,14 @@ describe('pure helpers', () => {
         { kind: 'conflict', code: 'other', message: 'Server says no.' },
         'pl',
       ),
-    ).toBe('Server says no.')
+    ).toBe('Nie udało się wykonać działania z powodu konfliktu danych.')
   })
 
   it('names statuses and events in each locale, Ukrainian by default', () => {
     expect(orderStatusPresentation('refunded').label).toBe('Повернено')
     expect(orderStatusPresentation('refunded', 'en-GB')).toEqual({
       label: 'Refunded',
-      tone: 'info',
+      tone: 'danger',
     })
     expect(orderStatusPresentation('confirmed', 'pl').label).toBe(
       'Potwierdzone',

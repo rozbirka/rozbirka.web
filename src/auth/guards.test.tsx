@@ -169,3 +169,33 @@ it('allows an authenticated user without a display name to finish the login name
 
   expect(screen.getByText('name step')).toBeInTheDocument()
 })
+
+it('keeps a pre-created owner with their phone as display name on the name step', () => {
+  vi.mocked(useAuth).mockReturnValue({
+    ...authValue('authenticated'),
+    user: {
+      id: 'user-1',
+      phone: '+380971110000',
+      displayName: '+380971110000',
+      effectiveLanguage: 'uk',
+    },
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/login']}>
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            <RedirectIfAuth>
+              <span>name step</span>
+            </RedirectIfAuth>
+          }
+        />
+        <Route path="/account" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(screen.getByText('name step')).toBeInTheDocument()
+})

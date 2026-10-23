@@ -1,41 +1,95 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
+import { ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 /**
- * The frame every redesigned screen wears: a sticky bar that keeps the
- * breadcrumb and the page actions in reach while the content scrolls, and a
- * column centred at 1240px under it. Both come straight from the design —
- * before this the actions rode along with the title and the column ran the
- * full width of the window, which pulled the eye apart on a wide monitor.
+ * The frame of a cabinet screen, as the design system draws it
+ * (docs/design-system/v2/components/Navigation.dc.html): a sticky 44px topbar
+ * with the breadcrumb on the left and the page actions on the right, then
+ * `.rz-page` under it.
  */
 export function RedesignShell({
   crumb,
   actions,
+  banner,
+  peek,
+  width = 'list',
   children,
 }: {
   crumb: ReactNode
   actions?: ReactNode
+  /** Full-width `.rz-banner` under the topbar (read-only, billing…). */
+  banner?: ReactNode
+  /** `.rz-peek` beside the page (master-detail); the page and it share `.rz-split`. */
+  peek?: ReactNode
+  /** `record` caps width; `workspace` fills the viewport for a scrollable working list. */
+  width?: 'list' | 'record' | 'workspace'
   children: ReactNode
 }) {
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <p className="text-app-dim min-w-0 font-mono text-[11px] tracking-[0.14em] uppercase">
-          {crumb}
-        </p>
+    <div
+      className={cn(
+        'grid content-start',
+        width === 'workspace' && 'rz-workspace',
+      )}
+    >
+      <div className="rz-topbar min-h-topbar h-auto flex-wrap justify-between gap-y-1.5 py-1.5">
+        <div className="rz-crumbs m-0">{crumb}</div>
         {actions === undefined ? null : (
-          <div className="flex flex-wrap items-center justify-end gap-2.5 sm:flex-nowrap">
+          <div className="rz-topbar__actions flex-wrap items-center">
             {actions}
           </div>
         )}
       </div>
-      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
-        {children}
-      </div>
+      {banner}
+      {peek === undefined || peek === null ? (
+        <div className={cn('rz-page', width === 'record' && 'max-w-[1240px]')}>
+          {children}
+        </div>
+      ) : (
+        <div className="rz-split">
+          <div
+            className={cn('rz-page', width === 'record' && 'max-w-[1240px]')}
+          >
+            {children}
+          </div>
+          {peek}
+        </div>
+      )}
     </div>
   )
 }
 
-/** The page title of a redesigned screen: 46px headline over a 15px lead. */
+/**
+ * A breadcrumb trail as v2 draws it: earlier parts muted, chevrons between,
+ * the last part strong with `aria-current="page"`.
+ */
+export function Crumbs({
+  items,
+  label,
+}: {
+  items: readonly ReactNode[]
+  /** Names the trail for assistive technology. */
+  label?: string
+}) {
+  return (
+    <nav aria-label={label} className="rz-crumbs">
+      {items.map((item, index) => {
+        const last = index === items.length - 1
+        return (
+          <Fragment key={index}>
+            {index > 0 ? (
+              <ChevronRight aria-hidden className="size-3 shrink-0" />
+            ) : null}
+            {last ? <span aria-current="page">{item}</span> : item}
+          </Fragment>
+        )
+      })}
+    </nav>
+  )
+}
+
+/** The page title: `.rz-h-page` (20px) with a muted lead under it. */
 export function RedesignTitle({
   title,
   lead,
@@ -48,16 +102,12 @@ export function RedesignTitle({
 }) {
   return (
     <div className="min-w-0">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-[34px] leading-[1] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-          {title}
-        </h1>
+      <div className="rz-page-head items-center">
+        <h1 className="rz-h-page">{title}</h1>
         {aside}
       </div>
       {lead === undefined ? null : (
-        <p className="text-app-muted mt-3 max-w-[62ch] text-[15px] leading-6 text-pretty">
-          {lead}
-        </p>
+        <p className="text-app-muted mt-1 max-w-[72ch] text-pretty">{lead}</p>
       )}
     </div>
   )

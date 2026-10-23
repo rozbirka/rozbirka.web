@@ -1,0 +1,111 @@
+{
+ "id": "C10",
+ "module": "cars",
+ "eyebrow": "Склад",
+ "title": "Автомобілі",
+ "icon": "icon-car",
+ "route": "/app/:tenant/cars",
+ "source": "cars/messages.ts, car-form-messages.ts",
+ "unverified": "назви колонок і вкладок, emptyBody, searchPlaceholder/дії, яких немає в пошуку по коду",
+ "searchLabel": "Пошук автомобілів",
+ "searchPlaceholder": "Марка, модель, VIN або код",
+ "emptyTitle": "Автомобілів поки немає",
+ "emptyBody": "Додайте авто, яке розбираєте, — його деталі зʼявляться на складі.",
+ "actions": [
+  {
+   "label": "Додати автомобіль",
+   "icon": "icon-plus",
+   "href": "#"
+  }
+ ],
+ "filters": [
+  "Марка: будь-яка"
+ ],
+ "tabs": [
+  {
+   "label": "Усі"
+  },
+  {
+   "label": "Розбирається",
+   "value": "Розбирається"
+  },
+  {
+   "label": "Розібрано",
+   "value": "Розібрано"
+  }
+ ],
+ "tabField": "state",
+ "columns": [
+  {
+   "key": "name",
+   "label": "Автомобіль",
+   "sub": "vin"
+  },
+  {
+   "key": "code",
+   "label": "Код",
+   "mono": true
+  },
+  {
+   "key": "state",
+   "label": "Стан",
+   "pill": {
+    "Розбирається": "rz-pill rz-pill--warn",
+    "Розібрано": "rz-pill rz-pill--ok"
+   }
+  },
+  {
+   "key": "parts",
+   "label": "Деталей",
+   "align": "end"
+  },
+  {
+   "key": "payoff",
+   "label": "Окупність",
+   "align": "end"
+  }
+ ],
+ "rows": [
+  {
+   "name": "Volkswagen Passat B8 · 2016",
+   "vin": "WVWZZZ3CZGE012345",
+   "code": "A-0142",
+   "state": "Розбирається",
+   "parts": 38,
+   "payoff": "62%"
+  },
+  {
+   "name": "Skoda Octavia A7 · 2018",
+   "vin": "TMBJG7NE0J0123456",
+   "code": "A-0139",
+   "state": "Розбирається",
+   "parts": 24,
+   "payoff": "41%"
+  },
+  {
+   "name": "Toyota Camry XV70 · 2019",
+   "vin": "4T1B11HK5KU123456",
+   "code": "A-0131",
+   "state": "Розібрано",
+   "parts": 57,
+   "payoff": "153%"
+  },
+  {
+   "name": "Renault Megane III · 2014",
+   "vin": "VF1BZ0B0H51234567",
+   "code": "A-0127",
+   "state": "Розібрано",
+   "parts": 41,
+   "payoff": "108%"
+  },
+  {
+   "name": "Nissan Qashqai J11 · 2017",
+   "vin": "SJNFAAJ11U1234567",
+   "code": "A-0120",
+   "state": "Розбирається",
+   "parts": 12,
+   "payoff": "18%"
+  }
+ ],
+ "detailHref": "./Record.dc.html?screen=car"
+}

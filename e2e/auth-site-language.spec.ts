@@ -21,7 +21,11 @@ for (const entry of [
   test(`landing language ${entry.locale} follows login and registration`, async ({
     page,
   }) => {
-    await page.goto('/', { waitUntil: 'networkidle' })
+    await page.goto('/')
+    await expect(page.locator('#root')).toHaveAttribute(
+      'data-app-hydrated',
+      'true',
+    )
     const mobile = (page.viewportSize()?.width ?? 1280) < 1024
     if (mobile) {
       await page.getByRole('button', { name: 'Відкрити меню' }).click()

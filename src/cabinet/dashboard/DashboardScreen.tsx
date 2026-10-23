@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { RefreshCw, Search } from 'lucide-react'
-import { Button, Skeleton } from '@/components/app'
+import { ChevronRight, RefreshCw, Search } from 'lucide-react'
+import { Button, Segmented, SkeletonRows } from '@/components/app'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
@@ -43,6 +43,14 @@ const PERIODS = {
   week: 'period.week',
   month: 'period.month',
 } as const satisfies Record<DashboardPeriod, string>
+
+const PERIOD_OPTIONS = Object.keys(PERIODS) as DashboardPeriod[]
+
+/** The main column's placeholder cards while the summary loads. */
+const SKELETON_MAIN = ['a', 'b'] as const
+function SkeletonCard({ lines }: { lines: number }) {
+  return <SkeletonRows announce={false} rows={lines} />
+}
 
 const DAY_NAME: Intl.DateTimeFormatOptions = {
   weekday: 'long',
@@ -103,60 +111,115 @@ export function DashboardScreen() {
   const cashPath = path('cash')
   const periodLabel = t(PERIODS[selection.period])
 
+  // The board is the design system's record layout: a full-width KPI strip,
+  // then a main column and a narrower aside. Each column stacks its own cards,
+  // so a card the account may not see closes up instead of leaving a hole
+  // beside its neighbour. With nothing in the main column the aside takes the
+  // whole width rather than sitting alone in 380px.
+  const main = [
+    analytics === null ? null : (
+      <RevenueChart data={analytics} key="revenue" periodLabel={periodLabel} />
+    ),
+    orders === null || ordersPath === null ? null : (
+      <RecentOrdersCard
+        accountingCurrency={accounting.currency}
+        base={ordersPath}
+        key="orders"
+        orders={orders}
+      />
+    ),
+    summary === null ? null : (
+      <ActivityCard
+        key="activity"
+        lastActivity={summary.lastActivity}
+        lastMyActivity={summary.lastMyActivity}
+      />
+    ),
+  ].filter((card) => card !== null)
+  const aside = [
+    summary === null ? null : (
+      <OrderValueCard
+        analyticsValue={analytics?.confirmedOrdersValue}
+        key="order-value"
+        period={selection.period}
+        periodLabel={periodLabel}
+        settingsPath={accounting.owner ? accounting.settingsPath : null}
+        status={accounting.status}
+        summaryValue={summary.confirmedOrdersValue}
+      />
+    ),
+    analytics === null ? null : (
+      <TopSalesCard
+        accountingCurrency={accounting.currency}
+        key="top-sales"
+        partsPath={partsPath}
+        periodLabel={periodLabel}
+        topPart={analytics.topPart}
+      />
+    ),
+    cars === null || slug === null ? null : (
+      <CarPayoffCard
+        accountingCurrency={accounting.currency}
+        base={cabinetPath(slug, 'cars')}
+        cars={cars.items}
+        key="cars"
+        now={now}
+        total={cars.total}
+      />
+    ),
+    registers === null || cashPath === null ? null : (
+      <TillsCard base={cashPath} key="tills" registers={registers} />
+    ),
+  ].filter((card) => card !== null)
+
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <p
-          aria-label={t('crumbLabel')}
-          className="text-app-dim flex items-center gap-2.5 font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase"
-        >
-          <span>{targetTenant?.name ?? t('businessFallback')}</span>
-          <span aria-hidden className="text-white/20">
-            ·
+    <div className="grid content-start">
+      <header className="rz-topbar min-h-topbar h-auto flex-wrap gap-y-1.5 py-1.5">
+        <p aria-label={t('crumbLabel')} className="rz-crumbs m-0">
+          <span className="min-w-0 truncate">
+            {targetTenant?.name ?? t('businessFallback')}
           </span>
-          <span className="text-app-muted">
-            {moduleLabel('dashboard', locale)}
-          </span>
+          <ChevronRight aria-hidden className="size-3 shrink-0" />
+          <span aria-current="page">{moduleLabel('dashboard', locale)}</span>
         </p>
-        <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
-          <button
-            className="border-app-line text-app-dim hover:text-app-muted bg-app-raised flex h-10 min-w-0 flex-1 items-center sm:max-w-[340px] gap-2.5 rounded-[10px] border px-3.5 text-left text-[14px] transition-colors hover:bg-white/[0.04]"
+        <div className="rz-topbar__actions min-w-0 flex-1 flex-wrap items-center justify-end">
+          <Button
+            className="text-app-dim min-w-0 flex-1 shrink justify-start sm:w-[300px] sm:flex-none"
             onClick={() => openCommandPalette()}
-            type="button"
           >
-            <Search aria-hidden className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1 truncate">
+            <Search aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-left">
               {t('searchPlaceholder')}
             </span>
-            <kbd className="border-app-line-2 hidden shrink-0 rounded-[5px] border px-1.5 py-0.5 font-mono text-[11px] sm:block">
+            <kbd className="rz-kbd hidden sm:inline-grid">
               {commandPaletteHint()}
             </kbd>
-          </button>
+          </Button>
           <Button
             aria-busy={dashboard.refreshing}
             aria-label={dashboard.refreshing ? t('refreshing') : t('refresh')}
-            className="min-w-11 px-0"
             disabled={dashboard.refreshing}
             onClick={() => void dashboard.refresh()}
+            size="icon"
           >
             <RefreshCw aria-hidden />
           </Button>
           {ordersPath === null ? null : (
-            <Button
-              asChild
-              className="px-5 text-sm font-bold"
-              variant="primary"
-            >
+            <Button asChild variant="primary">
               <Link to={`${ordersPath}/new`}>{t('newOrder')}</Link>
             </Button>
           )}
         </div>
-      </div>
+      </header>
 
-      <div className="mx-auto grid w-full max-w-[1320px] gap-3.5 px-4 pt-9 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="mb-3.5 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          <div className="min-w-0">
-            <h1 className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px]">
+      {snapshot !== null && targetTenant !== null ? (
+        <DashboardBillingBanner snapshot={snapshot} tenant={targetTenant} />
+      ) : null}
+
+      <div className="rz-page max-w-[1240px]">
+        <div className="rz-page-head items-end justify-between">
+          <div className="grid min-w-0 gap-1">
+            <h1 className="rz-h-page text-balance">
               {summary === null
                 ? t(greeting(now, timeZone))
                 : t('greetingNamed', {
@@ -164,24 +227,28 @@ export function DashboardScreen() {
                     name: summary.userName,
                   })}
             </h1>
-            <p className="text-app-muted mt-3 text-[15px]">
+            <p className="rz-muted m-0">
               {capitalize(format.dateWith(now, DAY_NAME) ?? '')}
               {dashboard.refreshing ? ` · ${t('refreshingNote')}` : ''}
             </p>
           </div>
-          <PeriodSwitch
-            onPeriodChange={(period) => {
+          <Segmented
+            as="toggle"
+            className="shrink-0"
+            label={t('periodGroup')}
+            name="dashboard-period"
+            onChange={(period) => {
               setSearchParams(writeDashboardPeriod(searchParams, period), {
                 replace: false,
               })
             }}
-            period={selection.period}
+            options={PERIOD_OPTIONS.map((value) => ({
+              value,
+              label: t(PERIODS[value]),
+            }))}
+            value={selection.period}
           />
         </div>
-
-        {snapshot !== null && targetTenant !== null ? (
-          <DashboardBillingBanner snapshot={snapshot} tenant={targetTenant} />
-        ) : null}
 
         {/* Owner onboarding of a new yard; renders nothing for anyone else. */}
         {snapshot !== null && targetTenant !== null ? (
@@ -191,7 +258,7 @@ export function DashboardScreen() {
         <div
           aria-busy={dashboard.refreshing}
           aria-label={t('summaryPanel')}
-          className="grid min-w-0 gap-3.5"
+          className="grid min-w-0 gap-4"
           role="region"
         >
           {dashboard.summary.status === 'error' ? (
@@ -213,131 +280,53 @@ export function DashboardScreen() {
             />
           ) : null}
           {summary === null && dashboard.summary.status === 'loading' ? (
-            <div aria-label={t('summaryLoading')} role="status">
-              <Skeleton className="h-[220px] rounded-[20px]" />
+            <div
+              aria-label={t('summaryLoading')}
+              className="flex flex-wrap items-start gap-4"
+              role="status"
+            >
+              {/* The board's own columns, each card a stack of bars. */}
+              <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+                {SKELETON_MAIN.map((key) => (
+                  <SkeletonCard key={key} lines={6} />
+                ))}
+              </div>
+              <div className="grid min-w-0 flex-[1_1_280px] gap-4 xl:max-w-[380px]">
+                <SkeletonCard lines={4} />
+              </div>
             </div>
           ) : null}
 
-          {/* The board flows rather than lines up in rows. Paired rows only
-              look right when both halves happen to be the same height, and
-              here they never are: a yard with one task, or without the cash
-              module, left a hole the size of the card beside it. In a column
-              flow every card follows the one above it in its own column, so
-              the board closes up whatever this account is allowed to see. */}
-          <div className="gap-x-3.5 xl:columns-2 [&>*]:mb-3.5 [&>*]:break-inside-avoid">
-            {summary === null ? null : (
-              <DashboardKpis
-                accountingCurrency={accounting.currency}
-                analytics={analytics}
-                data={summary}
-                parts={parts}
-              />
-            )}
-            {summary === null ? null : (
-              <OrderValueCard
-                analyticsValue={analytics?.confirmedOrdersValue}
-                period={selection.period}
-                periodLabel={periodLabel}
-                settingsPath={accounting.owner ? accounting.settingsPath : null}
-                status={accounting.status}
-                summaryValue={summary.confirmedOrdersValue}
-              />
-            )}
-            {analytics === null ? null : (
-              <RevenueChart data={analytics} periodLabel={periodLabel} />
-            )}
-            {cars === null || slug === null ? null : (
-              <CarPayoffCard
-                accountingCurrency={accounting.currency}
-                base={cabinetPath(slug, 'cars')}
-                cars={cars.items}
-                now={now}
-                total={cars.total}
-              />
-            )}
-            {orders === null || ordersPath === null ? null : (
-              <RecentOrdersCard
-                accountingCurrency={accounting.currency}
-                base={ordersPath}
-                orders={orders}
-              />
-            )}
-            {registers === null || cashPath === null ? null : (
-              <TillsCard base={cashPath} registers={registers} />
-            )}
-            {analytics === null ? null : (
-              <TopSalesCard
-                accountingCurrency={accounting.currency}
-                partsPath={partsPath}
-                periodLabel={periodLabel}
-                topPart={analytics.topPart}
-              />
-            )}
-            {summary === null ? null : (
-              <ActivityCard
-                lastActivity={summary.lastActivity}
-                lastMyActivity={summary.lastMyActivity}
-              />
-            )}
-          </div>
+          {summary === null ? null : (
+            <DashboardKpis
+              accountingCurrency={accounting.currency}
+              analytics={analytics}
+              data={summary}
+              parts={parts}
+            />
+          )}
+
+          {main.length === 0 && aside.length === 0 ? null : (
+            <div className="flex flex-wrap items-start gap-4">
+              {main.length === 0 ? null : (
+                <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+                  {main}
+                </div>
+              )}
+              {aside.length === 0 ? null : (
+                <aside
+                  className={cn(
+                    'grid min-w-0 flex-[1_1_280px] gap-4 empty:hidden',
+                    main.length > 0 && 'xl:max-w-[380px]',
+                  )}
+                >
+                  {aside}
+                </aside>
+              )}
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  )
-}
-
-/**
- * An exclusive choice of period. Kept as toggle buttons rather than the kit
- * `Segmented` radios because the shell and browser suites pin `aria-pressed`
- * and Tab reachability of every option; arrow keys move focus here so the
- * group still behaves like one control.
- */
-function PeriodSwitch({
-  period,
-  onPeriodChange,
-}: {
-  period: DashboardPeriod
-  onPeriodChange: (period: DashboardPeriod) => void
-}) {
-  const t = useT(dashboardMessages)
-  return (
-    <div
-      aria-label={t('periodGroup')}
-      className="border-app-line bg-app-raised flex shrink-0 gap-0.5 rounded-[11px] border p-[3px]"
-      onKeyDown={(event) => {
-        const step =
-          event.key === 'ArrowRight' || event.key === 'ArrowDown'
-            ? 1
-            : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-              ? -1
-              : 0
-        if (step === 0) return
-        const options = [...event.currentTarget.querySelectorAll('button')]
-        const current = options.indexOf(
-          document.activeElement as HTMLButtonElement,
-        )
-        if (current === -1) return
-        event.preventDefault()
-        options[(current + step + options.length) % options.length]?.focus()
-      }}
-      role="group"
-    >
-      {(Object.keys(PERIODS) as DashboardPeriod[]).map((value) => (
-        <button
-          aria-pressed={period === value}
-          className={cn(
-            'relative h-[34px] rounded-[8px] px-3.5 text-[14px] font-semibold transition-colors outline-none after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[""] focus-visible:ring-2 focus-visible:ring-white/40',
-            period === value
-              ? 'bg-white/10 text-white'
-              : 'text-app-muted hover:bg-white/[0.04]',
-          )}
-          key={value}
-          onClick={() => onPeriodChange(value)}
-          type="button"
-        >
-          {t(PERIODS[value])}
-        </button>
-      ))}
     </div>
   )
 }

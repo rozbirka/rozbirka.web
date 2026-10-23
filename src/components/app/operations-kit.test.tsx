@@ -25,6 +25,7 @@ import { ToastProvider } from './toast'
 import { useOperation } from './use-operation'
 import { useSteps } from './use-steps'
 import { Amount, DateValue, Fact, FactList, Quantity } from './value'
+import { LocaleProvider } from '@/i18n/LocaleProvider'
 
 it('keeps the label the accessible name when a field is required', () => {
   render(
@@ -64,11 +65,9 @@ it('keeps controls top-aligned when a neighboring field has helper text', () => 
   )
 
   expect(screen.getByLabelText('Тип деталі').parentElement).toHaveClass(
-    'content-start',
+    'rz-field',
   )
-  expect(screen.getByLabelText('OEM-код').parentElement).toHaveClass(
-    'content-start',
-  )
+  expect(screen.getByLabelText('OEM-код').parentElement).toHaveClass('rz-field')
 })
 
 it('formats money, quantities and time for reading in a column', () => {
@@ -153,10 +152,10 @@ it('can mark the selected segmented option with a brand outline', () => {
 
   expect(
     screen.getByRole('radio', { name: 'USD' }).closest('label'),
-  ).toHaveClass('ring-brand')
+  ).toHaveClass('shadow-[inset_0_0_0_1px_var(--rz-brand)]')
   expect(
     screen.getByRole('radio', { name: 'UAH' }).closest('label'),
-  ).not.toHaveClass('ring-brand')
+  ).not.toHaveClass('shadow-[inset_0_0_0_1px_var(--rz-brand)]')
 })
 
 const photos = [
@@ -614,6 +613,33 @@ it('runs an operation without a toast provider and reports success in place', as
   await waitFor(() =>
     expect(screen.getByRole('status')).toHaveTextContent('Збережено'),
   )
+})
+
+it('localises an unexpected operation failure instead of displaying its raw diagnostic', async () => {
+  const user = userEvent.setup()
+  function Probe() {
+    const save = useOperation(() =>
+      Promise.reject(new Error('Internal English diagnostic')),
+    )
+    return (
+      <>
+        <Button onClick={save.run}>Save</Button>
+        {save.error ? <p role="alert">{save.error}</p> : null}
+      </>
+    )
+  }
+  render(
+    <LocaleProvider locale="pl" syncDocumentLang={false}>
+      <Probe />
+    </LocaleProvider>,
+  )
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Wystąpił nieoczekiwany błąd. Spróbuj ponownie.',
+  )
+  expect(
+    screen.queryByText('Internal English diagnostic'),
+  ).not.toBeInTheDocument()
 })
 
 it('reads a figure against the limit that gives it meaning', () => {

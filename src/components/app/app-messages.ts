@@ -6,6 +6,9 @@ import { defineMessages } from '@/i18n/messages'
  */
 export const appMessages = defineMessages({
   uk: {
+    searchOptions: 'Пошук у списку',
+    noMatchingOptions: 'Нічого не знайдено.',
+    pickerResultsCount: '{shown} з {total}',
     pagination: 'Пагінація',
     pageOf: 'Сторінка {page} з {total}',
     rangeOf: '{from}–{to} з {total}',
@@ -63,6 +66,9 @@ export const appMessages = defineMessages({
     showPhoto: 'Показати {name}',
   },
   'en-GB': {
+    searchOptions: 'Search options',
+    noMatchingOptions: 'No matches found.',
+    pickerResultsCount: '{shown} of {total}',
     pagination: 'Pagination',
     pageOf: 'Page {page} of {total}',
     rangeOf: '{from}–{to} of {total}',
@@ -116,6 +122,9 @@ export const appMessages = defineMessages({
     showPhoto: 'Show {name}',
   },
   pl: {
+    searchOptions: 'Szukaj na liście',
+    noMatchingOptions: 'Brak wyników.',
+    pickerResultsCount: '{shown} z {total}',
     pagination: 'Paginacja',
     pageOf: 'Strona {page} z {total}',
     rangeOf: '{from}–{to} z {total}',

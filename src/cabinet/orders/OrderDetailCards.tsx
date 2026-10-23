@@ -1,20 +1,27 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { Link } from 'react-router'
-import { CreditCard, Plus } from 'lucide-react'
-import { Button, TextArea, Thumbnail } from '@/components/app'
-import { commonMessages, useLocale, useT } from '@/i18n'
+import { Link, useNavigate } from 'react-router'
+import { ArrowRight, Circle, CircleDot, CreditCard, Plus } from 'lucide-react'
+import {
+  Button,
+  StatusPill,
+  NotesCard,
+  Thumbnail,
+  type StatusTone,
+} from '@/components/app'
+import { useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { customersApi, type CustomerDetail } from '@/api/customers'
 import type { OrderDetail, OrderDetailItem } from '@/api/orders'
 import { money, type OrderMoney } from './order-money'
 import { orderCardMessages } from './order-cards-messages'
+import { orderMessages } from './messages'
 import { paymentMessages } from './payment-messages'
 import type { OrderStep } from './order-steps'
 
 /**
- * The 28-34px controls this card is drawn with. The visual box is the design's;
- * the hit area is grown back to the 44px the cabinet keeps everywhere with a
- * transparent overlay that costs the layout nothing.
+ * A card-head action: `.rz-btn--sm` (24px). The hit area is grown back to the
+ * 44px the cabinet keeps on touch with a transparent overlay that costs the
+ * layout nothing.
  */
 function SmallButton({
   children,
@@ -31,20 +38,20 @@ function SmallButton({
   title?: string
 }) {
   return (
-    <button
+    <Button
       aria-label={label}
-      className="border-app-line-2 text-app-muted hover:text-app-ink relative inline-flex h-7 items-center rounded-[8px] border px-2.5 text-[12px] font-semibold whitespace-nowrap transition-colors hover:bg-white/[0.06] disabled:pointer-events-none disabled:opacity-55 after:absolute after:-inset-2 after:content-['']"
+      className="relative after:absolute after:-inset-2 after:content-['']"
       disabled={disabled}
       onClick={onClick}
+      size="sm"
       title={title}
-      type="button"
     >
       {children}
-    </button>
+    </Button>
   )
 }
 
-/** The frame every block of the order card shares. */
+/** The frame every block of the order card shares: `.rz-card` with its head. */
 export function OrderCard({
   title,
   count,
@@ -64,80 +71,62 @@ export function OrderCard({
 }) {
   const titleId = useId()
   return (
-    <section
-      aria-labelledby={titleId}
-      className={cn(
-        'border-app-line bg-app-raised overflow-hidden rounded-[20px] border',
-        className,
-      )}
-    >
-      <div
-        className={cn(
-          'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-[18px]',
-          padded ? 'pb-0' : 'pb-[18px]',
-        )}
-      >
-        <div className="flex min-w-0 items-baseline gap-3">
-          <h2
-            className="text-[17px] font-bold tracking-[-0.01em] text-white"
-            id={titleId}
-          >
+    <section aria-labelledby={titleId} className={cn('rz-card', className)}>
+      <div className="rz-card__head py-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="rz-h-card" id={titleId}>
             {title}
           </h2>
           {count === undefined ? null : (
-            <span className="text-app-muted font-mono text-[12px] whitespace-nowrap">
+            <span className="rz-dim font-mono text-caption whitespace-nowrap">
               {count}
             </span>
           )}
         </div>
         {aside}
       </div>
-      {padded ? <div className="px-6 pt-2.5 pb-5">{children}</div> : children}
+      {padded ? <div className="rz-card__body">{children}</div> : children}
     </section>
   )
 }
 
 /**
- * The life of the order as a row of steps. Only steps Core can date are drawn,
- * so the row is two columns for an open order and three for one that ended in
- * a refund — never a greyed-out stage the server cannot reach.
+ * The life of the order as a row of steps (`.rz-steps`). Only steps Core can
+ * date are drawn, so the row is two steps for an open order and three for one
+ * that ended in a refund — never a greyed-out stage the server cannot reach.
  */
 export function OrderSteps({ steps }: { steps: readonly OrderStep[] }) {
   const t = useT(orderCardMessages)
   return (
     <ol
       aria-label={t('stepsLabel')}
-      className="grid gap-1.5"
-      style={{
-        gridTemplateColumns: `repeat(${String(steps.length)}, minmax(0, 1fr))`,
-      }}
+      className="text-app-muted m-0 flex list-none flex-wrap items-center gap-x-1.5 gap-y-0.5 p-0 text-caption"
     >
-      {steps.map((step) => (
-        <li className="min-w-0" key={step.key}>
-          <span
-            aria-hidden
-            className={cn(
-              'block h-1 rounded-full',
-              step.state === 'current'
-                ? 'bg-brand'
-                : step.state === 'done'
-                  ? 'bg-white/35'
-                  : 'bg-white/[0.08]',
-            )}
-          />
-          <span className="mt-2.5 flex flex-col gap-[3px]">
-            <span
-              className={cn(
-                'truncate text-[14px] font-bold',
-                step.state === 'upcoming' ? 'text-app-dim' : 'text-white',
-              )}
-            >
-              {step.label}
-            </span>
-            <span className="text-app-dim min-h-[15px] font-mono text-[11px] whitespace-nowrap">
-              {step.meta}
-            </span>
-          </span>
+      {steps.map((step, index) => (
+        <li
+          {...(step.state === 'current'
+            ? { 'aria-current': 'step' as const }
+            : {})}
+          className={cn(
+            'flex items-center gap-1.5 whitespace-nowrap',
+            step.state === 'current' && 'text-app-strong',
+          )}
+          data-state={step.state}
+          key={step.key}
+          title={step.meta === '' ? undefined : step.meta}
+        >
+          {index === 0 ? null : (
+            <ArrowRight aria-hidden className="text-app-dim size-3" />
+          )}
+          {step.state === 'upcoming' ? (
+            <Circle aria-hidden className="size-2.5" />
+          ) : (
+            <CircleDot aria-hidden className="size-2.5" />
+          )}
+          <span>{step.label}</span>
+          {step.meta === '' ? null : (
+            <span className="sr-only">{step.meta}</span>
+          )}
         </li>
       ))}
     </ol>
@@ -145,8 +134,9 @@ export function OrderSteps({ steps }: { steps: readonly OrderStep[] }) {
 }
 
 /**
- * The parts on the order. Each line carries the thing itself — its photo, what
- * car it came off — so the list reads as stock rather than as a set of rows.
+ * The parts on the order as a `.rz-table`: part, quantity, price, line sum,
+ * with the total in the card foot. Each line carries the thing itself — its
+ * photo, what car it came off — so the list reads as stock.
  */
 export function OrderItemsCard({
   addPath,
@@ -172,21 +162,26 @@ export function OrderItemsCard({
   total: number | null
 }) {
   const t = useT(orderCardMessages)
+  const to = useT(orderMessages)
+  const navigate = useNavigate()
   return (
     <OrderCard
       aside={
         !editable || addPath === null ? null : (
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="rz-btn-row gap-1.5">
             <SmallButton label={t('editItems')} onClick={onEdit}>
               {t('edit')}
             </SmallButton>
-            <Link
-              className="border-app-line-2 text-app-ink relative inline-flex h-[34px] items-center gap-1.5 rounded-[9px] border px-3.5 text-[13px] font-semibold whitespace-nowrap transition-colors hover:bg-white/[0.06] after:absolute after:-inset-1.5 after:content-['']"
-              to={addPath}
+            <Button
+              asChild
+              className="relative after:absolute after:-inset-2 after:content-['']"
+              size="sm"
             >
-              <Plus aria-hidden className="text-brand size-4" />
-              {t('addItem')}
-            </Link>
+              <Link to={addPath}>
+                <Plus aria-hidden />
+                {t('addItem')}
+              </Link>
+            </Button>
           </div>
         )
       }
@@ -194,47 +189,88 @@ export function OrderItemsCard({
       title={t('items')}
     >
       {items.length === 0 ? (
-        <p className="border-app-line text-app-muted border-t px-6 py-5 text-[14px]">
-          {t('noItems')}
-        </p>
+        <p className="rz-card__body text-app-muted m-0">{t('noItems')}</p>
       ) : (
         <>
-          <div className="border-app-line text-app-muted grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-y px-6 py-2.5 font-mono text-[10px] tracking-[0.14em] uppercase">
-            <span>{t('columnPart')}</span>
-            <span className="text-right">{t('columnTotal')}</span>
+          <div className="rz-table-scroll">
+            <table className="rz-table">
+              <caption>{t('orderItems')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t('columnPart')}</th>
+                  <th className="rz-num" scope="col">
+                    {to('quantity')}
+                  </th>
+                  <th className="rz-num" scope="col">
+                    {to('price')}
+                  </th>
+                  <th className="rz-num" scope="col">
+                    {t('columnTotal')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr
+                    className={cn(
+                      'h-auto',
+                      partsPath !== null && 'cursor-pointer',
+                    )}
+                    key={item.id}
+                    onClick={
+                      partsPath === null
+                        ? undefined
+                        : (event) => {
+                            if (
+                              event.defaultPrevented ||
+                              event.button !== 0 ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.shiftKey ||
+                              event.altKey ||
+                              (event.target instanceof Element &&
+                                event.target.closest(
+                                  'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [contenteditable]',
+                                ))
+                            )
+                              return
+                            void navigate(`${partsPath}/${item.partId}`)
+                          }
+                    }
+                  >
+                    <th className="py-2 sm:max-w-64" scope="row">
+                      <OrderItemLine item={item} partsPath={partsPath} />
+                    </th>
+                    <td className="rz-num" data-label={to('quantity')}>
+                      {String(item.quantity)}
+                    </td>
+                    <td
+                      className="rz-num whitespace-nowrap"
+                      data-label={to('price')}
+                    >
+                      {money(item.unitPrice, currency)}
+                    </td>
+                    <td
+                      className="rz-num whitespace-nowrap"
+                      data-label={t('columnTotal')}
+                    >
+                      {money(item.totalPrice, currency)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <ul aria-label={t('orderItems')}>
-            {items.map((item) => (
-              <li
-                className="border-app-line grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b px-6 py-3.5 transition-colors last:border-b-0 hover:bg-white/[0.02]"
-                key={item.id}
-              >
-                <OrderItemLine item={item} partsPath={partsPath} />
-                <span className="text-right">
-                  <span className="block text-[15px] font-bold whitespace-nowrap text-white">
-                    {money(item.totalPrice, currency)}
-                  </span>
-                  <span className="text-app-muted mt-1 block font-mono text-[12px] whitespace-nowrap">
-                    {String(item.quantity)} × {money(item.unitPrice, currency)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="flex flex-col items-end gap-2 px-6 pt-4 pb-[18px]">
-            <span className="flex items-baseline gap-5">
-              <span className="text-app-muted text-[14px] font-semibold">
-                {t('total')}
-              </span>
-              <span className="min-w-[104px] text-right text-[22px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
+          <div className="rz-card__foot flex-wrap items-baseline">
+            <span className="rz-muted">{t('total')}</span>
+            <span className="grid justify-items-end gap-0.5">
+              <span className="rz-mono rz-strong">
                 {money(total, currency)}
               </span>
+              {note === undefined ? null : (
+                <span className="rz-caption text-pretty">{note}</span>
+              )}
             </span>
-            {note === undefined ? null : (
-              <span className="text-app-dim text-[12px] text-pretty">
-                {note}
-              </span>
-            )}
           </div>
         </>
       )}
@@ -256,25 +292,21 @@ function OrderItemLine({
   ]
     .filter((part) => part !== null && part !== '')
     .join(' · ')
-  const name = (
-    <span className="block text-[15px] leading-[1.35] font-bold tracking-[-0.01em] text-pretty text-white">
-      {item.partName}
-    </span>
-  )
+  const name = <span className="block truncate">{item.partName}</span>
 
   return (
-    <span className="flex min-w-0 items-center gap-3.5">
+    <span className="flex min-w-0 items-center gap-2.5">
       {item.coverPhotoUrl === null ? (
         <span
           aria-hidden
-          className="border-app-line bg-app-input text-app-dim grid size-12 shrink-0 place-items-center rounded-[10px] border font-mono text-[9px]"
+          className="rz-photo size-control-lg shrink-0 font-mono text-micro"
         >
           {t('photo')}
         </span>
       ) : (
         <Thumbnail
           alt=""
-          className="size-12 shrink-0 rounded-[10px]"
+          className="size-control-lg shrink-0 rounded-control"
           photo={{
             url: item.coverPhotoUrl,
             thumbnailUrl: item.coverPhotoUrl,
@@ -286,14 +318,14 @@ function OrderItemLine({
           name
         ) : (
           <Link
-            className="hover:text-brand block"
+            className="text-app-strong block"
             to={`${partsPath}/${item.partId}`}
           >
             {name}
           </Link>
         )}
         {item.partType === null && origin === '' ? null : (
-          <span className="text-app-muted mt-1 block font-mono text-[12px] leading-[1.5]">
+          <span className="rz-dim block truncate font-mono text-caption font-normal">
             {[item.partType, origin].filter(Boolean).join(' · ')}
           </span>
         )}
@@ -304,9 +336,12 @@ function OrderItemLine({
 
 /** Money already taken against the order, one line per receipt. */
 export function OrderPaymentsCard({
+  action = null,
   paidLine,
   payments,
 }: {
+  /** The card-head control that records one more payment, when allowed. */
+  action?: ReactNode
   paidLine: string | null
   payments: OrderDetail['payments']
 }) {
@@ -314,38 +349,41 @@ export function OrderPaymentsCard({
   return (
     <OrderCard
       aside={
-        paidLine === null ? null : (
-          <span className="text-app-muted font-mono text-[13px]">
-            {paidLine}
-          </span>
+        paidLine === null && action === null ? null : (
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            {paidLine === null ? null : (
+              <span className="rz-mono rz-muted">{paidLine}</span>
+            )}
+            {action}
+          </div>
         )
       }
       count={String(payments.length)}
       title={t('payments')}
     >
       {payments.length === 0 ? (
-        <p className="border-app-line text-app-muted border-t px-6 pt-4 pb-[18px] text-[14px] text-pretty">
+        <p className="rz-card__body text-app-muted m-0 text-pretty">
           {t('noPayments')}
         </p>
       ) : (
         <ul aria-label={t('orderPayments')}>
           {payments.map((payment) => (
             <li
-              className="border-app-line flex items-center gap-3.5 border-t px-6 py-3.5"
+              className="border-app-line flex items-center gap-2.5 border-t px-(--rz-card-p) py-2.5 first:border-t-0"
               key={payment.id}
             >
-              <span className="bg-state-ok-soft text-state-ok grid size-[34px] shrink-0 place-items-center rounded-[10px]">
-                <CreditCard aria-hidden className="size-4" />
+              <span aria-hidden className="rz-timeline__icon">
+                <CreditCard />
               </span>
               <span className="min-w-0">
-                <span className="block text-[15px] font-semibold text-white">
+                <span className="rz-strong block font-medium">
                   {t('payment')}
                 </span>
-                <span className="text-app-muted mt-0.5 block truncate text-[13px]">
+                <span className="rz-caption block truncate">
                   {payment.accountName} · {payment.currency}
                 </span>
               </span>
-              <span className="ml-auto font-mono text-[15px] font-medium whitespace-nowrap text-white tabular-nums">
+              <span className="rz-num rz-strong ml-auto whitespace-nowrap">
                 {money(payment.amount, payment.currency)}
               </span>
             </li>
@@ -362,81 +400,34 @@ export function OrderNotesCard({
   editable,
   notes,
   onSave,
+  onSaved,
+  readBack,
 }: {
   busy: boolean
   editable: boolean
   notes: string | null
-  onSave: (value: string) => void
+  onSave: (value: string) => Promise<string | null>
+  onSaved: (value: string | null) => void
+  readBack: () => Promise<string | null>
 }) {
-  const t = useT(orderCardMessages)
-  const tc = useT(commonMessages)
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(notes ?? '')
-  const hasNote = notes !== null && notes !== ''
-
   return (
-    <OrderCard
-      aside={
-        editable && !editing ? (
-          <SmallButton
-            label={hasNote ? t('editNotes') : t('addNotes')}
-            onClick={() => {
-              setDraft(notes ?? '')
-              setEditing(true)
-            }}
-          >
-            {hasNote ? t('edit') : t('add')}
-          </SmallButton>
-        ) : null
-      }
-      padded
-      title={t('notes')}
-    >
-      {editing ? (
-        <>
-          <TextArea
-            aria-label={t('orderNotes')}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={t('notesPlaceholder')}
-            rows={3}
-            value={draft}
-          />
-          <div className="mt-2.5 flex flex-wrap justify-end gap-2">
-            <Button
-              aria-label={t('cancelNotes')}
-              onClick={() => setEditing(false)}
-            >
-              {tc('cancel')}
-            </Button>
-            <Button
-              aria-label={t('saveNotes')}
-              disabled={busy}
-              onClick={() => {
-                onSave(draft)
-                setEditing(false)
-              }}
-              variant="primary"
-            >
-              {tc('save')}
-            </Button>
-          </div>
-        </>
-      ) : hasNote ? (
-        <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line">
-          {notes}
-        </p>
-      ) : (
-        <p className="text-app-dim text-[14px]">{t('noNotes')}</p>
-      )}
-    </OrderCard>
+    <NotesCard
+      busy={busy}
+      canEdit={editable}
+      maxLength={1000}
+      onSave={onSave}
+      onSaved={onSaved}
+      readBack={readBack}
+      value={notes}
+    />
   )
 }
 
-const DUE_TONE: Record<OrderMoney['tone'], string> = {
-  ok: 'text-state-ok',
-  warn: 'text-state-warn',
-  info: 'text-state-info',
-  dim: 'text-app-dim',
+const DUE_TONE: Record<OrderMoney['tone'], StatusTone> = {
+  ok: 'ok',
+  warn: 'warn',
+  info: 'info',
+  dim: 'neutral',
 }
 
 const STATUS_KEY = {
@@ -473,53 +464,51 @@ export function OrderDueCard({
   const statusKey = STATUS_KEY[summary.status]
 
   return (
-    <section
-      aria-label={t('orderValue')}
-      className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {t('orderValue')}
-        </h2>
+    <section aria-label={t('orderValue')} className="rz-card">
+      <div className="rz-card__head py-2">
+        <h2 className="rz-h-card">{t('orderValue')}</h2>
         {statusKey === null ? null : (
-          <p className={cn('text-[13px] font-bold', DUE_TONE[summary.tone])}>
-            {t(statusKey)}
-          </p>
+          <StatusPill tone={DUE_TONE[summary.tone]}>{t(statusKey)}</StatusPill>
         )}
       </div>
-      <p className="mt-3 text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-        {money(summary.value, accountingCurrency, locale)}
-      </p>
-      <p className="text-app-dim mt-1.5 text-[12px]">
-        {accountingCurrency === null ? t('valueUnknown') : t('inAccounting')}
-      </p>
-      <dl className="border-app-line mt-4 grid gap-1.5 border-t pt-4">
-        <dt className="text-app-muted text-[14px]">{t('actualPayments')}</dt>
-        <dd className="grid gap-1">
-          {summary.paid.length === 0 ? (
-            <span className="text-app-dim text-[14px]">{t('noPayments')}</span>
-          ) : (
-            summary.paid.map((sum) => (
-              <span
-                className="font-mono text-[16px] font-semibold text-white tabular-nums"
-                key={sum.currency}
-              >
-                {money(sum.amount, sum.currency, locale)}
-              </span>
-            ))
-          )}
-          {tills.length === 0 ? null : (
-            <span className="text-app-muted text-[12.5px]">
-              {`${t('till')} ${tills.join(', ')}`}
-            </span>
-          )}
-        </dd>
-      </dl>
-      <div className="mt-5 grid gap-2">{actions}</div>
-      {hint === null ? null : (
-        <p className="text-app-dim mt-3 text-center text-[12px] leading-[1.5] text-pretty">
-          {hint}
+      <div className="rz-card__body grid gap-1.5">
+        <p className="rz-display m-0">
+          {money(summary.value, accountingCurrency, locale)}
         </p>
+        <p className="rz-caption m-0">
+          {accountingCurrency === null ? t('valueUnknown') : t('inAccounting')}
+        </p>
+      </div>
+      <dl className="rz-facts border-app-line border-t">
+        <div>
+          <dt>{t('actualPayments')}</dt>
+          <dd className="grid gap-1">
+            {summary.paid.length === 0 ? (
+              <span className="rz-dim">{t('noPayments')}</span>
+            ) : (
+              summary.paid.map((sum) => (
+                <span className="rz-mono rz-strong" key={sum.currency}>
+                  {money(sum.amount, sum.currency, locale)}
+                </span>
+              ))
+            )}
+            {tills.length === 0 ? null : (
+              <span className="rz-caption">
+                {`${t('till')} ${tills.join(', ')}`}
+              </span>
+            )}
+          </dd>
+        </div>
+      </dl>
+      {actions === null && hint === null ? null : (
+        <div className="rz-card__foot grid justify-stretch gap-2">
+          {actions === null ? null : (
+            <div className="grid gap-2">{actions}</div>
+          )}
+          {hint === null ? null : (
+            <p className="rz-caption m-0 text-center text-pretty">{hint}</p>
+          )}
+        </div>
       )}
     </section>
   )
@@ -572,55 +561,49 @@ export function OrderCustomerCard({
   }, [customerId])
 
   return (
-    <section
-      aria-label={t('customer')}
-      className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-    >
-      <div className="flex items-center gap-3 px-[22px] py-[18px]">
-        {customerId === null ? (
-          <p className="text-app-muted min-w-0 flex-1 text-[15px]">
-            {t('noCustomer')}
-          </p>
-        ) : (
-          <Link
-            className="-m-2 flex min-w-0 flex-1 items-center gap-3.5 rounded-[12px] p-2 transition-colors hover:bg-white/[0.03]"
-            to={to}
-          >
-            <span className="bg-brand/15 text-brand grid size-[42px] shrink-0 place-items-center rounded-full text-[14px] font-bold">
-              {initials}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[17px] font-bold tracking-[-0.015em] text-white">
-                {customer?.name ?? customerName ?? t('noName')}
-              </span>
-              <span className="text-app-muted mt-[3px] block font-mono text-[12px]">
-                {customer?.phone ?? t('customerCard')}
-              </span>
-            </span>
-          </Link>
-        )}
+    <section aria-label={t('customer')} className="rz-card">
+      <div className="rz-card__head py-2">
+        <h2 className="rz-h-card">{t('customer')}</h2>
         {onChange === undefined ? null : (
           <SmallButton
             label={customerId === null ? t('addCustomer') : t('changeCustomer')}
             onClick={onChange}
           >
-            {customerId === null ? t('add') : t('change')}
+            {customerId === null ? t('addCustomer') : t('change')}
           </SmallButton>
         )}
       </div>
+      <div className="rz-card__body py-2.5">
+        {customerId === null ? (
+          <p className="text-app-muted m-0">{t('noCustomer')}</p>
+        ) : (
+          <Link
+            className="-mx-2 flex min-w-0 items-center gap-2.5 rounded-control px-2 py-1.5 transition-colors hover:bg-app-hover"
+            to={to}
+          >
+            <span aria-hidden className="rz-avatar rz-avatar--round size-8">
+              {initials}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="rz-strong block truncate font-semibold">
+                {customer?.name ?? customerName ?? t('noName')}
+              </span>
+              <span className="rz-dim block font-mono text-caption">
+                {customer?.phone ?? t('customerCard')}
+              </span>
+            </span>
+          </Link>
+        )}
+      </div>
       {customer === null ? null : (
-        <dl className="border-app-line grid grid-cols-2 border-t">
-          <div className="border-app-line border-r px-[22px] py-3">
-            <dt className="text-app-muted text-[12px]">
-              {t('customerOrders')}
-            </dt>
-            <dd className="mt-[3px] font-mono text-[14px] text-white tabular-nums">
-              {customer.ordersCount ?? '—'}
-            </dd>
+        <dl className="rz-facts border-app-line border-t">
+          <div>
+            <dt>{t('customerOrders')}</dt>
+            <dd className="rz-mono">{customer.ordersCount ?? '—'}</dd>
           </div>
-          <div className="px-[22px] py-3">
-            <dt className="text-app-muted text-[12px]">{t('customerSpent')}</dt>
-            <dd className="mt-[3px] font-mono text-[14px] text-white tabular-nums">
+          <div>
+            <dt>{t('customerSpent')}</dt>
+            <dd className="rz-mono">
               {money(customer.totalAmount, accountingCurrency)}
             </dd>
           </div>
@@ -652,50 +635,75 @@ export function OrderHistoryCard({
   const visible = expanded ? ordered : ordered.slice(0, 3)
 
   return (
-    <OrderCard padded title={t('history')}>
+    <OrderCard padded={ordered.length === 0} title={t('history')}>
       {ordered.length === 0 ? (
-        <p className="text-app-muted text-[14px]">{t('historyEmpty')}</p>
+        <p className="text-app-muted m-0">{t('historyEmpty')}</p>
       ) : (
         <>
-          <ol aria-label={t('historyLabel')} className="grid">
-            {visible.map((entry, index) => (
-              <li
-                className="flex gap-3.5"
-                key={`${entry.createdAt}-${entry.eventType}-${String(index)}`}
-              >
-                <span aria-hidden className="flex flex-col items-center">
-                  <span className="bg-app-muted mt-1.5 size-2.5 rounded-full" />
-                  {index < visible.length - 1 ? (
-                    <span className="bg-app-line w-px flex-1" />
-                  ) : null}
-                </span>
-                <span className="min-w-0 flex-1 pb-4">
-                  <span className="block text-[14px] font-bold text-white">
-                    {title(entry.eventType)}
-                  </span>
-                  <span className="text-app-muted mt-1 block text-[12px]">
-                    {entry.userName} ·{' '}
-                    <time dateTime={entry.createdAt}>
-                      {when(entry.createdAt)}
-                    </time>
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ol>
+          <OrderTimeline
+            label={t('historyLabel')}
+            rows={visible}
+            title={title}
+            when={when}
+          />
           {ordered.length > 3 ? (
-            <button
-              className="border-app-line-2 text-app-muted hover:border-brand/60 hover:text-brand w-full rounded-xl border px-4 py-2.5 text-[13px] font-semibold transition-colors"
-              onClick={() => setExpanded((value) => !value)}
-              type="button"
-            >
-              {expanded
-                ? t('historyCollapse')
-                : t('historyExpand', { count: ordered.length })}
-            </button>
+            <div className="rz-card__foot">
+              <Button
+                className="justify-center"
+                onClick={() => setExpanded((value) => !value)}
+                size="wide"
+                variant="quiet"
+              >
+                {expanded
+                  ? t('historyCollapse')
+                  : t('historyExpand', { count: ordered.length })}
+              </Button>
+            </div>
           ) : null}
         </>
       )}
     </OrderCard>
+  )
+}
+
+/**
+ * Order events as `.rz-timeline`: what happened, who did it, and when — the
+ * machine value stays in `dateTime`.
+ */
+export function OrderTimeline({
+  label,
+  rows,
+  title,
+  when,
+}: {
+  label: string
+  rows: readonly (OrderDetail['history'][number] & { key?: string })[]
+  title: (eventType: string) => string
+  when: (timestamp: string) => string
+}) {
+  return (
+    <ol aria-label={label} className="rz-timeline">
+      {rows.map((entry, index) => (
+        <li
+          key={
+            entry.key ??
+            `${entry.createdAt}-${entry.eventType}-${String(index)}`
+          }
+        >
+          <span aria-hidden className="rz-timeline__icon">
+            <Circle />
+          </span>
+          <span className="min-w-0">
+            <span className="rz-strong block font-medium">
+              {title(entry.eventType)}
+            </span>
+            <span className="rz-dim block">{entry.userName}</span>
+          </span>
+          <time className="rz-timeline__date" dateTime={entry.createdAt}>
+            {when(entry.createdAt)}
+          </time>
+        </li>
+      ))}
+    </ol>
   )
 }

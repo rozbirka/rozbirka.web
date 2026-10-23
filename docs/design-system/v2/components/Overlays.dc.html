@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button,input,select{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}input::placeholder{color:var(--rz-text-dim)}</style>
+</helmet>
+<div data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:28px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B5 · Контейнери</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">ConfirmDialog · FormDialog · Sheet · ActionMenu · FilterPopover</h1>
+      <p style="margin:0;max-width:76ch;color:var(--rz-text-muted)">Діалоги й шторки — схема 1b: шапка й футер смугами --rz-sheet-band, тіло --rz-sheet-body, поля --rz-sheet-field; радіус md (8). Меню й поповери — surface overlay. Гарантії під час pending різні — як у коді: FormDialog і ConfirmDialog блокують закриття, Sheet — ні (caller перевіряє onOpenChange).</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: confirm-dialog.tsx, form-dialog.tsx (FormDialog, Sheet), action-menu.tsx · тексти — part-detail-messages.ts, parts-list-messages.ts, common-messages.ts</p>
+    </header>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px">
+      <div style="display:grid;gap:8px">
+        <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">ConfirmDialog · destructive · фокус на «Скасувати»</span>
+        <div style="position:relative;min-height:440px;display:grid;place-items:center;padding:24px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-scrim);overflow:hidden">
+          <div role="alertdialog" aria-labelledby="cd1" style="width:100%;max-width:420px;display:grid;gap:12px;padding:20px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog)">
+            <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-trash-2" style="font-size:var(--rz-icon-md)"></i></span>
+            <h2 id="cd1" style="margin:0;font-size:var(--rz-fs-title);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Видалити деталь?</h2>
+            <p style="margin:0;color:var(--rz-text-muted);text-wrap:pretty">Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Сервер відхилить видалення, якщо деталь уже в замовленні.</p>
+            <sc-if value="{{ confirmError }}" hint-placeholder-val="{{ false }}">
+              <div role="alert" style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 30%, transparent);border-radius:var(--rz-r-sm);background:var(--rz-danger-soft)"><i class="icon-triangle-alert" style="font-size:var(--rz-icon);color:var(--rz-danger);margin-top:2px"></i><span>Не вдалося видалити деталь через конфлікт.</span></div>
+            </sc-if>
+            <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:8px">
+              <button type="button" disabled="{{ pending }}" style="height:var(--rz-control-h-lg);padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer;box-shadow:var(--rz-focus)">Скасувати</button>
+              <button type="button" aria-busy="{{ pending }}" onClick="{{ runConfirm }}" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h-lg);padding:0 12px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-danger);font-weight:500;cursor:pointer;opacity:{{ pendingOpacity }}" style-hover="background:var(--rz-danger-soft)">{{ confirmLabel }}</button>
+            </div>
+          </div>
+        </div>
+        <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Клікніть «Видалити деталь»: pending 1 с → помилка конфлікту з коду. Кнопка повторює дієслово заголовка.</span>
+      </div>
+
+      <div style="display:grid;gap:8px">
+        <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">FormDialog · md 440 · коротка операція без втрати місця на сторінці</span>
+        <div style="position:relative;min-height:440px;display:grid;place-items:center;padding:24px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-scrim);overflow:hidden">
+          <div role="dialog" aria-labelledby="fd1" style="width:100%;max-width:440px;display:grid;grid-template-rows:auto 1fr auto;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog);overflow:hidden">
+            <header style="display:flex;align-items:flex-start;gap:12px;padding:12px 12px 12px 16px;border-bottom:1px solid var(--rz-border);background:var(--rz-sheet-band)">
+              <div style="flex:1;display:grid;gap:2px"><h2 id="fd1" style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Перемістити</h2><p style="margin:0;color:var(--rz-text-muted)">Колісний диск R17</p></div>
+              <button type="button" aria-label="Закрити" style="display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:var(--rz-icon-md)"></i></button>
+            </header>
+            <div style="display:grid;gap:12px;padding:16px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <label style="display:grid;gap:6px"><span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Склад</span><span style="position:relative"><select style="appearance:none;width:100%;height:var(--rz-control-h-lg);padding:0 28px 0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);color:var(--rz-text)"><option>Склад 2</option><option>Склад 1</option></select><i class="icon-chevron-down" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:var(--rz-icon);color:var(--rz-text-dim);pointer-events:none"></i></span></label>
+                <label style="display:grid;gap:6px"><span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Зона</span><span style="position:relative"><select style="appearance:none;width:100%;height:var(--rz-control-h-lg);padding:0 28px 0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);color:var(--rz-text)"><option>C</option><option>A</option><option>B</option></select><i class="icon-chevron-down" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:var(--rz-icon);color:var(--rz-text-dim);pointer-events:none"></i></span></label>
+              </div>
+              <label style="display:grid;gap:6px"><span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Місце на складі</span><input value="Стелаж 2" style="height:var(--rz-control-h-lg);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);color:var(--rz-text);outline:none"></label>
+            </div>
+            <footer style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--rz-border);background:var(--rz-sheet-band)">
+              <button type="button" style="height:var(--rz-control-h-lg);padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500">Скасувати</button>
+              <button type="submit" style="height:var(--rz-control-h-lg);padding:0 12px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600">Зберегти</button>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:16px">
+      <div style="display:grid;gap:8px">
+        <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Sheet · праворуч 560 · довга форма або вкладений процес · mobile — знизу</span>
+        <div style="position:relative;height:520px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-scrim);overflow:hidden">
+          <div role="dialog" aria-labelledby="sh1" style="position:absolute;top:0;right:0;bottom:0;width:min(400px,92%);display:grid;grid-template-rows:auto 1fr auto;border-left:1px solid var(--rz-border-strong);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog)">
+            <header style="display:flex;align-items:flex-start;gap:12px;padding:12px 12px 12px 16px;border-bottom:1px solid var(--rz-border);background:var(--rz-sheet-band)">
+              <div style="flex:1;display:grid;gap:4px"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Склад · Деталі</span><h2 id="sh1" style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Ціна продажу</h2><p style="margin:0;color:var(--rz-text-muted)">Колісний диск R17</p></div>
+              <button type="button" aria-label="Закрити" style="display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:var(--rz-icon)"></i></button>
+            </header>
+            <div style="display:grid;align-content:start;gap:14px;padding:16px;overflow-y:auto">
+              <label style="display:grid;gap:6px"><span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Ціна продажу</span><span style="display:flex;align-items:center;height:var(--rz-control-h-lg);border:1px solid var(--rz-brand);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);box-shadow:0 0 0 3px var(--rz-brand-soft)"><input value="1 800" style="flex:1;min-width:0;height:100%;padding:0 8px 0 10px;border:0;background:transparent;color:var(--rz-text-strong);font-family:var(--rz-font-mono);text-align:right;outline:none"><span style="padding:0 10px;color:var(--rz-text-dim);border-left:1px solid var(--rz-border);height:100%;display:grid;place-items:center">₴</span></span><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">за 1 шт</span></label>
+              <div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid color-mix(in srgb, var(--rz-info) 30%, transparent);border-radius:var(--rz-r-sm);background:var(--rz-info-soft)"><i class="icon-info" style="font-size:var(--rz-icon);color:var(--rz-info);margin-top:2px"></i><span>Ціна фіксується під час продажу — у резерві її ще немає.</span></div>
+            </div>
+            <footer style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--rz-border);background:var(--rz-sheet-band)">
+              <button type="button" style="height:var(--rz-control-h-lg);padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500">Скасувати</button>
+              <button type="submit" style="display:inline-flex;align-items:center;gap:8px;height:var(--rz-control-h-lg);padding:0 6px 0 12px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600">Зберегти<span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);padding:0 4px;border-radius:var(--rz-r-xs);background:rgb(0 0 0 / 0.14)">⌘↵</span></button>
+            </footer>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;gap:8px">
+        <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">ActionMenu · FilterPopover · md 8 · shadow popover</span>
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;min-height:520px;padding:20px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-bg)">
+          <div style="display:grid;gap:6px;justify-items:end">
+            <button type="button" aria-label="Інші дії з деталлю" aria-expanded="true" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-fill-active);color:var(--rz-text)"><i class="icon-ellipsis" style="font-size:var(--rz-icon-md)"></i></button>
+            <div role="menu" style="width:240px;display:grid;gap:1px;padding:4px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
+              <div role="menuitem" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);background:var(--rz-fill-active);color:var(--rz-text-strong)"><i class="icon-printer" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i><span style="flex:1">Друк стікера</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">P</span></div>
+              <div role="menuitem" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);color:var(--rz-text)"><i class="icon-arrow-right-left" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i><span style="flex:1">Перемістити</span></div>
+              <div role="menuitem" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);color:var(--rz-text)"><i class="icon-copy" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i><span style="flex:1">Копіювати код</span></div>
+              <div role="menuitem" aria-disabled="true" title="Додавання деталі в замовлення з її картки ще не підключене — відкрийте замовлення й додайте позицію там." style="display:grid;gap:2px;padding:6px 8px;border-radius:var(--rz-r-sm);color:var(--rz-text);opacity:0.55"><span style="display:flex;align-items:center;gap:10px"><i class="icon-clipboard-plus" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i>Додати в замовлення</span><span style="padding-left:24px;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">ще не підключене</span></div>
+              <div style="height:1px;margin:3px 4px;background:var(--rz-border)"></div>
+              <div role="menuitem" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);color:var(--rz-danger)"><i class="icon-trash-2" style="font-size:var(--rz-icon)"></i><span style="flex:1">Видалити деталь</span></div>
+            </div>
+          </div>
+
+          <div style="display:grid;gap:6px">
+            <button type="button" aria-expanded="true" style="justify-self:start;display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 8px 0 10px;border:1px solid var(--rz-border-strong);background:var(--rz-surface);border-radius:var(--rz-r-sm);color:var(--rz-text)"><span style="color:var(--rz-text-dim)">Марка:</span>Volkswagen<i class="icon-chevron-down" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i></button>
+            <div role="dialog" aria-label="Марка" style="width:260px;display:grid;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover);overflow:hidden">
+              <label style="display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-bottom:1px solid var(--rz-border)"><i class="icon-search" style="font-size:var(--rz-icon);color:var(--rz-text-dim)"></i><input aria-label="Марка" placeholder="Марка: будь-яка" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text);outline:none"></label>
+              <div role="listbox" style="display:grid;gap:1px;padding:4px;max-height:200px;overflow-y:auto">
+                <sc-for list="{{ makes }}" as="m" hint-placeholder-count="5">
+                  <div role="option" aria-selected="{{ m.sel }}" onClick="{{ m.onClick }}" style="display:flex;align-items:center;gap:10px;height:28px;padding:0 8px;border-radius:var(--rz-r-sm);cursor:pointer;color:var(--rz-text)" style-hover="background:var(--rz-fill-active)">
+                    <span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid {{ m.border }};background:{{ m.bg }};color:var(--rz-on-brand)"><i class="{{ m.icon }}" style="font-size:var(--rz-icon-xs)"></i></span>
+                    <span style="flex:1">{{ m.label }}</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">{{ m.count }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-top:1px solid var(--rz-border)"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">└ Модель: будь-яка</span><button type="button" style="height:22px;padding:0 6px;border:0;background:transparent;color:var(--rz-text-muted);font-size:var(--rz-fs-caption)">Скинути</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Коли що</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>ConfirmDialog — незворотне. Заголовок-питання, наслідок звичайною мовою, кнопка повторює дієслово. Не «Ви впевнені?».</li>
+        <li>FormDialog — 1–4 поля, коротка операція. Закривається лише після успіху або «Скасувати»; під час pending — не закривається.</li>
+        <li>Sheet — довга форма, вкладений процес (оплата, доставка, позиція замовлення). Footer з діями завжди видимий. На mobile — знизу, радіус lg зверху.</li>
+        <li>ActionMenu — дії, по які приходять рідше; destructive — внизу після роздільника. Недоступна дія показує причину.</li>
+        <li>FilterPopover — множинний вибір значень фільтра з пошуком і лічильниками; застосовується одразу.</li>
+        <li>Зміни v2: заголовок шторки 20/700 (у коді 26/800), оверлей scrim без blur, кнопка закриття 28 з хітбоксом 44 на touch.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  state = { pending: false, err: false, makes: { Volkswagen: true } };
+  renderVals() {
+    const { pending, err, makes } = this.state;
+    const list = [['Volkswagen', 412], ['Skoda', 268], ['Toyota', 190], ['Renault', 144], ['Nissan', 98], ['Audi', 87]];
+    return {
+      theme: this.props.theme ?? 'dark',
+      density: this.props.density ?? 'compact',
+      pending, pendingOpacity: pending ? 0.75 : 1, confirmError: err,
+      confirmLabel: pending ? 'Видаляємо…' : 'Видалити деталь',
+      runConfirm: () => { if (pending) return; this.setState({ pending: true, err: false }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ pending: false, err: true }), 1000); },
+      makes: list.map(([label, n]) => { const on = !!makes[label]; return { label, count: n, sel: on ? 'true' : 'false', icon: on ? 'icon-check' : '', bg: on ? 'var(--rz-brand)' : 'transparent', border: on ? 'var(--rz-brand)' : 'var(--rz-border-strong)', onClick: () => this.setState((s) => ({ makes: { ...s.makes, [label]: !s.makes[label] } })) }; }),
+    };
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+}
+</script>
+</body>
+</html>

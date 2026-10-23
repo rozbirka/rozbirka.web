@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { Button } from './button'
@@ -12,7 +12,7 @@ import { TextInput } from './input'
 import { Pagination } from './pagination'
 import { EmptyState } from './state-screen'
 import { ToastProvider } from './toast'
-import { useToast } from './toast-context'
+import { useToast, type ToastRequest } from './toast-context'
 
 it('opens secondary record actions as one vertical menu', async () => {
   const archive = vi.fn()
@@ -37,14 +37,22 @@ it('opens secondary record actions as one vertical menu', async () => {
   await user.click(screen.getByRole('button', { name: 'Інші дії з записом' }))
 
   const menu = screen.getByRole('menu')
-  expect(menu).toHaveClass('grid', 'min-w-52', 'p-1.5')
+  expect(menu).toHaveClass('rz-menu')
   expect(screen.getByRole('menuitem', { name: 'Архівувати' })).toHaveClass(
-    'min-h-11',
-    'text-[14.5px]',
+    'rz-menu__item',
   )
   expect(screen.getByRole('menuitem', { name: 'Видалити' })).toHaveClass(
-    'text-state-danger',
+    'rz-menu__item--danger',
   )
+  await user.keyboard('{ArrowDown}')
+  expect(screen.getByRole('menuitem', { name: 'Архівувати' })).toHaveFocus()
+  await user.keyboard('{ArrowDown}')
+  expect(screen.getByRole('menuitem', { name: 'Видалити' })).toHaveFocus()
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Інші дії з записом' }),
+  ).toHaveFocus()
 })
 
 it('names a field control by its label and describes it with the hint', () => {
@@ -175,6 +183,133 @@ it('shows the empty state instead of the body but keeps the footer', () => {
   expect(screen.getByText('Сторінка 2 з 3')).toBeVisible()
 })
 
+function RowSelectionProbe({
+  rowClick = false,
+  onAction = () => undefined,
+  onOpen,
+}: {
+  rowClick?: boolean | 'always'
+  onAction?: () => void
+  onOpen?: (row: Part) => void
+}) {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  return (
+    <DataTable
+      caption="Вибір деталей"
+      columns={[
+        ...partColumns,
+        {
+          key: 'actions',
+          label: 'Дії',
+          cell: () => (
+            <>
+              <Button onClick={onAction}>
+                <span>Розмістити</span>
+              </Button>
+              <a
+                href="#details"
+                onClick={(event) => {
+                  event.preventDefault()
+                  onAction()
+                }}
+              >
+                <span>Картка</span>
+              </a>
+            </>
+          ),
+        },
+      ]}
+      rows={[
+        { id: '1', name: 'Фара', price: 100 },
+        { id: '2', name: 'Крило', price: 200 },
+        { id: '3', name: 'Заблокована', price: 300 },
+      ]}
+      rowKey={(row) => row.id}
+      {...(onOpen ? { onRowClick: onOpen } : {})}
+      selection={{
+        selected,
+        onChange: setSelected,
+        rowLabel: (row) => row.name,
+        selectOnRowClick: rowClick,
+        unavailable: (row) => (row.id === '3' ? 'Інвентаризація' : undefined),
+      }}
+    />
+  )
+}
+
+it('toggles selection on row background only after a first checkbox, skipping controls and locked rows', async () => {
+  const user = userEvent.setup()
+  const action = vi.fn()
+  render(<RowSelectionProbe rowClick onAction={action} />)
+  const first = screen.getByRole('checkbox', { name: 'Фара' })
+  const second = screen.getByRole('checkbox', { name: 'Крило' })
+  const firstRow = first.closest('tr')!
+  const secondRow = second.closest('tr')!
+  const locked = screen.getByRole('checkbox', { name: 'Заблокована' })
+  await user.click(secondRow)
+  expect(second).not.toBeChecked()
+  await user.click(first)
+  expect(first).toBeChecked()
+  await user.click(second.parentElement!)
+  expect(second).toBeChecked()
+  await user.click(secondRow)
+  expect(second).not.toBeChecked()
+  await user.click(
+    within(secondRow).getByRole('button', { name: 'Розмістити' }),
+  )
+  await user.click(within(secondRow).getByText('Картка'))
+  expect(action).toHaveBeenCalledTimes(2)
+  expect(second).not.toBeChecked()
+  await user.click(locked.closest('tr')!)
+  expect(locked).toBeDisabled()
+  expect(locked).not.toBeChecked()
+  await user.click(secondRow)
+  expect(second).toBeChecked()
+  expect(secondRow).toHaveAttribute('aria-selected', 'true')
+  second.focus()
+  await user.keyboard('[Space]')
+  expect(second).not.toBeChecked()
+  await user.click(firstRow)
+  expect(first).not.toBeChecked()
+  await user.click(secondRow)
+  expect(second).not.toBeChecked()
+})
+
+it('can select rows immediately and again after clearing every row', async () => {
+  const user = userEvent.setup()
+  const action = vi.fn()
+  render(<RowSelectionProbe rowClick="always" onAction={action} />)
+  const first = screen.getByRole('checkbox', { name: 'Фара' })
+  const row = first.closest('tr')!
+  await user.click(row)
+  expect(first).toBeChecked()
+  await user.click(row)
+  expect(first).not.toBeChecked()
+  await user.click(first.parentElement!)
+  expect(first).toBeChecked()
+  await user.click(first)
+  expect(first).not.toBeChecked()
+  await user.click(within(row).getByRole('button', { name: 'Розмістити' }))
+  expect(action).toHaveBeenCalledOnce()
+  expect(first).not.toBeChecked()
+  const locked = screen.getByRole('checkbox', { name: 'Заблокована' })
+  await user.click(locked.closest('tr')!)
+  expect(locked).not.toBeChecked()
+})
+
+it('preserves the default row opening and checkbox behavior without opting into row selection', async () => {
+  const user = userEvent.setup()
+  const open = vi.fn()
+  render(<RowSelectionProbe onOpen={open} />)
+  const first = screen.getByRole('checkbox', { name: 'Фара' })
+  await user.click(first)
+  expect(open).not.toHaveBeenCalled()
+  const second = screen.getByRole('checkbox', { name: 'Крило' })
+  await user.click(second.closest('tr')!)
+  expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: '2' }))
+  expect(second).not.toBeChecked()
+})
+
 it('reports the visible range and blocks the edges of pagination', async () => {
   const onPage = vi.fn()
   const user = userEvent.setup()
@@ -223,6 +358,99 @@ it('announces a toast and dismisses it on request', async () => {
 
   await user.click(screen.getByRole('button', { name: 'Закрити сповіщення' }))
   expect(screen.queryByText('Деталь збережено')).not.toBeInTheDocument()
+})
+
+function ToastTrigger({ requests }: { requests: ToastRequest[] }) {
+  const toast = useToast()
+  return (
+    <Button onClick={() => requests.forEach((request) => toast.show(request))}>
+      Показати
+    </Button>
+  )
+}
+
+function renderToasts(requests: ToastRequest[]) {
+  render(
+    <ToastProvider>
+      <ToastTrigger requests={requests} />
+    </ToastProvider>,
+  )
+  act(() => screen.getByRole('button', { name: 'Показати' }).click())
+}
+
+it('keeps at most three toasts with the newest at the bottom', () => {
+  renderToasts([
+    { message: 'Перший.', tone: 'ok' },
+    { message: 'Замовлення створено.', tone: 'ok' },
+    { message: 'Оплату записано.', tone: 'ok' },
+    { message: 'Браузер заблокував вікно друку.', tone: 'danger' },
+  ])
+  expect(screen.queryByText('Перший.')).not.toBeInTheDocument()
+  const stack = [...document.querySelectorAll('.rz-toast .rz-toast__msg')].map(
+    (node) => node.textContent,
+  )
+  expect(stack).toEqual([
+    'Замовлення створено.',
+    'Оплату записано.',
+    'Браузер заблокував вікно друку.',
+  ])
+  expect(screen.getAllByRole('status')).toHaveLength(2)
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Браузер заблокував вікно друку.',
+  )
+})
+
+it('times toasts by the rule: 6 s, 10 s with undo, danger retry until closed', () => {
+  vi.useFakeTimers()
+  try {
+    renderToasts([
+      { message: 'Замовлення створено.', tone: 'ok' },
+      {
+        message: 'Позицію видалено.',
+        tone: 'ok',
+        action: { label: 'Скасувати', onAction: vi.fn(), kind: 'undo' },
+      },
+      {
+        message: 'Браузер заблокував вікно друку.',
+        tone: 'danger',
+        action: { label: 'Повторити', onAction: vi.fn(), kind: 'retry' },
+      },
+    ])
+    act(() => {
+      vi.advanceTimersByTime(5999)
+    })
+    expect(screen.getByText('Замовлення створено.')).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(screen.queryByText('Замовлення створено.')).not.toBeInTheDocument()
+    expect(screen.getByText('Позицію видалено.')).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(screen.queryByText('Позицію видалено.')).not.toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Браузер заблокував вікно друку.',
+    )
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('honours an explicit duration over the rule', () => {
+  vi.useFakeTimers()
+  try {
+    renderToasts([{ message: 'Мову збережено.', tone: 'ok', duration: 4000 }])
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(screen.queryByText('Мову збережено.')).not.toBeInTheDocument()
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 function ConfirmProbe({
@@ -283,9 +511,14 @@ it('shows a pressed and a busy state, not only hover and disabled', () => {
     </>,
   )
 
-  const save = screen.getByRole('button', { name: 'Зберегти' })
-  expect(save.className).toContain('active:')
-  expect(save.className).toContain('aria-busy:cursor-wait')
+  // `.rz-btn` carries :active and [aria-busy] in the design system kit.
+  expect(screen.getByRole('button', { name: 'Зберегти' })).toHaveClass(
+    'rz-btn',
+    'rz-btn--primary',
+  )
+  expect(screen.getByRole('button', { name: 'Зберігаємо…' })).toHaveClass(
+    'rz-btn',
+  )
 })
 
 it('keeps the copy chip small while the button stays easy to hit', async () => {
@@ -295,9 +528,9 @@ it('keeps the copy chip small while the button stays easy to hit', async () => {
   render(<CodeChip code="RZB-26-023C" label="Копіювати код" onCopy={onCopy} />)
 
   const button = screen.getByRole('button', { name: 'Копіювати код' })
-  expect(button).toHaveClass('size-6')
-  // The 44px target comes from an overlay, so the chip itself stays 30px tall.
-  expect(button.className).toContain('after:-inset-2.5')
+  expect(button.closest('.rz-code')).not.toBeNull()
+  // The 44px target comes from an overlay, so the chip itself stays 24px tall.
+  expect(button.className).toContain('after:-inset-3')
 
   await user.click(button)
 

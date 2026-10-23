@@ -45,7 +45,7 @@ export const reportsMessages = defineMessages({
     periodUnknown: 'Період невідомий',
     columnCreated: 'Створено',
     columnStatus: 'Стан',
-    failedReason: 'Причина: {reason}.',
+    failedReason: 'Причина: {reason}',
     failedUnknown: 'Причина невідома.',
     replaceHint: 'Створіть заміну — вона візьме період із форми вгорі.',
     askOwner: 'Попросіть власника кабінету сформувати звіт ще раз.',
@@ -60,6 +60,7 @@ export const reportsMessages = defineMessages({
     emptyTitle: 'Звітів ще немає',
     emptyDescription:
       'Оберіть період і створіть перший звіт — він з’явиться у цьому списку.',
+    createdToast: 'Звіт поставлено у чергу. PDF з’явиться у списку.',
   },
   'en-GB': {
     eyebrow: 'Money',
@@ -105,7 +106,7 @@ export const reportsMessages = defineMessages({
     periodUnknown: 'Period unknown',
     columnCreated: 'Created',
     columnStatus: 'Status',
-    failedReason: 'Reason: {reason}.',
+    failedReason: 'Reason: {reason}',
     failedUnknown: 'Reason unknown.',
     replaceHint:
       'Create a replacement — it will use the period from the form above.',
@@ -122,6 +123,7 @@ export const reportsMessages = defineMessages({
     emptyTitle: 'No reports yet',
     emptyDescription:
       'Choose a period and create your first report — it will appear in this list.',
+    createdToast: 'Report queued. The PDF will appear in the list.',
   },
   pl: {
     eyebrow: 'Pieniądze',
@@ -167,7 +169,7 @@ export const reportsMessages = defineMessages({
     periodUnknown: 'Okres nieznany',
     columnCreated: 'Utworzono',
     columnStatus: 'Stan',
-    failedReason: 'Przyczyna: {reason}.',
+    failedReason: 'Przyczyna: {reason}',
     failedUnknown: 'Przyczyna nieznana.',
     replaceHint: 'Utwórz zamiennik — weźmie okres z formularza powyżej.',
     askOwner: 'Poproś właściciela firmy o ponowne wygenerowanie raportu.',
@@ -182,5 +184,6 @@ export const reportsMessages = defineMessages({
     emptyTitle: 'Nie ma jeszcze raportów',
     emptyDescription:
       'Wybierz okres i utwórz pierwszy raport — pojawi się na tej liście.',
+    createdToast: 'Raport dodano do kolejki. PDF pojawi się na liście.',
   },
 })

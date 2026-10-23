@@ -81,7 +81,7 @@ export function DeliveryStepDrawer({
       description={t(copy.description)}
       eyebrow={t('eyebrowNp')}
       footer={
-        <div className="flex justify-end gap-2.5">
+        <div className="rz-btn-row ml-auto">
           <Button disabled={pending} onClick={onClose}>
             {tc('cancel')}
           </Button>
@@ -101,31 +101,27 @@ export function DeliveryStepDrawer({
       open
       title={t(copy.title)}
     >
-      <div className="grid gap-3.5">
+      <div className="grid gap-3">
         {error !== null && <Notice tone="danger">{error}</Notice>}
-        <dl className="border-app-line bg-app-inset grid gap-2.5 rounded-[14px] border px-4 py-3.5">
-          <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-app-muted text-[13px]">{t('orderTotal')}</dt>
-            <dd className="text-app-ink font-mono text-[13.5px]">
+        <dl className="rz-inset m-0 grid gap-0 py-1">
+          <div className="flex items-baseline justify-between gap-4 py-1.5">
+            <dt className="rz-muted">{t('orderTotal')}</dt>
+            <dd className="rz-mono rz-strong m-0">
               {uah(delivery.agreedTotalUah, locale)}
             </dd>
           </div>
-          <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-app-muted text-[13px]">{t('balance')}</dt>
+          <div className="border-app-line flex items-baseline justify-between gap-4 border-t py-1.5">
+            <dt className="rz-muted">{t('balance')}</dt>
             <dd
-              className={`font-mono text-[13.5px] ${
-                delivery.outstandingUah === 0
-                  ? 'text-app-ink'
-                  : 'text-state-warn'
+              className={`rz-mono m-0 ${
+                delivery.outstandingUah === 0 ? 'rz-strong' : 'text-state-warn'
               }`}
             >
               {uah(delivery.outstandingUah, locale)}
             </dd>
           </div>
         </dl>
-        <p className="text-app-muted text-[12.5px] leading-5 text-pretty">
-          {t(copy.note)}
-        </p>
+        <p className="rz-caption m-0 text-pretty">{t(copy.note)}</p>
       </div>
     </Sheet>
   )

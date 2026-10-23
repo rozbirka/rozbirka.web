@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}@keyframes rz-pulse{0%,100%{opacity:1}50%{opacity:0.45}}</style>
+</helmet>
+<div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B2 · Статуси</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Notice · Toast · Skeleton</h1>
+      <p style="margin:0;max-width:72ch;color:var(--rz-text-muted)">Notice — повідомлення на сторінці, на яке треба зважити або відреагувати. Toast — коротке підтвердження того, що людина щойно зробила. Skeleton — завантаження списку, оголошується один раз.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: notice.tsx, toast.tsx, toast-context.ts, skeleton.tsx</p>
+    </header>
+
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <section data-theme="{{ t.id }}" style="display:grid;gap:24px;padding:24px;background:var(--rz-bg);color:var(--rz-text);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg)">
+        <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">{{ t.label }}</p>
+
+        <div style="display:grid;gap:10px;max-width:720px">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Notice · info / ok / warn / danger</p>
+          <div role="status" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;padding:8px 12px;border:1px solid color-mix(in srgb, var(--rz-info) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-info-soft)">
+            <i class="icon-info" style="font-size:var(--rz-icon-md);color:var(--rz-info);margin-top:2px"></i>
+            <span style="flex:1;min-width:0;color:var(--rz-text)">Фільтр «Вільні запчастини» скинуто: кожна деталь має автомобіль або партію.</span>
+          </div>
+          <div role="status" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;padding:8px 12px;border:1px solid color-mix(in srgb, var(--rz-ok) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-ok-soft)">
+            <i class="icon-circle-check" style="font-size:var(--rz-icon-md);color:var(--rz-ok);margin-top:2px"></i>
+            <span style="flex:1;min-width:0;color:var(--rz-text)">Збережено</span>
+          </div>
+          <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 8px 8px 12px;border:1px solid color-mix(in srgb, var(--rz-warn) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-warn-soft)">
+            <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-warn)"></i>
+            <span style="flex:1;min-width:0;color:var(--rz-text)">Ліміт деталей вичерпано.</span>
+            <button type="button" style="height:24px;padding:0 8px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);background:var(--rz-surface);color:var(--rz-text);font-size:var(--rz-fs-caption);font-weight:500;cursor:pointer" style-hover="background:var(--rz-surface-2)">Тарифи</button>
+          </div>
+          <div role="alert" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 8px 8px 12px;border:1px solid color-mix(in srgb, var(--rz-danger) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-danger-soft)">
+            <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-danger)"></i>
+            <span style="flex:1;min-width:0;color:var(--rz-text)">Не вдалося зберегти. Спробуйте ще раз.</span>
+            <button type="button" style="height:24px;padding:0 8px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);background:var(--rz-surface);color:var(--rz-text);font-size:var(--rz-fs-caption);font-weight:500;cursor:pointer" style-hover="background:var(--rz-surface-2)">Спробувати ще раз</button>
+          </div>
+          <div role="status" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid color-mix(in srgb, var(--rz-warn) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-warn-soft)">
+            <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-warn);margin-top:2px"></i>
+            <div style="flex:1;min-width:0;display:grid;gap:4px;color:var(--rz-text)">
+              <strong style="font-weight:600;color:var(--rz-text-strong)">Один файл не завантажився. Повторіть або приберіть його, щоб зберегти.</strong>
+              <span style="color:var(--rz-text-muted)">block-варіант: заголовок і довільний вміст (список, кілька абзаців).</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Banner · смуга під topbar для стану всього модуля</p>
+          <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-height:36px;padding:6px 20px;border-top:1px solid var(--rz-border);border-bottom:1px solid var(--rz-border);background:var(--rz-warn-soft)">
+            <i class="icon-lock" style="font-size:var(--rz-icon);color:var(--rz-warn)"></i>
+            <span style="flex:1;min-width:0;color:var(--rz-text)">Поточна підписка не дозволяє цю дію.</span>
+            <a href="#" style="font-weight:500;color:var(--rz-brand-text)">Тарифи</a>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Банер — пропозиція v2 замість повторення Notice в кожній картці. Текст і тон — з access-повідомлень коду.</span>
+        </div>
+
+        <div style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Toast · ok / info / danger · знизу праворуч, до 3 одночасно, 6 с</p>
+          <div style="display:grid;gap:8px;justify-items:start">
+            <div role="status" style="display:flex;align-items:center;gap:10px;width:100%;max-width:400px;min-height:40px;padding:6px 6px 6px 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
+              <i class="icon-circle-check" style="font-size:var(--rz-icon-md);color:var(--rz-ok)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Код скопійовано.</span>
+              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:var(--rz-icon)"></i></button>
+            </div>
+            <div role="status" style="display:flex;align-items:center;gap:10px;width:100%;max-width:400px;min-height:40px;padding:6px 6px 6px 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
+              <i class="icon-info" style="font-size:var(--rz-icon-md);color:var(--rz-info)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Збережено</span>
+              <button type="button" style="height:24px;padding:0 8px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-brand-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">Відкрити</button>
+              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:var(--rz-icon)"></i></button>
+            </div>
+            <div role="alert" style="display:flex;align-items:center;gap:10px;width:100%;max-width:400px;min-height:40px;padding:6px 6px 6px 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
+              <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-danger)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Не вдалося виконати дію. Спробуйте ще раз.</span>
+              <button type="button" style="height:24px;padding:0 8px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-brand-text);font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:var(--rz-fill-hover)">Повторити</button>
+              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:var(--rz-icon)"></i></button>
+            </div>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Одна дія максимум («Відкрити», «Повторити», «Скасувати» — з toast-context.ts). Те, на що треба відреагувати, — Notice, не Toast.</span>
+        </div>
+
+        <div style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Skeleton · рядки таблиці, картка, текст</p>
+          <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px">
+            <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface);overflow:hidden">
+              <p role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Завантажуємо дані…</p>
+              <div style="height:32px;border-bottom:1px solid var(--rz-border)"></div>
+              <sc-for list="{{ skRows }}" as="row" hint-placeholder-count="6">
+                <div style="display:flex;align-items:center;gap:16px;height:var(--rz-row-h);padding:0 var(--rz-cell-px);border-top:1px solid var(--rz-border)">
+                  <span style="width:14px;height:14px;border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span>
+                  <span style="height:10px;width:{{ row.a }};border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span>
+                  <span style="height:10px;width:{{ row.b }};border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span>
+                  <span style="height:16px;width:64px;border-radius:var(--rz-r-full);background:var(--rz-fill-active)"></span>
+                  <span style="margin-left:auto;height:10px;width:24px;border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:grid;gap:10px;align-content:start;padding:16px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+              {{ pulse }}
+              <span style="height:10px;width:40%;border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span>
+              <span style="height:16px;width:80%;border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span>
+              <span style="height:10px;width:60%;border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span>
+              <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">верхня смуга — з анімацією pulse 1.6 с (motion-safe)</span>
+            </div>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Skeleton повторює геометрію реального вмісту: ті самі висота рядка, колонки й радіуси. Показується через 300 мс, щоб не блимати на швидкій мережі.</span>
+        </div>
+      </section>
+    </sc-for>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Notice: danger → role="alert", інші → role="status". Іконка tone, текст — звичайний колір тексту, не колір тону.</li>
+        <li>Toast не містить інформації, якої немає на сторінці. Помилки, що блокують роботу, — Notice або ErrorState.</li>
+        <li>Затримка показу Skeleton 300 мс — пропозиція v2; у коді затримки немає.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      density: this.props.density ?? 'compact',
+      themes: [{ id: 'dark', label: 'Темна тема' }, { id: 'light', label: 'Світла тема' }],
+      skRows: [['38%', '22%'], ['30%', '18%'], ['44%', '20%'], ['26%', '24%'], ['36%', '16%'], ['32%', '22%']].map(([a, b]) => ({ a, b })),
+      pulse: React.createElement('span', { 'aria-hidden': true, style: { display: 'block', height: 48, borderRadius: 6, background: 'var(--rz-fill-active)', animation: 'rz-pulse 1.6s ease-in-out infinite' } }),
+    };
+  }
+}
+</script>
+</body>
+</html>

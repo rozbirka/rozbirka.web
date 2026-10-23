@@ -243,8 +243,9 @@ it('sums an order from its parts and keeps the hryvnia figure out of it', () => 
   renderBody(load({}))
 
   const items = screen.getByRole('region', { name: 'Позиції' })
-  // The line's own sum and the card total — both in the order's currency.
-  expect(within(items).getAllByText('3 200,00 USD')).toHaveLength(2)
+  // The unit price, the line's own sum and the card total (one piece, so all
+  // three match) — every one in the order's currency.
+  expect(within(items).getAllByText('3 200,00 USD')).toHaveLength(3)
   // What the carrier collects is a different number about a different thing,
   // and it does not belong beside the price of the goods.
   expect(items).not.toHaveTextContent('UAH')
@@ -294,7 +295,9 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
   await user.click(
     await screen.findByRole('button', { name: 'Зберегти платіж' }),
   )
-  expect(await screen.findAllByText('Мережа зникла.')).toHaveLength(1)
+  expect(await screen.findAllByText('Немає з’єднання з мережею.')).toHaveLength(
+    1,
+  )
 
   await user.click(screen.getByRole('button', { name: 'Зберегти платіж' }))
   expect(recordPayment).toHaveBeenNthCalledWith(

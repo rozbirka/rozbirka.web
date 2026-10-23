@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div role="toolbar" aria-label="Стан прототипу" style="position:fixed;left:12px;bottom:12px;z-index:90;max-width:calc(100vw - 24px);display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-dialog)">
+  <button type="button" class="rz-btn rz-btn--ghost rz-btn--sm" onClick="{{ toggle }}" aria-expanded="{{ openAria }}"><i class="icon-layers"></i>{{ title }} · {{ currentLabel }}</button>
+  <sc-if value="{{ open }}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{ items }}" as="s" hint-placeholder-count="8">
+      <button type="button" class="rz-btn rz-btn--sm" aria-pressed="{{ s.pressed }}" onClick="{{ s.onClick }}" style="background:{{ s.bg }};border-color:{{ s.border }}">{{ s.label }}</button>
+    </sc-for>
+    <a class="rz-btn rz-btn--sm rz-btn--ghost" href="{{ boardHref }}"><i class="icon-layout-grid"></i>Усі стани</a>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;title&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;file&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;current&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;states&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;[string,string][]&quot;}, &quot;onChange&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;(id: string) =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = { open: false };
+  renderVals() {
+    const states = this.props.states ?? [];
+    const cur = this.props.current;
+    const found = states.find((s) => s[0] === cur);
+    return {
+      title: this.props.title ?? '',
+      currentLabel: found ? found[1] : cur,
+      open: this.state.open, openAria: this.state.open ? 'true' : 'false',
+      toggle: () => this.setState((s) => ({ open: !s.open })),
+      boardHref: './Board.dc.html?f=' + encodeURIComponent(this.props.file ?? ''),
+      items: states.map(([id, label]) => ({ label, pressed: id === cur ? 'true' : 'false', bg: id === cur ? 'var(--rz-fill-selected)' : 'transparent', border: id === cur ? 'var(--rz-brand)' : 'var(--rz-border-strong)', onClick: () => this.props.onChange && this.props.onChange(id) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

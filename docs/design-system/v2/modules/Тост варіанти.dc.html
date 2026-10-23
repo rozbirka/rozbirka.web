@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>body{margin:0;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:13px}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<section style="padding:40px;display:grid;gap:24px">
+  <div style="display:grid;gap:6px;max-width:760px">
+    <div style="font-size:20px;font-weight:700;color:var(--rz-text-strong)">2 · Стриманий тост · знизу по центру</div>
+    <div style="color:var(--rz-text-muted);text-wrap:pretty">Нейтральна темна картка без кольорових заливок: тон — лише маленька іконка. Заголовок + необовʼязковий рядок деталей, дії — текстові посилання. Кілька тостів складаються в стос (видно краї попередніх); при наведенні стос розгортається.</div>
+  </div>
+  <div id="2a" style="display:grid;gap:12px">
+    <div style="display:flex;gap:8px;align-items:center"><span style="font:600 12px var(--rz-font-mono);padding:2px 8px;border-radius:9999px;background:var(--rz-brand);color:var(--rz-on-brand)">2a</span><span style="font-weight:600;color:var(--rz-text-strong)">Стриманий</span></div>
+    <div style="display:flex;flex-wrap:wrap;gap:16px">
+
+      <div style="display:grid;gap:6px"><span style="color:var(--rz-text-muted);font-size:12px">Створено · з деталями й діями</span>
+      <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+        <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+        <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center">
+          <div role="status" style="width:360px;display:grid;grid-template-columns:16px minmax(0,1fr) 20px;column-gap:10px;row-gap:2px;padding:12px 10px 12px 14px;border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)">
+            <i class="icon-circle-check" style="font-size:16px;color:var(--rz-ok);margin-top:1px"></i>
+            <span style="font-weight:600;color:var(--rz-text-strong)">Замовлення створено</span>
+            <i class="icon-x" style="font-size:14px;color:var(--rz-text-muted);justify-self:end;margin-top:1px"></i>
+            <span></span>
+            <span style="color:var(--rz-text-muted)">#1042 · Ірина Коваль</span>
+            <span></span>
+            <span></span>
+            <span style="display:flex;gap:14px;margin-top:6px;font-weight:600"><span style="color:var(--rz-text-strong)">Копіювати номер</span><span style="color:var(--rz-text-muted)">Друк</span></span>
+            <span></span>
+          </div>
+        </div>
+      </div></div>
+
+      <div style="display:grid;gap:6px"><span style="color:var(--rz-text-muted);font-size:12px">Однорядковий · «Скасувати»</span>
+      <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+        <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+        <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center">
+          <div role="status" style="width:360px;display:flex;align-items:center;gap:10px;height:44px;padding:0 10px 0 14px;border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)">
+            <i class="icon-trash-2" style="font-size:16px;color:var(--rz-text-muted)"></i>
+            <span style="flex:1;font-weight:600;color:var(--rz-text-strong)">Позицію видалено</span>
+            <span style="font-weight:600;color:var(--rz-text-strong)">Скасувати</span>
+            <span style="font:500 11px var(--rz-font-mono);padding:1px 5px;border-radius:4px;border:1px solid var(--rz-border-strong);color:var(--rz-text-muted)">Ctrl Z</span>
+          </div>
+        </div>
+      </div></div>
+
+      <div style="display:grid;gap:6px"><span style="color:var(--rz-text-muted);font-size:12px">Стос із трьох · згорнутий</span>
+      <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+        <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+        <div style="position:absolute;left:50%;bottom:24px;width:360px;height:44px;transform:translateX(-50%)">
+          <div style="position:absolute;inset:0;transform:translateY(-16px) scale(.9);border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);opacity:.6"></div>
+          <div style="position:absolute;inset:0;transform:translateY(-8px) scale(.95);border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);opacity:.85"></div>
+          <div role="alert" style="position:absolute;inset:0;display:flex;align-items:center;gap:10px;padding:0 10px 0 14px;border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)">
+            <i class="icon-triangle-alert" style="font-size:16px;color:var(--rz-danger)"></i>
+            <span style="flex:1;font-weight:600;color:var(--rz-text-strong)">Браузер заблокував вікно друку</span>
+            <span style="font-weight:600;color:var(--rz-text-strong)">Повторити</span>
+          </div>
+        </div>
+      </div></div>
+
+      <div style="display:grid;gap:6px"><span style="color:var(--rz-text-muted);font-size:12px">Стос · розгорнутий при наведенні</span>
+      <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+        <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+        <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center;gap:8px">
+          <div role="status" style="width:360px;display:flex;align-items:center;gap:10px;height:44px;padding:0 10px 0 14px;border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)"><i class="icon-circle-check" style="font-size:16px;color:var(--rz-ok)"></i><span style="flex:1;font-weight:600;color:var(--rz-text-strong)">Оплату записано</span><i class="icon-x" style="font-size:14px;color:var(--rz-text-muted)"></i></div>
+          <div role="status" style="width:360px;display:flex;align-items:center;gap:10px;height:44px;padding:0 10px 0 14px;border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)"><i class="icon-trash-2" style="font-size:16px;color:var(--rz-text-muted)"></i><span style="flex:1;font-weight:600;color:var(--rz-text-strong)">Позицію видалено</span><span style="font-weight:600;color:var(--rz-text-strong)">Скасувати</span><i class="icon-x" style="font-size:14px;color:var(--rz-text-muted)"></i></div>
+          <div role="alert" style="width:360px;display:flex;align-items:center;gap:10px;height:44px;padding:0 10px 0 14px;border-radius:8px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)"><i class="icon-triangle-alert" style="font-size:16px;color:var(--rz-danger)"></i><span style="flex:1;font-weight:600;color:var(--rz-text-strong)">Браузер заблокував вікно друку</span><span style="font-weight:600;color:var(--rz-text-strong)">Повторити</span><i class="icon-x" style="font-size:14px;color:var(--rz-text-muted)"></i></div>
+        </div>
+      </div></div>
+
+    </div>
+  </div>
+  <div style="height:1px;background:var(--rz-border);margin:16px 0"></div>
+  <div style="display:grid;gap:6px;max-width:760px">
+    <div style="font-size:20px;font-weight:700;color:var(--rz-text-strong)">Тост · 3 варіанти · знизу по центру</div>
+    <div style="color:var(--rz-text-muted);text-wrap:pretty">У кожному: одне сповіщення і стос із трьох (ok · ok зі «Скасувати» · danger з «Повторити»). Позиція однакова: по центру, 24px від низу; на мобільному — над нижнім меню.</div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+
+    <div id="1a" style="display:grid;gap:12px">
+      <div style="display:flex;gap:8px;align-items:center"><span style="font:600 12px var(--rz-font-mono);padding:2px 8px;border-radius:9999px;background:var(--rz-brand);color:var(--rz-on-brand)">1a</span><span style="font-weight:600;color:var(--rz-text-strong)">Пігулка, інверсна</span><span style="color:var(--rz-text-muted)">коротко, контрастно, не схожа на картки</span></div>
+      <div style="display:grid;gap:16px">
+        <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+          <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+          <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center;gap:8px">
+            <div role="status" style="display:flex;align-items:center;gap:10px;height:40px;padding:0 6px 0 8px;border-radius:9999px;background:var(--rz-text-strong);color:var(--rz-bg);box-shadow:var(--rz-shadow-dialog);font-weight:600">
+              <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:9999px;background:var(--rz-ok);color:#000"><i class="icon-check" style="font-size:14px"></i></span>
+              <span>Замовлення #1042 створено.</span>
+              <span style="display:grid;place-items:center;width:28px;height:28px;border-radius:9999px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+          </div>
+        </div>
+        <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+          <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+          <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center;gap:8px">
+            <div role="status" style="display:flex;align-items:center;gap:10px;height:40px;padding:0 6px 0 8px;border-radius:9999px;background:var(--rz-text-strong);color:var(--rz-bg);box-shadow:var(--rz-shadow-dialog);font-weight:600;opacity:.85">
+              <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:9999px;background:var(--rz-ok);color:#000"><i class="icon-check" style="font-size:14px"></i></span><span>Оплату записано.</span><span style="display:grid;place-items:center;width:28px;height:28px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+            <div role="status" style="display:flex;align-items:center;gap:10px;height:40px;padding:0 6px 0 8px;border-radius:9999px;background:var(--rz-text-strong);color:var(--rz-bg);box-shadow:var(--rz-shadow-dialog);font-weight:600">
+              <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:9999px;background:var(--rz-ok);color:#000"><i class="icon-check" style="font-size:14px"></i></span><span>Позицію видалено.</span><span style="padding:0 10px;height:28px;display:flex;align-items:center;border-radius:9999px;background:rgb(0 0 0 / .08);font-weight:700">Скасувати</span><span style="display:grid;place-items:center;width:28px;height:28px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+            <div role="alert" style="display:flex;align-items:center;gap:10px;height:40px;padding:0 6px 0 8px;border-radius:9999px;background:var(--rz-text-strong);color:var(--rz-bg);box-shadow:var(--rz-shadow-dialog);font-weight:600">
+              <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:9999px;background:var(--rz-danger);color:#000"><i class="icon-triangle-alert" style="font-size:14px"></i></span><span>Браузер заблокував вікно друку.</span><span style="padding:0 10px;height:28px;display:flex;align-items:center;border-radius:9999px;background:rgb(0 0 0 / .08);font-weight:700">Повторити</span><span style="display:grid;place-items:center;width:28px;height:28px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1b" style="display:grid;gap:12px">
+      <div style="display:flex;gap:8px;align-items:center"><span style="font:600 12px var(--rz-font-mono);padding:2px 8px;border-radius:9999px;background:var(--rz-brand);color:var(--rz-on-brand)">1b</span><span style="font-weight:600;color:var(--rz-text-strong)">Картка з заголовком і таймером</span><span style="color:var(--rz-text-muted)">вміщає пояснення, видно скільки лишилось</span></div>
+      <div style="display:grid;gap:16px">
+        <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+          <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+          <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center;gap:8px">
+            <div role="status" style="position:relative;overflow:hidden;width:400px;display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 8px 14px 12px;border-radius:12px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)">
+              <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:9999px;background:var(--rz-ok-soft);color:var(--rz-ok)"><i class="icon-circle-check" style="font-size:16px"></i></span>
+              <span style="display:grid;gap:2px"><span style="font-weight:600;color:var(--rz-text-strong)">Замовлення створено</span><span style="color:var(--rz-text-muted);font-size:12px">#1042 · Ірина Коваль · 14 400 ₴</span></span>
+              <span style="display:grid;place-items:center;width:28px;height:28px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span>
+              <span style="position:absolute;left:0;bottom:0;height:2px;width:62%;background:var(--rz-ok)"></span>
+            </div>
+          </div>
+        </div>
+        <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+          <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+          <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center;gap:8px">
+            <div role="status" style="position:relative;overflow:hidden;width:400px;display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 8px 10px 12px;border-radius:12px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)">
+              <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:9999px;background:var(--rz-ok-soft);color:var(--rz-ok)"><i class="icon-circle-check" style="font-size:16px"></i></span><span style="font-weight:600;color:var(--rz-text-strong)">Оплату записано</span><span style="display:grid;place-items:center;width:28px;height:28px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span><span style="position:absolute;left:0;bottom:0;height:2px;width:20%;background:var(--rz-ok)"></span>
+            </div>
+            <div role="status" style="position:relative;overflow:hidden;width:400px;display:grid;grid-template-columns:32px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:8px 8px 10px 12px;border-radius:12px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)">
+              <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:9999px;background:var(--rz-ok-soft);color:var(--rz-ok)"><i class="icon-trash-2" style="font-size:16px"></i></span><span style="font-weight:600;color:var(--rz-text-strong)">Позицію видалено</span><span style="height:28px;padding:0 10px;display:flex;align-items:center;border-radius:6px;border:1px solid var(--rz-border-strong);font-weight:600;color:var(--rz-text-strong)">Скасувати</span><span style="display:grid;place-items:center;width:28px;height:28px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span><span style="position:absolute;left:0;bottom:0;height:2px;width:70%;background:var(--rz-ok)"></span>
+            </div>
+            <div role="alert" style="position:relative;overflow:hidden;width:400px;display:grid;grid-template-columns:32px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:8px 8px 8px 12px;border-radius:12px;background:var(--rz-overlay);border:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)">
+              <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:9999px;background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-triangle-alert" style="font-size:16px"></i></span><span style="display:grid;gap:2px"><span style="font-weight:600;color:var(--rz-text-strong)">Друк заблоковано</span><span style="color:var(--rz-text-muted);font-size:12px">Дозвольте спливаючі вікна</span></span><span style="height:28px;padding:0 10px;display:flex;align-items:center;border-radius:6px;border:1px solid var(--rz-border-strong);font-weight:600;color:var(--rz-text-strong)">Повторити</span><span style="display:grid;place-items:center;width:28px;height:28px;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="1c" style="display:grid;gap:12px">
+      <div style="display:flex;gap:8px;align-items:center"><span style="font:600 12px var(--rz-font-mono);padding:2px 8px;border-radius:9999px;background:var(--rz-brand);color:var(--rz-on-brand)">1c</span><span style="font-weight:600;color:var(--rz-text-strong)">Суцільний колір тону</span><span style="color:var(--rz-text-muted)">тон читається миттєво, найпомітніший</span></div>
+      <div style="display:grid;gap:16px">
+        <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+          <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+          <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center;gap:8px">
+            <div role="status" style="display:flex;align-items:center;gap:10px;width:440px;height:44px;padding:0 6px 0 14px;border-radius:8px;background:var(--rz-ok);color:#000;box-shadow:var(--rz-shadow-dialog);font-weight:600">
+              <i class="icon-circle-check" style="font-size:16px"></i><span style="flex:1">Замовлення #1042 створено.</span><span style="display:grid;place-items:center;width:32px;height:32px"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+          </div>
+        </div>
+        <div style="position:relative;width:560px;height:300px;border:1px solid var(--rz-border);border-radius:8px;background:var(--rz-bg);overflow:hidden">
+          <div style="padding:20px;display:grid;gap:10px"><div style="height:14px;width:180px;border-radius:4px;background:var(--rz-surface-2)"></div><div style="height:120px;border-radius:8px;background:var(--rz-surface);border:1px solid var(--rz-border)"></div></div>
+          <div style="position:absolute;left:0;right:0;bottom:24px;display:grid;justify-items:center;gap:8px">
+            <div role="status" style="display:flex;align-items:center;gap:10px;width:440px;height:44px;padding:0 6px 0 14px;border-radius:8px;background:var(--rz-ok);color:#000;box-shadow:var(--rz-shadow-dialog);font-weight:600">
+              <i class="icon-circle-check" style="font-size:16px"></i><span style="flex:1">Оплату записано.</span><span style="display:grid;place-items:center;width:32px;height:32px"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+            <div role="status" style="display:flex;align-items:center;gap:10px;width:440px;height:44px;padding:0 6px 0 14px;border-radius:8px;background:var(--rz-ok);color:#000;box-shadow:var(--rz-shadow-dialog);font-weight:600">
+              <i class="icon-circle-check" style="font-size:16px"></i><span style="flex:1">Позицію видалено.</span><span style="height:30px;padding:0 10px;display:flex;align-items:center;border-radius:6px;border:1px solid rgb(0 0 0 / .35);font-weight:700">Скасувати</span><span style="display:grid;place-items:center;width:32px;height:32px"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+            <div role="alert" style="display:flex;align-items:center;gap:10px;width:440px;height:44px;padding:0 6px 0 14px;border-radius:8px;background:var(--rz-danger);color:#000;box-shadow:var(--rz-shadow-dialog);font-weight:600">
+              <i class="icon-triangle-alert" style="font-size:16px"></i><span style="flex:1">Браузер заблокував вікно друку.</span><span style="height:30px;padding:0 10px;display:flex;align-items:center;border-radius:6px;border:1px solid rgb(0 0 0 / .35);font-weight:700">Повторити</span><span style="display:grid;place-items:center;width:32px;height:32px"><i class="icon-x" style="font-size:14px"></i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+</body>
+</html>

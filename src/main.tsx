@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router/dom'
+import { HydrationReady } from '@/components/app/hydration-ready'
 import { AuthProvider } from '@/auth/AuthContext'
 import { AppLocaleProvider } from '@/i18n/AppLocaleProvider'
 import { router } from '@/routes/router'
@@ -30,6 +31,7 @@ if (document.readyState === 'complete') {
 
 const app = (
   <StrictMode>
+    <HydrationReady />
     <AuthProvider>
       <AppLocaleProvider>
         <RouterProvider router={router} />

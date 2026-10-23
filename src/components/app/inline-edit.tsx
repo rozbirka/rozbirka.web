@@ -84,7 +84,7 @@ export function InlineEdit({
       <button
         aria-label={t('editValue', { label })}
         className={cn(
-          'hover:border-app-line-2 focus-visible:outline-brand group inline-flex min-h-9 items-center gap-1.5 rounded-[8px] border border-transparent px-1.5 text-left',
+          'hover:border-app-line-2 rounded-control group inline-flex h-control items-center gap-1.5 border border-transparent px-1.5 text-left',
           className,
         )}
         onClick={(event) => {
@@ -103,7 +103,7 @@ export function InlineEdit({
         {children}
         <Pencil
           aria-hidden
-          className="text-app-dim size-3.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+          className="text-app-dim size-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
         />
       </button>
     )
@@ -118,7 +118,7 @@ export function InlineEdit({
       <span className="flex items-center gap-1.5">
         <input
           aria-label={label}
-          className="border-app-line-2 bg-app-input text-app-ink focus-visible:outline-brand min-h-9 w-20 rounded-[8px] border px-2 text-right text-sm tabular-nums"
+          className="rz-input rz-input--num rz-input--sm w-20"
           disabled={pending}
           inputMode={inputMode}
           onChange={(event) => setDraft(event.target.value)}
@@ -140,6 +140,7 @@ export function InlineEdit({
           aria-label={t('saveValue')}
           disabled={pending}
           onClick={() => void commit()}
+          className="rz-btn--sm size-6 pointer-coarse:size-control"
           size="icon"
           variant="primary"
         >
@@ -148,6 +149,7 @@ export function InlineEdit({
         <Button
           aria-label={t('cancelChange')}
           disabled={pending}
+          className="rz-btn--sm size-6 pointer-coarse:size-control"
           onClick={close}
           size="icon"
         >
@@ -155,7 +157,7 @@ export function InlineEdit({
         </Button>
       </span>
       {error === null ? null : (
-        <span className="text-state-danger text-[12.5px]" role="alert">
+        <span className="rz-error" role="alert">
           {error}
         </span>
       )}

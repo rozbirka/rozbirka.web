@@ -1,6 +1,5 @@
 import { X } from 'lucide-react'
 import { Button } from './button'
-import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 import { useT } from '@/i18n/hooks'
 import { appMessages } from './app-messages'
@@ -45,15 +44,9 @@ export function BulkBar({
     pageCount !== undefined && pageCount > 0 && count >= pageCount
 
   return (
-    <div
-      aria-label={t('bulkRegion')}
-      className="border-brand/30 rounded-panel bg-brand/[0.07] flex flex-wrap items-center gap-x-4 gap-y-2.5 border p-2.5"
-      role="region"
-    >
-      <p className="text-app-ink flex items-baseline gap-2 pl-1.5 text-sm">
-        <span className="text-brand text-[19px] font-bold tabular-nums">
-          {count}
-        </span>{' '}
+    <div aria-label={t('bulkRegion')} className="rz-bulk" role="region">
+      <p className="text-app-ink flex items-baseline gap-1.5">
+        <span className="rz-bulk__count">{count}</span>{' '}
         <span>
           {t('bulkSelected', { noun })}
           {busy === undefined ? null : t('bulkRunning')}
@@ -64,7 +57,7 @@ export function BulkBar({
         <>
           {onSelectPage === undefined || everythingOnPage ? null : (
             <button
-              className="text-app-muted hover:text-app-ink min-h-11 text-[13px] underline decoration-white/25 underline-offset-4"
+              className="rz-btn rz-btn--ghost rz-btn--sm"
               onClick={onSelectPage}
               type="button"
             >
@@ -72,7 +65,7 @@ export function BulkBar({
               {pageCount === undefined ? '' : ` (${String(pageCount)})`}
             </button>
           )}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="rz-bulk__actions items-center">
             {actions.map((action) => (
               <Button
                 disabled={action.unavailable !== undefined}
@@ -81,11 +74,11 @@ export function BulkBar({
                 {...(action.unavailable === undefined
                   ? {}
                   : { title: action.unavailable })}
-                className={cn(
-                  action.tone === 'danger' &&
-                    action.unavailable === undefined &&
-                    'border-state-danger/40 text-state-danger hover:bg-state-danger/10',
-                )}
+                variant={
+                  action.tone === 'danger' && action.unavailable === undefined
+                    ? 'danger'
+                    : 'ghost'
+                }
               >
                 {action.label}
               </Button>
@@ -100,7 +93,7 @@ export function BulkBar({
           </div>
         </>
       ) : (
-        <div className="ml-auto flex flex-wrap items-center gap-3">{busy}</div>
+        <div className="rz-bulk__actions items-center">{busy}</div>
       )}
     </div>
   )

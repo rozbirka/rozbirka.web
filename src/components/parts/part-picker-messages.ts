@@ -4,6 +4,7 @@ export const partPickerMessages = defineMessages({
   uk: {
     all: 'Усі',
     available: 'В наявності',
+    stockQuantity: '{count} шт',
     reserved: 'Резерв',
     inStock: '{count} в наявності',
     none: 'Немає',
@@ -19,10 +20,13 @@ export const partPickerMessages = defineMessages({
     choose: 'Обрати запчастину {name}',
     loading: 'Завантажуємо…',
     showMore: 'Показати ще',
+    inOrder: 'у замовленні',
+    retry: 'Повторити пошук',
   },
   'en-GB': {
     all: 'All',
     available: 'In stock',
+    stockQuantity: '{count} pcs',
     reserved: 'Reserved',
     inStock: '{count} in stock',
     none: 'None',
@@ -38,10 +42,13 @@ export const partPickerMessages = defineMessages({
     choose: 'Choose part {name}',
     loading: 'Loading…',
     showMore: 'Show more',
+    inOrder: 'in order',
+    retry: 'Retry search',
   },
   pl: {
     all: 'Wszystkie',
     available: 'Dostępne',
+    stockQuantity: '{count} szt.',
     reserved: 'Rezerwacja',
     inStock: 'dostępne: {count}',
     none: 'Brak',
@@ -57,5 +64,7 @@ export const partPickerMessages = defineMessages({
     choose: 'Wybierz część {name}',
     loading: 'Wczytywanie…',
     showMore: 'Pokaż więcej',
+    inOrder: 'w zamówieniu',
+    retry: 'Ponów wyszukiwanie',
   },
 })

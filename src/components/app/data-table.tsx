@@ -23,6 +23,8 @@ export interface DataTableSelection<Row> {
   rowLabel: (row: Row) => string
   /** Why this row cannot be picked. Set means the checkbox is disabled. */
   unavailable?: (row: Row) => string | undefined
+  /** True enables row-space selection after the first pick; 'always' enables it immediately. Controls keep their own actions. */
+  selectOnRowClick?: boolean | 'always'
 }
 
 export interface DataTableProps<Row> {
@@ -34,6 +36,8 @@ export interface DataTableProps<Row> {
   /** Shown instead of the body when there is nothing to list. */
   empty?: ReactNode
   onRowClick?: (row: Row) => void
+  /** The row whose record is open beside the list (peek): brand edge. */
+  activeKey?: string | null
   footer?: ReactNode
   /** Turns the list into a working set: a checkbox per row and in the header. */
   selection?: DataTableSelection<Row>
@@ -56,14 +60,15 @@ export function DataTable<Row>({
   rowKey,
   empty,
   onRowClick,
+  activeKey = null,
   footer,
   selection,
-  density = 'comfortable',
+  density,
   embedded = false,
 }: DataTableProps<Row>) {
   const t = useT(appMessages)
-  const compact = density === 'compact'
-  const cellPadding = compact ? 'px-3 py-1.5 md:px-4' : 'px-4 py-3.5'
+  // v2 density comes from tokens; the list's own setting scopes them.
+  const densityAttr = density === undefined ? {} : { 'data-density': density }
   const pickable =
     selection === undefined
       ? []
@@ -80,6 +85,9 @@ export function DataTable<Row>({
     else for (const row of pickable) next.add(rowKey(row))
     selection.onChange(next)
   }
+  const rowSelectionActive =
+    selection?.selectOnRowClick === 'always' ||
+    (selection?.selectOnRowClick === true && selection.selected.size > 0)
   const toggleRow = (id: string) => {
     if (selection === undefined) return
     const next = new Set(selection.selected)
@@ -92,12 +100,7 @@ export function DataTable<Row>({
     // The footer stays: page 2 of a filtered list can come back empty, and the
     // way back is in the pagination.
     return (
-      <div
-        className={cn(
-          'overflow-hidden',
-          !embedded && 'border-app-line rounded-panel bg-app-raised border',
-        )}
-      >
+      <div className={cn(embedded ? 'overflow-hidden' : 'rz-table-wrap')}>
         {empty}
         {footer}
       </div>
@@ -106,141 +109,138 @@ export function DataTable<Row>({
 
   return (
     <div
-      className={cn(
-        'relative overflow-hidden md:overflow-x-auto',
-        !embedded && 'border-app-line rounded-panel bg-app-raised border',
-      )}
+      className={cn('relative', embedded ? 'overflow-hidden' : 'rz-table-wrap')}
+      {...densityAttr}
     >
-      <table
-        className={cn(
-          'data-table w-full border-collapse',
-          compact ? 'text-[13.5px]' : 'text-[14.5px]',
-        )}
-        role="table"
-      >
-        <caption className="sr-only">{caption}</caption>
-        <thead>
-          <tr role="row">
-            {selection === undefined ? null : (
-              <th
-                className={cn(
-                  'border-app-line border-b px-4',
-                  compact ? 'w-9 py-2' : 'w-11 py-3',
-                )}
-                role="columnheader"
-                scope="col"
-              >
-                <input
-                  aria-label={t('selectPage')}
-                  checked={
-                    pickable.length > 0 && pickedOnPage === pickable.length
-                  }
-                  className="accent-brand size-4.5 align-middle"
-                  disabled={pickable.length === 0}
-                  onChange={togglePage}
-                  ref={(node) => {
-                    if (node)
-                      node.indeterminate =
-                        pickedOnPage > 0 && pickedOnPage < pickable.length
-                  }}
-                  type="checkbox"
-                />
-              </th>
-            )}
-            {columns.map((column) => (
-              <th
-                className={cn(
-                  'text-app-dim border-app-line border-b px-4 font-mono text-[11.5px] font-normal tracking-[0.08em] whitespace-nowrap uppercase',
-                  compact ? 'py-2' : 'py-3',
-                  column.align === 'end' ? 'text-right' : 'text-left',
-                )}
-                key={column.key}
-                role="columnheader"
-                scope="col"
-              >
-                {column.headerHidden ? (
-                  <span className="sr-only">{column.label}</span>
-                ) : (
-                  column.label
-                )}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const id = rowKey(row)
-            const unavailable = selection?.unavailable?.(row)
-            const picked = selection?.selected.has(id) === true
-            return (
-              <tr
-                className={cn(
-                  'border-app-line md:border-b md:last:border-b-0',
-                  onRowClick !== undefined &&
-                    'cursor-pointer hover:bg-white/[0.025]',
-                  picked && 'bg-brand/[0.06]',
-                )}
-                key={id}
-                onClick={
-                  onRowClick === undefined ? undefined : () => onRowClick(row)
-                }
-                role="row"
-              >
-                {selection === undefined ? null : (
-                  <td
-                    className={cn(cellPadding, 'text-left font-normal')}
-                    data-label={t('selectRow')}
-                    // The checkbox is the point of the cell; a row that navigates
-                    // must not swallow the click that picks it.
-                    onClick={(event) => {
-                      event.stopPropagation()
+      <div className="rz-table-scroll">
+        <table className="rz-table" role="table">
+          <caption className="sr-only">{caption}</caption>
+          <thead>
+            <tr role="row">
+              {selection === undefined ? null : (
+                <th className="rz-col-check" role="columnheader" scope="col">
+                  <input
+                    aria-label={t('selectPage')}
+                    checked={
+                      pickable.length > 0 && pickedOnPage === pickable.length
+                    }
+                    className="rz-check align-middle"
+                    disabled={pickable.length === 0}
+                    onChange={togglePage}
+                    ref={(node) => {
+                      if (node)
+                        node.indeterminate =
+                          pickedOnPage > 0 && pickedOnPage < pickable.length
                     }}
-                    role="cell"
-                  >
-                    <input
-                      aria-label={selection.rowLabel(row)}
-                      checked={picked}
-                      className="accent-brand size-4.5 align-middle"
-                      disabled={unavailable !== undefined}
-                      onChange={() => toggleRow(id)}
-                      type="checkbox"
-                      {...(unavailable === undefined
-                        ? {}
-                        : { title: unavailable })}
-                    />
-                  </td>
-                )}
-                {columns.map((column) => {
-                  const isPrimary = column.variant === 'primary'
-                  const Cell = isPrimary ? 'th' : 'td'
-                  return (
-                    <Cell
-                      className={cn(
-                        cellPadding,
-                        'text-left font-normal',
-                        column.align === 'end' && 'text-right tabular-nums',
-                        isPrimary
-                          ? 'text-app-ink font-medium'
-                          : 'text-app-muted',
-                      )}
-                      data-label={
-                        isPrimary || column.headerHidden
-                          ? undefined
-                          : column.label
-                      }
-                      key={column.key}
-                      role={isPrimary ? 'rowheader' : 'cell'}
-                      {...(isPrimary ? { scope: 'row' as const } : {})}
+                    type="checkbox"
+                  />
+                </th>
+              )}
+              {columns.map((column) => (
+                <th
+                  className={cn(column.align === 'end' && 'rz-num')}
+                  key={column.key}
+                  role="columnheader"
+                  scope="col"
+                >
+                  {column.headerHidden ? (
+                    <span className="sr-only">{column.label}</span>
+                  ) : (
+                    column.label
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const id = rowKey(row)
+              const unavailable = selection?.unavailable?.(row)
+              const picked = selection?.selected.has(id) === true
+              const clickable = rowSelectionActive
+                ? unavailable === undefined
+                : onRowClick !== undefined
+              return (
+                <tr
+                  {...(picked ? { 'aria-selected': true } : {})}
+                  {...(activeKey === id ? { 'data-active': 'true' } : {})}
+                  className={cn(clickable && 'cursor-pointer')}
+                  key={id}
+                  onClick={
+                    clickable
+                      ? (event) => {
+                          if (!rowSelectionActive) {
+                            onRowClick?.(row)
+                            return
+                          }
+                          if (
+                            event.defaultPrevented ||
+                            (event.target instanceof Element &&
+                              event.target.closest(
+                                'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [role="checkbox"], [contenteditable]',
+                              ))
+                          )
+                            return
+                          toggleRow(id)
+                        }
+                      : undefined
+                  }
+                  role="row"
+                >
+                  {selection === undefined ? null : (
+                    <td
+                      className="rz-col-check"
+                      data-label={t('selectRow')}
+                      // A checkbox never opens or toggles the row twice. In
+                      // selection mode, the cell's empty space belongs to the row.
+                      onClick={(event) => {
+                        if (
+                          !rowSelectionActive ||
+                          (event.target instanceof Element &&
+                            event.target.closest('input'))
+                        )
+                          event.stopPropagation()
+                      }}
+                      role="cell"
                     >
-                      {column.cell(row)}
-                    </Cell>
-                  )
-                })}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                      <input
+                        aria-label={selection.rowLabel(row)}
+                        checked={picked}
+                        className="rz-check align-middle"
+                        disabled={unavailable !== undefined}
+                        onChange={() => toggleRow(id)}
+                        type="checkbox"
+                        {...(unavailable === undefined
+                          ? {}
+                          : { title: unavailable })}
+                      />
+                    </td>
+                  )}
+                  {columns.map((column) => {
+                    const isPrimary = column.variant === 'primary'
+                    const Cell = isPrimary ? 'th' : 'td'
+                    return (
+                      <Cell
+                        className={cn(column.align === 'end' && 'rz-num')}
+                        data-label={
+                          isPrimary || column.headerHidden
+                            ? undefined
+                            : column.label
+                        }
+                        key={column.key}
+                        role={isPrimary ? 'rowheader' : 'cell'}
+                        {...(isPrimary ? { scope: 'row' as const } : {})}
+                      >
+                        {column.cell(row)}
+                      </Cell>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       {footer}
     </div>
   )

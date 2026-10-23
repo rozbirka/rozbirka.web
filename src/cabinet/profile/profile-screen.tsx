@@ -1,17 +1,15 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react'
-import { LogOut } from 'lucide-react'
-import { Button, Field, Notice, TextInput } from '@/components/app'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { ChevronDown, LogOut } from 'lucide-react'
+import { Button, Card, Field, Notice, TextInput } from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
 import { AccountDeletion } from '@/components/account/account-deletion'
 import { useT } from '@/i18n/hooks'
 import { useCabinet } from '../CabinetContext'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import {
+  RecordColumns,
+  RecordHead,
+  RecordShell,
+} from '../billing/billing-shell'
 import { LanguageCard } from './language-card'
 import { RegionSummary } from '../business/region-settings'
 import { profileMessages } from './profile-messages'
@@ -39,6 +37,7 @@ export function ProfileScreen() {
   const auth = useAuth()
   const cabinet = useCabinet()
   const t = useT(profileMessages)
+  const personalId = useId()
   const currentName = auth.user?.displayName ?? ''
   const [name, setName] = useState(currentName)
   const [savedName, setSavedName] = useState(currentName.trim())
@@ -114,56 +113,112 @@ export function ProfileScreen() {
   const roleLabel = role ? (roleKey ? t(roleKey) : role) : t('roleUnknown')
   const phone = auth.user?.phone ?? null
   return (
-    <RedesignShell crumb={t('crumb')}>
-      <RedesignTitle lead={t('lead')} title={t('title')} />
+    <RecordShell crumb={t('crumb')}>
+      <RecordHead title={t('title')} />
 
       {saveState === 'success' && <Notice tone="ok">{t('nameSaved')}</Notice>}
       {saveState === 'error' && <Notice tone="danger">{t('nameError')}</Notice>}
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card title={t('personal')}>
-          <div className="flex items-center gap-4">
-            <span
-              aria-hidden
-              className="bg-brand/12 text-brand inline-flex size-14 shrink-0 items-center justify-center rounded-[16px] text-[18px] font-extrabold"
-            >
-              {initials(normalizedName)}
-            </span>
-            <div className="min-w-0">
-              <p className="text-app-ink truncate text-[17px] font-bold">
-                {normalizedName || t('noName')}
-              </p>
-              <p className="text-app-dim mt-1 text-[13px]">
-                {phone ?? t('noPhone')}
-              </p>
-            </div>
-          </div>
+      <RecordColumns
+        aside={
+          <>
+            <Card bodyClassName="grid gap-0 pb-0" title={t('settings')}>
+              <LanguageCard embedded />
 
-          <form
-            className="mt-5 grid gap-4"
-            id={FORM_ID}
-            onSubmit={(event) => void handleSubmit(event)}
-          >
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t('nameLabel')} required>
-                <TextInput
-                  autoComplete="name"
-                  disabled={busy}
-                  onChange={(event) => handleNameChange(event.target.value)}
-                  placeholder={t('namePlaceholder')}
-                  value={name}
-                />
-              </Field>
-              <Field label={t('phoneLabel')}>
-                <TextInput
-                  disabled
-                  readOnly
-                  title={t('phoneReadOnly')}
-                  value={phone ?? t('phoneMissing')}
-                />
-              </Field>
+              {/* Business settings remain read-only for every member here. */}
+              <details className="border-app-line group -mx-[var(--rz-card-p)] mt-4 border-t px-[var(--rz-card-p)]">
+                <summary className="rz-strong flex min-h-control-lg cursor-pointer list-none items-center justify-between gap-3 py-2 font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
+                  {t('docCardTitle')}
+                  <ChevronDown
+                    aria-hidden
+                    className="text-app-dim size-4 transition-transform group-open:rotate-180"
+                  />
+                </summary>
+                <div className="grid gap-3 pb-4">
+                  <p className="rz-muted m-0">{t('docCardBody')}</p>
+                  {cabinet.targetTenant ? (
+                    <RegionSummary tenant={cabinet.targetTenant} />
+                  ) : (
+                    <dl className="rz-facts px-0 py-0">
+                      <div>
+                        <dt>{t('docLang')}</dt>
+                        <dd>{t('docLangUnknown')}</dd>
+                      </div>
+                    </dl>
+                  )}
+                </div>
+              </details>
+            </Card>
+
+            <AccountDeletion compact key={auth.user?.id} />
+          </>
+        }
+        main={
+          <section aria-labelledby={personalId} className="rz-card min-w-0">
+            <header className="rz-card__head py-2.5">
+              <h2 className="rz-h-card" id={personalId}>
+                {t('personal')}
+              </h2>
+            </header>
+            <div className="rz-card__body grid gap-4">
+              <div className="flex items-center gap-3">
+                <span
+                  aria-hidden
+                  className="rz-avatar rz-avatar--round size-10 text-body"
+                >
+                  {initials(normalizedName)}
+                </span>
+                <div className="grid min-w-0 gap-0.5">
+                  <p className="rz-h-title m-0 truncate">
+                    {normalizedName || t('noName')}
+                  </p>
+                  <p className="rz-dim rz-mono m-0">{phone ?? t('noPhone')}</p>
+                </div>
+              </div>
+
+              <form
+                className="rz-form-grid"
+                id={FORM_ID}
+                onSubmit={(event) => void handleSubmit(event)}
+              >
+                <Field label={t('nameLabel')} required>
+                  <TextInput
+                    autoComplete="name"
+                    disabled={busy}
+                    onChange={(event) => handleNameChange(event.target.value)}
+                    placeholder={t('namePlaceholder')}
+                    value={name}
+                  />
+                </Field>
+                <Field label={t('phoneLabel')}>
+                  <TextInput
+                    disabled
+                    readOnly
+                    title={t('phoneReadOnly')}
+                    value={phone ?? t('phoneMissing')}
+                  />
+                </Field>
+              </form>
+
+              <div className="grid gap-1">
+                <h3 className="rz-h-card">{t('access')}</h3>
+                <dl className="rz-facts px-0 py-0">
+                  <div>
+                    <dt>{t('role')}</dt>
+                    <dd>{roleLabel}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('cabinet')}</dt>
+                    <dd>{cabinet.targetTenant?.name ?? t('cabinetNone')}</dd>
+                  </div>
+                </dl>
+              </div>
             </div>
-            <div className="border-app-line flex flex-wrap justify-end gap-2 border-t pt-4">
+            <div className="rz-card__foot flex-wrap items-center justify-end gap-2">
+              <Button className="mr-auto" onClick={() => void auth.signOut()}>
+                <LogOut aria-hidden />
+                {t('signOut')}
+              </Button>
               <Button
                 disabled={busy || normalizedName === savedName}
                 onClick={() => handleNameChange(savedName)}
@@ -172,79 +227,17 @@ export function ProfileScreen() {
                 {t('cancelChanges')}
               </Button>
               <Button
-                className="px-5 text-sm font-bold"
                 disabled={!canSave}
+                form={FORM_ID}
                 type="submit"
                 variant="primary"
               >
                 {busy ? t('saving') : t('save')}
               </Button>
             </div>
-          </form>
-        </Card>
-
-        <div className="grid min-w-0 content-start gap-5">
-          <LanguageCard />
-
-          {/* Every member reads the business region here, read-only; the
-              owner edits it in Business → «Регіон і документи». */}
-          <Card title={t('docCardTitle')}>
-            <p className="text-app-muted text-[13.5px]">{t('docCardBody')}</p>
-            {cabinet.targetTenant ? (
-              <div className="mt-3 grid gap-3 text-[13.5px]">
-                <RegionSummary tenant={cabinet.targetTenant} />
-              </div>
-            ) : (
-              <dl className="mt-3 flex items-baseline justify-between gap-4 text-[13.5px]">
-                <dt className="text-app-muted">{t('docLang')}</dt>
-                <dd className="text-app-ink text-right font-medium">
-                  {t('docLangUnknown')}
-                </dd>
-              </dl>
-            )}
-          </Card>
-
-          <Card title={t('access')}>
-            <dl className="grid gap-3 text-[13.5px]">
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">{t('role')}</dt>
-                <dd className="text-app-ink text-right font-medium">
-                  {roleLabel}
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">{t('cabinet')}</dt>
-                <dd className="text-app-ink text-right font-medium">
-                  {cabinet.targetTenant?.name ?? t('cabinetNone')}
-                </dd>
-              </div>
-            </dl>
-            <div className="border-app-line mt-4 border-t pt-4">
-              <Button
-                className="w-full justify-center"
-                onClick={() => void auth.signOut()}
-              >
-                <LogOut aria-hidden />
-                {t('signOut')}
-              </Button>
-            </div>
-          </Card>
-
-          <AccountDeletion key={auth.user?.id} />
-        </div>
-      </div>
-    </RedesignShell>
-  )
-}
-
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section
-      aria-label={title}
-      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5"
-    >
-      <h2 className="text-app-ink text-[15px] font-bold">{title}</h2>
-      <div className="mt-3.5">{children}</div>
-    </section>
+          </section>
+        }
+      />
+    </RecordShell>
   )
 }

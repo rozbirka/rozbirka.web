@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button,input,select{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible,input:focus-visible,select:focus-visible{outline:none;box-shadow:var(--rz-focus)}input::placeholder{color:var(--rz-text-dim)}</style>
+</helmet>
+<div data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B4 · Дані</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">DataTable · Toolbar · ActiveFilters · BulkBar · Pagination</h1>
+      <p style="margin:0;max-width:76ch;color:var(--rz-text-muted)">Інтерактивно: оберіть рядки — тулбар заміниться на BulkBar; клікніть заголовок «Деталь», «Всього» чи «Доступно» — сортування; клікніть число в «Доступно» — inline-редагування (Enter — зберегти, Esc — скасувати). Тема й щільність — у Tweaks.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: data-table.tsx, toolbar.tsx, bulk-bar.tsx, pagination.tsx, inline-edit.tsx · рядки — parts-list-messages.ts, app-messages.ts</p>
+    </header>
+
+    <section style="display:grid;gap:10px">
+      <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ true }}">
+        <div role="search" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <label style="flex:1 1 240px;max-width:320px;display:flex;align-items:center;gap:8px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);background:var(--rz-surface-2);border-radius:var(--rz-r-sm)">
+            <i class="icon-search" style="font-size:var(--rz-icon);color:var(--rz-text-dim)"></i>
+            <input aria-label="Пошук деталей" placeholder="Пошук: назва, OEM, QR або VIN" value="{{ query }}" onChange="{{ onQuery }}" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text);outline:none">
+          </label>
+          <div role="radiogroup" aria-label="Статус" style="display:flex;gap:2px;padding:2px;border:1px solid var(--rz-border);background:var(--rz-surface);border-radius:var(--rz-r-sm)">
+            <sc-for list="{{ statusTabs }}" as="s" hint-placeholder-count="4">
+              <button type="button" role="radio" aria-checked="{{ s.checked }}" onClick="{{ s.onClick }}" style="display:inline-flex;align-items:center;gap:6px;height:calc(var(--rz-control-h) - 6px);padding:0 9px;border:0;border-radius:var(--rz-r-xs);background:{{ s.bg }};color:{{ s.color }};font-weight:500;cursor:pointer;white-space:nowrap">
+                <sc-if value="{{ s.dot }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:{{ s.dot }}"></span></sc-if>{{ s.label }}</button>
+            </sc-for>
+          </div>
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 8px 0 10px;border:1px solid var(--rz-border-strong);background:var(--rz-surface);border-radius:var(--rz-r-sm);color:var(--rz-text);cursor:pointer;white-space:nowrap"><span style="color:var(--rz-text-dim)">Марка:</span>Volkswagen<i class="icon-chevron-down" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i></button>
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 8px 0 10px;border:1px dashed var(--rz-border-strong);background:transparent;border-radius:var(--rz-r-sm);color:var(--rz-text-muted);cursor:pointer;white-space:nowrap" style-hover="background:var(--rz-fill-hover)">Склад: усі<i class="icon-chevron-down" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i></button>
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 8px 0 10px;border:1px dashed var(--rz-border-strong);background:transparent;border-radius:var(--rz-r-sm);color:var(--rz-text-muted);cursor:pointer;white-space:nowrap" style-hover="background:var(--rz-fill-hover)">Стан деталі<i class="icon-chevron-down" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i></button>
+          <div style="margin-left:auto;display:flex;gap:4px">
+            <button type="button" aria-label="Налаштувати колонки" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-sliders-horizontal" style="font-size:var(--rz-icon)"></i></button>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Активні:</span>
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 4px 0 8px;border:1px solid var(--rz-border-strong);background:var(--rz-surface-2);border-radius:var(--rz-r-xs);font-size:var(--rz-fs-caption);color:var(--rz-text);cursor:pointer" style-hover="border-color:var(--rz-text-dim)">Марка: Volkswagen<i class="icon-x" aria-label="Прибрати фільтр" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i></button>
+          <sc-if value="{{ statusChip }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ clearStatus }}" style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 4px 0 8px;border:1px solid var(--rz-border-strong);background:var(--rz-surface-2);border-radius:var(--rz-r-xs);font-size:var(--rz-fs-caption);color:var(--rz-text);cursor:pointer">{{ statusChip }}<i class="icon-x" aria-label="Прибрати фільтр" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i></button></sc-if>
+          <button type="button" style="height:22px;padding:0 6px;border:0;background:transparent;color:var(--rz-text-dim);font-size:var(--rz-fs-caption);cursor:pointer" style-hover="color:var(--rz-text)">Скинути</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+        <div role="region" aria-label="Дії над обраними" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-height:var(--rz-control-h-lg);padding:3px 4px 3px 12px;border:1px solid color-mix(in srgb, var(--rz-brand) 35%, transparent);border-radius:var(--rz-r-md);background:var(--rz-brand-soft)">
+          <span style="display:flex;align-items:baseline;gap:6px;color:var(--rz-text)"><span style="font-family:var(--rz-font-mono);font-weight:500;color:var(--rz-brand-text)">{{ selCount }}</span>{{ selNoun }} обрано</span>
+          <sc-if value="{{ canSelectPage }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ toggleAll }}" style="height:24px;padding:0 6px;border:0;background:transparent;color:var(--rz-text-muted);font-size:var(--rz-fs-caption);text-decoration:underline;text-underline-offset:3px;cursor:pointer">Обрати всі на сторінці ({{ pageCount }})</button></sc-if>
+          <div style="margin-left:auto;display:flex;flex-wrap:wrap;gap:6px">
+            <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface);color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-surface-2)"><i class="icon-printer" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i>Друк стікера</button>
+            <button type="button" disabled title="Немає права змінювати деталі." style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid color-mix(in srgb, var(--rz-danger) 40%, transparent);border-radius:var(--rz-r-sm);background:var(--rz-surface);color:var(--rz-danger);font-weight:500;opacity:0.5;cursor:not-allowed">Видалити</button>
+            <button type="button" aria-label="Зняти вибір" onClick="{{ clearSelection }}" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-x" style="font-size:var(--rz-icon-md)"></i></button>
+          </div>
+        </div>
+        <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Недоступна дія показує причину: «Немає права змінювати деталі.»</p>
+      </sc-if>
+
+      <div style="border:1px solid var(--rz-border);background:var(--rz-surface);border-radius:var(--rz-r-md);overflow:hidden">
+        <div style="overflow-x:auto">
+          <table style="width:100%;min-width:760px;border-collapse:collapse">
+            <caption style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Деталі на складі</caption>
+            <thead>
+              <tr style="height:32px;border-bottom:1px solid var(--rz-border)">
+                <th style="width:36px;padding:0 0 0 var(--rz-cell-px)"><button type="button" role="checkbox" aria-checked="{{ head.aria }}" aria-label="Обрати всі на сторінці" onClick="{{ toggleAll }}" style="display:grid;place-items:center;width:14px;height:14px;padding:0;border-radius:var(--rz-r-xs);border:1px solid {{ head.border }};background:{{ head.bg }};color:var(--rz-on-brand);cursor:pointer"><i class="{{ head.icon }}" style="font-size:var(--rz-icon-xs)"></i></button></th>
+                <sc-for list="{{ cols }}" as="c" hint-placeholder-count="7">
+                  <th aria-sort="{{ c.ariaSort }}" style="text-align:{{ c.align }};padding:0 var(--rz-cell-px);font-weight:400;white-space:nowrap">
+                    <button type="button" onClick="{{ c.onSort }}" disabled="{{ c.unsortable }}" style="display:inline-flex;align-items:center;gap:4px;padding:0;border:0;background:transparent;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:{{ c.color }};cursor:{{ c.cursor }}">{{ c.label }}<i class="{{ c.icon }}" style="font-size:var(--rz-icon-sm)"></i></button>
+                  </th>
+                </sc-for>
+                <th style="width:40px"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Дії</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+                <sc-for list="{{ skeleton }}" as="k" hint-placeholder-count="6">
+                  <tr style="height:var(--rz-row-h);border-top:1px solid var(--rz-border)"><td style="padding:0 0 0 var(--rz-cell-px)"><span style="display:block;width:14px;height:14px;border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span></td><td style="padding:0 var(--rz-cell-px)"><span style="display:block;height:10px;width:{{ k.w }};border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span></td><td style="padding:0 var(--rz-cell-px)"><span style="display:block;height:10px;width:70%;border-radius:var(--rz-r-xs);background:var(--rz-fill-active)"></span></td><td style="padding:0 var(--rz-cell-px)"><span style="display:block;height:16px;width:72px;border-radius:var(--rz-r-full);background:var(--rz-fill-active)"></span></td><td></td><td></td><td></td><td></td></tr>
+                </sc-for>
+              </sc-if>
+              <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+                <tr style="height:var(--rz-row-h);border-top:1px solid var(--rz-border);background:{{ r.bg }};cursor:pointer" style-hover="background:var(--rz-fill-hover)">
+                  <td style="padding:0 0 0 var(--rz-cell-px)"><button type="button" role="checkbox" aria-checked="{{ r.aria }}" aria-label="{{ r.selectLabel }}" title="{{ r.lockReason }}" disabled="{{ r.locked }}" onClick="{{ r.onToggle }}" style="display:grid;place-items:center;width:14px;height:14px;padding:0;border-radius:var(--rz-r-xs);border:1px solid {{ r.boxBorder }};background:{{ r.boxBg }};color:var(--rz-on-brand);cursor:{{ r.boxCursor }};opacity:{{ r.boxOpacity }}"><i class="{{ r.boxIcon }}" style="font-size:var(--rz-icon-xs)"></i></button></td>
+                  <th scope="row" style="text-align:left;padding:0 var(--rz-cell-px);font-weight:500;max-width:320px">
+                    <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="min-width:0;color:var(--rz-text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</span><span style="flex:none;white-space:nowrap;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);font-weight:400;color:var(--rz-text-dim)">{{ r.oem }}</span></div>
+                  </th>
+                  <td style="padding:0 var(--rz-cell-px);color:var(--rz-text-muted);white-space:nowrap">{{ r.car }}</td>
+                  <td style="padding:0 var(--rz-cell-px)"><span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:{{ r.soft }};color:{{ r.tone }};font-size:var(--rz-fs-caption);font-weight:500;white-space:nowrap"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>{{ r.statusLabel }}</span></td>
+                  <td style="padding:0 var(--rz-cell-px);text-align:right;font-family:var(--rz-font-mono);font-variant-numeric:tabular-nums;color:var(--rz-text-muted)">{{ r.total }}</td>
+                  <td style="padding:0 calc(var(--rz-cell-px) - 6px);text-align:right">
+                    <sc-if value="{{ r.editing }}" hint-placeholder-val="{{ false }}">
+                      <input aria-label="{{ r.qtyLabel }}" value="{{ draft }}" onChange="{{ onDraft }}" onKeyDown="{{ onEditKey }}" onBlur="{{ commitEdit }}" style="width:64px;height:24px;padding:0 6px;border:1px solid var(--rz-brand);border-radius:var(--rz-r-xs);background:var(--rz-surface-2);color:var(--rz-text-strong);font-family:var(--rz-font-mono);font-size:var(--rz-fs-body);text-align:right;box-shadow:0 0 0 3px var(--rz-brand-soft);outline:none">
+                    </sc-if>
+                    <sc-if value="{{ r.notEditing }}" hint-placeholder-val="{{ true }}">
+                      <button type="button" aria-label="{{ r.editLabel }}" title="{{ r.lockReason }}" disabled="{{ r.locked }}" onClick="{{ r.onEdit }}" style="display:inline-flex;align-items:center;justify-content:flex-end;gap:6px;min-width:48px;height:24px;padding:0 6px;border:1px solid transparent;border-radius:var(--rz-r-xs);background:transparent;font-family:var(--rz-font-mono);font-variant-numeric:tabular-nums;color:var(--rz-text-strong);cursor:{{ r.editCursor }}" style-hover="border-color:var(--rz-border-strong)"><sc-if value="{{ r.locked }}" hint-placeholder-val="{{ false }}"><i class="icon-lock" style="font-size:var(--rz-icon-sm);color:var(--rz-text-dim)"></i></sc-if>{{ r.available }}</button>
+                    </sc-if>
+                  </td>
+                  <td style="padding:0 var(--rz-cell-px);text-align:right;font-family:var(--rz-font-mono);font-variant-numeric:tabular-nums;color:var(--rz-text-muted)">{{ r.reserved }}</td>
+                  <td style="padding:0 6px 0 0;text-align:right"><button type="button" aria-label="Дії" style="display:inline-grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-active);color:var(--rz-text)"><i class="icon-ellipsis" style="font-size:var(--rz-icon)"></i></button></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <sc-if value="{{ saveError }}" hint-placeholder-val="{{ false }}">
+          <div role="alert" style="display:flex;align-items:center;gap:8px;padding:6px var(--rz-cell-px);border-top:1px solid var(--rz-border);background:var(--rz-danger-soft);color:var(--rz-text)"><i class="icon-triangle-alert" style="font-size:var(--rz-icon);color:var(--rz-danger)"></i>Кількість — ціле число від нуля.</div>
+        </sc-if>
+        <nav aria-label="Пагінація деталей" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;min-height:40px;padding:6px var(--rz-cell-px);border-top:1px solid var(--rz-border);color:var(--rz-text-dim)">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);font-variant-numeric:tabular-nums">1–{{ pageCount }} з 1 284</span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:var(--rz-fs-caption)"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Кількість деталей на сторінці</span><select style="height:24px;padding:0 4px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);background:var(--rz-surface-2);color:var(--rz-text);font-size:var(--rz-fs-caption)"><option>25 на сторінці</option><option>50 на сторінці</option><option>100 на сторінці</option></select></label>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+            <span style="font-size:var(--rz-fs-caption)">Сторінка 1 з 52</span>
+            <button type="button" aria-label="Попередня сторінка" disabled style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid var(--rz-border-strong);background:transparent;border-radius:var(--rz-r-sm);color:var(--rz-text-dim);opacity:0.5;cursor:not-allowed"><i class="icon-chevron-left" style="font-size:var(--rz-icon)"></i></button>
+            <button type="button" aria-label="Наступна сторінка" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid var(--rz-border-strong);background:transparent;border-radius:var(--rz-r-sm);color:var(--rz-text-muted);cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-chevron-right" style="font-size:var(--rz-icon)"></i></button>
+          </div>
+        </nav>
+      </div>
+    </section>
+
+    <section style="display:grid;gap:10px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Mobile · нижче 768 — рядок стає карткою</h2>
+      <div style="width:375px;max-width:100%;display:grid;gap:8px;padding:12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-lg);background:var(--rz-bg)">
+        <sc-for list="{{ cards }}" as="r" hint-placeholder-count="3">
+          <div style="display:grid;gap:6px;padding:12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="display:grid;place-items:center;width:20px;height:20px;margin-top:1px;border-radius:var(--rz-r-xs);border:1px solid var(--rz-border-strong)"></span>
+              <div style="flex:1;min-width:0;display:grid"><span style="font-weight:600;color:var(--rz-text-strong)">{{ r.name }}</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">{{ r.oem }}</span></div>
+              <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:{{ r.soft }};color:{{ r.tone }};font-size:var(--rz-fs-caption);font-weight:500;white-space:nowrap"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>{{ r.statusLabel }}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:12px;font-size:var(--rz-fs-caption)"><span style="color:var(--rz-text-dim)">Авто-джерело</span><span style="color:var(--rz-text-muted)">{{ r.car }}</span></div>
+            <div style="display:flex;justify-content:space-between;gap:12px;font-size:var(--rz-fs-caption)"><span style="color:var(--rz-text-dim)">Доступно / Резерв / Всього</span><span style="font-family:var(--rz-font-mono);color:var(--rz-text)">{{ r.available }} / {{ r.reserved }} / {{ r.total }}</span></div>
+          </div>
+        </sc-for>
+      </div>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Той самий DOM, інше відображення (як у коді): підписи колонок стають підписами рядків, чекбокс 20px з хітбоксом 44. Вибір усіх — кнопкою в BulkBar.</p>
+    </section>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Висота рядка — --rz-row-h (34 compact / 44 comfortable). Заголовок колонки — mono 11 uppercase.</li>
+        <li>Перша колонка — rowheader (th scope="row"), текст strong 500. Решта — text-muted. Числа — mono, праворуч, tabular-nums.</li>
+        <li>Обраний рядок — row-selected (brand 8%). Чекбокс заголовка — mixed, коли обрано частину сторінки.</li>
+        <li>Рядок, який не можна обрати чи змінити, — вимкнений чекбокс + замок + причина в title: «Деталь у відкритій інвентаризації — кількість рахує сесія.»</li>
+        <li>Поки є вибір, BulkBar займає місце тулбара фільтрів (як у коді). Фільтри застосовуються одразу, без кнопки «Застосувати».</li>
+        <li>Нове у v2: сортування за колонками, налаштування колонок, меню дій рядка «…». У коді цього немає.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}, &quot;loading&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}}">
+const PARTS = [
+  { id: 'p1', name: 'Фара передня ліва', oem: '3G1941005', car: 'VW Passat B8 · 2016', status: 'available', total: 1, available: 1, reserved: 0 },
+  { id: 'p2', name: 'Двері задні праві', oem: '5E5833052', car: 'Skoda Octavia A7 · 2018', status: 'reserved', total: 1, available: 0, reserved: 1 },
+  { id: 'p3', name: 'Генератор', oem: '03L903023F', car: 'VW Passat B8 · 2016', status: 'available', total: 2, available: 2, reserved: 0 },
+  { id: 'p4', name: 'Дзеркало бічне праве', oem: '87910-33D10', car: 'Toyota Camry XV70 · 2019', status: 'sold', total: 1, available: 0, reserved: 0 },
+  { id: 'p5', name: 'Кермова рейка', oem: '8200675422', car: 'Renault Megane III · 2014', status: 'available', total: 1, available: 1, reserved: 0, locked: true },
+  { id: 'p6', name: 'Бампер передній', oem: '5E0807221', car: 'Skoda Octavia A7 · 2018', status: 'available', total: 1, available: 1, reserved: 0 },
+  { id: 'p7', name: 'Компресор кондиціонера', oem: '5Q0816803', car: 'VW Passat B8 · 2016', status: 'reserved', total: 1, available: 0, reserved: 1 },
+  { id: 'p8', name: 'Блок ABS', oem: '44050-33K10', car: 'Toyota Camry XV70 · 2019', status: 'available', total: 1, available: 1, reserved: 0 },
+  { id: 'p9', name: 'Стартер', oem: '02M911024A', car: 'Skoda Octavia A7 · 2018', status: 'sold', total: 1, available: 0, reserved: 0 },
+  { id: 'p10', name: 'Радіатор охолодження', oem: '214104EA0A', car: 'Nissan Qashqai J11 · 2017', status: 'available', total: 2, available: 1, reserved: 1 },
+  { id: 'p11', name: 'Колісний диск R17', oem: '5G0601025', car: 'VW Passat B8 · 2016', status: 'available', total: 4, available: 3, reserved: 1 },
+  { id: 'p12', name: 'Панель приладів', oem: '83800-33A30', car: 'Toyota Camry XV70 · 2019', status: 'available', total: 1, available: 1, reserved: 0 },
+];
+const ST = { available: ['Доступна', 'var(--rz-ok)', 'var(--rz-ok-soft)'], reserved: ['У резерві', 'var(--rz-warn)', 'var(--rz-warn-soft)'], sold: ['Продана', 'var(--rz-danger)', 'var(--rz-danger-soft)'] };
+const LOCK = 'Деталь у відкритій інвентаризації — кількість рахує сесія.';
+const noun = (n) => { const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return 'деталь'; if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return 'деталі'; return 'деталей'; };
+class Component extends DCLogic {
+  state = { parts: PARTS, selected: {}, status: 'all', query: '', sort: { key: null, dir: 'asc' }, editId: null, draft: '', saveError: false };
+  commit = () => {
+    const { editId, draft } = this.state;
+    if (!editId) return;
+    const n = Number(draft);
+    if (!Number.isInteger(n) || n < 0) { this.setState({ saveError: true }); return; }
+    this.setState((s) => ({ editId: null, saveError: false, parts: s.parts.map((p) => (p.id === editId ? { ...p, available: n, total: Math.max(p.total, n + p.reserved) } : p)) }));
+  };
+  renderVals() {
+    const { parts, selected, status, query, sort, editId, saveError } = this.state;
+    const q = query.trim().toLowerCase();
+    let list = parts.filter((p) => (status === 'all' || p.status === status) && (!q || (p.name + ' ' + p.oem + ' ' + p.car).toLowerCase().includes(q)));
+    if (sort.key) list = [...list].sort((a, b) => { const x = a[sort.key], y = b[sort.key]; const r = typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'uk'); return sort.dir === 'asc' ? r : -r; });
+    const pickable = list.filter((p) => !p.locked);
+    const picked = pickable.filter((p) => selected[p.id]).length;
+    const selCount = Object.values(selected).filter(Boolean).length;
+    const headState = picked === 0 ? 'false' : picked === pickable.length ? 'true' : 'mixed';
+    const sortCol = (key, label, align) => {
+      const on = sort.key === key;
+      return { label, align, unsortable: !key, ariaSort: on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none', color: on ? 'var(--rz-text)' : 'var(--rz-text-dim)', cursor: key ? 'pointer' : 'default', icon: on ? (sort.dir === 'asc' ? 'icon-arrow-up' : 'icon-arrow-down') : '', onSort: () => key && this.setState((s) => ({ sort: { key, dir: s.sort.key === key && s.sort.dir === 'asc' ? 'desc' : 'asc' } })) };
+    };
+    const tabs = [['all', 'Усі', null], ['available', 'В наявності', 'var(--rz-ok)'], ['reserved', 'У резерві', 'var(--rz-warn)'], ['sold', 'Продано', 'var(--rz-danger)']];
+    const decorate = (p) => {
+      const on = !!selected[p.id];
+      const [statusLabel, tone, soft] = ST[p.status];
+      return {
+        ...p, statusLabel, tone, soft, aria: on ? 'true' : 'false', boxIcon: on ? 'icon-check' : '',
+        boxBg: on ? 'var(--rz-brand)' : 'transparent', boxBorder: on ? 'var(--rz-brand)' : 'var(--rz-border-strong)',
+        boxCursor: p.locked ? 'not-allowed' : 'pointer', boxOpacity: p.locked ? 0.4 : 1, locked: !!p.locked, lockReason: p.locked ? LOCK : '',
+        bg: on ? 'var(--rz-row-selected)' : 'transparent', selectLabel: 'Обрати: ' + p.name,
+        editing: editId === p.id, notEditing: editId !== p.id, qtyLabel: 'Кількість — ' + p.name, editLabel: 'Змінити — Кількість ' + p.name, editCursor: p.locked ? 'not-allowed' : 'text',
+        onToggle: (e) => { e.stopPropagation(); if (!p.locked) this.setState((s) => ({ selected: { ...s.selected, [p.id]: !s.selected[p.id] } })); },
+        onEdit: (e) => { e.stopPropagation(); if (!p.locked) this.setState({ editId: p.id, draft: String(p.available), saveError: false }); },
+      };
+    };
+    return {
+      theme: this.props.theme ?? 'dark',
+      density: this.props.density ?? 'compact',
+      loading: !!this.props.loading,
+      skeleton: ['38%', '30%', '44%', '26%', '36%', '32%'].map((w) => ({ w })),
+      query, onQuery: (e) => this.setState({ query: e.target.value }),
+      statusTabs: tabs.map(([k, label, dot]) => ({ label, dot, checked: status === k ? 'true' : 'false', bg: status === k ? 'var(--rz-fill-selected)' : 'transparent', color: status === k ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)', onClick: () => this.setState({ status: k }) })),
+      statusChip: status === 'all' ? null : 'Статус: ' + tabs.find((t) => t[0] === status)[1],
+      clearStatus: () => this.setState({ status: 'all' }),
+      cols: [sortCol('name', 'Деталь', 'left'), sortCol(null, 'Авто-джерело', 'left'), sortCol(null, 'Стан', 'left'), sortCol('total', 'Всього', 'right'), sortCol('available', 'Доступно', 'right'), sortCol(null, 'Резерв', 'right')],
+      head: { aria: headState, icon: headState === 'true' ? 'icon-check' : headState === 'mixed' ? 'icon-minus' : '', bg: headState === 'false' ? 'transparent' : 'var(--rz-brand)', border: headState === 'false' ? 'var(--rz-border-strong)' : 'var(--rz-brand)' },
+      toggleAll: () => this.setState((s) => { const next = { ...s.selected }; const all = picked === pickable.length; pickable.forEach((p) => { next[p.id] = !all; }); return { selected: next }; }),
+      rows: this.props.loading ? [] : list.map(decorate),
+      cards: parts.slice(0, 3).map(decorate),
+      hasSelection: selCount > 0, noSelection: selCount === 0, selCount, selNoun: noun(selCount),
+      canSelectPage: picked < pickable.length, pageCount: list.length,
+      clearSelection: () => this.setState({ selected: {} }),
+      draft: this.state.draft, onDraft: (e) => this.setState({ draft: e.target.value }),
+      onEditKey: (e) => { if (e.key === 'Enter') this.commit(); if (e.key === 'Escape') this.setState({ editId: null, saveError: false }); },
+      commitEdit: () => this.commit(),
+      saveError,
+    };
+  }
+}
+</script>
+</body>
+</html>

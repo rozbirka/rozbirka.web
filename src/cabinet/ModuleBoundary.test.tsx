@@ -1,6 +1,6 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SubscriptionDto } from '../api/types'
 import type { CabinetContextValue } from './CabinetContext'
@@ -87,6 +87,91 @@ beforeEach(() => {
 })
 
 describe('ModuleBoundary', () => {
+  it('holds a local preview until released, preserving the other URL filters', () => {
+    function ActualScreen() {
+      const location = useLocation()
+      return <p>Actual screen {location.search}</p>
+    }
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/app/koval/billing?loadingPreview=hold&filter=active',
+        ]}
+      >
+        <ModuleBoundary module="billing" screen={ActualScreen} />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByText(/Actual screen/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Показати екран' }))
+    expect(screen.getByText('Actual screen ?filter=active')).toBeVisible()
+  })
+
+  it('releases a timed preview and cleans up its timer', () => {
+    vi.useFakeTimers()
+    try {
+      render(
+        <MemoryRouter
+          initialEntries={['/app/koval/billing?loadingPreview=3000']}
+        >
+          <ModuleBoundary
+            module="billing"
+            screen={() => <p>Actual screen</p>}
+          />
+        </MemoryRouter>,
+      )
+      expect(screen.queryByText('Actual screen')).not.toBeInTheDocument()
+      act(() => {
+        vi.advanceTimersByTime(2999)
+      })
+      expect(screen.queryByText('Actual screen')).not.toBeInTheDocument()
+      act(() => {
+        vi.advanceTimersByTime(1)
+      })
+      expect(screen.getByText('Actual screen')).toBeVisible()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('cannot use preview mode to bypass module permissions', () => {
+    mockedUseCabinet.mockReturnValue(cabinet([]))
+    const actual = vi.fn(() => <p>Actual screen</p>)
+    render(
+      <MemoryRouter initialEntries={['/app/koval/billing?loadingPreview=hold']}>
+        <ModuleBoundary module="billing" screen={actual} />
+      </MemoryRouter>,
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Недостатньо прав' }),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Показати екран' }),
+    ).not.toBeInTheDocument()
+    expect(actual).not.toHaveBeenCalled()
+  })
+
+  it('does not show the preview in a deployed build', () => {
+    vi.stubEnv('DEV', false)
+    try {
+      render(
+        <MemoryRouter
+          initialEntries={['/app/koval/billing?loadingPreview=hold']}
+        >
+          <ModuleBoundary
+            module="billing"
+            screen={() => <p>Actual screen</p>}
+          />
+        </MemoryRouter>,
+      )
+      expect(screen.getByText('Actual screen')).toBeVisible()
+      expect(
+        screen.queryByRole('button', { name: 'Показати екран' }),
+      ).not.toBeInTheDocument()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('loads an allowed released module screen lazily', async () => {
     const load = vi.fn(() =>
       Promise.resolve({

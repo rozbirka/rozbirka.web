@@ -7,6 +7,7 @@ import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { reportsApi, type ReportJob } from '@/api/reports'
 import { LocaleProvider } from '@/i18n'
+import { ToastProvider } from '@/components/app'
 import { ReportsScreen } from './ReportsScreen'
 
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
@@ -332,7 +333,7 @@ it('downloads or prints a completed report through the authenticated API helper'
 
   await waitFor(() => expect(reportsApi.download).toHaveBeenCalledTimes(2))
   expect(click).toHaveBeenCalledTimes(1)
-  expect(open).toHaveBeenCalledWith('', '_blank', 'noopener')
+  expect(open).toHaveBeenCalledWith('', '_blank')
 })
 
 it('pre-opens a print window synchronously and closes it when download fails', async () => {
@@ -352,7 +353,7 @@ it('pre-opens a print window synchronously and closes it when download fails', a
   await userEvent
     .setup()
     .click(await screen.findByRole('button', { name: 'Друкувати' }))
-  expect(window.open).toHaveBeenCalledWith('', '_blank', 'noopener')
+  expect(window.open).toHaveBeenCalledWith('', '_blank')
 
   pending.reject(new Error('offline'))
   await act(() => pending.promise.catch(() => undefined))
@@ -379,7 +380,7 @@ it('recovers an expired report by creating a replacement with the selected range
   expect(options?.signal).toBeInstanceOf(AbortSignal)
 })
 
-it('serializes Europe/Kyiv winter-to-summer calendar boundaries as inclusive UTC instants', async () => {
+it('preserves calendar dates across Europe/Kyiv winter-to-summer offsets', async () => {
   const originalTimeZone = process.env['TZ']
   process.env['TZ'] = 'Europe/Kyiv'
 
@@ -396,8 +397,8 @@ it('serializes Europe/Kyiv winter-to-summer calendar boundaries as inclusive UTC
     await waitFor(() => expect(reportsApi.create).toHaveBeenCalledTimes(1))
     const [request] = vi.mocked(reportsApi.create).mock.calls[0] ?? []
     expect(request?.carSales).toEqual({
-      from: '2026-01-14T22:00:00.000Z',
-      to: '2026-07-15T20:59:59.999Z',
+      from: '2026-01-15T00:00:00.000Z',
+      to: '2026-07-15T23:59:59.999Z',
     })
   } finally {
     if (originalTimeZone === undefined) delete process.env['TZ']
@@ -614,8 +615,33 @@ it('shows the covered period for a report created in this session', async () => 
 
   await waitFor(() => expect(reportsApi.create).toHaveBeenCalledTimes(1))
   const row = await screen.findByRole('rowheader')
-  expect(row).toHaveTextContent('15.01.2026')
-  expect(row).toHaveTextContent('20.01.2026')
+  // v2 (module 31): the start drops the year the end already states.
+  expect(row).toHaveTextContent('15.01 – 20.01.2026')
+})
+
+it('shows persisted report periods after reopening the screen', async () => {
+  vi.mocked(reportsApi.list).mockResolvedValue({
+    items: [
+      {
+        ...report('completed'),
+        period: { from: '2026-10-15', to: '2026-10-21' },
+      },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  })
+  const view = render(<ReportsScreen {...screenProps} />)
+  expect(await screen.findByRole('rowheader')).toHaveTextContent(
+    '15.10 – 21.10.2026',
+  )
+  view.unmount()
+  render(<ReportsScreen {...screenProps} />)
+  expect(await screen.findByRole('rowheader')).toHaveTextContent(
+    '15.10 – 21.10.2026',
+  )
+  expect(reportsApi.create).not.toHaveBeenCalled()
 })
 
 it('marks a period the server never returned as unknown', async () => {
@@ -776,9 +802,11 @@ it('renders reports in English (UK) with UK dates and file sizes', async () => {
   expect(screen.getByText(/PDF · 1.2 KB · available until/)).toBeInTheDocument()
   // Requested at 08:00 UTC is 11:00 in Kyiv, the business time zone.
   expect(screen.getAllByText('28/08/2026, 11:00').length).toBeGreaterThan(0)
-  // The server's reason stays as received.
+  // Unknown server diagnostics use the interface-language error message.
   expect(
-    screen.getByText(/Reason: Service unavailable\. Create a replacement/),
+    screen.getByText(
+      /Reason: A server error occurred\. Please try again later\. Create a replacement/,
+    ),
   ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Download PDF' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Create report' })).toBeVisible()
@@ -799,4 +827,87 @@ it('explains an invalid period in Polish', async () => {
   expect(
     screen.getByText('Koniec okresu nie może być wcześniej niż początek'),
   ).toBeInTheDocument()
+})
+
+it('confirms a created report with an ok toast and names its period compactly', async () => {
+  render(
+    <ToastProvider>
+      <ReportsScreen {...screenProps} />
+    </ToastProvider>,
+  )
+  const user = userEvent.setup()
+
+  fireEvent.change(await screen.findByLabelText('Початок періоду'), {
+    target: { value: '2026-10-15' },
+  })
+  fireEvent.change(screen.getByLabelText('Кінець періоду'), {
+    target: { value: '2026-10-21' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Створити звіт' }))
+
+  expect(
+    await screen.findByText('Звіт поставлено у чергу. PDF з’явиться у списку.'),
+  ).toBeVisible()
+  const period = await screen.findByText(/15\.10\s*[–-]\s*21\.10\.2026/)
+  expect(period).toHaveClass('rz-mono')
+})
+
+it('retains the print window handle while detaching its opener before the PDF download', async () => {
+  const pending = deferred<Awaited<ReturnType<typeof reportsApi.download>>>()
+  let loaded: EventListener | undefined
+  const frame = {
+    title: '',
+    src: '',
+    style: {},
+    contentWindow: { print: vi.fn() },
+    addEventListener: vi.fn((_type: string, listener: EventListener) => {
+      loaded = listener
+    }),
+  }
+  const popup = {
+    document: {
+      title: '',
+      body: { replaceChildren: vi.fn() },
+      createElement: vi.fn(() => frame),
+    },
+    opener: window as Window | null,
+    close: vi.fn(),
+    focus: vi.fn(),
+    print: vi.fn(),
+    location: { href: '' },
+  }
+  // Real browsers return null for noopener even when the new window opens.
+  vi.spyOn(window, 'open').mockImplementation((_url, _target, features) =>
+    features?.includes('noopener') ? null : (popup as unknown as Window),
+  )
+  vi.mocked(reportsApi.list).mockResolvedValue({
+    items: [report('completed')],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  })
+  vi.mocked(reportsApi.download).mockReturnValue(pending.promise)
+  render(<ReportsScreen {...screenProps} />)
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: 'Друкувати' }))
+  expect(popup.opener).toBeNull()
+  expect(popup.location.href).toBe('')
+  await act(async () => {
+    pending.resolve({
+      blob: new Blob(['pdf'], { type: 'application/pdf' }),
+      filename: 'sales.pdf',
+    })
+    await pending.promise
+  })
+  await waitFor(() => expect(frame.src).toBe('blob:report'))
+  expect(popup.document.body.replaceChildren).toHaveBeenCalledWith(frame)
+  expect(popup.location.href).toBe('')
+  expect(frame.contentWindow.print).not.toHaveBeenCalled()
+  act(() => loaded?.(new Event('load')))
+  expect(frame.contentWindow.print).toHaveBeenCalledOnce()
+  expect(popup.focus).toHaveBeenCalledOnce()
+  expect(popup.close).not.toHaveBeenCalled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })

@@ -1,0 +1,76 @@
+{
+ "id": "C30",
+ "module": "billing",
+ "crumbs": [
+  "Налаштування",
+  "Підписка"
+ ],
+ "title": "Тарифи",
+ "route": "/app/:tenant/settings/billing/plans",
+ "source": "billing/plans-messages.ts, access-messages.ts",
+ "unverified": "назви й ліміти тарифів",
+ "states": [
+  [
+   "data",
+   "Дані"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "main": [
+  {
+   "type": "table",
+   "title": "Тарифи",
+   "columns": [
+    {
+     "label": "Тариф"
+    },
+    {
+     "label": "Деталі",
+     "align": "end"
+    },
+    {
+     "label": "Користувачі",
+     "align": "end"
+    },
+    {
+     "label": "Ціна",
+     "align": "end"
+    }
+   ],
+   "rows": [
+    [
+     "Старт",
+     "300",
+     "1",
+     "490 ₴"
+    ],
+    [
+     "Бізнес · поточний",
+     "1 500",
+     "5",
+     "1 490 ₴"
+    ],
+    [
+     "Про",
+     "10 000",
+     "20",
+     "3 990 ₴"
+    ]
+   ]
+  },
+  {
+   "type": "notice",
+   "tone": "info",
+   "icon": "icon-info",
+   "text": "Скільки доплатити за залишок періоду, кабінет не рахує — сума буде видна в рахунку Mono."
+  }
+ ],
+ "aside": []
+}

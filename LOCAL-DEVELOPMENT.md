@@ -184,3 +184,21 @@ Native responses retain Core's JSON envelope and native refresh credentials;
 no Set-Cookie headers are emitted. Browser code continues to use `/session/*`
 and its HttpOnly refresh cookie. Local native development can use the Core
 Aspire gateway directly; device-specific local origin selection stays in mobile.
+
+### Loading state preview
+
+With `npm run dev:local`, append `loadingPreview=hold` to any accessible cabinet
+route to keep its existing, route-specific skeleton visible. For example,
+`/app/<tenant>/warehouses?loadingPreview=hold` previews the warehouse list;
+`/app/<tenant>/cars/<id>?loadingPreview=hold` previews a car record.
+Use `&loadingPreview=hold` when the URL already contains query parameters.
+The **Показати екран** button removes only the preview parameter and opens the
+normal screen, preserving filters. `loadingPreview=3000` shows the placeholder
+for three seconds and then opens the screen automatically (100–30000 ms).
+
+This is a development-only visual inspection mode. Module access checks run
+first, the actual screen mounts after the preview, and API clients, requests,
+timeouts, writes and data remain unchanged. QA and production builds ignore the
+parameter. To test real network transitions or failures, additionally use a
+browser network throttle or scoped Playwright response delays; the preview is
+not a measurement of backend response time.

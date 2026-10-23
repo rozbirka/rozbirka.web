@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}a{color:var(--rz-brand-text);text-decoration:none}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<div data-theme="dark" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:40px 24px 64px">
+  <div style="max-width:880px;margin:0 auto;display:grid;gap:28px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Rozbirka Design System · v2</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Зміст</h1>
+      <p style="margin:0;color:var(--rz-text-muted)">Фаза B — компоненти. Фаза C — фічі (кожна сторінка окремо, з усіма станами).</p>
+    </header>
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+      <section style="display:grid;gap:8px">
+        <div style="display:flex;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">{{ g.title }}</h2><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:{{ g.statusColor }}">{{ g.status }}</span></div>
+        <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface);overflow:hidden">
+          <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:16px;padding:9px 12px;border-top:1px solid var(--rz-border)">
+              <sc-if value="{{ it.href }}" hint-placeholder-val="{{ true }}"><a href="{{ it.href }}" style="font-weight:500">{{ it.name }}</a></sc-if>
+              <sc-if value="{{ it.todo }}" hint-placeholder-val="{{ false }}"><span style="color:var(--rz-text-dim)">{{ it.name }}</span></sc-if>
+              <span style="color:var(--rz-text-muted)">{{ it.note }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const done = (name, href, note) => ({ name, href, note, todo: false });
+    const todo = (name, note) => ({ name, href: null, note, todo: true });
+    return {
+      groups: [
+        { title: 'Фундамент', status: 'готово', statusColor: 'var(--rz-ok)', items: [done('tokens.css', './tokens.css', 'Теми dark/light, щільність, шкали'), done('MIGRATION.md', './MIGRATION.md', 'As-is → v2')] },
+        { title: 'B1 · Базові контроли', status: 'переглянуто', statusColor: 'var(--rz-ok)', items: [done('Button', './components/Button.dc.html', 'primary · secondary · ghost · danger, 5 розмірів'), done('Field та поля вводу', './components/Field.dc.html', 'TextInput, NumberInput, SearchInput, Select, TextArea, inline-layout'), done('Checkbox · Radio · Switch', './components/Selection.dc.html', 'Нові у v2'), done('CodeChip · Kbd', './components/CodeChip.dc.html', 'Коди з копіюванням, скорочення')] },
+        { title: 'B2 · Статуси', status: 'переглянуто', statusColor: 'var(--rz-ok)', items: [done('StatusPill · Counter · Meter', './components/Status.dc.html', '5 тонів, pill і dot, лічильники, прогрес понад ліміт'), done('Notice · Toast · Skeleton', './components/Feedback.dc.html', 'Повідомлення, банер модуля, тости, завантаження')] },
+        { title: 'B3 · Навігація', status: 'переглянуто', statusColor: 'var(--rz-ok)', items: [done('Sidebar · Rail · Mobile · Topbar', './components/Navigation.dc.html', '3 подачі навігації, breadcrumb, банер офлайну'), done('Tabs · Segmented · CommandPalette', './components/Tabs.dc.html', 'Вкладки-маршрути, сегменти, ⌘K зі станами')] },
+        { title: 'B4 · Дані', status: 'переглянуто', statusColor: 'var(--rz-ok)', items: [done('DataTable · Toolbar · BulkBar · Pagination', './components/DataTable.dc.html', 'Вибір, сортування, inline-edit, заблоковані рядки, mobile-картки, skeleton'), done('Стани замість вмісту', './components/States.dc.html', 'Empty ×2, Error ×2, Denied, Quota, Plan, 404, read-only')] },
+        { title: 'B5 · Контейнери', status: 'переглянуто', statusColor: 'var(--rz-ok)', items: [done('Card · FactList · KpiStrip · Peek', './components/Containers.dc.html', 'Один контейнер замість трьох поколінь, master-detail'), done('Діалоги · Sheet · меню · popover', './components/Overlays.dc.html', 'ConfirmDialog з pending і помилкою, FormDialog, Sheet, ActionMenu, FilterPopover')] },
+        { title: 'B6 · ERP', status: 'переглянуто', statusColor: 'var(--rz-ok)', items: [done('QuantityStepper · Photo · Stepper · Timeline · PermissionGate', './components/Records.dc.html', 'Предметні блоки картки запису'), done('Scanner', './components/Scanner.dc.html', '6 станів складського режиму, glove 56'), done('Друк', './components/Print.dc.html', 'Стікер 40×58, етикетка НП, документ A4 (пропозиція)')] },
+        { title: 'Кіт для агентів', status: 'переглянуто', statusColor: 'var(--rz-ok)', items: [done('kit.css', './kit.css', 'Класи .rz-* для HTML-прототипів, лише токени'), done('CATALOG.md', './CATALOG.md', 'Компонент → клас → еталон → файл у репо → статус'), done('Kit Check', './Kit Check.dc.html', 'Розмітка лише з класів кіта')] },
+        { title: 'C · Фічі · 33', status: 'на перегляді', statusColor: 'var(--rz-warn)', items: [done("C1 · Запчастини — список", "./archive/features/Parts List.dc.html", "/app/:tenant/parts · 14 станів"), done("C2 · Деталь — картка", "./archive/features/Part Detail.dc.html", "/app/:tenant/parts/:partId · 13 станів"), done("C3 · Нова деталь", "./archive/features/Record.dc.html?screen=partform", "/app/:tenant/parts/new · /parts/:id/edit · 4 станів"), done("C4 · Замовлення", "./archive/features/List.dc.html?screen=orders", "/app/:tenant/orders · 7 станів"), done("C5 · Замовлення №358", "./archive/features/Record.dc.html?screen=order", "/app/:tenant/orders/:orderId · 7 станів"), done("C6 · Інвентаризація", "./archive/features/List.dc.html?screen=inventory", "/app/:tenant/inventory · 7 станів"), done("C7 · Головна", "./archive/features/Record.dc.html?screen=dashboard", "/app/:tenant/dashboard · 5 станів"), done("C8 · Клієнти", "./archive/features/List.dc.html?screen=customers", "/app/:tenant/customers · 7 станів"), done("C10 · Автомобілі", "./archive/features/List.dc.html?screen=cars", "/app/:tenant/cars · 7 станів"), done("C11 · Приймання", "./archive/features/List.dc.html?screen=intakes", "/app/:tenant/intakes · 7 станів"), done("C12 · Каси", "./archive/features/List.dc.html?screen=cash", "/app/:tenant/cash · 7 станів"), done("C13 · Команда", "./archive/features/List.dc.html?screen=team", "/app/:tenant/team · 7 станів"), done("C14 · Імпорт запчастин", "./archive/features/List.dc.html?screen=imports", "/app/:tenant/parts/imports · 7 станів"), done("C15 · Підписка", "./archive/features/Record.dc.html?screen=subscription", "/app/:tenant/settings/billing/overview · 6 станів"), done("C16 · Бізнес", "./archive/features/Record.dc.html?screen=business", "/app/:tenant/settings/business · 4 станів"), done("C17 · Профіль", "./archive/features/Record.dc.html?screen=profile", "/app/:tenant/settings/profile · 3 станів"), done("C18 · Звіти", "./archive/features/Record.dc.html?screen=reports", "/app/:tenant/reports · 4 станів"), done("C19 · Інтеграції", "./archive/features/Record.dc.html?screen=integrations", "/app/:tenant/settings/integrations · 4 станів"), done("C20 · Вхід", "./archive/features/Record.dc.html?screen=login", "/login · 5 станів"), done("C21 · Запрошення", "./archive/features/Record.dc.html?screen=invite", "/invite/:code · 3 станів"), done("C22 · Volkswagen Passat B8 · 2016", "./archive/features/Record.dc.html?screen=car", "/app/:tenant/cars/:carId · 4 станів"), done("C23 · Новий автомобіль", "./archive/features/Record.dc.html?screen=carform", "/app/:tenant/cars/new · /:carId/edit · 3 станів"), done("C24 · СТО «Мотор»", "./archive/features/Record.dc.html?screen=customer", "/app/:tenant/customers/:customerId · 4 станів"), done("C25 · Новий клієнт", "./archive/features/Record.dc.html?screen=customerform", "/app/:tenant/customers/new · /:id/edit · 3 станів"), done("C26 · Партія з аукціону #12", "./archive/features/Record.dc.html?screen=intake", "/app/:tenant/intakes/:intakeId[/parts/batch] · 5 станів"), done("C27 · sklad_oct.xlsx", "./archive/features/Record.dc.html?screen=importflow", "/app/:tenant/parts/imports/:importId · 6 станів"), done("C28 · Склад 1 · Зона A", "./archive/features/Record.dc.html?screen=session", "/app/:tenant/inventory/sessions/:sessionId[/results|/audit|/journal/:zoneId] · 6 станів"), done("C29 · Нова пошта", "./archive/features/Record.dc.html?screen=novaposhta", "/app/:tenant/settings/integrations/:id[/dispatch-points|/webhook|/settings] · 5 станів"), done("C30 · Тарифи", "./archive/features/Record.dc.html?screen=plans", "/app/:tenant/settings/billing/plans · 3 станів"), done("C31 · Платежі", "./archive/features/Record.dc.html?screen=payments", "/app/:tenant/settings/billing/payments · 3 станів"), done("C32 · Нова розбірка", "./archive/features/Record.dc.html?screen=onboarding", "/app (без розбірок) · OnboardingChecklist · 3 станів"), done("C33 · Особистий акаунт", "./archive/features/Record.dc.html?screen=account", "/account · /account/security · 3 станів"), done("C34 · Політика конфіденційності", "./archive/features/Record.dc.html?screen=privacy", "/privacy · 1 станів"), done('C9 · Друк', './components/Print.dc.html', 'Стікер, етикетка НП, A4'), done('Сканер', './components/Scanner.dc.html', '6 станів'), done('404 / тариф / доступ', './components/States.dc.html', ''), done('Усі стани (дошка)', './archive/features/Board.dc.html', ''), done('FEATURES.md', './archive/features/FEATURES.md', 'Покриття маршрутів')] },
+        { title: 'D · Пакет для агентів', status: 'на перегляді', statusColor: 'var(--rz-warn)', items: [done('CLAUDE.md', '../CLAUDE.md', 'Порядок читання, правила, self-check'), done('SKILL.md', '../skill/SKILL.md', 'Скіл, що підключає пакет'), done('visual_check.py', '../check/visual_check.py', 'Рендер станів, лінт токенів, diff з еталоном'), done('evals', '../evals/README.md', '5 задач з еталонами'), done('content/', '../content/README.md', 'Де живуть рядки й переліки')] },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

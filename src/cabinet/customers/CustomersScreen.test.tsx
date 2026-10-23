@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -127,7 +128,8 @@ it('returns from a customer card to the customer directory', async () => {
     </ToastProvider>,
   )
 
-  await user.click(await screen.findByRole('link', { name: 'До клієнтів' }))
+  // The breadcrumb's «Клієнти» leads back to the directory.
+  await user.click(await screen.findByRole('link', { name: 'Клієнти' }))
 
   await waitFor(() =>
     expect(router.state.location.pathname).toBe('/app/garage/customers'),
@@ -178,7 +180,7 @@ it('opens the new-customer form in the standard side drawer over the directory',
 
   expect(screen.getByText('Клієнти', { selector: 'h1' })).toBeInTheDocument()
   const drawer = screen.getByRole('dialog', { name: 'Новий клієнт' })
-  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(drawer).toHaveClass('rz-sheet')
   // The shared drawer: its footer keeps the save action in view.
   expect(
     within(drawer).getByRole('button', { name: 'Створити клієнта' }),
@@ -245,16 +247,18 @@ it('uses browser-native contact links and opens a new order over the customer ca
     '/app/garage/orders/order-7',
   )
   const average = screen.getByText('Середній чек').closest('div')
-  expect(
-    within(average as HTMLElement).getByText(/1\s167,00\sUSD/),
-  ).toBeVisible()
+  // v2 KPI: the figure large, the ISO code as its unit.
+  expect(average).toHaveTextContent(/1\s167,00\s*USD/)
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
 
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
   expect(screen.getByRole('dialog', { name: 'Нове замовлення' })).toBeVisible()
   expect(screen.getByText('Ірина', { selector: 'h1' })).toBeVisible()
-  expect(screen.getByLabelText('Пошук клієнта')).toHaveValue('Ірина')
+  expect(
+    screen.getByRole('status', { name: 'Клієнта обрано' }),
+  ).toHaveTextContent('Ірина')
+  expect(screen.queryByRole('searchbox', { name: 'Пошук клієнта' })).toBeNull()
 })
 
 it('paginates a customer order history by 20 orders', async () => {
@@ -718,7 +722,7 @@ it('edits a customer in the side drawer over the customer card', async () => {
   const drawer = await screen.findByRole('dialog', {
     name: 'Редагувати клієнта',
   })
-  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(drawer).toHaveClass('rz-sheet')
   await within(drawer).findByDisplayValue('Ірина')
   expect(
     within(drawer).getByRole('button', { name: 'Зберегти зміни' }),
@@ -924,4 +928,237 @@ it('renders the customer form in Polish', () => {
   expect(
     within(drawer).getByRole('button', { name: 'Utwórz klienta' }),
   ).toBeVisible()
+})
+
+it('edits customer notes in their card, cancels drafts, and clears with an empty string', async () => {
+  const customer = { ...addressedCustomer, notes: 'Початкова нотатка' }
+  customerMocks.getById.mockResolvedValue(customer)
+  customerMocks.update.mockResolvedValue({
+    customer: { ...customer, notes: null },
+  })
+  const user = userEvent.setup()
+  renderScreen('/app/garage/customers/customer-1')
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  expect(within(card).queryByRole('textbox')).not.toBeInTheDocument()
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', {
+    name: 'Нотатки',
+  })
+  await user.clear(input)
+  await user.type(input, 'Незбережена зміна')
+  await user.click(within(card).getByRole('button', { name: 'Скасувати' }))
+  expect(within(card).getByText('Початкова нотатка')).toBeVisible()
+  expect(customerMocks.update).not.toHaveBeenCalled()
+
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  await user.clear(within(card).getByRole('textbox', { name: 'Нотатки' }))
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  expect(customerMocks.update).toHaveBeenCalledWith(
+    'customer-1',
+    { notes: '' },
+    { signal: expect.any(AbortSignal) as AbortSignal },
+  )
+  expect(await within(card).findByText('Нотаток немає.')).toBeVisible()
+  expect(within(card).queryByRole('textbox')).not.toBeInTheDocument()
+})
+
+it('retains a rejected customer note draft and saves only trimmed notes on retry', async () => {
+  const customer = { ...addressedCustomer, notes: null }
+  customerMocks.getById.mockResolvedValue(customer)
+  customerMocks.update
+    .mockRejectedValueOnce({ kind: 'validation', message: 'Виправте нотатку' })
+    .mockResolvedValueOnce({
+      customer: { ...customer, notes: 'Перевірити адресу' },
+    })
+  const user = userEvent.setup()
+  renderScreen('/app/garage/customers/customer-1')
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', {
+    name: 'Нотатки',
+  })
+  await user.type(input, '  Перевірити адресу  ')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  expect(await within(card).findByRole('alert')).toBeVisible()
+  expect(input).toHaveValue('  Перевірити адресу  ')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  expect(customerMocks.update).toHaveBeenLastCalledWith(
+    'customer-1',
+    { notes: 'Перевірити адресу' },
+    { signal: expect.any(AbortSignal) as AbortSignal },
+  )
+  expect(await within(card).findByText('Перевірити адресу')).toBeVisible()
+})
+
+it('does not offer inline customer notes editing without customer management permission', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['customers.view', 'orders.view']),
+  )
+  customerMocks.getById.mockResolvedValue({
+    ...addressedCustomer,
+    notes: 'Для перегляду',
+  })
+  renderScreen('/app/garage/customers/customer-1')
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  expect(within(card).getByText('Для перегляду')).toBeVisible()
+  expect(within(card).queryByRole('button')).not.toBeInTheDocument()
+  expect(within(card).queryByRole('textbox')).not.toBeInTheDocument()
+})
+
+it('discards the previous customer note editor immediately on navigation and ignores its late save', async () => {
+  const first = { ...addressedCustomer, notes: 'Перша нотатка' }
+  const second = {
+    ...first,
+    id: 'customer-2',
+    name: 'Другий клієнт',
+    notes: 'Друга нотатка',
+  }
+  let resolveSecond!: (value: typeof second) => void
+  let resolveSave!: (value: { customer: { notes: string } }) => void
+  customerMocks.getById.mockImplementation((id: string) =>
+    id === first.id
+      ? Promise.resolve(first)
+      : new Promise<typeof second>((resolve) => {
+          resolveSecond = resolve
+        }),
+  )
+  customerMocks.update.mockReturnValue(
+    new Promise<{ customer: { notes: string } }>((resolve) => {
+      resolveSave = resolve
+    }),
+  )
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/customers/:customerId',
+        element: <CustomersScreen definition={definition} />,
+      },
+    ],
+    { initialEntries: ['/app/garage/customers/customer-1'] },
+  )
+  const user = userEvent.setup()
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+  const card = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(card).getByRole('button', { name: 'Редагувати' }))
+  const input = within(card).getByRole('textbox', {
+    name: 'Нотатки',
+  })
+  await user.clear(input)
+  await user.type(input, 'Збережена перша')
+  await user.click(within(card).getByRole('button', { name: 'Зберегти' }))
+  await act(() => router.navigate('/app/garage/customers/customer-2'))
+  expect(
+    screen.queryByRole('textbox', { name: 'Нотатки' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText('Перша нотатка')).not.toBeInTheDocument()
+  await act(async () => {
+    resolveSecond(second)
+    await Promise.resolve()
+  })
+  expect(await screen.findByText('Друга нотатка')).toBeVisible()
+  await act(async () => {
+    resolveSave({ customer: { notes: 'Збережена перша' } })
+    await Promise.resolve()
+  })
+  expect(screen.getByText('Друга нотатка')).toBeVisible()
+  expect(screen.queryByText('Збережена перша')).not.toBeInTheDocument()
+  expect(customerMocks.update).toHaveBeenCalledTimes(1)
+})
+
+it('opens a customer order from empty row space without duplicating link navigation', async () => {
+  customerMocks.getById.mockResolvedValue({
+    ...addressedCustomer,
+    ordersCount: 1,
+    orders: [
+      {
+        id: 'order-1',
+        number: 359,
+        status: 'confirmed',
+        totalAmount: 125,
+        currency: 'USD',
+        partNames: ['Деталь'],
+        createdAt: '2026-09-21T10:00:00Z',
+      },
+    ],
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/garage/customers/:id',
+        element: <CustomersScreen definition={definition} />,
+      },
+      { path: '/app/garage/orders/:id', element: <p>Замовлення клієнта</p> },
+    ],
+    { initialEntries: ['/app/garage/customers/customer-1'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+  const link = await screen.findByRole('link', { name: '#359' })
+  await user.click(link.closest('tr')!)
+  expect(router.state.location.pathname).toBe('/app/garage/orders/order-1')
+  await act(async () => {
+    await router.navigate(-1)
+  })
+  await user.click(await screen.findByRole('link', { name: '#359' }))
+  await act(async () => {
+    await router.navigate(-1)
+  })
+  expect(router.state.location.pathname).toBe(
+    '/app/garage/customers/customer-1',
+  )
+})
+
+it('sorts the loaded customers through the shared searchable dropdown', async () => {
+  const user = userEvent.setup()
+  customerMocks.list.mockResolvedValue({
+    items: [
+      {
+        id: 'one',
+        name: 'Андрій',
+        phone: null,
+        notes: null,
+        ordersCount: 1,
+        totalAmount: 100,
+        lastOrderAt: null,
+      },
+      {
+        id: 'two',
+        name: 'Ярослав',
+        phone: null,
+        notes: null,
+        ordersCount: 2,
+        totalAmount: 500,
+        lastOrderAt: null,
+      },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 2,
+    totalPages: 1,
+  })
+  renderScreen('/app/garage/customers')
+  const first = await screen.findByText('Ярослав')
+  const second = screen.getByText('Андрій')
+  expect(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  const trigger = screen.getByRole('button', { name: 'Сортувати' })
+  expect(trigger).toHaveTextContent('Сумою')
+  await user.click(trigger)
+  expect(
+    screen.queryByRole('searchbox', { name: 'Пошук у списку' }),
+  ).not.toBeInTheDocument()
+  expect(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  await user.click(screen.getByRole('option', { name: 'Іменем' }))
+  expect(screen.queryByRole('listbox')).toBeNull()
+  expect(trigger).toHaveTextContent('Іменем')
+  expect(
+    second.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
 })

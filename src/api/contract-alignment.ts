@@ -12,14 +12,17 @@
  * `Pending…` list with its reason, checked with `Same<Unknown<…>, Pending…>`.
  * Once the pin includes the field, typecheck fails again until the entry is
  * removed — so a branch cannot quietly ship against a contract that is not
- * merged and pinned. There are no pending entries at the moment.
+ * merged and pinned.
  *
  * Covers request payloads only: an unknown field sent to Core is the silent
  * failure. Add a line here when another adapter starts sending new fields.
  */
-import type { components } from './generated/core'
+import type { components, paths } from './generated/core'
+import type { InventoryZoneQuery, SectionListOptions } from './inventory'
+import type { RequestOptions } from './contracts'
 import type { UpdateBusinessRequest } from './business'
 import type { CustomerInput } from './customers'
+import type { AddIntakePartRequest } from './intakes'
 import type { UpdateOnboardingRequest } from './onboarding'
 import type { ConfirmPayment } from './orders'
 import type { ImportMapping, ImportRule } from './part-imports'
@@ -35,7 +38,32 @@ type Check<T extends true> = T
 /** Every value the web sends fits the contract's type for that field. */
 type Fits<Sent, Contract> = [Sent] extends [Contract] ? true : false
 
+type ZoneListQuery = NonNullable<
+  paths['/api/v1/inventory/zones']['get']['parameters']['query']
+>
+type SectionListQuery = NonNullable<
+  paths['/api/v1/inventory/sections']['get']['parameters']['query']
+>
+
 export type ContractAlignment = [
+  Check<
+    Same<
+      Unknown<Omit<InventoryZoneQuery, keyof RequestOptions>, ZoneListQuery>,
+      never
+    >
+  >,
+  Check<
+    Same<
+      Unknown<Omit<SectionListOptions, keyof RequestOptions>, SectionListQuery>,
+      never
+    >
+  >,
+  Check<
+    Same<
+      Unknown<AddIntakePartRequest, Schemas['AddPartToIntakeRequest']>,
+      never
+    >
+  >,
   Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
   Check<Same<Unknown<ImportRule, Schemas['ImportFieldRule']>, never>>,
   Check<Same<Unknown<CreatePartRequest, Schemas['CreatePartRequest']>, never>>,

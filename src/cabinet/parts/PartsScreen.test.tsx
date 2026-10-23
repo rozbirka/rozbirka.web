@@ -1,3 +1,4 @@
+import type { UpdatePartRequest } from '@/api/parts'
 import { FeatureFlagsProvider } from '../FeatureFlags'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -15,8 +16,13 @@ import { FEATURES } from '@/api/types'
 import { LocaleProvider, type Locale } from '@/i18n'
 import { PartsScreen } from './PartsScreen'
 import { resetOnboardingCache } from '../onboarding/use-owner-onboarding'
+import { ToastProvider } from '@/components/app'
 
 const inventoryMocks = vi.hoisted(() => ({
+  getZones: vi.fn(),
+  getSections: vi.fn(),
+  getShelves: vi.fn(),
+  replacePartZones: vi.fn(),
   getPartZones: vi.fn().mockResolvedValue([
     {
       isSystemUnassigned: false,
@@ -130,6 +136,7 @@ const selectorMocks = vi.hoisted(() => ({
   cars: vi.fn(),
   car: vi.fn(),
   intakes: vi.fn(),
+  intake: vi.fn(),
 }))
 const mediaMocks = vi.hoisted(() => ({
   upload: vi.fn(),
@@ -186,7 +193,7 @@ vi.mock('@/api/cars', () => ({
   carsApi: { get: selectorMocks.car, list: selectorMocks.cars },
 }))
 vi.mock('@/api/intakes', () => ({
-  intakesApi: { list: selectorMocks.intakes },
+  intakesApi: { list: selectorMocks.intakes, get: selectorMocks.intake },
 }))
 vi.mock('@/api/media', () => ({
   mediaApi: { upload: mediaMocks.upload, remove: mediaMocks.remove },
@@ -259,7 +266,7 @@ beforeEach(() => {
       },
     ],
     page: 1,
-    pageSize: 100,
+    pageSize: 300,
     total: 1,
     totalPages: 1,
   })
@@ -270,6 +277,11 @@ beforeEach(() => {
     model: 'Focus',
     year: 2018,
   })
+  selectorMocks.intake.mockReset().mockResolvedValue({
+    id: 'intake-1',
+    name: 'Партія серпень',
+    supplier: 'Постачальник',
+  })
   selectorMocks.intakes.mockReset().mockResolvedValue({
     items: [
       {
@@ -279,12 +291,56 @@ beforeEach(() => {
       },
     ],
     page: 1,
-    pageSize: 100,
+    pageSize: 300,
     total: 1,
     totalPages: 1,
   })
   mediaMocks.upload.mockReset()
   mediaMocks.remove.mockReset().mockResolvedValue(undefined)
+  inventoryMocks.getZones.mockReset().mockResolvedValue([
+    {
+      id: 'system',
+      warehouseId: 'warehouse',
+      warehouseName: 'Основний склад',
+      name: 'Без зони',
+      isSystemUnassigned: true,
+      isActive: true,
+    },
+    {
+      id: 'zone',
+      warehouseId: 'warehouse',
+      warehouseName: 'Основний склад',
+      name: 'Контейнер',
+      isSystemUnassigned: false,
+      isActive: true,
+    },
+  ])
+  inventoryMocks.getSections
+    .mockReset()
+    .mockResolvedValue([
+      { id: 'section', zoneId: 'zone', name: 'Стелаж', isActive: true },
+    ])
+  inventoryMocks.getShelves.mockReset().mockResolvedValue([
+    {
+      id: 'shelf',
+      sectionId: 'section',
+      zoneId: 'zone',
+      name: 'Полиця',
+      isActive: true,
+    },
+  ])
+  inventoryMocks.getPartZones.mockReset().mockResolvedValue([
+    {
+      isSystemUnassigned: false,
+      warehouseId: 'wh-1',
+      warehouseName: 'Склад А',
+      zoneCode: 'A-3-2',
+      zoneId: 'zone-1',
+      zoneName: 'Стелаж 3 · полиця 2',
+      zoneQrCode: 'QR',
+    },
+  ])
+  inventoryMocks.replacePartZones.mockReset().mockResolvedValue([])
   cabinetMock.snapshot.permissions = new Set([
     'parts.view',
     'parts.manage',
@@ -330,6 +386,91 @@ it('returns from the new-part drawer to the parts directory', async () => {
   expect(screen.getByText('Екран деталей')).toBeVisible()
 })
 
+it('opens the newly created part instead of leaving the creation drawer open', async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          {
+            path: 'parts/new',
+            element: <PartsScreen definition={partsDefinition as never} />,
+          },
+          { path: 'parts/:partId', element: <p>Картка деталі</p> },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/yard/parts/new?car_id=car-1'] },
+  )
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Дзеркало' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
+  expect(await screen.findByText('Картка деталі')).toBeVisible()
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  expect(screen.queryByRole('region', { name: 'Нова деталь' })).toBeNull()
+  expect(screen.getByRole('status')).toHaveTextContent('Деталь створено.')
+})
+
+it('saves the chosen warehouse, zone, section and shelf after creating a part', async () => {
+  cabinetMock.snapshot.permissions.add('inventory.view')
+  cabinetMock.snapshot.permissions.add('inventory.zones.manage')
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/new',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+      { path: '/app/:tenant/parts/:partId', element: <p>Картка деталі</p> },
+    ],
+    { initialEntries: ['/app/yard/parts/new?car_id=car-1'] },
+  )
+  const user = userEvent.setup()
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+  for (const [label, option] of [
+    ['Пошук складу', 'Основний склад'],
+    ['Пошук зони', 'Контейнер'],
+    ['Пошук секції', 'Стелаж'],
+    ['Пошук полиці', 'Полиця'],
+  ] as const) {
+    await user.click(await screen.findByRole('searchbox', { name: label }))
+    await user.click(screen.getByRole('option', { name: option }))
+  }
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Фара' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Створити деталь' }))
+  expect(await screen.findByText('Картка деталі')).toBeVisible()
+  expect(inventoryMocks.replacePartZones).toHaveBeenCalledWith(
+    'part-1',
+    ['zone'],
+    expect.anything(),
+    'shelf',
+    'section',
+  )
+})
+
+async function expectPartFormClosed() {
+  await vi.waitFor(() =>
+    expect(
+      screen.queryByRole('region', {
+        name: /^(Нова деталь|New part|Nowa część)$/,
+      }),
+    ).not.toBeInTheDocument(),
+  )
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -346,6 +487,16 @@ function LocationProbe() {
       </button>
     </>
   )
+}
+
+/** Toolbar filters live in popovers; open one to reach its controls. */
+function openFilter(name: string | RegExp) {
+  fireEvent.click(screen.getByRole('button', { name }))
+}
+
+async function chooseDropdown(label: string, option: string | RegExp) {
+  fireEvent.click(await screen.findByRole('button', { name: label }))
+  fireEvent.click(await screen.findByRole('option', { name: option }))
 }
 
 function DetailNavigation() {
@@ -380,20 +531,29 @@ it('normalizes invalid URL filters before requesting inventory', async () => {
 
   await vi.waitFor(() =>
     expect(partMocks.search).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, pageSize: 30 }),
+      expect.objectContaining({
+        page: 1,
+        pageSize: 30,
+        intakeIds: ['intake-1'],
+      }),
       expect.anything(),
     ),
   )
   expect(partMocks.search.mock.calls.at(-1)?.[0]).not.toHaveProperty('statuses')
   expect(partMocks.search.mock.calls.at(-1)?.[0]).not.toHaveProperty('carIds')
+  expect(partMocks.facets).toHaveBeenCalledWith(
+    expect.objectContaining({ intakeIds: ['intake-1'] }),
+    expect.anything(),
+    expect.anything(),
+  )
   const statusRow = (name: string | RegExp) =>
-    within(screen.getByRole('region', { name: 'Статус' })).getByRole('button', {
+    within(screen.getByRole('group', { name: 'Статус' })).getByRole('button', {
       name,
     })
   expect(statusRow(/Усі/)).toHaveAttribute('aria-pressed', 'true')
   expect(
     within(
-      screen.getByRole('radiogroup', {
+      await screen.findByRole('radiogroup', {
         name: 'Кількість деталей на сторінці',
       }),
     ).getByRole('radio', { name: '30' }),
@@ -430,18 +590,13 @@ it('keeps controlled filters synced with back navigation and resets page when fi
   )
 
   const statusRow = (name: string | RegExp) =>
-    within(screen.getByRole('region', { name: 'Статус' })).getByRole('button', {
+    within(screen.getByRole('group', { name: 'Статус' })).getByRole('button', {
       name,
     })
   expect(statusRow(/У резерві/)).toHaveAttribute('aria-pressed', 'true')
-  const make = screen.getByLabelText('Марка')
-  // Options arrive with the facets, so wait for the one we are about to pick.
-  await vi.waitFor(() =>
-    expect(within(make).getByRole('option', { name: /Ford/ })).toBeDefined(),
-  )
-  fireEvent.change(make, { target: { value: 'make-ford' } })
+  await chooseDropdown('Авто', 'CAR-01 · Ford Focus (2018)')
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
-    'make=make-ford',
+    'car_ids=car-1',
   )
   expect(screen.getByLabelText('Поточний маршрут').textContent).not.toMatch(
     /(?:^|[?&])page=3(?:&|$)/,
@@ -523,7 +678,7 @@ it('does not request car or intake selectors without their view permissions', as
   expect(selectorMocks.cars).not.toHaveBeenCalled()
   expect(selectorMocks.intakes).not.toHaveBeenCalled()
   expect(screen.queryByLabelText('Авто')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Приймання')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Партія')).not.toBeInTheDocument()
 })
 
 it('does not offer or request unauthorized source selectors on create', () => {
@@ -564,12 +719,41 @@ it('loads only the source selector that becomes relevant', async () => {
   expect(selectorMocks.cars).toHaveBeenCalledOnce()
   expect(selectorMocks.intakes).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Автомобіль-джерело' }))
   await screen.findByRole('option', { name: 'CAR-01 · Ford Focus (2018)' })
   expect(selectorMocks.cars).toHaveBeenCalledOnce()
   expect(selectorMocks.intakes).not.toHaveBeenCalled()
 })
 
 it('shows server-authoritative compatibility as read-only when mutation is absent from the contract', async () => {
+  partMocks.compatibilities.mockResolvedValueOnce({
+    partId: 'part-1',
+    version: 'v1',
+    items: [
+      {
+        id: 'compat-1',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-ford',
+        makeName: 'Ford',
+        modelId: 'model-focus',
+        modelName: 'Focus',
+        yearFrom: 2018,
+        yearTo: 2018,
+        evidenceType: 'DonorObservation',
+      },
+      {
+        id: 'compat-2',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-vw',
+        makeName: 'Volkswagen',
+        modelId: null,
+        modelName: null,
+        evidenceType: 'Manual',
+      },
+    ],
+  })
   partMocks.get.mockResolvedValue({
     id: 'part-1',
     name: 'Bumper',
@@ -606,6 +790,8 @@ it('shows server-authoritative compatibility as read-only when mutation is absen
   const card = await screen.findByRole('region', { name: /Сумісність/ })
   expect(within(card).getByText('Ford Focus')).toBeVisible()
   expect(within(card).getByText('2018')).toBeVisible()
+  expect(within(card).getByText('—')).toBeVisible()
+  expect(within(card).queryByText('undefined')).not.toBeInTheDocument()
   // The donor row is Core's own, and the screen says so rather than offering
   // an edit that would be refused.
   expect(within(card).getByText('авто-джерело, не редагується')).toBeVisible()
@@ -704,6 +890,10 @@ it('shows the fixed condition choices in a separate card when editing a part', a
           path="/app/:tenant/parts/:partId/edit"
           element={<PartsScreen definition={partsDefinition as never} />}
         />
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<p>Картка деталі</p>}
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -724,8 +914,198 @@ it('shows the fixed condition choices in a separate card when editing a part', a
     within(condition).getByRole('radio', { name: 'Задовільний' }),
   ).toHaveAttribute('aria-checked', 'true')
   expect(
+    within(conditionCard).getByText(
+      'Справна, є сліди використання або дрібні косметичні дефекти.',
+    ),
+  ).toBeVisible()
+  fireEvent.click(
+    within(condition).getByRole('radio', { name: 'На запчастини' }),
+  )
+  expect(
+    within(condition).getByRole('radio', { name: 'На запчастини' }),
+  ).toHaveAttribute('aria-checked', 'true')
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+  await vi.waitFor(() =>
+    expect(partMocks.update).toHaveBeenCalledWith(
+      'part-1',
+      expect.objectContaining({ condition: 'scrap' }),
+      expect.anything(),
+    ),
+  )
+  expect(
     screen.queryByRole('combobox', { name: 'Стан' }),
   ).not.toBeInTheDocument()
+})
+
+it('shows saved compatibility rows in the part edit screen', async () => {
+  partMocks.get.mockResolvedValueOnce({
+    id: 'part-1',
+    source: 'batch',
+    carId: null,
+    intakeId: 'intake-1',
+    name: 'Фара',
+    quantityTotal: 1,
+    unit: 'шт',
+    condition: 'good',
+    notes: null,
+    oemCode: null,
+    partType: null,
+    desiredSalePrice: null,
+    compatCarBrand: null,
+    compatCarModel: null,
+    compatCarYear: null,
+  })
+  partMocks.compatibilities.mockResolvedValueOnce({
+    partId: 'part-1',
+    version: 'v1',
+    items: [
+      {
+        id: 'compat-1',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-ford',
+        makeName: 'Ford',
+        modelId: 'model-focus',
+        modelName: 'Focus',
+        yearFrom: 2018,
+        yearTo: 2018,
+        evidenceType: 'Manual',
+      },
+      {
+        id: 'compat-2',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-vw',
+        makeName: 'Volkswagen',
+        modelId: null,
+        modelName: null,
+        evidenceType: 'Manual',
+      },
+    ],
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId/edit"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const compatibility = await screen.findByRole('region', {
+    name: 'Сумісність',
+  })
+  expect(await within(compatibility).findByText('Ford')).toBeVisible()
+  expect(within(compatibility).getByText('Focus')).toBeVisible()
+  expect(within(compatibility).getByText('2018')).toBeVisible()
+  expect(within(compatibility).getByText('Volkswagen')).toBeVisible()
+  expect(within(compatibility).getByText('—')).toBeVisible()
+  expect(within(compatibility).queryByText('undefined')).not.toBeInTheDocument()
+  expect(partMocks.compatibilities).toHaveBeenCalledWith(
+    'part-1',
+    expect.objectContaining({
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+})
+
+it('opens part editing as a standalone page and returns to the card', async () => {
+  const part = {
+    id: 'part-1',
+    name: 'Фара',
+    source: 'batch',
+    carId: null,
+    intakeId: 'intake-1',
+    condition: 'good',
+    status: 'available',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    unit: 'шт',
+    notes: null,
+    oemCode: null,
+    partType: null,
+    desiredSalePrice: null,
+    photos: [],
+    reservations: null,
+    order: null,
+    soldOrders: null,
+    createdByName: 'Олена',
+    createdAt: '2026-08-28T12:00:00Z',
+  }
+  partMocks.get.mockResolvedValue(part)
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/:partId',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+      {
+        path: '/app/:tenant/parts/:partId/edit',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+    ],
+    { initialEntries: ['/app/yard/parts/part-1'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+
+  await user.click(await screen.findByRole('link', { name: 'Редагувати' }))
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1/edit')
+  const drawer = await screen.findByRole('region', {
+    name: 'Редагувати деталь',
+  })
+  expect(
+    within(drawer).getByRole('button', { name: 'Зберегти зміни' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Ціна продажу' }),
+  ).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1/edit')
+  await user.click(within(drawer).getByRole('button', { name: 'Назад' }))
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+  await user.click(await screen.findByRole('link', { name: 'Редагувати' }))
+  const editing = await screen.findByRole('region', {
+    name: 'Редагувати деталь',
+  })
+  await user.clear(within(editing).getByRole('textbox', { name: 'Назва' }))
+  await user.type(
+    within(editing).getByRole('textbox', { name: 'Назва' }),
+    'Фара права',
+  )
+  let finish: ((value: unknown) => void) | undefined
+  partMocks.update.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  await user.click(
+    within(editing).getByRole('button', { name: 'Зберегти зміни' }),
+  )
+  expect(editing).toBeVisible()
+  partMocks.get.mockResolvedValue({ ...part, name: 'Фара права' })
+  await act(async () => {
+    finish?.({ ...part, name: 'Фара права' })
+    await Promise.resolve()
+  })
+  await vi.waitFor(() =>
+    expect(router.state.location.pathname).toBe('/app/yard/parts/part-1'),
+  )
+  expect(
+    screen.queryByRole('region', { name: 'Редагувати деталь' }),
+  ).not.toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'Фара права' }),
+  ).toBeVisible()
 })
 
 it('creates a part with every supported source, inventory, price, and compatibility field', async () => {
@@ -770,6 +1150,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
   }
   fireEvent.click(screen.getByRole('radio', { name: 'Хороший' }))
 
+  fireEvent.click(screen.getByRole('button', { name: 'Додати ще авто' }))
   const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
   fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
@@ -778,7 +1159,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
   fireEvent.change(vehicle.getByLabelText('Рік'), { target: { value: '2018' } })
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     {
       sourceType: 'batch',
@@ -857,7 +1238,7 @@ it('retains successful media uploads while exposing retry and remove for each fa
   await screen.findByText('mirror.jpg · Завантажено')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(mediaMocks.upload).toHaveBeenCalledTimes(3)
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -902,7 +1283,7 @@ it('removes a selected file without uploading it before save', async () => {
   expect(mediaMocks.remove).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({ photoKeys: [] }),
     expect.objectContaining({
@@ -957,9 +1338,7 @@ it('persists a tenant-authorized labeled car selection without exposing its raw 
     target: { value: 'Bumper' },
   })
   fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
-  fireEvent.change(await screen.findByLabelText('Автомобіль-джерело'), {
-    target: { value: 'car-1' },
-  })
+  await chooseDropdown('Автомобіль-джерело', 'CAR-01 · Ford Focus (2018)')
 
   expect(
     await screen.findByText('CAR-01 · Ford Focus (2018)'),
@@ -967,7 +1346,7 @@ it('persists a tenant-authorized labeled car selection without exposing its raw 
   expect(screen.queryByLabelText('ID джерела')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('Марка сумісності')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     {
       sourceType: 'car',
@@ -999,9 +1378,7 @@ it('rechecks cars.view before creating a car-sourced part', async () => {
     target: { value: 'Bumper' },
   })
   fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
-  fireEvent.change(await screen.findByLabelText('Автомобіль-джерело'), {
-    target: { value: 'car-1' },
-  })
+  await chooseDropdown('Автомобіль-джерело', 'CAR-01 · Ford Focus (2018)')
   cabinetMock.snapshot.permissions.delete('cars.view')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
@@ -1025,9 +1402,7 @@ it('rechecks intakes.view before creating an intake-sourced part', async () => {
     target: { value: 'Bumper' },
   })
   fireEvent.click(screen.getByRole('button', { name: /З партії/ }))
-  fireEvent.change(await screen.findByLabelText('Партія-джерело'), {
-    target: { value: 'intake-1' },
-  })
+  await chooseDropdown('Партія-джерело', 'Партія серпень · Постачальник')
   cabinetMock.snapshot.permissions.delete('intakes.view')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
@@ -1035,92 +1410,108 @@ it('rechecks intakes.view before creating an intake-sourced part', async () => {
   expect(partMocks.create).not.toHaveBeenCalled()
 })
 
-it('loads existing edit values and updates every field accepted by the immutable request', async () => {
-  partMocks.get.mockResolvedValue({
-    id: 'part-1',
-    name: 'Front bumper',
-    source: 'car',
-    carId: 'car-1',
-    carCode: 'CAR-01',
-    carBrand: 'Ford',
-    carModel: 'Focus',
-    carYear: 2018,
-    intakeId: null,
-    quantityTotal: 2,
-    quantityAvailable: 2,
-    quantityReserved: 0,
-    qrCode: 'RZB-26-1',
-    createdByName: 'Olena',
-    createdAt: '2026-08-01T10:00:00Z',
-    unit: 'pcs',
-    condition: 'used',
-    notes: 'Old note',
-    oemCode: 'OEM-read-only',
-    partType: 'body',
-    desiredSalePrice: 100,
-    photos: [
-      {
-        id: 'photo-1',
-        storageKey: 'tenant-secret/existing.jpg',
-        url: 'https://cdn.example/existing.jpg',
-        thumbnailUrl: 'https://cdn.example/existing-thumb.jpg',
-        sortOrder: 0,
-      },
-    ],
-  })
-  render(
-    <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/parts/:partId/edit"
-          element={<PartsScreen definition={partsDefinition as never} />}
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  expect(await screen.findByLabelText('Назва')).toHaveValue('Front bumper')
-  // The source is stated, not editable — it is fixed when the part is born.
-  expect(await screen.findByText(/З авто · CAR-01/)).toBeInTheDocument()
-  expect(screen.queryByLabelText('ID джерела')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Тип джерела')).not.toBeInTheDocument()
-  expect(screen.getByLabelText('OEM-код')).toHaveValue('OEM-read-only')
-  // The stepper is a text field with numeric input mode, not <input type=number>.
-  expect(screen.getByLabelText('Кількість')).toHaveValue('2')
-  expect(screen.getByRole('link', { name: 'Існуюче фото 1' })).toHaveAttribute(
-    'href',
-    'https://cdn.example/existing.jpg',
-  )
-  expect(screen.queryByText(/tenant-secret/)).not.toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Назва'), {
-    target: { value: 'Rear bumper' },
-  })
-  fireEvent.change(screen.getByLabelText('Кількість'), {
-    target: { value: '4' },
-  })
-  fireEvent.change(screen.getByLabelText('Бажана ціна'), {
-    target: { value: '' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
-
-  expect(await screen.findByText('Зміни збережено.')).toBeInTheDocument()
-  expect(partMocks.update).toHaveBeenCalledWith(
-    'part-1',
-    {
-      name: 'Rear bumper',
+it.each([
+  { input: ' 00123-AB ', expected: '00123-AB' },
+  { input: '', expected: null },
+])(
+  'edits and saves OEM code $expected alongside other part fields',
+  async ({ input, expected }) => {
+    partMocks.get.mockResolvedValue({
+      id: 'part-1',
+      name: 'Front bumper',
+      source: 'car',
+      carId: 'car-1',
+      carCode: 'CAR-01',
+      carBrand: 'Ford',
+      carModel: 'Focus',
+      carYear: 2018,
+      intakeId: null,
+      quantityTotal: 2,
+      quantityAvailable: 2,
+      quantityReserved: 0,
+      qrCode: 'RZB-26-1',
+      createdByName: 'Olena',
+      createdAt: '2026-08-01T10:00:00Z',
+      unit: 'pcs',
       condition: 'used',
       notes: 'Old note',
-      quantity: 4,
+      oemCode: 'OEM-read-only',
       partType: 'body',
-      unit: 'шт',
-      photoKeys: ['tenant-secret/existing.jpg'],
-      desiredSalePrice: { isSet: true, value: null },
-    },
-    expect.objectContaining({
-      signal: expect.any(AbortSignal) as AbortSignal,
-    }),
-  )
-})
+      desiredSalePrice: 100,
+      photos: [
+        {
+          id: 'photo-1',
+          storageKey: 'tenant-secret/existing.jpg',
+          url: 'https://cdn.example/existing.jpg',
+          thumbnailUrl: 'https://cdn.example/existing-thumb.jpg',
+          sortOrder: 0,
+        },
+      ],
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/:partId/edit"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+          <Route
+            path="/app/:tenant/parts/:partId"
+            element={<p>Картка деталі</p>}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Назва')).toHaveValue('Front bumper')
+    expect(screen.getAllByRole('region', { name: 'Фото' })).toHaveLength(1)
+    // The source is stated, not editable — it is fixed when the part is born.
+    expect(await screen.findByText(/З авто · CAR-01/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('ID джерела')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Тип джерела')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('OEM-код')).toHaveValue('OEM-read-only')
+    expect(screen.getByLabelText('OEM-код')).toBeEnabled()
+    fireEvent.change(screen.getByLabelText('OEM-код'), {
+      target: { value: input },
+    })
+    // The stepper is a text field with numeric input mode, not <input type=number>.
+    expect(screen.getByLabelText('Кількість')).toHaveValue('2')
+    expect(
+      screen.getByRole('link', { name: 'Існуюче фото 1' }),
+    ).toHaveAttribute('href', 'https://cdn.example/existing.jpg')
+    expect(screen.queryByText(/tenant-secret/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Назва'), {
+      target: { value: 'Rear bumper' },
+    })
+    fireEvent.change(screen.getByLabelText('Кількість'), {
+      target: { value: '4' },
+    })
+    fireEvent.change(screen.getByLabelText('Бажана ціна'), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+
+    expect(await screen.findByText('Картка деталі')).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(partMocks.update).toHaveBeenCalledWith(
+      'part-1',
+      {
+        name: 'Rear bumper',
+        oemCode: expected,
+        condition: 'used',
+        notes: 'Old note',
+        quantity: 4,
+        partType: 'body',
+        unit: 'шт',
+        photoKeys: ['tenant-secret/existing.jpg'],
+        desiredSalePrice: { isSet: true, value: null },
+      },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    )
+  },
+)
 
 it('guards duplicate creates with aria-busy and exposes mutation failures', async () => {
   cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
@@ -1150,9 +1541,10 @@ it('guards duplicate creates with aria-busy and exposes mutation failures', asyn
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
   const cancel = screen.getByRole('button', { name: 'Скасувати' })
+  expect(screen.getByRole('button', { name: 'Назад' })).toBeDisabled()
   expect(cancel).toBeDisabled()
   fireEvent.click(cancel)
-  expect(screen.getByRole('dialog', { name: 'Нова деталь' })).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Нова деталь' })).toBeVisible()
   expect(partMocks.create).toHaveBeenCalledTimes(1)
   rejectCreate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -1202,6 +1594,10 @@ it('guards duplicate edits with aria-busy and exposes mutation failures', async 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Не вдалося зберегти зміни.',
   )
+  expect(
+    screen.getByRole('region', { name: 'Редагувати деталь' }),
+  ).toBeVisible()
+  expect(screen.getByLabelText('Назва')).toHaveValue('Bumper')
 })
 
 it('uses opaque media labels and never renders storage keys', async () => {
@@ -1508,10 +1904,9 @@ it('renders the immutable detail and history contract with permission-aware link
     'href',
     '/app/yard/parts/part-1/edit',
   )
-  expect(screen.getByRole('link', { name: 'Перемістити' })).toHaveAttribute(
-    'href',
-    '/app/yard/parts/part-1/inventory',
-  )
+  expect(
+    screen.getByRole('button', { name: 'Перемістити' }),
+  ).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Друк стікера' })).toHaveAttribute(
     'href',
     '/app/yard/stickers?part=part-1',
@@ -1615,6 +2010,7 @@ it('reads history payloads as facts and shows an order once', async () => {
 })
 
 it('counts every filter value from the server and narrows the search by it', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   render(
     <MemoryRouter initialEntries={['/app/yard/parts']}>
       <Routes>
@@ -1626,9 +2022,10 @@ it('counts every filter value from the server and narrows the search by it', asy
     </MemoryRouter>,
   )
 
-  const conditions = await screen.findByRole('region', {
-    name: /Стан деталі/,
-  })
+  // The counts arrive with the facets, which also fill the page-head totals.
+  await screen.findByText('усього', { selector: 'dt' })
+  openFilter('Стан деталі')
+  const conditions = screen.getByRole('dialog', { name: 'Стан деталі' })
   // The numbers are the server's, counted under the rest of the filter.
   expect(
     within(conditions).getByRole('button', { name: /Хороший/i }),
@@ -1653,11 +2050,8 @@ it('counts every filter value from the server and narrows the search by it', asy
     expect.anything(),
   )
 
-  const origins = screen.getByRole('region', { name: 'Походження' })
-  expect(within(origins).getByRole('button', { name: /З авто/i })).toBeVisible()
-  expect(
-    within(origins).getByRole('button', { name: /З партії/i }),
-  ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Авто' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Партія' })).toBeVisible()
 })
 
 it('keeps the selected car and fills its compatibility and placement filters', async () => {
@@ -1695,12 +2089,25 @@ it('keeps the selected car and fills its compatibility and placement filters', a
     </MemoryRouter>,
   )
 
+  // The preset shows on the toolbar buttons and inside their popovers.
   await vi.waitFor(() => {
-    expect(screen.getByLabelText('Марка')).toHaveValue('make-ford')
-    expect(screen.getByLabelText('Модель')).toHaveValue('model-focus')
-    expect(screen.getByLabelText('Склад')).toHaveValue('w1')
-    expect(screen.getByLabelText('Зона')).toHaveValue('z1')
+    expect(screen.getByRole('button', { name: 'Авто' })).toBeVisible()
+    expect(
+      screen.getByRole('button', {
+        name: 'Склад: Львів, Городоцька · Стелаж A3',
+      }),
+    ).toBeVisible()
   })
+  expect(screen.getByRole('button', { name: 'Авто' })).toHaveTextContent(
+    'CAR-01 · Ford Focus (2018)',
+  )
+  openFilter('Склад: Львів, Городоцька · Стелаж A3')
+  expect(screen.getByRole('button', { name: 'Склад' })).toHaveTextContent(
+    'Львів, Городоцька',
+  )
+  expect(screen.getByRole('button', { name: 'Зона' })).toHaveTextContent(
+    'Стелаж A3',
+  )
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
     'car_ids=car-1',
   )
@@ -1727,24 +2134,82 @@ it('keeps the selected car and fills its compatibility and placement filters', a
   )
 })
 
-it('opens the model filter only once a make is chosen', async () => {
+it('filters by one car or one intake and preserves placement and condition', async () => {
+  const user = userEvent.setup()
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts']}>
+    <MemoryRouter
+      initialEntries={[
+        '/app/yard/parts?warehouse=warehouse&zone=zone&condition=good&origin=car&make=make-ford&model=model-focus&page=3',
+      ]}
+    >
       <Routes>
         <Route
           path="/app/:tenant/parts"
-          element={<PartsScreen definition={partsDefinition as never} />}
+          element={
+            <>
+              <PartsScreen definition={partsDefinition as never} />
+              <LocationProbe />
+            </>
+          }
         />
       </Routes>
     </MemoryRouter>,
   )
-
-  const model = await screen.findByLabelText('Модель')
-  expect(model).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Марка'), {
-    target: { value: 'make-ford' },
-  })
-  await vi.waitFor(() => expect(screen.getByLabelText('Модель')).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: 'Авто' }))
+  await user.click(
+    await screen.findByRole('option', { name: 'CAR-01 · Ford Focus (2018)' }),
+  )
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        carIds: ['car-1'],
+        warehouseIds: ['warehouse'],
+        zoneIds: ['zone'],
+        conditions: ['good'],
+        page: 1,
+      }),
+      expect.anything(),
+    ),
+  )
+  expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty(
+    'compatibility',
+  )
+  expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('originTypes')
+  await user.click(screen.getByRole('button', { name: 'Партія' }))
+  await user.click(
+    await screen.findByRole('option', { name: 'Партія серпень' }),
+  )
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        intakeIds: ['intake-1'],
+        warehouseIds: ['warehouse'],
+        zoneIds: ['zone'],
+        conditions: ['good'],
+        page: 1,
+      }),
+      expect.anything(),
+    ),
+  )
+  expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('carIds')
+  expect(screen.getByRole('button', { name: 'Авто' })).toHaveTextContent(
+    'Авто: усі',
+  )
+  expect(screen.getByRole('button', { name: 'Партія' })).toHaveTextContent(
+    'Партія серпень',
+  )
+  await user.click(screen.getByRole('button', { name: 'Партія' }))
+  await user.click(screen.getByRole('option', { name: 'Партія: усі' }))
+  await vi.waitFor(() =>
+    expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('intakeIds'),
+  )
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
+    'condition=good',
+  )
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
+    'warehouse=warehouse',
+  )
 })
 
 it('ignores an aborted stale list failure after filters change', async () => {
@@ -1860,7 +2325,7 @@ it('ignores an aborted stale detail failure after navigation', async () => {
   expect(screen.getByRole('heading', { name: 'Mirror' })).toBeInTheDocument()
 })
 
-it('blocks an invalid create and points at the offending fields', async () => {
+it('validates the name and creates with the quantity selected by the stepper', async () => {
   cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   render(
     <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
@@ -1875,16 +2340,15 @@ it('blocks an invalid create and points at the offending fields', async () => {
   fireEvent.change(screen.getByLabelText('Кількість'), {
     target: { value: '0' },
   })
+  expect(screen.getByLabelText('Кількість')).toHaveValue('1')
+  expect(screen.getByRole('button', { name: 'Менше' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'виправте позначені нижче поля',
   )
   expect(partMocks.create).not.toHaveBeenCalled()
-  for (const [label, message] of [
-    ['Назва', 'Введіть назву деталі'],
-    ['Кількість', 'Вкажіть ціле число від 1'],
-  ] as const) {
+  for (const [label, message] of [['Назва', 'Введіть назву деталі']] as const) {
     const control = screen.getByLabelText(label)
     expect(control).toHaveAttribute('aria-invalid', 'true')
     expect(
@@ -1895,13 +2359,18 @@ it('blocks an invalid create and points at the offending fields', async () => {
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Bumper' },
   })
-  fireEvent.change(screen.getByLabelText('Кількість'), {
-    target: { value: '2' },
-  })
+  fireEvent.click(screen.getByRole('button', { name: 'Більше' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Більше' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Менше' }))
+  expect(screen.getByLabelText('Кількість')).toHaveValue('2')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
-  expect(screen.getByLabelText('Назва')).not.toHaveAttribute('aria-invalid')
+  await expectPartFormClosed()
+  expect(partMocks.create).toHaveBeenCalledWith(
+    expect.objectContaining({ quantity: 2 }),
+    expect.anything(),
+  )
+  expect(screen.queryByLabelText('Назва')).toBeNull()
 })
 
 it('requires a source selection before creating a car-sourced part', async () => {
@@ -2023,14 +2492,170 @@ it('tells the operator that the parts search accepts a VIN', async () => {
   )
 })
 
-it('does not show selection checkboxes or bulk actions in the parts directory', async () => {
+it('keeps the add button in place but switched off with the reason once the quota is spent', async () => {
+  cabinetMock.snapshot.entitlement = {
+    ...cabinetMock.snapshot.entitlement,
+    usage: {
+      ...cabinetMock.snapshot.entitlement.usage,
+      parts: { used: 10, max: 10 },
+    },
+  }
   renderDirectory()
 
   await screen.findByRole('link', { name: 'Фара ліва' })
-  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Додати деталь' })).toBeNull()
+  const add = screen.getByRole('button', { name: 'Додати деталь' })
+  expect(add).toBeDisabled()
+  expect(add).toHaveAttribute('title', 'Ліміт деталей вичерпано.')
+})
+
+function StickerProbe() {
+  const location = useLocation()
+  return <output aria-label="Стікери">{location.search}</output>
+}
+
+function renderDirectoryWithStickers() {
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  return render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+        <Route element={<StickerProbe />} path="/app/:tenant/stickers" />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+it('picks rows into a working set whose one bulk action prints their stickers', async () => {
+  const user = userEvent.setup()
+  renderDirectoryWithStickers()
+
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.getByRole('search')).toBeVisible()
   expect(
     screen.queryByRole('region', { name: 'Дії над обраними' }),
   ).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('checkbox', { name: 'Обрати: Фара ліва' }))
+  const bulk = screen.getByRole('region', { name: 'Дії над обраними' })
+  // The bulk bar takes the toolbar's place (D15) and counts what is picked.
+  expect(bulk).toHaveTextContent('1 деталь обрано')
+  expect(screen.queryByRole('search')).toBeNull()
+  // Only a read-only action: no bulk price change or delete comes back.
+  expect(
+    within(bulk)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual(['Обрати всі на сторінці (2)', 'Друк стікера', ''])
+
+  await user.click(
+    within(bulk).getByRole('button', { name: /Обрати всі на сторінці/ }),
+  )
+  expect(bulk).toHaveTextContent('2 деталі обрано')
+
+  await user.click(within(bulk).getByRole('button', { name: 'Друк стікера' }))
+  expect(await screen.findByLabelText('Стікери')).toHaveTextContent(
+    '?part=part-1&part=part-2',
+  )
+})
+
+it('clears the working set from the bulk bar and gives the toolbar back', async () => {
+  const user = userEvent.setup()
+  renderDirectory()
+
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати: Бампер передній' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Зняти вибір' }))
+  expect(
+    screen.queryByRole('region', { name: 'Дії над обраними' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('search')).toBeVisible()
+})
+
+it('opens a part beside the list on row click and walks the page from there', async () => {
+  const user = userEvent.setup()
+  partMocks.get.mockImplementation((id: string) =>
+    Promise.resolve({
+      id,
+      name: id === 'part-1' ? 'Фара ліва' : 'Бампер передній',
+      condition: 'used',
+      status: 'available',
+      source: 'car',
+      quantityTotal: 2,
+      quantityAvailable: 2,
+      quantityReserved: 0,
+      quantitySoldTotal: 0,
+      oemCode: id === 'part-1' ? '3G1941005' : null,
+      effectiveSalePrice: 1800,
+      unit: 'pcs',
+      photos: [],
+      reservations: null,
+      order: null,
+      soldOrders: null,
+      createdByName: 'Olena',
+      createdAt: '2026-08-28T12:00:00Z',
+    }),
+  )
+  cabinetMock.snapshot.permissions.add('inventory.view')
+  inventoryMocks.getPartZones.mockResolvedValue([
+    {
+      warehouseId: 'warehouse-1',
+      warehouseName: 'Склад без зони',
+      zoneId: 'system-zone',
+      zoneName: 'Системна зона',
+      zoneCode: 'unassigned',
+      zoneQrCode: 'QR',
+      isSystemUnassigned: true,
+    },
+  ])
+  renderDirectory()
+
+  const row = (await screen.findByRole('link', { name: 'Фара ліва' })).closest(
+    'tr',
+  )!
+  await user.click(within(row).getByRole('cell', { name: /2/ }).closest('td')!)
+  const peek = await screen.findByRole('complementary', {
+    name: 'Деталь: Фара ліва',
+  })
+  expect(
+    screen.getByRole('link', { name: 'Фара ліва' }).closest('tr'),
+  ).toHaveAttribute('data-active', 'true')
+  expect(within(peek).getByText('OEM 3G1941005')).toBeVisible()
+  expect(within(peek).getByText('Наявність')).toBeVisible()
+  expect(
+    await within(peek).findByText(
+      'Склад без зони · На рівні складу · без зони',
+    ),
+  ).toBeVisible()
+  expect(within(peek).queryByText('Системна зона')).not.toBeInTheDocument()
+  expect(
+    within(peek).getByRole('link', { name: 'Відкрити картку деталі' }),
+  ).toHaveAttribute('href', '/app/yard/parts/part-1')
+  expect(
+    within(peek).getByRole('button', { name: 'Попередня деталь' }),
+  ).toBeDisabled()
+
+  await user.click(
+    within(peek).getByRole('button', { name: 'Наступна деталь' }),
+  )
+  expect(
+    await screen.findByRole('complementary', {
+      name: 'Деталь: Бампер передній',
+    }),
+  ).toBeVisible()
+
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('complementary')).toBeNull()
 })
 
 it('does not expose web-only saved filters', async () => {
@@ -2062,7 +2687,7 @@ it('uses standard row spacing without exposing density controls', async () => {
     </MemoryRouter>,
   )
 
-  expect(await screen.findByRole('table')).toHaveClass('text-[14.5px]')
+  expect(await screen.findByRole('table')).toHaveClass('rz-table')
   expect(
     screen.queryByRole('radiogroup', { name: 'Щільність рядків' }),
   ).toBeNull()
@@ -2097,14 +2722,20 @@ it('keeps the top stock totals in sync with the filtered status counts', async (
 
   renderDirectory()
 
-  const soldLabel = await screen.findByText('продано')
-  expect(soldLabel).toHaveTextContent(/85\s*продано/)
-  expect(screen.getByText('усього')).toHaveTextContent(/193\s*усього/)
-  expect(screen.getByText('доступно')).toHaveTextContent(/104\s*доступно/)
-  expect(screen.getByText('у резерві')).toHaveTextContent(/4\s*у резерві/)
-  expect(screen.getByText('Розмір сторінки').parentElement).toHaveClass(
-    'ml-auto',
-  )
+  // Each total is a term of the page head's list, named by its label.
+  const total = (label: string) =>
+    screen.getByText(label, { selector: 'dt' }).parentElement
+  await screen.findByText('продано', { selector: 'dt' })
+  expect(total('продано')).toHaveTextContent(/^продано\s*85$/)
+  expect(total('усього')).toHaveTextContent(/^усього\s*193$/)
+  expect(total('доступно')).toHaveTextContent(/^доступно\s*104$/)
+  expect(total('у резерві')).toHaveTextContent(/^у резерві\s*4$/)
+  // The page size sits with the pagination, not with the totals.
+  expect(
+    within(
+      screen.getByRole('navigation', { name: 'Пагінація деталей' }),
+    ).getByText('Розмір сторінки'),
+  ).toBeVisible()
 })
 
 it('edits a quantity in the row by rewriting the whole record', async () => {
@@ -2296,7 +2927,7 @@ it('blames the server, not the network, when the request came back 500', async (
   ).toBeVisible()
 })
 
-it('opens the new part as a drawer and names the next thing to fix', async () => {
+it('opens the new part as a standalone page and names the next thing to fix', async () => {
   cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   const user = userEvent.setup()
 
@@ -2311,8 +2942,8 @@ it('opens the new part as a drawer and names the next thing to fix', async () =>
     </MemoryRouter>,
   )
 
-  const drawer = await screen.findByRole('dialog')
-  expect(drawer).toHaveClass('sm:right-0')
+  const drawer = await screen.findByRole('region', { name: 'Нова деталь' })
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(within(drawer).getByText(/Введіть назву деталі/)).toBeVisible()
 
   await user.type(within(drawer).getByLabelText('Назва'), 'Цапфа RR')
@@ -2357,12 +2988,77 @@ it('starts a part from a car page with that car already chosen', async () => {
     'true',
   )
   expect(
-    screen.getByRole('combobox', { name: 'Автомобіль-джерело' }),
-  ).toHaveValue('car-1')
+    screen.getByRole('button', { name: 'Автомобіль-джерело' }),
+  ).toHaveTextContent('CAR-01 · Ford Focus (2018)')
 })
 
-it('adds and removes vehicles in the compatibility list', async () => {
+it('hides the create-car action after choosing a source car and restores it when cleared', async () => {
+  cabinetMock.snapshot.permissions.add('cars.manage')
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    screen.getByRole('link', { name: 'Створити автомобіль' }),
+  ).toBeVisible()
+  const source = await screen.findByRole('button', {
+    name: 'Автомобіль-джерело',
+  })
+  await chooseDropdown('Автомобіль-джерело', 'CAR-01 · Ford Focus (2018)')
+  expect(screen.queryByRole('link', { name: 'Створити автомобіль' })).toBeNull()
+
+  fireEvent.click(source)
+  fireEvent.click(
+    await screen.findByRole('option', { name: 'Оберіть автомобіль' }),
+  )
+  expect(
+    screen.getByRole('link', { name: 'Створити автомобіль' }),
+  ).toBeVisible()
+})
+
+it('shows the selected source car as compatibility without an empty vehicle form', async () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new?car_id=car-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('Ford Focus')).toBeVisible()
+  expect(
+    screen.getByText('З вибраного авто-джерела. Змінюється разом із джерелом.'),
+  ).toBeVisible()
+  expect(screen.queryByRole('region', { name: 'Авто 1' })).toBeNull()
+})
+
+it('adds and removes extra compatibility inline on demand', async () => {
   const user = userEvent.setup()
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ MakeId: 1, MakeName: 'Ford' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ Model_ID: 2, Model_Name: 'Focus' }] }),
+      }),
+  )
 
   render(
     <MemoryRouter initialEntries={['/app/yard/parts/new']}>
@@ -2375,15 +3071,22 @@ it('adds and removes vehicles in the compatibility list', async () => {
     </MemoryRouter>,
   )
 
-  await screen.findByRole('region', { name: 'Авто 1' })
-  expect(screen.queryByRole('button', { name: /Прибрати/ })).toBeNull()
+  expect(screen.queryByRole('region', { name: 'Авто 1' })).toBeNull()
 
   await user.click(screen.getByRole('button', { name: 'Додати ще авто' }))
+  const vehicle = within(await screen.findByRole('region', { name: 'Авто 1' }))
+  expect(screen.queryByRole('dialog', { name: 'Додати сумісність' })).toBeNull()
+  fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
+  fireEvent.click(vehicle.getByRole('button', { name: 'Модель' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Focus' }))
+  fireEvent.change(vehicle.getByLabelText('Рік'), {
+    target: { value: '2018' },
+  })
+  expect(vehicle.getByLabelText('Рік')).toHaveValue('2018')
+  await user.click(vehicle.getByRole('button', { name: 'Прибрати' }))
 
-  expect(screen.getByRole('region', { name: 'Авто 2' })).toBeVisible()
-  await user.click(screen.getAllByRole('button', { name: /Прибрати/ })[1]!)
-
-  expect(screen.queryByRole('region', { name: 'Авто 2' })).toBeNull()
+  expect(screen.queryByRole('region', { name: 'Авто 1' })).toBeNull()
 })
 
 it('refuses to save a make the yard has never catalogued', async () => {
@@ -2411,6 +3114,7 @@ it('refuses to save a make the yard has never catalogued', async () => {
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Цапфа' },
   })
+  fireEvent.click(screen.getByRole('button', { name: 'Додати ще авто' }))
   const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
   fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Rivian' }))
@@ -2446,12 +3150,14 @@ it('keeps the donor row by replacing compatibility after creating a car part', a
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Цапфа' },
   })
-  const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
+  expect(await screen.findByText('Ford Focus')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Додати ще авто' }))
+  const vehicle = within(screen.getByRole('region', { name: 'Авто 2' }))
   fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   // The list never rides along with the part: that would drop the donor row.
   expect(partMocks.create.mock.calls[0]?.[0]).not.toHaveProperty(
     'compatibilities',
@@ -2503,10 +3209,14 @@ it('says the part cannot be ordered from its own page yet, instead of pretending
     </MemoryRouter>,
   )
 
-  const order = await screen.findByRole('button', {
+  // The action lives in the record's menu, switched off with its reason.
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: 'Інші дії з деталлю' }))
+  const order = await screen.findByRole('menuitem', {
     name: 'Додати в замовлення',
   })
-  expect(order).toBeDisabled()
+  expect(order).toHaveAttribute('aria-disabled', 'true')
   expect(order).toHaveAttribute(
     'title',
     expect.stringContaining('ще не підключене'),
@@ -2553,7 +3263,7 @@ it('offers the price only as a warning while the part has none', async () => {
   expect(within(price).queryByRole('link', { name: 'Змінити' })).toBeNull()
 })
 
-it('names where the part actually sits, and says when it sits nowhere', async () => {
+it('shows warehouse-level placement and reserves the empty state for no locations', async () => {
   const part = {
     id: 'part-1',
     name: 'Bumper',
@@ -2587,13 +3297,13 @@ it('names where the part actually sits, and says when it sits nowhere', async ()
     </MemoryRouter>,
   )
 
-  const stock = await screen.findByRole('region', { name: 'Наявність' })
-  expect(
-    await within(stock).findByText('Склад А · Стелаж 3 · полиця 2'),
-  ).toBeVisible()
+  const placement = await screen.findByRole('region', {
+    name: 'Місце на складі',
+  })
+  expect(await within(placement).findByText('Склад А')).toBeVisible()
   unmount()
 
-  // Core keeps a system zone for anything nobody has placed; it is not a place.
+  // Warehouse-level placement is represented by the warehouse’s system zone.
   inventoryMocks.getPartZones.mockResolvedValueOnce([
     {
       isSystemUnassigned: true,
@@ -2605,7 +3315,7 @@ it('names where the part actually sits, and says when it sits nowhere', async ()
       zoneQrCode: 'QR',
     },
   ])
-  render(
+  const warehouseOnlyView = render(
     <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
       <Routes>
         <Route
@@ -2616,10 +3326,34 @@ it('names where the part actually sits, and says when it sits nowhere', async ()
     </MemoryRouter>,
   )
 
+  const warehouseOnly = await screen.findByRole('region', {
+    name: 'Місце на складі',
+  })
+  expect(
+    await within(warehouseOnly).findByText('На рівні складу · без зони'),
+  ).toBeVisible()
+  expect(within(warehouseOnly).getByText('Склад А')).toBeVisible()
+  expect(
+    within(warehouseOnly).queryByText('Не розміщена'),
+  ).not.toBeInTheDocument()
+  expect(within(warehouseOnly).queryByText('Без зони')).not.toBeInTheDocument()
+  warehouseOnlyView.unmount()
+
+  inventoryMocks.getPartZones.mockResolvedValueOnce([])
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
   expect(await screen.findByText('Не розміщена')).toBeVisible()
 })
 
-it('keeps reserves with the sales and says what it cannot promise about them', async () => {
+it('shows reservation data without unsupported actions, amounts or delivery placeholders', async () => {
   partMocks.get.mockResolvedValue({
     id: 'part-1',
     name: 'Bumper',
@@ -2667,18 +3401,21 @@ it('keeps reserves with the sales and says what it cannot promise about them', a
   const sales = await screen.findByRole('region', { name: 'Продажі' })
   expect(within(sales).getByText('Андрій Коваль')).toBeVisible()
   expect(within(sales).getByText('СТО «Мотор-Сервіс»')).toBeVisible()
-  // A reservation carries no price of its own, and the table says so.
-  expect(within(sales).getAllByText('—').length).toBeGreaterThan(0)
-
-  // The action from the design is offered, but refused with its reason.
-  const extend = within(sales).getAllByRole('button', {
-    name: /Продовжити/,
-  })[0]!
-  expect(extend).toBeDisabled()
-  expect(extend).toHaveAttribute(
-    'title',
-    expect.stringContaining('Строку резерву розбірка не веде'),
-  )
+  expect(
+    within(sales)
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent),
+  ).toEqual(['Замовлення', 'Клієнт', 'Статус', 'К-сть'])
+  expect(
+    within(sales).queryByRole('button', { name: /Продовжити|Повернення/ }),
+  ).not.toBeInTheDocument()
+  expect(within(sales).queryByText('—')).not.toBeInTheDocument()
+  expect(sales).not.toHaveTextContent('спосіб доставки')
+  expect(sales).not.toHaveTextContent('тримається, доки')
+  expect(sales).not.toHaveTextContent('У резерві на')
+  expect(sales).not.toHaveTextContent('Знижки')
+  expect(sales).not.toHaveTextContent('Разом продано')
+  expect(sales).not.toHaveTextContent('Виручка')
 })
 
 it('groups history by day and narrows it to what was asked for', async () => {
@@ -2807,13 +3544,22 @@ it('narrows the sales table to reserves or to sales', async () => {
   )
 
   const sales = await screen.findByRole('region', { name: 'Продажі' })
-  // Revenue and the discount against the asking price are both real figures.
-  expect(sales).toHaveTextContent('Виручка')
-  expect(sales).toHaveTextContent('Знижки')
+  // Actual sold quantities and prices remain; no historical discount is inferred.
+  expect(sales).not.toHaveTextContent('Знижки')
+  expect(within(sales).getAllByText('360')).toHaveLength(2)
+  expect(
+    within(sales).getByRole('columnheader', { name: 'Сума' }),
+  ).toBeVisible()
   expect(within(sales).getByText('Андрій Коваль')).toBeVisible()
   expect(within(sales).getByText('Олег Шевчук')).toBeVisible()
 
-  await user.click(within(sales).getByRole('tab', { name: /Продано/ }))
+  await user.click(within(sales).getByRole('button', { name: /У резерві/ }))
+  expect(
+    within(sales).queryByRole('columnheader', { name: 'Сума' }),
+  ).not.toBeInTheDocument()
+  expect(sales).not.toHaveTextContent('Разом продано')
+
+  await user.click(within(sales).getByRole('button', { name: /Продано/ }))
 
   expect(within(sales).queryByText('Андрій Коваль')).toBeNull()
   expect(within(sales).getByText('Олег Шевчук')).toBeVisible()
@@ -2883,7 +3629,7 @@ it('does not offer archived cars for new parts', async () => {
       },
     ],
     page: 1,
-    pageSize: 100,
+    pageSize: 300,
     total: 1,
   })
   render(
@@ -2899,6 +3645,7 @@ it('does not offer archived cars for new parts', async () => {
   await act(async () => {
     await Promise.resolve()
   })
+  fireEvent.click(screen.getByRole('button', { name: 'Автомобіль-джерело' }))
   expect(screen.queryByRole('option', { name: /OLD/ })).not.toBeInTheDocument()
   expect(selectorMocks.cars).toHaveBeenCalledWith(
     expect.objectContaining({ status: 'active' }),
@@ -2981,6 +3728,7 @@ function renderInLocale(locale: Locale, entry: string, path: string) {
 }
 
 it('reads the parts directory in English (UK)', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   partMocks.search.mockResolvedValue({
     items: pickableRows,
     page: 1,
@@ -2998,9 +3746,12 @@ it('reads the parts directory in English (UK)', async () => {
   )
   expect(screen.getByRole('link', { name: 'Add part' })).toBeVisible()
   expect(screen.getByRole('button', { name: /In stock/ })).toBeVisible()
+  openFilter('Part condition')
   expect(screen.getByRole('button', { name: /For parts/ })).toBeVisible()
-  expect(screen.getByRole('button', { name: /From an intake/ })).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Reset filters' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Car' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Intake' })).toBeVisible()
+  // Nothing is narrowed yet, so there is nothing to reset.
+  expect(screen.queryByRole('button', { name: 'Reset filters' })).toBeNull()
   expect(
     screen.getByRole('columnheader', { name: 'Source car' }),
   ).toBeInTheDocument()
@@ -3021,17 +3772,15 @@ it('reads the new-part form in English (UK) and Polish', async () => {
     '/app/:tenant/parts/new',
   )
 
-  const drawer = await screen.findByRole('dialog', { name: 'New part' })
+  const drawer = await screen.findByRole('region', { name: 'New part' })
   expect(within(drawer).getByText('Warehouse · Parts')).toBeVisible()
   expect(
     within(drawer).getByRole('button', { name: 'Create part' }),
   ).toBeVisible()
   expect(within(drawer).getByRole('button', { name: 'Cancel' })).toBeVisible()
   expect(
-    await within(drawer).findByRole('option', {
-      name: 'Партія серпень · Постачальник',
-    }),
-  ).toBeInTheDocument()
+    await within(drawer).findByRole('button', { name: 'Source intake' }),
+  ).toHaveTextContent('Партія серпень · Постачальник')
   expect(within(drawer).getByLabelText('Source intake')).toBeVisible()
   expect(within(drawer).getByRole('radio', { name: 'For parts' })).toBeVisible()
   expect(
@@ -3047,7 +3796,7 @@ it('reads the new-part form in English (UK) and Polish', async () => {
   expect(within(drawer).getByText('You can add photos later.')).toBeVisible()
 
   await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
-  expect(await within(drawer).findByText('Part created.')).toBeVisible()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({ unit: 'шт', name: 'Hub carrier RR' }),
     expect.anything(),
@@ -3055,7 +3804,7 @@ it('reads the new-part form in English (UK) and Polish', async () => {
   unmount()
 
   renderInLocale('pl', '/app/yard/parts/new', '/app/:tenant/parts/new')
-  const polish = await screen.findByRole('dialog', { name: 'Nowa część' })
+  const polish = await screen.findByRole('region', { name: 'Nowa część' })
   expect(
     within(polish).getByRole('button', { name: 'Utwórz część' }),
   ).toBeVisible()
@@ -3075,7 +3824,7 @@ it('reads a known source error code on create in the interface language', async 
     '/app/yard/parts/new?intake_id=intake-1',
     '/app/:tenant/parts/new',
   )
-  const drawer = await screen.findByRole('dialog', { name: 'New part' })
+  const drawer = await screen.findByRole('region', { name: 'New part' })
   await user.type(within(drawer).getByLabelText('Name'), 'Bumper')
   await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
 
@@ -3092,7 +3841,9 @@ it('reads a known source error code on create in the interface language', async 
   })
   await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
   expect(
-    await within(drawer).findByText('Message from the server'),
+    await within(drawer).findByText(
+      'Couldn’t complete the action because of a data conflict.',
+    ),
   ).toBeVisible()
 })
 
@@ -3146,7 +3897,11 @@ it('reads the part page and its history in English (UK)', async () => {
   expect(screen.getByText('Fair condition')).toBeVisible()
   expect(screen.getByText('0 photos')).toBeVisible()
   expect(screen.getByText('per 1 pcs')).toBeVisible()
-  expect(screen.getByRole('link', { name: 'Back to warehouse' })).toBeVisible()
+  // The way back is the breadcrumb.
+  expect(screen.getByRole('link', { name: 'Parts' })).toHaveAttribute(
+    'href',
+    '/app/yard/parts',
+  )
 })
 
 describe('asking price and the accounting currency', () => {
@@ -3214,7 +3969,7 @@ describe('asking price and the accounting currency', () => {
     ).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+    await expectPartFormClosed()
     expect(tenantMocks.list).toHaveBeenCalled()
     expect(partMocks.create).toHaveBeenCalledWith(
       expect.objectContaining({ desiredSalePrice: 0 }),
@@ -3267,14 +4022,12 @@ describe('the owner’s first part', () => {
       target: { value: 'Bumper' },
     })
     fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
-    fireEvent.change(await screen.findByLabelText('Автомобіль-джерело'), {
-      target: { value: 'car-1' },
-    })
+    await chooseDropdown('Автомобіль-джерело', 'CAR-01 · Ford Focus (2018)')
     await screen.findByText('CAR-01 · Ford Focus (2018)')
     fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
   }
 
-  it('keeps the parts screen and offers the way back to the dashboard', async () => {
+  it('opens the saved part even when it completes onboarding', async () => {
     onboardingMocks.get
       .mockReset()
       .mockResolvedValueOnce(onboardingFacts)
@@ -3286,28 +4039,22 @@ describe('the owner’s first part', () => {
     renderNewPart()
     await fillAndSave()
 
-    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
-    expect(
-      await screen.findByText('Основне налаштування завершено'),
-    ).toBeVisible()
-    expect(screen.getByRole('link', { name: 'До дашборду' })).toHaveAttribute(
-      'href',
-      '/app/yard/dashboard',
-    )
-    expect(onboardingMocks.get).toHaveBeenCalledTimes(2)
+    await expectPartFormClosed()
+    expect(screen.queryByText('Основне налаштування завершено')).toBeNull()
+    expect(partMocks.create).toHaveBeenCalledOnce()
   })
 
-  it('says nothing when the part does not finish onboarding', async () => {
+  it('opens the saved part when onboarding remains incomplete', async () => {
     onboardingMocks.get.mockReset().mockResolvedValue(onboardingFacts)
     renderNewPart()
     await fillAndSave()
 
-    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'До дашборду' })).toBeNull()
+    await expectPartFormClosed()
+    expect(partMocks.create).toHaveBeenCalledOnce()
   })
 })
 
-it('reads the part back after a lost save before reporting it', async () => {
+it('closes editing after a lost response only when the saved changes are confirmed', async () => {
   const stored = {
     id: 'part-1',
     source: 'free',
@@ -3328,22 +4075,729 @@ it('reads the part back after a lost save before reporting it', async () => {
     kind: 'network',
     message: 'offline',
   })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/:partId/edit',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+      { path: '/app/:tenant/parts/:partId', element: <p>Картка деталі</p> },
+    ],
+    { initialEntries: ['/app/yard/parts/part-1/edit'] },
+  )
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+  const field = await screen.findByLabelText('Нотатки')
+  fireEvent.change(field, { target: { value: 'Перевірено' } })
+  partMocks.get.mockResolvedValue({ ...stored, notes: 'Перевірено' })
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+
+  expect(await screen.findByText('Картка деталі')).toBeVisible()
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByText('Зміни збережено.')).toBeVisible()
+  expect(partMocks.update).toHaveBeenCalledOnce()
+})
+
+it('does not reopen a part after its pending edit completes on another screen', async () => {
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    source: 'free',
+    name: 'Фара',
+    quantityTotal: 1,
+    unit: 'pcs',
+    condition: 'good',
+    desiredSalePrice: null,
+    photos: [],
+  })
+  let finish: (() => void) | undefined
+  partMocks.update.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+  )
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/:partId/edit',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+      { path: '/app/:tenant/parts/:partId', element: <p>Інша деталь</p> },
+    ],
+    { initialEntries: ['/app/yard/parts/part-1/edit'] },
+  )
+  render(<RouterProvider router={router} />)
+  await screen.findByLabelText('Назва')
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+  expect(partMocks.update).toHaveBeenCalledOnce()
+  await act(async () => {
+    await router.navigate('/app/yard/parts/part-2')
+  })
+  await act(async () => {
+    finish?.()
+    await Promise.resolve()
+  })
+
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-2')
+  expect(screen.getByText('Інша деталь')).toBeVisible()
+})
+
+it.each(['Назва', 'OEM-код', 'Нотатки'])(
+  'reads back a lost save and retains unsaved %s',
+  async (label) => {
+    const stored = {
+      id: 'part-1',
+      source: 'free',
+      carId: null,
+      intakeId: null,
+      name: 'Дзеркало дверей L',
+      quantityTotal: 1,
+      unit: 'pcs',
+      condition: 'fair',
+      notes: null,
+      oemCode: null,
+      partType: null,
+      desiredSalePrice: null,
+      photos: [],
+    }
+    partMocks.get.mockResolvedValue(stored)
+    partMocks.update.mockRejectedValueOnce({
+      kind: 'network',
+      message: 'offline',
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/:partId/edit"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const field = await screen.findByLabelText(label)
+    fireEvent.change(field, { target: { value: 'Дзеркало праве' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+
+    // Read back: still the old name, so nothing was saved; the typing stays.
+    expect(await screen.findByText(/зміни не збереглися/)).toBeInTheDocument()
+    expect(screen.getByLabelText(label)).toHaveValue('Дзеркало праве')
+    expect(partMocks.update).toHaveBeenCalledOnce()
+  },
+)
+
+it('applies section and shelf filters from a warehouse link and resets descendants when zone changes', async () => {
+  partMocks.facets.mockResolvedValue({
+    ...(await partMocks.facets()),
+    warehouses: [{ id: 'warehouse', name: 'Основний склад', count: 52 }],
+    zones: [{ id: 'zone', name: 'Зона А', count: 52 }],
+  })
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/app/yard/parts?warehouse=warehouse&zone=zone&section=section&shelf=shelf&per_page=10&page=3',
+      ]}
+    >
       <Routes>
         <Route
-          path="/app/:tenant/parts/:partId/edit"
+          path="/app/:tenant/parts"
+          element={
+            <>
+              <PartsScreen definition={partsDefinition as never} />
+              <LocationProbe />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        warehouseIds: ['warehouse'],
+        zoneIds: ['zone'],
+        sectionIds: ['section'],
+        shelfIds: ['shelf'],
+        pageSize: 30,
+        page: 3,
+      }),
+      expect.anything(),
+    ),
+  )
+  expect(screen.queryByRole('radio', { name: /^10$/ })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
+    'per_page=30',
+  )
+  await screen.findByRole('button', { name: 'Склад: Основний склад · Зона А' })
+  openFilter('Склад: Основний склад · Зона А')
+  await chooseDropdown('Зона', '└ Зона: усі')
+  await vi.waitFor(() => {
+    expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('sectionIds')
+    expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('shelfIds')
+  })
+  expect(screen.getByLabelText('Поточний маршрут')).not.toHaveTextContent(
+    'section=',
+  )
+  expect(screen.getByLabelText('Поточний маршрут')).not.toHaveTextContent(
+    /[?&]page=3(?:&|$)/,
+  )
+})
+
+it.each([
+  ['warehouse=warehouse&zone=zone&without_section=1', { missingSection: true }],
+  [
+    'warehouse=warehouse&zone=zone&section=section&without_shelf=1',
+    { sectionIds: ['section'], missingShelf: true },
+  ],
+])('applies direct location filters from %s', async (query, expected) => {
+  render(
+    <MemoryRouter initialEntries={[`/app/yard/parts?${query}`]}>
+      <PartsScreen definition={partsDefinition as never} />
+    </MemoryRouter>,
+  )
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ...expected, zoneIds: ['zone'], pageSize: 30 }),
+      expect.anything(),
+    ),
+  )
+})
+
+function openPartWithNotes(notes: string | null = 'Стара нотатка') {
+  const part = {
+    id: 'part-1',
+    name: 'Фара',
+    source: 'free',
+    status: 'available',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    notes,
+    photos: [],
+    condition: 'good',
+    desiredSalePrice: null,
+    effectiveSalePrice: null,
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  }
+  partMocks.get.mockResolvedValue(part)
+  partMocks.update.mockImplementation(
+    (_id: string, request: UpdatePartRequest) => {
+      const saved = { ...part, notes: request.notes }
+      partMocks.get.mockResolvedValue(saved)
+      return Promise.resolve(saved)
+    },
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
           element={<PartsScreen definition={partsDefinition as never} />}
         />
       </Routes>
     </MemoryRouter>,
   )
-  const name = await screen.findByLabelText('Назва')
-  fireEvent.change(name, { target: { value: 'Дзеркало праве' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+  return part
+}
 
-  // Read back: still the old name, so nothing was saved; the typing stays.
-  expect(await screen.findByText(/зміни не збереглися/)).toBeInTheDocument()
-  expect(screen.getByLabelText('Назва')).toHaveValue('Дзеркало праве')
-  expect(partMocks.update).toHaveBeenCalledOnce()
+it.each(['Нова нотатка', ''])(
+  'saves inline notes %j without changing other part fields',
+  async (text) => {
+    const user = userEvent.setup()
+    openPartWithNotes()
+    const region = await screen.findByRole('region', { name: 'Нотатки' })
+    await user.click(within(region).getByRole('button', { name: 'Редагувати' }))
+    const input = within(region).getByRole('textbox', { name: 'Нотатки' })
+    await user.clear(input)
+    if (text) await user.type(input, text)
+    await user.click(within(region).getByRole('button', { name: 'Зберегти' }))
+    await vi.waitFor(() =>
+      expect(within(region).queryByRole('textbox')).toBeNull(),
+    )
+    expect(partMocks.update).toHaveBeenCalledWith(
+      'part-1',
+      {
+        notes: text,
+        desiredSalePrice: { isSet: false },
+      },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    )
+    expect(region).toHaveTextContent(text || 'Нотаток немає.')
+    expect(region).toHaveTextContent('Olena')
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Фара' }),
+    ).toBeVisible()
+  },
+)
+
+it('cancels inline notes and retains the draft after a failed save', async () => {
+  const user = userEvent.setup()
+  openPartWithNotes()
+  partMocks.update.mockRejectedValueOnce({
+    kind: 'http',
+    status: 500,
+    message: 'failure',
+  })
+  const region = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(region).getByRole('button', { name: 'Редагувати' }))
+  const input = within(region).getByRole('textbox', { name: 'Нотатки' })
+  await user.type(input, ' чернетка')
+  await user.click(within(region).getByRole('button', { name: 'Зберегти' }))
+  expect(await within(region).findByRole('alert')).toBeVisible()
+  expect(input).toHaveValue('Стара нотатка чернетка')
+  await user.click(within(region).getByRole('button', { name: 'Скасувати' }))
+  expect(within(region).queryByRole('textbox')).toBeNull()
+  expect(region).toHaveTextContent('Стара нотатка')
 })
+
+it('checks a lost inline notes response before declaring success', async () => {
+  const user = userEvent.setup()
+  openPartWithNotes()
+  partMocks.update.mockRejectedValueOnce({
+    kind: 'network',
+    message: 'offline',
+  })
+  const region = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(region).getByRole('button', { name: 'Редагувати' }))
+  const input = within(region).getByRole('textbox', { name: 'Нотатки' })
+  await user.type(input, ' чернетка')
+  await user.click(within(region).getByRole('button', { name: 'Зберегти' }))
+  expect(await within(region).findByRole('alert')).toBeVisible()
+  expect(input).toHaveValue('Стара нотатка чернетка')
+  expect(within(region).queryByText('Збережено')).toBeNull()
+})
+
+it('does not expose inline note editing without parts.manage', async () => {
+  cabinetMock.snapshot.permissions.delete('parts.manage')
+  openPartWithNotes()
+  const region = await screen.findByRole('region', { name: 'Нотатки' })
+  expect(
+    within(region).queryByRole('button', { name: 'Редагувати' }),
+  ).toBeNull()
+  expect(region).toHaveTextContent('Стара нотатка')
+})
+
+it.each([
+  { sectionName: 'Секція A01', sectionId: 's1' },
+  {
+    sectionName: 'Секція A01',
+    sectionId: 's1',
+    shelfName: 'Полиця Фари',
+    shelfId: 'p1',
+  },
+])(
+  'shows the actual section and shelf in the part location',
+  async (placement) => {
+    cabinetMock.snapshot.permissions.add('inventory.view')
+    inventoryMocks.getPartZones.mockResolvedValue([
+      {
+        ...placement,
+        isSystemUnassigned: false,
+        warehouseId: 'w1',
+        warehouseName: 'Основний склад',
+        zoneId: 'z1',
+        zoneName: 'Зона A',
+        zoneCode: 'A',
+        zoneQrCode: 'QR',
+      },
+    ])
+    openPartWithNotes()
+    const region = await screen.findByRole('region', {
+      name: 'Місце на складі',
+    })
+    expect(await within(region).findByText('Секція A01')).toBeVisible()
+    if ('shelfName' in placement)
+      expect(within(region).getByText('Полиця Фари')).toBeVisible()
+    expect(region).toHaveTextContent('Основний склад')
+    expect(region).toHaveTextContent('Зона A')
+  },
+)
+
+it('adds a first note and prevents duplicate saves while pending', async () => {
+  const user = userEvent.setup()
+  const part = openPartWithNotes(null)
+  let finish: ((value: unknown) => void) | undefined
+  partMocks.update.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  const region = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(region).getByRole('button', { name: 'Редагувати' }))
+  await user.type(
+    within(region).getByRole('textbox', { name: 'Нотатки' }),
+    'Перша нотатка',
+  )
+  const form = region.querySelector('form')!
+  fireEvent.submit(form)
+  fireEvent.submit(form)
+  expect(partMocks.update).toHaveBeenCalledOnce()
+  expect(within(region).getByRole('textbox')).toBeDisabled()
+  partMocks.get.mockResolvedValue({ ...part, notes: 'Перша нотатка' })
+  await act(async () => {
+    finish?.({ ...part, notes: 'Перша нотатка' })
+    await Promise.resolve()
+  })
+  expect(within(region).queryByRole('textbox')).toBeNull()
+  expect(region).toHaveTextContent('Перша нотатка')
+})
+
+it('accepts a lost note save only when the readback matches it', async () => {
+  const user = userEvent.setup()
+  const part = openPartWithNotes()
+  partMocks.update.mockRejectedValueOnce({
+    kind: 'network',
+    message: 'offline',
+  })
+  const region = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(region).getByRole('button', { name: 'Редагувати' }))
+  const input = within(region).getByRole('textbox')
+  await user.clear(input)
+  await user.type(input, 'Збережена нотатка')
+  partMocks.get.mockResolvedValue({ ...part, notes: 'Збережена нотатка' })
+  await user.click(within(region).getByRole('button', { name: 'Зберегти' }))
+  expect(await within(region).findByText('Збережено')).toBeVisible()
+  expect(within(region).queryByRole('textbox')).toBeNull()
+  expect(region).toHaveTextContent('Збережена нотатка')
+})
+
+it('rechecks permission before saving inline notes', async () => {
+  const user = userEvent.setup()
+  openPartWithNotes()
+  const region = await screen.findByRole('region', { name: 'Нотатки' })
+  await user.click(within(region).getByRole('button', { name: 'Редагувати' }))
+  await user.type(within(region).getByRole('textbox'), ' чернетка')
+  cabinetMock.snapshot.permissions.delete('parts.manage')
+  await user.click(within(region).getByRole('button', { name: 'Зберегти' }))
+  expect(await within(region).findByRole('alert')).toBeVisible()
+  expect(partMocks.update).not.toHaveBeenCalled()
+})
+
+it('shows a location load failure and retries instead of claiming the part is unplaced', async () => {
+  const user = userEvent.setup()
+  cabinetMock.snapshot.permissions.add('inventory.view')
+  inventoryMocks.getPartZones.mockRejectedValueOnce(new Error('offline'))
+  openPartWithNotes()
+  const region = await screen.findByRole('region', { name: 'Місце на складі' })
+  expect(await within(region).findByRole('alert')).toHaveTextContent(
+    'Не вдалося завантажити місце на складі.',
+  )
+  expect(within(region).queryByText('Не розміщена')).toBeNull()
+  await user.click(
+    within(region).getByRole('button', { name: 'Спробувати ще раз' }),
+  )
+  expect(await within(region).findByText('Склад А')).toBeVisible()
+})
+
+function reservationNavigationRouter() {
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Деталь у резерві',
+    condition: 'fair',
+    status: 'reserved',
+    source: 'free',
+    quantityTotal: 1,
+    quantityAvailable: 0,
+    quantityReserved: 1,
+    quantitySoldTotal: 0,
+    oemCode: null,
+    effectiveSalePrice: 100,
+    desiredSalePrice: 100,
+    photos: [],
+    order: null,
+    soldOrders: null,
+    reservations: [
+      {
+        orderId: 'order-1042',
+        orderNumber: 1042,
+        quantity: 1,
+        customerName: 'Клієнт резерву',
+      },
+    ],
+    createdByName: 'Олена',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/:partId',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+      {
+        path: '/app/:tenant/orders/:orderId',
+        element: <p>Картка замовлення</p>,
+      },
+    ],
+    { initialEntries: ['/app/yard/parts/part-1'] },
+  )
+  render(<RouterProvider router={router} />)
+  return router
+}
+
+it.each(['badge', 'space', 'number', 'keyboard'])(
+  'opens the reserved order by %s without duplicate navigation',
+  async (target) => {
+    const user = userEvent.setup()
+    const router = reservationNavigationRouter()
+    const sales = await screen.findByRole('region', { name: 'Продажі' })
+    const row = within(sales)
+      .getByRole('rowheader', { name: /1042/ })
+      .closest('tr')!
+    if (target === 'badge') await user.click(within(row).getByText('Резерв'))
+    else if (target === 'space') await user.click(row)
+    else if (target === 'number')
+      await user.click(within(row).getByRole('link', { name: '№ 1042' }))
+    else {
+      within(row).getByRole('link', { name: 'Резерв · № 1042' }).focus()
+      await user.keyboard('{Enter}')
+    }
+    expect(router.state.location.pathname).toBe('/app/yard/orders/order-1042')
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  },
+)
+
+it('keeps reservation rows non-navigable without access to orders', async () => {
+  cabinetMock.snapshot.permissions.delete('orders.view')
+  const user = userEvent.setup()
+  const router = reservationNavigationRouter()
+  const sales = await screen.findByRole('region', { name: 'Продажі' })
+  const row = within(sales)
+    .getByRole('rowheader', { name: /1042/ })
+    .closest('tr')!
+  await user.click(within(row).getByText('Резерв'))
+  await user.click(row)
+  expect(within(row).queryByRole('link')).not.toBeInTheDocument()
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+})
+
+it.each(['/app/yard/parts', '/app/yard/parts/new'])(
+  'opens a standalone part form from %s without rendering its directory',
+  async (entry) => {
+    partMocks.search.mockResolvedValue({
+      items: pickableRows,
+      page: 1,
+      pageSize: 30,
+      total: 2,
+      totalPages: 1,
+    })
+    const router = createMemoryRouter(
+      ['/app/:tenant/parts', '/app/:tenant/parts/new'].map((path) => ({
+        path,
+        element: <PartsScreen definition={partsDefinition as never} />,
+      })),
+      { initialEntries: [entry] },
+    )
+    const user = userEvent.setup()
+    render(<RouterProvider router={router} />)
+    if (!entry.endsWith('/new')) {
+      await screen.findByRole('link', { name: 'Фара ліва' })
+      await user.click(screen.getByRole('link', { name: 'Додати деталь' }))
+    }
+    const drawer = await screen.findByRole('region', { name: 'Нова деталь' })
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/app/yard/parts/new')
+    expect(partMocks.get).not.toHaveBeenCalled()
+    await user.click(within(drawer).getByRole('button', { name: 'Скасувати' }))
+    expect(router.state.location.pathname).toBe('/app/yard/parts')
+    expect(
+      screen.queryByRole('region', { name: 'Нова деталь' }),
+    ).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Фара ліва' })).toBeVisible()
+    expect(partMocks.create).not.toHaveBeenCalled()
+  },
+)
+
+it.each(['empty', 'failed', 'loading'] as const)(
+  'opens the part page without fetching the directory when its request would be %s',
+  async (state) => {
+    if (state === 'failed')
+      partMocks.search.mockRejectedValueOnce({ kind: 'network' })
+    else if (state === 'loading')
+      partMocks.search.mockReturnValueOnce(
+        new Promise(() => {
+          // Keep the background loading while the drawer remains editable.
+        }),
+      )
+    else
+      partMocks.search.mockResolvedValueOnce({
+        items: [],
+        page: 1,
+        pageSize: 30,
+        total: 0,
+        totalPages: 0,
+      })
+    render(
+      <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/new"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const drawer = await screen.findByRole('region', { name: 'Нова деталь' })
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Нова деталь' }),
+    ).toBeVisible()
+    const name = within(drawer).getByRole('textbox', { name: /^Назва/ })
+    fireEvent.change(name, { target: { value: 'Нова фара' } })
+    expect(name).toHaveValue('Нова фара')
+    expect(partMocks.search).not.toHaveBeenCalled()
+    expect(partMocks.create).not.toHaveBeenCalled()
+  },
+)
+
+it('opens a price-only drawer over the part card, saves and refreshes it without navigating', async () => {
+  let detail = {
+    id: 'part-1',
+    name: 'Фара ліва',
+    condition: 'good',
+    status: 'available',
+    source: 'free',
+    quantityTotal: 3,
+    quantityAvailable: 3,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    effectiveSalePrice: 100,
+    desiredSalePrice: 100,
+    photos: [],
+    reservations: [],
+    soldOrders: [],
+    oemCode: 'OEM-1',
+    notes: 'Зберегти нотатку',
+    unit: 'pcs',
+    createdAt: '2026-10-23T10:00:00Z',
+  }
+  partMocks.get.mockImplementation(() => Promise.resolve(detail))
+  partMocks.update.mockImplementation(
+    (_id: string, request: UpdatePartRequest) => {
+      detail = {
+        ...detail,
+        desiredSalePrice: request.desiredSalePrice.value!,
+        effectiveSalePrice: request.desiredSalePrice.value!,
+      }
+      return Promise.resolve(detail)
+    },
+  )
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/:partId',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+    ],
+    { initialEntries: ['/app/yard/parts/part-1'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+  const card = await screen.findByRole('region', { name: 'Ціна продажу' })
+  await user.click(within(card).getByRole('button', { name: 'Змінити' }))
+  const drawer = screen.getByRole('dialog', { name: 'Ціна продажу' })
+  expect(card).toBeInTheDocument()
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  expect(within(drawer).queryByLabelText('Кількість')).toBeNull()
+  fireEvent.change(
+    within(drawer).getByRole('textbox', { name: 'Ціна продажу' }),
+    { target: { value: '150.5' } },
+  )
+  await user.click(within(drawer).getByRole('button', { name: 'Зберегти' }))
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('dialog', { name: 'Ціна продажу' })).toBeNull(),
+  )
+  expect(partMocks.update).toHaveBeenCalledWith(
+    'part-1',
+    { desiredSalePrice: { isSet: true, value: 150.5 } },
+    expect.anything(),
+  )
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  expect(within(card).getByText('150,5')).toBeVisible()
+  expect(detail.notes).toBe('Зберегти нотатку')
+})
+
+it.each([
+  ['reserved', 100],
+  ['reserved', null],
+  ['sold', 100],
+  ['sold', null],
+] as const)(
+  'disables the part-card price action for %s (price=%s)',
+  async (status, price) => {
+    partMocks.get.mockResolvedValue({
+      id: 'part-1',
+      name: 'Фара ліва',
+      condition: 'good',
+      source: 'free',
+      status,
+      quantityTotal: status === 'sold' ? 0 : 1,
+      quantityAvailable: 0,
+      quantityReserved: status === 'reserved' ? 1 : 0,
+      quantitySoldTotal: status === 'sold' ? 1 : 0,
+      effectiveSalePrice: price,
+      desiredSalePrice: price,
+      photos: [],
+      reservations: [],
+      soldOrders: [],
+      unit: 'шт',
+      createdAt: '2026-10-23T10:00:00Z',
+    })
+    renderInLocale('uk', '/app/yard/parts/part-1', '/app/:tenant/parts/:partId')
+    const card = await screen.findByRole('region', { name: 'Ціна продажу' })
+    const action = within(card).getByRole('button', {
+      name: price === null ? 'Вказати ціну' : 'Змінити',
+    })
+    expect(action).toBeDisabled()
+    fireEvent.click(action)
+    expect(screen.queryByRole('dialog', { name: 'Ціна продажу' })).toBeNull()
+    expect(card).toHaveTextContent(
+      status === 'reserved'
+        ? 'Запчастина у резерві.'
+        : 'Запчастину вже продано.',
+    )
+  },
+)
+
+it.each(['reserved', 'sold'])(
+  'disables the asking price on the separate edit page for %s',
+  async (status) => {
+    partMocks.get.mockResolvedValue({
+      id: 'part-1',
+      name: 'Фара ліва',
+      condition: 'good',
+      source: 'free',
+      status,
+      quantityTotal: status === 'sold' ? 0 : 1,
+      quantityAvailable: 0,
+      quantityReserved: status === 'reserved' ? 1 : 0,
+      quantitySoldTotal: status === 'sold' ? 1 : 0,
+      desiredSalePrice: 100,
+      photos: [],
+      unit: 'шт',
+    })
+    renderInLocale(
+      'uk',
+      '/app/yard/parts/part-1/edit',
+      '/app/:tenant/parts/:partId/edit',
+    )
+    const input = await screen.findByRole('textbox', { name: 'Бажана ціна' })
+    expect(input).toBeDisabled()
+    expect(input).toHaveAccessibleDescription(
+      status === 'reserved'
+        ? 'Запчастина у резерві. Редагування та зміна ціни недоступні.'
+        : 'Запчастину вже продано. Редагування та зміна ціни недоступні.',
+    )
+  },
+)

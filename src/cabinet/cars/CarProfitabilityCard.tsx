@@ -1,7 +1,9 @@
-import { Card, StatusPill } from '@/components/app'
+import { useId } from 'react'
+import { StatusPill } from '@/components/app'
 import type { CarProfitability } from '@/api/cars'
 import { useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 import { carCardMessages } from './car-card-messages'
 import { useCarMoney } from './car-money'
 import {
@@ -12,11 +14,24 @@ import {
   surplusPercent,
 } from './car-profitability'
 
+/** Where the car stands against its investment, as a pill beside its name. */
+export function CarPayoffPill({ profit }: { profit: CarProfitability }) {
+  const { locale } = useLocale()
+  const kind = payoffKind(profit)
+  return (
+    <StatusPill
+      tone={kind === 'paid' ? 'ok' : kind === 'recouping' ? 'warn' : 'neutral'}
+    >
+      {payoffLabel(kind, locale)}
+    </StatusPill>
+  )
+}
+
 /**
- * What a car has cost and returned. Three figures carry it — what went in,
- * what came back, and the gap between them — and the bar below puts break-even
- * where it actually falls, so a car that made money never reads like one that
- * merely broke even.
+ * What a car has cost and returned, as the page-wide KPI strip of the car
+ * record. Three figures carry it — what went in, what came back, and the gap
+ * between them — and the fourth puts the payback share on a bar with
+ * break-even written beside it, so the bar is never colour alone.
  */
 export function CarProfitabilityCard({
   currency,
@@ -34,156 +49,95 @@ export function CarProfitabilityCard({
   const { locale } = useLocale()
   const t = useT(carCardMessages)
   const money = useCarMoney(currency)
+  // The figure itself goes bare; the currency sits beside it as the unit.
+  const figure = useCarMoney(null)
+  const unit = currency ?? undefined
   const kind = payoffKind(profit)
   const paid = kind === 'paid'
   const result = payoffResult(profit, locale)
   const scale = payoffScale(profit)
   const surplus = surplusPercent(profit)
+  const percent = profit.recoupedPercent ?? 0
+  const titleId = useId()
 
   return (
-    <Card
-      aside={
-        <StatusPill tone={paid ? 'ok' : 'neutral'}>
-          {payoffLabel(kind, locale)}
-        </StatusPill>
-      }
-      title={t('profitabilityTitle')}
-    >
-      <dl className="border-app-line bg-app-line grid gap-px overflow-hidden rounded-[14px] border sm:grid-cols-3">
-        <Tile
-          label={t('invested')}
-          note={
-            expensesTotal > 0
-              ? t('investedWithExpenses', {
-                  car: money(purchasePrice),
-                  expenses: money(expensesTotal),
-                })
-              : t('investedPriceOnly')
-          }
-          value={money(profit.invested)}
-        />
-        <Tile
-          label={t('recouped')}
-          note={
-            profit.partsSold > 0
-              ? t('recoupedFromSales', { count: profit.partsSold })
-              : t('noSalesYet')
-          }
-          value={money(profit.recouped)}
-        />
-        <Tile
-          label={result.label}
-          note={
-            paid
-              ? surplus === null
-                ? t('overInvested')
-                : t('surplusOfInvested', { percent: surplus })
-              : t('stillToSell')
-          }
-          tone={paid ? 'ok' : 'plain'}
-          value={`${paid ? '+' : ''}${money(result.amount)}`}
-        />
-      </dl>
-
-      {scale !== null && (
-        <section className="mt-[22px]">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-app-ink text-[13px] font-semibold">
-              {t('payback')}
-            </h3>
-            <p
-              className={cn(
-                'font-mono text-[13px]',
-                paid ? 'text-state-ok' : 'text-app-muted',
-              )}
-            >
-              {t('recoupedShare', { percent: profit.recoupedPercent ?? 0 })}
-            </p>
-          </div>
-
-          <div
-            aria-label={t('payback')}
-            aria-valuemax={100}
-            aria-valuemin={0}
-            aria-valuenow={profit.recoupedPercent ?? 0}
-            aria-valuetext={t('recoupedShare', {
-              percent: profit.recoupedPercent ?? 0,
-            })}
-            className="relative mt-2.5 h-2.5 rounded-full bg-white/[0.06]"
-            role="progressbar"
-          >
-            <span
-              className="absolute inset-y-0 left-0 rounded-l-full bg-white/[0.28]"
-              style={{ width: `${String(scale.base)}%` }}
-            />
-            <span
-              className="bg-state-ok absolute inset-y-0 rounded-r-full"
-              style={{
-                left: `${String(scale.marker)}%`,
-                width: `${String(scale.over)}%`,
-              }}
-            />
-            {/* Break-even itself, drawn over both fills so it stays readable. */}
-            <span
-              className="bg-app-ink absolute -inset-y-[5px] -ml-px w-0.5 rounded-sm"
-              style={{ left: `${String(scale.marker)}%` }}
-            />
-          </div>
-
-          <p className="relative mt-2 h-[18px]">
-            <span className="text-app-dim absolute left-0 font-mono text-[11px]">
-              0
-            </span>
-            <span
-              className="text-app-muted absolute font-mono text-[11px] whitespace-nowrap"
-              style={{
-                left: `${String(scale.marker)}%`,
-                transform: `translateX(${scale.marker > 80 ? '-100%' : '-50%'})`,
-              }}
-            >
-              {t('breakEven', { amount: money(profit.invested) })}
-            </span>
-          </p>
-        </section>
-      )}
-    </Card>
-  )
-}
-
-function Tile({
-  label,
-  note,
-  tone = 'plain',
-  value,
-}: {
-  label: string
-  note: string
-  tone?: 'plain' | 'ok'
-  value: string
-}) {
-  return (
-    <div className="bg-app-raised min-w-0 px-4 pt-[15px] pb-4">
-      <dt
-        className={cn(
-          'font-mono text-[10px] tracking-[0.14em] uppercase',
-          tone === 'ok' ? 'text-state-ok/80' : 'text-app-muted',
-        )}
-      >
-        {label}
-      </dt>
-      <dd>
-        <span
-          className={cn(
-            'mt-2.5 block font-mono text-[19px] font-medium whitespace-nowrap tabular-nums',
-            tone === 'ok' ? 'text-state-ok' : 'text-app-ink',
-          )}
-        >
-          {value}
-        </span>
-        <span className="text-app-dim mt-1.5 block text-[12px] leading-[1.45] text-pretty">
-          {note}
-        </span>
-      </dd>
-    </div>
+    <section aria-labelledby={titleId} className="grid">
+      <h2 className="sr-only" id={titleId}>
+        {t('profitabilityTitle')}
+      </h2>
+      <div className="[&_.rz-display]:whitespace-nowrap lg:[&_.rz-kpis]:grid-cols-4">
+        <KpiStrip>
+          <Kpi
+            label={t('invested')}
+            meta={
+              expensesTotal > 0
+                ? t('investedWithExpenses', {
+                    car: money(purchasePrice),
+                    expenses: money(expensesTotal),
+                  })
+                : t('investedPriceOnly')
+            }
+            {...(unit === undefined ? {} : { unit })}
+            value={figure(profit.invested)}
+          />
+          <Kpi
+            label={t('recouped')}
+            meta={
+              profit.partsSold > 0
+                ? t('recoupedFromSales', { count: profit.partsSold })
+                : t('noSalesYet')
+            }
+            {...(unit === undefined ? {} : { unit })}
+            value={figure(profit.recouped)}
+          />
+          <Kpi
+            label={result.label}
+            meta={
+              paid
+                ? surplus === null
+                  ? t('overInvested')
+                  : t('surplusOfInvested', { percent: surplus })
+                : t('stillToSell')
+            }
+            tone={paid ? 'ok' : kind === 'recouping' ? 'warn' : 'plain'}
+            {...(unit === undefined ? {} : { unit })}
+            value={`${paid ? '+' : ''}${figure(result.amount)}`}
+          />
+          <Kpi
+            label={t('payback')}
+            meta={
+              scale === null ? (
+                t('recoupedShare', { percent })
+              ) : (
+                <span className="grid gap-1.5">
+                  <span
+                    aria-label={t('payback')}
+                    aria-valuemax={100}
+                    aria-valuemin={0}
+                    aria-valuenow={percent}
+                    aria-valuetext={t('recoupedShare', { percent })}
+                    className={cn(
+                      'rz-meter',
+                      kind === 'recouping' && 'rz-meter--warn',
+                    )}
+                    role="progressbar"
+                  >
+                    <span
+                      style={{ width: `${String(Math.min(percent, 100))}%` }}
+                    />
+                  </span>
+                  <span>
+                    {t('recoupedShare', { percent })} ·{' '}
+                    {t('breakEven', { amount: money(profit.invested) })}
+                  </span>
+                </span>
+              )
+            }
+            unit="%"
+            value={String(percent)}
+          />
+        </KpiStrip>
+      </div>
+    </section>
   )
 }

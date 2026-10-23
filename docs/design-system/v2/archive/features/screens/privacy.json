@@ -1,0 +1,22 @@
+{
+ "id": "C34",
+ "layout": "auth",
+ "title": "Політика конфіденційності",
+ "eyebrow": "Rozbirka",
+ "subtitle": "Українська — джерело; переклади очікують юридичної перевірки.",
+ "route": "/privacy",
+ "source": "screens/privacy.tsx, privacy-translations.ts",
+ "unverified": "текст політики не відтворено",
+ "submit": "Українська",
+ "links": [
+  "English (UK)",
+  "Polski"
+ ],
+ "fields": [],
+ "states": [
+  [
+   "data",
+   "Сторінка"
+  ]
+ ]
+}

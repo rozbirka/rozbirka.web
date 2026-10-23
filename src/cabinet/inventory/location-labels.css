@@ -1,0 +1,75 @@
+@import './location-list-layout.css';
+
+/* QR label selection (docs/design-system/v2/modules/12 Склади, section 6).
+   Everything else comes from kit classes; this file only lays out the rows
+   the kit has no pattern for. */
+.location-labels__head {
+  padding: 10px var(--rz-card-p);
+}
+
+/* A quiet action with its explanation beside it, wrapping under on phones. */
+.location-labels__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.location-labels__row > p {
+  flex: 1 1 220px;
+  min-width: 0;
+  margin: 0;
+}
+
+.location-labels__code {
+  color: var(--rz-text-dim);
+  font-family: var(--rz-font-mono);
+  font-size: var(--rz-fs-caption);
+}
+
+@media (max-width: 767px) {
+  .location-labels .rz-table tbody tr {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+    width: 100%;
+    min-height: var(--location-list-row-height);
+    margin: 0;
+    padding: 4px var(--rz-cell-px);
+    border: 0;
+    border-top: 1px solid var(--rz-border);
+    border-radius: 0;
+  }
+
+  .location-labels .rz-table tbody :is(td, th) {
+    width: auto;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .location-labels .rz-table td::before {
+    display: none;
+  }
+
+  .location-labels .rz-table tbody .rz-col-check {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .location-labels .rz-table tbody th {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .location-labels .rz-table tbody td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 2;
+    overflow-wrap: anywhere;
+  }
+
+  .location-labels .rz-table tbody td:nth-child(4) {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}

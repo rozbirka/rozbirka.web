@@ -1,12 +1,13 @@
-import { useId, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
+import { Button, Card } from '@/components/app'
 import { cn } from '@/lib/utils'
 
 /**
- * One block of the dashboard: a title, something opposite it, and a stack of
- * rows separated by hairlines rather than by gaps. Every panel on this screen
- * has the same frame, so the screen reads as one board instead of a dozen
- * loose boxes.
+ * One block of the dashboard: `.rz-card` with its `__head` (title, and
+ * something opposite it), then a stack of rows separated by hairlines rather
+ * than by gaps. Every panel on this screen has the same frame, so the screen
+ * reads as one board instead of a dozen loose boxes.
  */
 export function DashboardCard({
   title,
@@ -20,36 +21,22 @@ export function DashboardCard({
   children: ReactNode
   className?: string
 }) {
-  const titleId = useId()
-
   return (
-    <section
-      aria-labelledby={titleId}
-      className={cn(
-        'border-app-line bg-app-raised overflow-hidden rounded-[20px] border',
-        className,
-      )}
+    <Card
+      aside={aside}
+      bodyClassName="p-0 divide-y divide-app-line"
+      {...(className === undefined ? {} : { className })}
+      title={title}
     >
-      <div className="flex items-baseline justify-between gap-4 px-6 pt-5 pb-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <h2
-            className="text-[17px] font-bold tracking-[-0.01em] whitespace-nowrap text-white"
-            id={titleId}
-          >
-            {title}
-          </h2>
-        </div>
-        {aside}
-      </div>
       {children}
-    </section>
+    </Card>
   )
 }
 
 /**
- * The link opposite a card title. It is 14px text, so the 44px hit area the
- * cabinet keeps everywhere is restored with a transparent overlay instead of
- * padding that would push the title line out of shape.
+ * The link opposite a card title: the card head's small secondary button
+ * (`.rz-btn--sm`). On a coarse pointer it grows to the control height, so the
+ * 44px hit area the cabinet keeps everywhere still holds.
  */
 export function CardLink({
   children,
@@ -59,21 +46,16 @@ export function CardLink({
   to: string
 }) {
   return (
-    <Link
-      className="text-brand hover:text-brand-hover relative text-[14px] font-bold whitespace-nowrap transition-colors after:absolute after:-inset-x-2 after:-inset-y-3 after:content-['']"
-      to={to}
-    >
-      {children}
-    </Link>
+    <Button asChild className="pointer-coarse:h-control" size="sm">
+      <Link to={to}>{children}</Link>
+    </Button>
   )
 }
 
 /** Opposite a title where there is nothing to link to: the period, a total. */
 export function CardNote({ children }: { children: ReactNode }) {
   return (
-    <span className="text-app-dim font-mono text-[12px] whitespace-nowrap">
-      {children}
-    </span>
+    <span className="rz-caption rz-mono whitespace-nowrap">{children}</span>
   )
 }
 
@@ -93,9 +75,9 @@ export function CardRow({
   return (
     <div
       className={cn(
-        'border-app-line border-t px-6 py-3.5',
+        'px-(--rz-card-p) py-2.5',
         tint === true && 'bg-state-warn-soft',
-        hover && 'transition-colors hover:bg-white/[0.03]',
+        hover && 'hover:bg-app-hover transition-colors',
         className,
       )}
     >
@@ -107,8 +89,6 @@ export function CardRow({
 /** Said in place of rows when a card has nothing to show. */
 export function CardEmpty({ children }: { children: ReactNode }) {
   return (
-    <p className="border-app-line text-app-dim border-t px-6 py-5 text-[13px] text-pretty">
-      {children}
-    </p>
+    <p className="rz-dim m-0 px-(--rz-card-p) py-4 text-pretty">{children}</p>
   )
 }

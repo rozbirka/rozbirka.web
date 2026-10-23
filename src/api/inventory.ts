@@ -5,6 +5,32 @@ import type { components } from './generated/core'
 export type Warehouse = components['schemas']['WarehouseDto']
 export type WarehouseDetail = components['schemas']['WarehouseDetailDto']
 export type InventoryZone = components['schemas']['InventoryZoneDto']
+export interface InventorySection {
+  id: string
+  zoneId: string
+  zoneName: string
+  warehouseId: string
+  warehouseName: string
+  name: string
+  code: string
+  qrCode: string
+  isActive: boolean
+  partCount: number | null
+}
+export interface InventoryShelf {
+  id: string
+  zoneId: string
+  zoneName: string
+  warehouseId: string
+  warehouseName: string
+  name: string
+  code: string
+  qrCode: string
+  isActive: boolean
+  sectionId: string
+  sectionName: string
+  partCount: number | null
+}
 export type InventorySession = components['schemas']['InventorySessionDto']
 export type InventorySessionResults =
   components['schemas']['InventorySessionResultsDto']
@@ -15,7 +41,14 @@ export type InventoryAuditEvent =
 export type InventoryScan = components['schemas']['InventoryScanDto']
 export type InventoryAdjustment =
   components['schemas']['InventoryAdjustmentDto']
-export type PartInventoryZone = components['schemas']['PartInventoryZoneDto']
+export type PartInventoryZone =
+  components['schemas']['PartInventoryZoneDto'] & {
+    shelfId?: string | null
+    shelfName?: string | null
+    shelfCode?: string | null
+    sectionId?: string | null
+    sectionName?: string | null
+  }
 
 export interface WarehouseInput {
   name: string
@@ -41,6 +74,12 @@ export interface ZoneUpdate {
 export interface InventoryZoneQuery extends RequestOptions {
   warehouseId?: string
   activeOnly?: boolean
+  archivedOnly?: boolean
+}
+
+type LocationListOptions = RequestOptions & { includePartCounts?: boolean }
+export type SectionListOptions = LocationListOptions & {
+  archivedOnly?: boolean
 }
 
 const config = ({ signal }: RequestOptions = {}) =>
@@ -64,13 +103,14 @@ export const inventoryApi = {
     ).data
   },
   async getZones(options: InventoryZoneQuery = {}): Promise<InventoryZone[]> {
-    const { warehouseId, activeOnly, ...requestOptions } = options
+    const { warehouseId, activeOnly, archivedOnly, ...requestOptions } = options
     return (
       await apiClient.get<InventoryZone[]>('/inventory/zones', {
         ...config(requestOptions),
         params: {
           ...(warehouseId ? { warehouseId } : {}),
           ...(activeOnly !== undefined ? { activeOnly } : {}),
+          ...(archivedOnly !== undefined ? { archivedOnly } : {}),
         },
       })
     ).data
@@ -138,11 +178,157 @@ export const inventoryApi = {
       )
     ).data
   },
+  /** Requires the local Core restore contract until its published pin is updated. */
+  async restoreZone(
+    locationId: string,
+    options: RequestOptions = {},
+  ): Promise<InventoryZone> {
+    return (
+      await apiClient.post<InventoryZone>(
+        `/inventory/zones/${id(locationId)}/restore`,
+        undefined,
+        config(options),
+      )
+    ).data
+  },
   async archiveZone(
     zoneId: string,
     options: RequestOptions = {},
   ): Promise<void> {
     await apiClient.delete(`/inventory/zones/${id(zoneId)}`, config(options))
+  },
+  async getShelves(
+    zoneId?: string,
+    options: LocationListOptions = {},
+    sectionId?: string,
+  ): Promise<InventoryShelf[]> {
+    return (
+      await apiClient.get<InventoryShelf[]>('/inventory/shelves', {
+        ...config(options),
+        params: {
+          ...(zoneId ? { zoneId } : {}),
+          ...(sectionId ? { sectionId } : {}),
+          includePartCounts: options.includePartCounts ?? false,
+        },
+      })
+    ).data
+  },
+  async getSection(
+    sectionId: string,
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.get<InventorySection>(
+        `/inventory/sections/${id(sectionId)}`,
+        config(options),
+      )
+    ).data
+  },
+  async getShelf(
+    shelfId: string,
+    options: RequestOptions = {},
+  ): Promise<InventoryShelf> {
+    return (
+      await apiClient.get<InventoryShelf>(
+        `/inventory/shelves/${id(shelfId)}`,
+        config(options),
+      )
+    ).data
+  },
+  async getSections(
+    zoneId?: string,
+    options: SectionListOptions = {},
+  ): Promise<InventorySection[]> {
+    return (
+      await apiClient.get<InventorySection[]>('/inventory/sections', {
+        ...config(options),
+        params: {
+          ...(zoneId ? { zoneId } : {}),
+          includePartCounts: options.includePartCounts ?? false,
+          ...(options.archivedOnly !== undefined
+            ? { archivedOnly: options.archivedOnly }
+            : {}),
+        },
+      })
+    ).data
+  },
+  async createSection(
+    input: { zoneId: string; name: string; code: string },
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.post<InventorySection>(
+        '/inventory/sections',
+        input,
+        config(options),
+      )
+    ).data
+  },
+  async updateSection(
+    sectionId: string,
+    input: { name: string; code: string; isActive: boolean },
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.put<InventorySection>(
+        `/inventory/sections/${id(sectionId)}`,
+        input,
+        config(options),
+      )
+    ).data
+  },
+  /** Requires the local Core restore contract until its published pin is updated. */
+  async restoreSection(
+    locationId: string,
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.post<InventorySection>(
+        `/inventory/sections/${id(locationId)}/restore`,
+        undefined,
+        config(options),
+      )
+    ).data
+  },
+  async archiveSection(
+    sectionId: string,
+    options: RequestOptions = {},
+  ): Promise<void> {
+    await apiClient.delete(
+      `/inventory/sections/${id(sectionId)}`,
+      config(options),
+    )
+  },
+  async createShelf(
+    input: { zoneId: string; sectionId: string; name: string; code: string },
+    options: RequestOptions = {},
+  ): Promise<InventoryShelf> {
+    return (
+      await apiClient.post<InventoryShelf>(
+        '/inventory/shelves',
+        input,
+        config(options),
+      )
+    ).data
+  },
+  async updateShelf(
+    shelfId: string,
+    input: { name: string; code: string; isActive: boolean },
+    options: RequestOptions = {},
+  ): Promise<InventoryShelf> {
+    return (
+      await apiClient.put<InventoryShelf>(
+        `/inventory/shelves/${id(shelfId)}`,
+        input,
+        config(options),
+      )
+    ).data
+  },
+  async archiveShelf(
+    shelfId: string,
+    options: RequestOptions = {},
+  ): Promise<void> {
+    await apiClient.delete(`/inventory/shelves/${id(shelfId)}`, config(options))
   },
   async getPartZones(
     partId: string,
@@ -159,11 +345,17 @@ export const inventoryApi = {
     partId: string,
     zoneIds: string[],
     options: RequestOptions = {},
+    shelfId?: string,
+    sectionId?: string,
   ): Promise<PartInventoryZone[]> {
     return (
       await apiClient.put<PartInventoryZone[]>(
         `/parts/${id(partId)}/inventory-zones`,
-        { zoneIds },
+        {
+          zoneIds,
+          ...(shelfId ? { shelfId } : {}),
+          ...(sectionId ? { sectionId } : {}),
+        },
         config(options),
       )
     ).data

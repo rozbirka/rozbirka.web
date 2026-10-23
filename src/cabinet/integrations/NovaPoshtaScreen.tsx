@@ -6,14 +6,15 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Link2Off } from 'lucide-react'
 import {
   Button,
   DateValue,
   Field,
-  Notice,
+  StateScreen,
   StatusPill,
   TextInput,
+  Notice,
   useOptionalToast,
 } from '@/components/app'
 import {
@@ -29,8 +30,11 @@ import { cabinetPath } from '../cabinet-paths'
 import { moduleLabel, navigationGroupLabel } from '../module-messages'
 import { cabinetModules } from '../module-registry'
 import { RedesignShell } from '../redesign-shell'
+import { CabinetLoadingContent } from '../loading-screen'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { DeliveryPreferencesPanel } from './delivery-preferences-panel'
+import { DeliveryDepositPanel } from './delivery-deposit-panel'
 import { DispatchPointsPanel } from './dispatch-points-panel'
 import { TrackingSubscriptionPanel } from './tracking-panel'
 import { WebhookPanel } from './webhook-panel'
@@ -38,13 +42,13 @@ import { Switch } from './dispatch-point-form'
 import {
   diagnosticCheckLabel,
   integrationErrorMessage,
-  integrationMark,
   integrationProblemMessage,
   integrationStatusPresentation,
   isCountryUnavailableProblem,
   isNovaPoshtaAvailable,
 } from './integration-labels'
 import { integrationsMessages } from './integrations-messages'
+import { IntegrationCrumbs, Mark } from './IntegrationsScreen'
 import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
 
 const FACTS = ['fact1', 'fact2', 'fact3', 'fact4'] as const
@@ -73,60 +77,17 @@ function Card({
   tone?: 'plain' | 'danger' | 'ok'
   children: ReactNode
 }) {
-  const border =
-    tone === 'danger'
-      ? 'border-state-danger/30'
-      : tone === 'ok'
-        ? 'border-state-ok/25'
-        : 'border-app-line'
   return (
-    <section
-      className={`bg-app-raised min-w-0 rounded-[20px] border px-6 py-5 ${border}`}
-    >
-      <h2
-        className={`text-[17px] font-bold tracking-[-0.01em] ${
-          tone === 'danger' ? 'text-state-danger' : 'text-white'
-        }`}
-      >
-        {title}
-      </h2>
-      <div className="mt-4 grid gap-3.5">{children}</div>
+    <section className="rz-card">
+      <header className="rz-card__head">
+        <h2
+          className={`rz-h-card ${tone === 'danger' ? 'text-state-danger' : ''}`}
+        >
+          {title}
+        </h2>
+      </header>
+      <div className="rz-card__body grid gap-3">{children}</div>
     </section>
-  )
-}
-
-function Stat({
-  label,
-  value,
-  note,
-  tone,
-  title,
-}: {
-  label: string
-  value: ReactNode
-  note: string
-  tone?: 'plain' | 'danger'
-  title?: string
-}) {
-  return (
-    <div
-      className="border-app-line bg-app-raised min-w-0 rounded-[18px] border px-5 py-4.5"
-      title={title}
-    >
-      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p
-        className={`mt-3 text-[26px] leading-none font-extrabold tracking-[-0.02em] ${
-          tone === 'danger' ? 'text-state-danger' : 'text-app-ink'
-        }`}
-      >
-        {value}
-      </p>
-      <p className="text-app-dim mt-1.5 text-[12px] leading-[1.45] text-pretty">
-        {note}
-      </p>
-    </div>
   )
 }
 
@@ -229,7 +190,11 @@ export function NovaPoshtaScreen() {
   }, [countryBlocked, integrationId, scopeKey])
 
   if (tenant === null) {
-    return <p className="text-app-muted text-sm">{t('pickBusinessOne')}</p>
+    return (
+      <div className="rz-page">
+        <p className="rz-muted m-0">{t('pickBusinessOne')}</p>
+      </div>
+    )
   }
 
   const settingsLabel = navigationGroupLabel('settings', locale) ?? ''
@@ -264,7 +229,12 @@ export function NovaPoshtaScreen() {
     return (
       <RedesignShell
         actions={backToList}
-        crumb={`${settingsLabel} · ${t('crumbIntegration')}`}
+        crumb={
+          <IntegrationCrumbs
+            current={t('crumbIntegration')}
+            parents={[settingsLabel]}
+          />
+        }
       >
         <NovaPoshtaUnavailable />
       </RedesignShell>
@@ -273,16 +243,28 @@ export function NovaPoshtaScreen() {
 
   if (state.kind !== 'ready') {
     return (
-      <RedesignShell crumb={`${settingsLabel} · ${t('crumbIntegration')}`}>
+      <RedesignShell
+        crumb={
+          <IntegrationCrumbs
+            current={t('crumbIntegration')}
+            parents={[settingsLabel]}
+          />
+        }
+      >
         {state.kind === 'loading' ? (
-          <p className="text-app-muted text-sm">{t('loading')}</p>
+          <CabinetLoadingContent module="integrations" label={t('loading')} />
         ) : (
-          <Notice tone="danger">
-            {t('openError')}{' '}
-            <Link className="underline underline-offset-4" to={listPath}>
-              {t('backToList')}
-            </Link>
-          </Notice>
+          <StateScreen
+            actions={
+              <Button asChild>
+                <Link to={listPath}>{t('backToList')}</Link>
+              </Button>
+            }
+            icon={<Link2Off aria-hidden />}
+            role="alert"
+            title={t('openError')}
+            tone="danger"
+          />
         )}
       </RedesignShell>
     )
@@ -379,7 +361,7 @@ export function NovaPoshtaScreen() {
     {
       id: 'points',
       label: t('tabPoints'),
-      ...(points === null ? {} : { badge: String(points) }),
+      ...(points == null ? {} : { badge: String(points) }),
     },
     {
       id: 'statuses',
@@ -394,29 +376,25 @@ export function NovaPoshtaScreen() {
   return (
     <RedesignShell
       actions={backToList}
-      crumb={`${settingsLabel} · ${integration.displayName}`}
+      crumb={
+        <IntegrationCrumbs
+          current={integration.displayName}
+          parents={[settingsLabel, moduleLabel('integrations', locale)]}
+        />
+      }
     >
-      <div className="flex flex-wrap items-start gap-4">
-        <span
-          aria-hidden
-          className="border-app-line text-app-muted inline-flex size-14 shrink-0 items-center justify-center rounded-[15px] border font-mono text-[15px]"
-        >
-          {integrationMark(integration.code, locale)}
-        </span>
-        <div className="min-w-0 flex-[1_1_300px]">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-[30px] leading-[1.05] font-extrabold tracking-[-0.03em] text-white sm:text-[38px]">
-              {integration.displayName}
-            </h1>
+      <div className="flex flex-wrap items-start gap-3">
+        <Mark code={integration.code} large />
+        <div className="grid min-w-0 flex-[1_1_300px] gap-1">
+          <div className="rz-page-head items-center">
+            <h1 className="rz-h-page">{integration.displayName}</h1>
             <StatusPill tone={status.tone}>{status.label}</StatusPill>
           </div>
-          <p className="text-app-muted mt-2.5 max-w-[62ch] text-[14px] leading-6 text-pretty">
-            {t('intro')}
-          </p>
+          <p className="rz-muted m-0 max-w-[62ch] text-pretty">{t('intro')}</p>
         </div>
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-2.5 pt-1">
           <span
-            className={`text-[14px] font-semibold ${active ? 'text-app-ink' : 'text-app-muted'}`}
+            className={`font-medium ${active ? 'text-app-ink' : 'text-app-muted'}`}
           >
             {active ? t('stateOn') : t('stateOff')}
           </span>
@@ -430,48 +408,40 @@ export function NovaPoshtaScreen() {
         </div>
       </div>
 
-      <nav aria-label={t('sectionsNav')}>
-        <ul className="border-app-line-2 flex flex-wrap items-end gap-1 border-b">
-          {tabs.map((item) => (
-            <li key={item.id}>
-              <Link
-                aria-current={tab === item.id ? 'page' : undefined}
-                className={`-mb-px flex min-h-11 items-center gap-2.5 border-b-2 px-3.5 text-[14px] font-bold ${
-                  tab === item.id
-                    ? 'border-brand text-white'
-                    : 'text-app-muted hover:text-app-ink border-transparent'
-                }`}
-                to={tabPath(item.id)}
+      <nav aria-label={t('sectionsNav')} className="rz-tabs">
+        {tabs.map((item) => (
+          <Link
+            aria-current={tab === item.id ? 'page' : undefined}
+            key={item.id}
+            to={tabPath(item.id)}
+          >
+            {item.label}
+            {item.badge !== undefined && (
+              <span
+                className={
+                  item.danger === true
+                    ? 'rz-count rz-count--danger'
+                    : 'rz-count'
+                }
               >
-                {item.label}
-                {item.badge !== undefined && (
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[11px] font-normal ${
-                      item.danger === true
-                        ? 'bg-state-danger-soft text-state-danger'
-                        : 'text-app-muted bg-white/[0.06]'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ul>
+                {item.badge}
+              </span>
+            )}
+          </Link>
+        ))}
       </nav>
 
       {error !== null && <Notice tone="danger">{error}</Notice>}
 
       {tab === 'overview' && (
-        <div className="grid gap-5">
+        <div className="grid gap-4">
           <Card
             title={t('statusCard')}
             tone={failing ? 'danger' : active ? 'ok' : 'plain'}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <p
-                className={`text-[16px] font-bold ${failing ? 'text-state-danger' : 'text-app-ink'}`}
+                className={`m-0 font-semibold ${failing ? 'text-state-danger' : 'text-app-strong'}`}
               >
                 {failing
                   ? t('rejected')
@@ -481,7 +451,7 @@ export function NovaPoshtaScreen() {
                       : t('integrationOff')
                     : t('noKeyYet')}
               </p>
-              <p className="text-app-dim font-mono text-[12px]">
+              <p className="rz-mono rz-caption m-0">
                 {integration.verifiedAt === null ? (
                   t('notCheckedYet')
                 ) : (
@@ -492,7 +462,7 @@ export function NovaPoshtaScreen() {
                 )}
               </p>
             </div>
-            <p className="text-app-muted text-[13px] leading-5 text-pretty">
+            <p className="rz-muted m-0 text-pretty">
               {integration.lastErrorCode === null
                 ? configured
                   ? t('keyAccepted')
@@ -500,35 +470,28 @@ export function NovaPoshtaScreen() {
                 : integrationErrorMessage(integration.lastErrorCode, locale)}
             </p>
             {diagnostics !== null && (
-              <ul className="grid gap-2.5">
+              <ul className="rz-inset m-0 grid list-none gap-2">
                 {diagnostics.checks.map((check) => (
-                  <li
-                    className="flex items-start gap-2.5 text-[13.5px] leading-5"
-                    key={check.code}
-                  >
+                  <li className="grid gap-0.5" key={check.code}>
                     <span
-                      aria-hidden
-                      className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                      className={`rz-dot text-app-ink ${
                         check.status === 'passed'
-                          ? 'bg-state-ok'
-                          : 'bg-state-danger'
+                          ? 'rz-dot--ok'
+                          : 'rz-dot--danger'
                       }`}
-                    />
-                    <span className="min-w-0">
-                      <span className="text-app-ink block">
-                        {diagnosticCheckLabel(check.code, locale)}
-                      </span>
-                      {check.errorCode !== null && (
-                        <span className="text-app-muted mt-0.5 block text-[12.5px] text-pretty">
-                          {integrationErrorMessage(check.errorCode, locale)}
-                        </span>
-                      )}
+                    >
+                      {diagnosticCheckLabel(check.code, locale)}
                     </span>
+                    {check.errorCode !== null && (
+                      <span className="rz-caption pl-3 text-pretty">
+                        {integrationErrorMessage(check.errorCode, locale)}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
-            <div className="flex flex-wrap gap-2.5">
+            <div className="rz-btn-row">
               <Button
                 aria-busy={busy === 'verify'}
                 disabled={busy !== null || !configured}
@@ -547,41 +510,38 @@ export function NovaPoshtaScreen() {
             </div>
           </Card>
 
-          <div className="grid gap-5 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))]">
-            <Stat
+          <KpiStrip>
+            <Kpi
               label={t('statPoints')}
-              note={t('statPointsNote')}
-              value={points === null ? '—' : String(points)}
+              meta={t('statPointsNote')}
+              value={points == null ? '—' : String(points)}
             />
-            <Stat
+            <Kpi
               label={t('statFailures')}
-              note={
+              meta={
                 failures === null || failures === 0
                   ? t('statFailuresOk')
                   : t('statFailuresBad')
               }
-              tone={failures !== null && failures > 0 ? 'danger' : 'plain'}
-              value={failures === null ? '—' : String(failures)}
+              tone={failures !== null && failures > 0 ? 'warn' : 'plain'}
+              value={failures == null ? '—' : String(failures)}
             />
-            <Stat
+            <Kpi
               label={t('statDeliveries')}
-              note={t('statDeliveriesNote')}
+              meta={t('statDeliveriesNote')}
               title={t('noShipmentTotals')}
+              tone="dim"
               value="—"
             />
-          </div>
+          </KpiStrip>
 
           <Card title={t('factsTitle')}>
-            <ul className="grid gap-3">
+            <ul className="m-0 grid list-none gap-2 p-0">
               {FACTS.map((fact) => (
                 <li
-                  className="text-app-muted flex items-start gap-2.5 text-[13.5px] leading-5 text-pretty"
+                  className="rz-dot text-app-muted items-baseline whitespace-normal text-pretty"
                   key={fact}
                 >
-                  <span
-                    aria-hidden
-                    className="bg-app-line-2 mt-2 size-1.5 shrink-0 rounded-full"
-                  />
                   {t(fact)}
                 </li>
               ))}
@@ -598,7 +558,7 @@ export function NovaPoshtaScreen() {
       )}
 
       {tab === 'statuses' && (
-        <div className="grid gap-5">
+        <div className="grid gap-4">
           {/* The managed subscription first: whether the carrier is asked to
               send anything at all. The queue below is a separate question —
               what happened to the events that did arrive. */}
@@ -611,7 +571,8 @@ export function NovaPoshtaScreen() {
       )}
 
       {tab === 'settings' && (
-        <div className="grid max-w-[640px] gap-5">
+        <div className="grid max-w-[640px] gap-4">
+          <DeliveryDepositPanel key={scopeKey} />
           <DeliveryPreferencesPanel integrationId={integration.id} />
           <Card title={t('connectionCard')}>
             <Field hint={t('noRename')} label={t('nameLabel')}>
@@ -625,20 +586,20 @@ export function NovaPoshtaScreen() {
 
             {editingKey ? (
               <form
-                className="grid gap-3.5"
+                className="grid gap-3"
                 noValidate
                 onSubmit={(event) => void saveKey(event)}
               >
                 <Field hint={t('newKeyHint')} label={t('newKeyLabel')} required>
                   <TextInput
                     autoComplete="off"
-                    className="font-mono"
+                    className="rz-mono"
                     onChange={(event) => setKey(event.target.value)}
                     placeholder={t('keyPlaceholder')}
                     value={key}
                   />
                 </Field>
-                <div className="flex flex-wrap gap-2.5">
+                <div className="rz-btn-row">
                   <Button
                     aria-busy={busy === 'save'}
                     disabled={busy !== null || key.trim() === ''}
@@ -660,20 +621,20 @@ export function NovaPoshtaScreen() {
               </form>
             ) : (
               <>
-                <div className="border-app-line bg-app-input flex flex-wrap items-center gap-3 rounded-[11px] border px-3.5 py-3">
-                  <span className="text-app-muted min-w-0 font-mono text-[15px] tracking-[0.12em]">
+                <div className="rz-inset flex flex-wrap items-center gap-3">
+                  <span className="rz-mono text-app-muted min-w-0">
                     {configured ? '••••••••••••••••' : t('keyNotSaved')}
                   </span>
                   {configured && (
-                    <span className="text-state-ok ml-auto text-[12px] font-bold">
+                    <StatusPill className="ml-auto" tone="ok">
                       {tc('saved')}
-                    </span>
+                    </StatusPill>
                   )}
                 </div>
-                <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
+                <p className="rz-caption m-0 text-pretty">
                   {t('keyHiddenNote')}
                 </p>
-                <div className="flex flex-wrap gap-2.5">
+                <div className="rz-btn-row">
                   <Button
                     disabled={busy !== null}
                     onClick={() => setEditingKey(true)}
@@ -698,7 +659,7 @@ export function NovaPoshtaScreen() {
             title={active ? t('disableCard') : t('enableCard')}
             tone={active ? 'danger' : 'plain'}
           >
-            <p className="text-app-muted text-[13px] leading-5 text-pretty">
+            <p className="rz-muted m-0 text-pretty">
               {active ? t('disableText') : t('enableText')}
             </p>
             <div>

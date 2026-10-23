@@ -1,6 +1,15 @@
+import { Popover } from 'radix-ui'
+import { localizeApiError } from '@/api/error-localization'
+import { PartSourceFilter } from './PartSourceFilter'
+import { PartLocationCard } from './PartLocationCard'
+import { PartNotesCard } from './PartNotesCard'
+import { PartPriceDrawer } from './PartPriceDrawer'
+import { CabinetLoadingContent } from '../loading-screen'
+import { FormPage } from '../form-page'
 import {
+  lazy,
+  Suspense,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -14,48 +23,61 @@ import {
   useSearchParams,
 } from 'react-router'
 import {
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   ExternalLink,
   Lock,
   Car as CarIcon,
   CircleMinus,
   MapPin,
   Package,
+  Pencil,
   ShoppingBag,
   Tag,
   Plus,
-  X,
   Printer,
-  Search,
+  RefreshCw,
+  SearchX,
   Trash2,
+  Upload,
+  WifiOff,
+  X,
 } from 'lucide-react'
 import {
   ActionMenu,
   Amount,
   DateValue,
   PhotoFileField,
-  Gallery,
+  PhotoGrid,
   Card,
+  PanelFooter,
   CodeChip,
   SectionPanel,
   Sheet,
   PillGroup,
   QuantityStepper,
   SkeletonRows,
+  SkeletonFields,
   SpecGrid,
+  BulkBar,
   Button,
   ConfirmDialog,
   DataTable,
-  EmptyState,
   ErrorState,
   Field,
   InlineEdit,
   Notice,
-  SelectInput,
+  SearchInput,
+  SelectPicker,
+  StateScreen,
   StatusPill,
   TextArea,
   TextInput,
+  useOptionalToast,
   type StatusTone,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
@@ -70,8 +92,10 @@ import {
   type Translate,
 } from '@/i18n'
 import { partsListMessages } from './parts-list-messages'
+import { PartLocationFilters, WITHOUT_LOCATION } from './PartLocationFilters'
 import { partDetailMessages } from './part-detail-messages'
 import { partFormMessages } from './part-form-messages'
+import { CompatibilityRowCard, ConditionTile } from './PartFormChoices'
 import {
   conditionLabel,
   conditionPhrase,
@@ -80,8 +104,8 @@ import {
   historyKind,
   type HistoryKind,
   historyLabel,
-  originLabel,
   PIECES_UNIT,
+  partEditingRestriction,
   sourceLabel,
   unitLabel,
 } from './part-labels'
@@ -103,6 +127,7 @@ import { mediaApi } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { FeatureGate } from '../FeatureFlags'
+import { RedesignShell } from '../redesign-shell'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import {
@@ -111,15 +136,22 @@ import {
 } from '../module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
+import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
+import {
+  emptyPartPlacement,
+  type PartPlacement,
+} from '../inventory/part-placement-state'
+import { usePlacementOptions } from '../inventory/usePlacementOptions'
+import { placementMessages } from '../inventory/part-placement-messages'
+import { placementMessages as movePlacementMessages } from '../inventory/placement-messages'
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { VehicleCatalogPicker } from '../cars/CarsScreen'
 import {
   emptyRow,
   filledRows,
+  isBlankRow,
   resolveCompatibility,
-  rowProblem,
   rowsProblem,
   unknownBrandsMessage,
   type CompatibilityRow,
@@ -140,8 +172,12 @@ import {
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
-import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
-import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
+
+const PartPlacementDrawer = lazy(() =>
+  import('../warehouses/WarehousesScreen').then((module) => ({
+    default: module.PartPlacementDrawer,
+  })),
+)
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -160,7 +196,7 @@ const positiveInteger = (value: string | null, fallback: number) => {
 }
 const pageSizeParam = (value: string | null, fallback: number) => {
   const parsed = positiveInteger(value, fallback)
-  return parsed <= 100 ? parsed : fallback
+  return parsed !== 10 && parsed <= 100 ? parsed : fallback
 }
 const statusPresentation = (
   status: string,
@@ -254,8 +290,9 @@ function useSourceOptions(
   return options
 }
 
-const carLabel = (car: CarListItem) =>
-  `${car.code} · ${car.brand} ${car.model} (${car.year})`
+const carLabel = (
+  car: Pick<CarListItem, 'code' | 'brand' | 'model' | 'year'>,
+) => `${car.code} · ${car.brand} ${car.model} (${car.year})`
 const intakeLabel = (intake: IntakeListItem, locale: Locale) =>
   `${intake.name ?? translate(partFormMessages, locale, 'intakeNoName')} · ${intake.supplier ?? translate(partFormMessages, locale, 'intakeNoSupplier')}`
 
@@ -339,6 +376,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const canManage = manageDecision.kind === 'allowed'
 
   const [reloadToken, setReloadToken] = useState(0)
+  // v2 list (module 11, frames 1.2–1.3): a working set of picked rows whose
+  // one bulk action is printing their stickers, and the part opened beside
+  // the list. Both reset when the filters change; paging keeps the picks.
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  const [peekId, setPeekId] = useState<string | null>(null)
+  const navigateList = useNavigate()
   const removedOrigin =
     searchParams.get('origin')?.toLowerCase() === 'free' ||
     (location.state as { removedOrigin?: boolean } | null)?.removedOrigin ===
@@ -361,6 +404,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       modelId: one('model'),
       warehouseId: one('warehouse'),
       zoneId: one('zone'),
+      sectionId: one('without_section') === '1' ? '' : one('section'),
+      shelfId:
+        one('without_section') === '1' || one('without_shelf') === '1'
+          ? ''
+          : one('shelf'),
+      withoutSection: one('without_section') === '1',
+      withoutShelf:
+        one('without_section') !== '1' && one('without_shelf') === '1',
       page: positiveInteger(searchParams.get('page'), 1),
       pageSize: pageSizeParam(searchParams.get('per_page'), 30),
       carIds: normalizedIds(searchParams.getAll('car_ids')),
@@ -381,7 +432,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         : {}),
       ...(filters.warehouseId ? { warehouseIds: [filters.warehouseId] } : {}),
       ...(filters.zoneId ? { zoneIds: [filters.zoneId] } : {}),
+      ...(filters.sectionId ? { sectionIds: [filters.sectionId] } : {}),
+      ...(filters.shelfId ? { shelfIds: [filters.shelfId] } : {}),
+      ...(filters.withoutSection ? { missingSection: true } : {}),
+      ...(filters.withoutShelf ? { missingShelf: true } : {}),
       ...(filters.carIds.length > 0 ? { carIds: filters.carIds } : {}),
+      ...(filters.intakeIds.length > 0 ? { intakeIds: filters.intakeIds } : {}),
       ...(filters.makeId || filters.modelId
         ? {
             compatibility: {
@@ -395,6 +451,17 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }),
     [filters],
   )
+  const selectionScope = JSON.stringify({
+    ...searchRequest,
+    page: undefined,
+    pageSize: undefined,
+  })
+  const [pickScope, setPickScope] = useState(selectionScope)
+  if (pickScope !== selectionScope) {
+    setPickScope(selectionScope)
+    setPicked(new Set())
+    setPeekId(null)
+  }
   const filteredCarKey = filters.carIds.join(',')
   const filteredCars = useMemo(
     () =>
@@ -481,6 +548,8 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       'model',
       'warehouse',
       'zone',
+      'section',
+      'shelf',
     ] as const) {
       const raw = searchParams.get(name)
       if (raw === null) continue
@@ -492,6 +561,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       next.delete('origin')
       next.set('page', '1')
     }
+    for (const name of ['without_section', 'without_shelf']) {
+      if (next.has(name) && next.get(name) !== '1') next.delete(name)
+    }
+    if (filters.withoutSection) {
+      next.delete('section')
+      next.delete('shelf')
+      next.delete('without_shelf')
+    } else if (filters.withoutShelf) next.delete('shelf')
     const rawStatus = searchParams.get('status')
     if (rawStatus !== null && !partStatuses.has(rawStatus))
       next.delete('status')
@@ -560,7 +637,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         })
     }
     return () => controller.abort()
-  }, [isEdit, isNew, partId, reloadToken, searchRequest])
+  }, [createDecision.kind, isEdit, isNew, partId, reloadToken, searchRequest])
 
   if (isNew && createDecision.kind !== 'allowed')
     return <AccessDenied decision={createDecision} />
@@ -578,6 +655,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   if (isEdit && partId)
     return (
       <PartEdit
+        key={partId}
         canViewCars={links.cars}
         canViewIntakes={links.intakes}
         partId={partId}
@@ -587,6 +665,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   if (partId)
     return (
       <PartDetailScreen
+        key={partId}
         detail={detail}
         history={history}
         error={error !== null}
@@ -595,6 +674,18 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         links={links}
         requireLatestMutation={requireLatestMutation}
         tenantSlug={cabinet.targetTenant?.slug ?? ''}
+        onPriceSaved={(saved) => {
+          setDetail((current) => (current?.id === partId ? saved : current))
+          setReloadToken((value) => value + 1)
+        }}
+        onNotesSaved={(notes) => {
+          setDetail((current) =>
+            current?.id === partId ? { ...current, notes } : current,
+          )
+          setReloadToken((value) => value + 1)
+        }}
+        onPlacementSaved={() => setReloadToken((value) => value + 1)}
+        placementRevision={reloadToken}
       />
     )
 
@@ -605,12 +696,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     facets === null
       ? undefined
       : facets[dimension].reduce((sum, value) => sum + value.count, 0)
-  const facetOptions = (dimension: keyof PartFacets) =>
-    (facets?.[dimension] ?? []).map((value) => (
-      <option key={value.id} value={value.id}>
-        {value.name} ({value.count})
-      </option>
-    ))
   const statusTotal = facetTotal('statuses')
 
   const updatePage = (page: number) => {
@@ -642,6 +727,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       ['model', filters.modelId],
       ['warehouse', filters.warehouseId],
       ['zone', filters.zoneId],
+      ['section', filters.sectionId],
+      ['shelf', filters.shelfId],
+      ['without_section', filters.withoutSection ? '1' : ''],
+      ['without_shelf', filters.withoutShelf ? '1' : ''],
     ] as const
   )
     .filter(([, value]) => value !== '')
@@ -681,438 +770,651 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }
   }
 
-  return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        {removedOrigin ? (
-          <Notice tone="info">{t('removedOrigin')}</Notice>
+  const facetName = (dimension: keyof PartFacets, id: string) =>
+    facets?.[dimension].find((value) => value.id === id)?.name
+  const statusTabs = [
+    { value: '', label: t('all'), dot: null },
+    { value: 'available', label: t('statusInStock'), dot: 'rz-dot--ok' },
+    { value: 'reserved', label: t('statusReserved'), dot: 'rz-dot--warn' },
+    { value: 'sold', label: t('statusSold'), dot: 'rz-dot--danger' },
+  ] as const
+  const totals = [
+    { key: 'all', value: statusTotal ?? 0, label: t('totalAll') },
+    {
+      key: 'available',
+      value: facetCount('statuses', 'available') ?? 0,
+      label: t('totalAvailable'),
+    },
+    {
+      key: 'reserved',
+      value: facetCount('statuses', 'reserved') ?? 0,
+      label: t('totalReserved'),
+    },
+    {
+      key: 'sold',
+      value: facetCount('statuses', 'sold') ?? 0,
+      label: t('totalSold'),
+    },
+  ]
+  const selectedSourceCar =
+    filters.carIds.length === 1
+      ? filteredCars.find((car) => car.id === filters.carIds[0])
+      : undefined
+  const sourceOwner = `${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`
+  const updateSource = (kind: 'cars' | 'intakes', id: string | null) => {
+    const next = new URLSearchParams(searchParams)
+    const ownKey = kind === 'cars' ? 'car_ids' : 'intake_ids'
+    const otherKey = kind === 'cars' ? 'intake_ids' : 'car_ids'
+    next.delete(ownKey)
+    if (id) {
+      next.set(ownKey, id)
+      next.delete(otherKey)
+    }
+    for (const key of ['make', 'model', 'origin', 'page']) next.delete(key)
+    appliedCarPresetRef.current = normalizedIds(next.getAll('car_ids')).join(
+      ',',
+    )
+    setSearchParams(next)
+  }
+  const loading = pageMeta === null && error === null
+  // Out of quota or on a lapsed subscription the button stays in its place,
+  // switched off with the reason, so nobody wonders where it went.
+  const createBlockedReason =
+    createDecision.kind === 'quota-exhausted'
+      ? t('accessQuota')
+      : createDecision.kind === 'subscription-blocked'
+        ? t('accessSubscription')
+        : null
+  // An empty yard with no filters has nothing to search or narrow yet.
+  const emptyYard =
+    !loading &&
+    error === null &&
+    items.length === 0 &&
+    statusTotal === 0 &&
+    activeFilters.length === 0
+
+  const directoryPath = isNew
+    ? location.pathname.replace(/\/new$/, '')
+    : location.pathname
+
+  const emptyActions =
+    manageDecision.kind === 'allowed' || createDecision.kind === 'allowed' ? (
+      <>
+        {manageDecision.kind === 'allowed' ? (
+          <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+            <Button asChild>
+              <Link to={`${directoryPath}/imports`}>
+                <Upload aria-hidden />
+                {t('importParts')}
+              </Link>
+            </Button>
+          </FeatureGate>
         ) : null}
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-              {t('eyebrow')}
-            </p>
-            <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              {t('title')}
-            </h1>
-          </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5">
+        {createDecision.kind === 'allowed' ? (
+          <Button asChild variant="primary">
+            <Link to={`${directoryPath}/new`}>
+              <Plus aria-hidden />
+              {t('addPart')}
+            </Link>
+          </Button>
+        ) : null}
+      </>
+    ) : null
+
+  const directory = (
+    <RedesignShell
+      {...(peekId === null || loading || error
+        ? {}
+        : {
+            peek: (
+              <PartPeek
+                key={peekId}
+                links={links}
+                onClose={() => setPeekId(null)}
+                onOpen={setPeekId}
+                partId={peekId}
+                rows={items}
+                tenantSlug={cabinet.targetTenant?.slug ?? ''}
+              />
+            ),
+          })}
+      actions={
+        manageDecision.kind === 'allowed' ||
+        createDecision.kind === 'allowed' ||
+        createBlockedReason !== null ? (
+          <>
             {manageDecision.kind === 'allowed' ? (
               <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
                 <Button asChild>
-                  <Link to="imports">{t('importParts')}</Link>
+                  <Link to={`${directoryPath}/imports`}>
+                    <Upload aria-hidden />
+                    {t('importParts')}
+                  </Link>
                 </Button>
               </FeatureGate>
             ) : null}
             {createDecision.kind === 'allowed' ? (
-              <Button
-                asChild
-                className="px-5 text-sm font-bold"
-                variant="primary"
-              >
-                <Link to="new">
+              <Button asChild variant="primary">
+                <Link to={`${directoryPath}/new`}>
                   <Plus aria-hidden />
                   {t('addPart')}
                 </Link>
               </Button>
+            ) : createBlockedReason !== null ? (
+              <Button disabled title={createBlockedReason} variant="primary">
+                <Lock aria-hidden />
+                {t('addPart')}
+              </Button>
             ) : null}
-          </div>
+          </>
+        ) : undefined
+      }
+      crumb={
+        <>
+          <span>{t('eyebrow')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <div className="rz-page-head">
+        <h1 className="rz-h-page">{t('title')}</h1>
+        {facets === null || emptyYard ? null : (
+          <dl className="rz-totals">
+            {totals.map((total) => (
+              <div className="flex items-baseline gap-1" key={total.key}>
+                <dt className="order-last">{total.label}</dt>
+                <dd>{total.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+
+      {removedOrigin ? <Notice tone="info">{t('removedOrigin')}</Notice> : null}
+      {createDecision.kind === 'quota-exhausted' ? (
+        <Notice tone="warn">{t('accessQuota')}</Notice>
+      ) : null}
+
+      {picked.size > 0 ? (
+        <BulkBar
+          actions={[
+            {
+              key: 'stickers',
+              label: t('bulkPrintStickers'),
+              onRun: () =>
+                void navigateList(
+                  `/app/${cabinet.targetTenant?.slug ?? ''}/stickers?${[
+                    ...picked,
+                  ]
+                    .map((id) => `part=${encodeURIComponent(id)}`)
+                    .join('&')}`,
+                ),
+            },
+          ]}
+          count={picked.size}
+          noun={t('bulkNoun', { count: picked.size })}
+          onClear={() => setPicked(new Set())}
+          onSelectPage={() =>
+            setPicked(new Set([...picked, ...items.map((part) => part.id)]))
+          }
+          pageCount={items.length}
+        />
+      ) : null}
+
+      <div
+        className="rz-toolbar"
+        hidden={emptyYard || picked.size > 0}
+        role="search"
+      >
+        <SearchInput
+          aria-label={t('searchLabel')}
+          name="q"
+          onChange={(event) => updateFilter('q', event.target.value)}
+          placeholder={t('searchPlaceholder')}
+          value={filters.q ?? ''}
+        />
+        <div
+          aria-label={t('filterStatus')}
+          className="rz-seg max-w-full overflow-x-auto"
+          role="group"
+        >
+          {statusTabs.map((tab) => (
+            <button
+              aria-pressed={filters.status === tab.value}
+              key={tab.value || 'all'}
+              onClick={() => updateFilter('status', tab.value)}
+              type="button"
+            >
+              {tab.dot === null ? null : (
+                <span aria-hidden className={cn('rz-dot', tab.dot)} />
+              )}
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 items-center gap-3 rounded-[14px] border px-4">
-          <Search aria-hidden className="text-app-dim size-4 shrink-0" />
-          <input
-            aria-label={t('searchLabel')}
-            className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
-            name="q"
-            onChange={(event) => updateFilter('q', event.target.value)}
-            placeholder={t('searchPlaceholder')}
-            value={filters.q ?? ''}
+        {links.cars ? (
+          <PartSourceFilter
+            key={`${sourceOwner}:cars`}
+            kind="cars"
+            owner={sourceOwner}
+            values={filters.carIds}
+            enabled={links.cars}
+            selectedLabel={
+              selectedSourceCar ? carLabel(selectedSourceCar) : undefined
+            }
+            onChange={(id) => updateSource('cars', id)}
           />
-        </span>
+        ) : null}
 
-        <div className="flex flex-wrap items-start gap-6">
-          <aside className="border-app-line bg-app-raised grid min-w-0 flex-[0_1_320px] gap-6 rounded-[20px] border p-5 sm:min-w-[260px]">
-            <FilterGroup label={t('filterStatus')}>
-              <FilterRow
-                active={filters.status === ''}
-                count={statusTotal}
-                dot="bg-app-dim"
-                label={t('all')}
-                onSelect={() => updateFilter('status', '')}
-              />
-              {[
-                {
-                  value: 'available',
-                  label: t('statusInStock'),
-                  dot: 'bg-state-ok',
-                },
-                {
-                  value: 'reserved',
-                  label: t('statusReserved'),
-                  dot: 'bg-state-warn',
-                },
-                {
-                  value: 'sold',
-                  label: t('statusSold'),
-                  dot: 'bg-state-danger',
-                },
-              ].map((option) => (
-                <FilterRow
-                  active={filters.status === option.value}
-                  count={facetCount('statuses', option.value)}
-                  dot={option.dot}
-                  key={option.value}
-                  label={option.label}
-                  onSelect={() => updateFilter('status', option.value)}
-                />
-              ))}
-            </FilterGroup>
+        {links.intakes ? (
+          <PartSourceFilter
+            key={`${sourceOwner}:intakes`}
+            kind="intakes"
+            owner={sourceOwner}
+            values={filters.intakeIds}
+            enabled={links.intakes}
+            onChange={(id) => updateSource('intakes', id)}
+          />
+        ) : null}
 
-            <FilterGroup label={t('filterCompatibility')}>
-              <SelectInput
-                aria-label={t('make')}
-                name="make"
-                onChange={(event) => {
-                  const next = new URLSearchParams(searchParams)
-                  if (event.target.value) next.set('make', event.target.value)
-                  else next.delete('make')
-                  next.delete('model')
-                  next.delete('page')
-                  setSearchParams(next)
-                }}
-                value={filters.makeId}
-              >
-                <option value="">{t('makeAny')}</option>
-                {facetOptions('makes')}
-              </SelectInput>
-              <SelectInput
-                aria-label={t('model')}
-                className={filters.makeId ? undefined : 'opacity-55'}
-                disabled={!filters.makeId}
-                name="model"
-                onChange={(event) => updateFilter('model', event.target.value)}
-                title={filters.makeId ? undefined : t('chooseMakeFirst')}
-                value={filters.modelId}
-              >
-                <option value="">{t('modelAny')}</option>
-                {facetOptions('models')}
-              </SelectInput>
-            </FilterGroup>
-
-            <FilterGroup label={t('filterPlacement')}>
-              <SelectInput
-                aria-label={t('warehouse')}
-                name="warehouse"
-                onChange={(event) => {
-                  const next = new URLSearchParams(searchParams)
-                  if (event.target.value)
-                    next.set('warehouse', event.target.value)
-                  else next.delete('warehouse')
-                  next.delete('zone')
-                  next.delete('page')
-                  setSearchParams(next)
-                }}
-                value={filters.warehouseId}
-              >
-                <option value="">{t('warehouseAll')}</option>
-                {facetOptions('warehouses')}
-              </SelectInput>
-              <SelectInput
-                aria-label={t('zone')}
-                className={filters.warehouseId ? undefined : 'opacity-55'}
-                disabled={!filters.warehouseId}
-                name="zone"
-                onChange={(event) => updateFilter('zone', event.target.value)}
-                title={
-                  filters.warehouseId ? undefined : t('chooseWarehouseFirst')
+        <FilterPopover
+          label={t('filterPlacement')}
+          placeholder={t('warehouseAll')}
+          {...(filters.warehouseId
+            ? {
+                setKey: t('warehouse'),
+                setValue: [
+                  facetName('warehouses', filters.warehouseId) ??
+                    t('selectedWarehouse'),
+                  filters.zoneId
+                    ? (facetName('zones', filters.zoneId) ?? t('selectedZone'))
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+              }
+            : {})}
+        >
+          <div className="grid gap-2 p-3">
+            <PartLocationFilters
+              owner={`${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`}
+              enabled={links.inventory}
+              warehouseId={filters.warehouseId}
+              fallbackWarehouses={facets?.warehouses ?? []}
+              fallbackZones={facets?.zones ?? []}
+              zoneId={filters.zoneId}
+              sectionId={filters.sectionId}
+              shelfId={filters.shelfId}
+              withoutSection={filters.withoutSection}
+              withoutShelf={filters.withoutShelf}
+              onChange={(level, value) => {
+                const next = new URLSearchParams(searchParams)
+                if (level === 'warehouse' || level === 'zone') {
+                  const descendants =
+                    level === 'warehouse'
+                      ? [
+                          'zone',
+                          'section',
+                          'shelf',
+                          'without_section',
+                          'without_shelf',
+                        ]
+                      : ['section', 'shelf', 'without_section', 'without_shelf']
+                  for (const name of descendants) next.delete(name)
+                  if (value) next.set(level, value)
+                  else next.delete(level)
+                } else if (level === 'section') {
+                  for (const name of [
+                    'section',
+                    'shelf',
+                    'without_section',
+                    'without_shelf',
+                  ])
+                    next.delete(name)
+                  if (value === WITHOUT_LOCATION)
+                    next.set('without_section', '1')
+                  else if (value) next.set('section', value)
+                } else {
+                  next.delete('shelf')
+                  next.delete('without_shelf')
+                  if (value === WITHOUT_LOCATION) next.set('without_shelf', '1')
+                  else if (value) next.set('shelf', value)
                 }
-                value={filters.zoneId}
-              >
-                <option value="">{t('zoneAll')}</option>
-                {facetOptions('zones')}
-              </SelectInput>
-            </FilterGroup>
+                next.delete('page')
+                setSearchParams(next)
+              }}
+            />
+          </div>
+        </FilterPopover>
 
-            <FilterGroup label={t('filterCondition')}>
-              <FilterRow
-                active={filters.condition === ''}
-                count={facetTotal('conditions')}
-                dot="bg-transparent"
-                label={t('all')}
-                onSelect={() => updateFilter('condition', '')}
+        <FilterPopover
+          label={t('filterCondition')}
+          placeholder={t('filterCondition')}
+          {...(filters.condition
+            ? {
+                setKey: t('filterCondition'),
+                setValue: conditionLabel(filters.condition, locale),
+              }
+            : {})}
+        >
+          <div className="grid gap-px p-1">
+            <FilterOption
+              active={filters.condition === ''}
+              count={facetTotal('conditions')}
+              label={t('all')}
+              onSelect={() => updateFilter('condition', '')}
+            />
+            {(facets?.conditions ?? []).map((value) => (
+              <FilterOption
+                active={filters.condition === value.id}
+                count={value.count}
+                key={value.id}
+                label={conditionLabel(value.id, locale)}
+                onSelect={() => updateFilter('condition', value.id)}
               />
-              {(facets?.conditions ?? []).map((value) => (
-                <FilterRow
-                  active={filters.condition === value.id}
-                  count={value.count}
-                  dot="bg-transparent"
-                  key={value.id}
-                  label={conditionLabel(value.id, locale)}
-                  onSelect={() => updateFilter('condition', value.id)}
-                />
-              ))}
-            </FilterGroup>
+            ))}
+          </div>
+        </FilterPopover>
 
-            <FilterGroup label={t('filterOrigin')}>
-              <FilterRow
-                active={filters.origin === ''}
-                count={facetTotal('origins')}
-                dot="bg-transparent"
-                label={t('all')}
-                onSelect={() => updateFilter('origin', '')}
-              />
-              {(facets?.origins ?? [])
-                .filter((value) => ['car', 'batch'].includes(value.id))
-                .map((value) => (
-                  <FilterRow
-                    active={filters.origin === value.id}
-                    count={value.count}
-                    dot="bg-transparent"
-                    key={value.id}
-                    label={originLabel(value.id, value.name, locale)}
-                    onSelect={() => updateFilter('origin', value.id)}
-                  />
-                ))}
-            </FilterGroup>
+        {activeFilters.length === 0 ? null : (
+          <Button
+            onClick={() => setSearchParams(new URLSearchParams())}
+            variant="quiet"
+          >
+            {t('resetFilters')}
+          </Button>
+        )}
+      </div>
 
-            <Button
-              className="w-full text-sm font-semibold"
-              disabled={activeFilters.length === 0}
-              onClick={() => setSearchParams(new URLSearchParams())}
-            >
-              {t('resetFilters')}
-            </Button>
-          </aside>
-
-          <div className="grid min-w-0 flex-[1_1_320px] gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-              <p className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-[22px] font-bold text-white tabular-nums">
-                    {statusTotal ?? 0}
-                  </span>
-                  {t('totalAll')}
-                </span>
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-state-ok text-[22px] font-bold tabular-nums">
-                    {facetCount('statuses', 'available') ?? 0}
-                  </span>
-                  {t('totalAvailable')}
-                </span>
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-state-warn text-[22px] font-bold tabular-nums">
-                    {facetCount('statuses', 'reserved') ?? 0}
-                  </span>
-                  {t('totalReserved')}
-                </span>
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-state-danger text-[22px] font-bold tabular-nums">
-                    {facetCount('statuses', 'sold') ?? 0}
-                  </span>
-                  {t('totalSold')}
-                </span>
-              </p>
-              <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-                <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-                  {t('pageSize')}
-                </span>
-                <PillGroup
-                  label={t('pageSizeLabel')}
-                  onChange={(next) => updateFilter('per_page', next)}
-                  options={[
-                    { value: '30', label: '30' },
-                    { value: '60', label: '60' },
-                    { value: '100', label: '100' },
-                  ]}
-                  value={String(filters.pageSize)}
-                />
-              </div>
-            </div>
-
-            {error ? (
-              <ErrorState
-                description={
-                  error.kind === 'network' || error.kind === 'timeout'
-                    ? t('networkDescription')
-                    : t('serverDescription')
-                }
-                onRetry={() =>
+      {error ? (
+        error.kind === 'network' || error.kind === 'timeout' ? (
+          <StateScreen
+            actions={
+              <Button
+                onClick={() =>
                   setSearchParams(new URLSearchParams(searchParams))
                 }
-                title={
-                  error.kind === 'network' || error.kind === 'timeout'
-                    ? t('networkTitle')
-                    : t('serverTitle')
-                }
-              />
-            ) : (
-              <>
-                <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
-                  <DataTable
-                    caption={t('tableCaption')}
-                    columns={[
-                      {
-                        key: 'name',
-                        label: t('colPart'),
-                        variant: 'primary',
-                        cell: (part) => (
-                          <Link
-                            className="hover:text-brand block font-semibold"
-                            to={part.id}
-                          >
-                            {part.name}
-                          </Link>
-                        ),
-                      },
-                      {
-                        key: 'car',
-                        label: t('colCar'),
-                        cell: (part) =>
-                          part.car
-                            ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
-                            : '—',
-                      },
-                      {
-                        key: 'status',
-                        label: t('colStatus'),
-                        cell: (part) => {
-                          const presentation = statusPresentation(
-                            part.status ?? '',
-                            locale,
-                          )
-                          return presentation.label === '' ? (
-                            '—'
-                          ) : (
-                            <StatusPill tone={presentation.tone}>
-                              {presentation.label}
-                            </StatusPill>
-                          )
-                        },
-                      },
-                      {
-                        key: 'quantity',
-                        label: t('colTotal'),
-                        align: 'end',
-                        cell: (part) => (
-                          <InlineEdit
-                            inputMode="numeric"
-                            label={t('quantityLabel', { name: part.name })}
-                            onCommit={(next) =>
-                              rewritePart(part.id, (current) => {
-                                const quantity = Number(next.trim())
-                                return Number.isInteger(quantity) &&
-                                  quantity >= 0
-                                  ? { ...current, quantity }
-                                  : t('quantityInvalid')
-                              })
-                            }
-                            value={String(part.quantity)}
-                            {...(canManage
-                              ? {}
-                              : {
-                                  unavailable: t('noManageRight'),
-                                })}
-                            {...(part.isInventoryLocked
-                              ? {
-                                  unavailable: t('inventoryLocked'),
-                                }
-                              : {})}
-                          >
-                            {part.quantity}
-                          </InlineEdit>
-                        ),
-                      },
-                      {
-                        key: 'available',
-                        label: t('colAvailable'),
-                        align: 'end',
-                        cell: (part) => part.quantityAvailable,
-                      },
-                      {
-                        key: 'reserved',
-                        label: t('colReserved'),
-                        align: 'end',
-                        cell: (part) => part.quantityReserved,
-                      },
+              >
+                <RefreshCw aria-hidden />
+                {tc('retry')}
+              </Button>
+            }
+            description={t('networkDescription')}
+            icon={<WifiOff aria-hidden />}
+            role="alert"
+            title={t('networkTitle')}
+            tone="danger"
+          />
+        ) : (
+          <ErrorState
+            description={t('serverDescription')}
+            onRetry={() => setSearchParams(new URLSearchParams(searchParams))}
+            title={t('serverTitle')}
+          />
+        )
+      ) : loading ? (
+        <CabinetLoadingContent module="parts" heading={false} />
+      ) : (
+        <DataTable
+          caption={t('tableCaption')}
+          columns={[
+            {
+              key: 'name',
+              label: t('colPart'),
+              variant: 'primary',
+              cell: (part) => (
+                <span className="rz-cell-main">
+                  <Link
+                    className="text-app-strong hover:text-brand-text"
+                    to={part.id}
+                  >
+                    {part.name}
+                  </Link>
+                  {part.oemCode ? (
+                    <span className="rz-mono">{part.oemCode}</span>
+                  ) : null}
+                </span>
+              ),
+            },
+            {
+              key: 'car',
+              label: t('colCar'),
+              cell: (part) => (
+                <span className="whitespace-nowrap">
+                  {part.car
+                    ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
+                    : '—'}
+                </span>
+              ),
+            },
+            {
+              key: 'status',
+              label: t('colStatus'),
+              cell: (part) => {
+                const presentation = statusPresentation(
+                  part.status ?? '',
+                  locale,
+                )
+                return presentation.label === '' ? (
+                  '—'
+                ) : (
+                  <StatusPill tone={presentation.tone}>
+                    {presentation.label}
+                  </StatusPill>
+                )
+              },
+            },
+            {
+              key: 'quantity',
+              label: t('colTotal'),
+              align: 'end',
+              cell: (part) => (
+                <InlineEdit
+                  className="text-app-muted"
+                  inputMode="numeric"
+                  label={t('quantityLabel', { name: part.name })}
+                  onCommit={(next) =>
+                    rewritePart(part.id, (current) => {
+                      const quantity = Number(next.trim())
+                      return Number.isInteger(quantity) && quantity >= 0
+                        ? { ...current, quantity }
+                        : t('quantityInvalid')
+                    })
+                  }
+                  value={String(part.quantity)}
+                  {...(canManage
+                    ? {}
+                    : {
+                        unavailable: t('noManageRight'),
+                      })}
+                  {...(part.isInventoryLocked
+                    ? {
+                        unavailable: t('inventoryLocked'),
+                      }
+                    : {})}
+                >
+                  {part.quantity}
+                </InlineEdit>
+              ),
+            },
+            {
+              key: 'available',
+              label: t('colAvailable'),
+              align: 'end',
+              cell: (part) => (
+                <span className="inline-flex items-center gap-1.5">
+                  {part.isInventoryLocked ? (
+                    <span className="text-app-dim" title={t('inventoryLocked')}>
+                      <Lock aria-hidden className="size-3" />
+                    </span>
+                  ) : null}
+                  {part.quantityAvailable}
+                </span>
+              ),
+            },
+            {
+              key: 'reserved',
+              label: t('colReserved'),
+              align: 'end',
+              cell: (part) => (
+                <span className="text-app-muted">{part.quantityReserved}</span>
+              ),
+            },
+          ]}
+          empty={
+            <StateScreen
+              className="border-0"
+              description={
+                activeFilters.length > 0
+                  ? t('emptyFilteredDescription')
+                  : t('emptyDescription')
+              }
+              icon={
+                activeFilters.length > 0 ? (
+                  <SearchX aria-hidden />
+                ) : (
+                  <Package aria-hidden />
+                )
+              }
+              title={
+                activeFilters.length > 0
+                  ? t('emptyFilteredTitle')
+                  : t('emptyTitle')
+              }
+              tone={activeFilters.length > 0 ? 'neutral' : 'brand'}
+              {...(activeFilters.length > 0
+                ? {
+                    actions: (
+                      <Button
+                        onClick={() => setSearchParams(new URLSearchParams())}
+                      >
+                        <X aria-hidden />
+                        {t('resetFilters')}
+                      </Button>
+                    ),
+                  }
+                : !emptyYard || emptyActions === null
+                  ? {}
+                  : { actions: emptyActions })}
+            />
+          }
+          footer={
+            pageMeta ? (
+              <nav aria-label={t('pagination')} className="rz-pager">
+                <p className="rz-mono m-0">
+                  {t('pageOf', {
+                    page: pageMeta.page,
+                    total: pageMeta.totalPages,
+                  })}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{t('pageSize')}</span>
+                  <PillGroup
+                    label={t('pageSizeLabel')}
+                    onChange={(next) => updateFilter('per_page', next)}
+                    options={[
+                      { value: '30', label: '30' },
+                      { value: '60', label: '60' },
+                      { value: '100', label: '100' },
                     ]}
-                    empty={
-                      <EmptyState
-                        description={
-                          activeFilters.length > 0
-                            ? t('emptyFilteredDescription')
-                            : t('emptyDescription')
-                        }
-                        title={
-                          activeFilters.length > 0
-                            ? t('emptyFilteredTitle')
-                            : t('emptyTitle')
-                        }
-                      />
-                    }
-                    footer={
-                      pageMeta ? (
-                        <nav
-                          aria-label={t('pagination')}
-                          className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4"
-                        >
-                          <p className="text-app-dim text-[14px]">
-                            {t('pageOf', {
-                              page: pageMeta.page,
-                              total: pageMeta.totalPages,
-                            })}
-                          </p>
-                          <span className="flex items-center gap-2.5">
-                            <Button
-                              aria-label={t('previousPage')}
-                              className="px-4 text-sm font-semibold"
-                              disabled={pageMeta.page <= 1}
-                              onClick={() => updatePage(pageMeta.page - 1)}
-                            >
-                              <ChevronLeft aria-hidden />
-                              {tc('back')}
-                            </Button>
-                            <Button
-                              aria-label={t('nextPage')}
-                              className="px-4 text-sm font-semibold"
-                              disabled={pageMeta.page >= pageMeta.totalPages}
-                              onClick={() => updatePage(pageMeta.page + 1)}
-                            >
-                              {tc('next')}
-                              <ChevronRight aria-hidden />
-                            </Button>
-                          </span>
-                        </nav>
-                      ) : null
-                    }
-                    rowKey={(part) => part.id}
-                    rows={items}
+                    value={String(filters.pageSize)}
                   />
                 </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+                <div className="rz-pager__nav">
+                  <Button
+                    aria-label={t('previousPage')}
+                    disabled={pageMeta.page <= 1}
+                    onClick={() => updatePage(pageMeta.page - 1)}
+                    size="sm"
+                  >
+                    <ChevronLeft aria-hidden />
+                    {tc('back')}
+                  </Button>
+                  <Button
+                    aria-label={t('nextPage')}
+                    disabled={pageMeta.page >= pageMeta.totalPages}
+                    onClick={() => updatePage(pageMeta.page + 1)}
+                    size="sm"
+                  >
+                    {tc('next')}
+                    <ChevronRight aria-hidden />
+                  </Button>
+                </div>
+              </nav>
+            ) : null
+          }
+          activeKey={peekId}
+          onRowClick={(part) => setPeekId(part.id)}
+          rowKey={(part) => part.id}
+          rows={items}
+          selection={{
+            selected: picked,
+            onChange: setPicked,
+            rowLabel: (part) => t('selectPart', { name: part.name }),
+          }}
+        />
+      )}
+    </RedesignShell>
   )
+
+  return directory
 }
 
-/** A titled block of the filter rail. */
-function FilterGroup({
+/**
+ * One filter of the toolbar: a dashed `.rz-filter` button that turns solid
+ * once a value is set, and a `.rz-popover` under it holding the choices.
+ * Choices apply as they are made, so the popover has no Apply button.
+ */
+function FilterPopover({
   label,
+  placeholder,
+  setKey,
+  setValue,
   children,
 }: {
+  /** Names the popover for assistive technology. */
   label: string
+  /** The button's text while nothing is chosen: "Марка: будь-яка". */
+  placeholder: string
+  /** Once set, the button reads "<key>: <value>". */
+  setKey?: string
+  setValue?: string
   children: ReactNode
 }) {
+  const [open, setOpen] = useState(false)
+  const isSet = setKey !== undefined && setValue !== undefined
   return (
-    <section aria-label={label} className="grid gap-2.5">
-      <h2 className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-        {label}
-      </h2>
-      {children}
-    </section>
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          className={cn('rz-filter', isSet && 'rz-filter--set')}
+          type="button"
+        >
+          {isSet ? (
+            <>
+              <span className="rz-filter__key">{setKey}:</span> {setValue}
+            </>
+          ) : (
+            placeholder
+          )}
+          <ChevronDown aria-hidden className="text-app-dim size-3" />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          aria-label={label}
+          className="rz rz-popover z-50 max-w-[calc(100vw-1.5rem)]"
+          align="start"
+          collisionPadding={12}
+          sideOffset={4}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          {children}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
 
@@ -1120,56 +1422,30 @@ function FilterGroup({
  * One value of a filter, with how many records carry it. The count is the
  * point: it says whether the click is worth making before it is made.
  */
-function FilterRow({
+function FilterOption({
   label,
   count,
-  dot,
   active,
-  disabled = false,
-  hint,
   onSelect,
 }: {
   label: string
   count?: number | undefined
-  /** Colour class of the state this row stands for. */
-  dot: string
   active: boolean
-  /** The list endpoint cannot filter by this yet. */
-  disabled?: boolean
-  /** Said out loud by assistive technology when the row is out of reach. */
-  hint?: string
   onSelect: () => void
 }) {
   return (
     <button
       aria-pressed={active}
       className={cn(
-        'focus-visible:outline-brand flex min-h-10 w-full items-center justify-between gap-3 rounded-[10px] px-3 text-sm transition-colors',
-        disabled
-          ? 'text-app-dim cursor-not-allowed opacity-55'
-          : active
-            ? 'bg-app-input cursor-pointer font-semibold text-white'
-            : 'text-app-muted hover:bg-white/[0.03] hover:text-app-ink cursor-pointer',
+        'rz-menu__item w-full justify-between',
+        active && 'bg-app-selected font-semibold text-app-strong',
       )}
-      disabled={disabled}
       onClick={onSelect}
-      title={hint}
       type="button"
     >
-      <span className="flex min-w-0 items-center gap-2.5">
-        <span
-          aria-hidden
-          className={cn('size-1.5 shrink-0 rounded-full', dot)}
-        />
-        <span className="truncate">{label}</span>
-      </span>
+      <span className="min-w-0 truncate">{label}</span>
       {count === undefined ? null : (
-        <span
-          className={cn(
-            'text-[14px] tabular-nums',
-            active ? 'text-white' : 'text-app-dim',
-          )}
-        >
+        <span className="text-app-dim font-mono text-caption tabular-nums">
           {count}
         </span>
       )}
@@ -1191,15 +1467,6 @@ const partConditions = (locale: Locale) =>
     label: conditionLabel(value, locale),
   }))
 
-/** Two letters standing in for a person where a photo would be. */
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '—'
-
 function PartDetailScreen({
   detail,
   history,
@@ -1209,6 +1476,10 @@ function PartDetailScreen({
   links,
   requireLatestMutation,
   tenantSlug,
+  onPlacementSaved,
+  onNotesSaved,
+  onPriceSaved,
+  placementRevision,
 }: {
   detail: PartDetail | null
   history: Awaited<ReturnType<typeof partsApi.history>> | null
@@ -1225,13 +1496,22 @@ function PartDetailScreen({
     typeof useLatestMutationGuard
   >['requireLatestMutation']
   tenantSlug: string
+  onPlacementSaved: () => void
+  onNotesSaved: (notes: string) => void
+  onPriceSaved: (saved: PartDetail) => void
+  placementRevision: number
 }) {
   const navigate = useNavigate()
+  const [placementOpen, setPlacementOpen] = useState(false)
+  const [priceOpen, setPriceOpen] = useState(false)
+  const priceTrigger = useRef<HTMLButtonElement>(null)
+  const tPlacement = useT(movePlacementMessages)
   const t = useT(partDetailMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
   const format = useFormat()
   const { currency: partCurrency } = useAccountingCurrency()
+  const priceRestriction = partEditingRestriction(detail?.status, locale)
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -1268,6 +1548,7 @@ function PartDetailScreen({
     links.orders ? `/app/${tenantSlug}/orders/${id}` : null
   const [compat, setCompat] = useState<PartCompatibilities | null>(null)
   const [zones, setZones] = useState<PartInventoryZone[] | null>(null)
+  const [zonesFailed, setZonesFailed] = useState(false)
   const [historyFilter, setHistoryFilter] =
     useState<(typeof HISTORY_FILTERS)[number]['value']>('all')
   const [historyAll, setHistoryAll] = useState(false)
@@ -1293,14 +1574,17 @@ function PartDetailScreen({
     const controller = new AbortController()
     void inventoryApi.getPartZones(partId, { signal: controller.signal }).then(
       (result) => {
-        if (!controller.signal.aborted) setZones(result)
+        if (!controller.signal.aborted) {
+          setZones(result)
+          setZonesFailed(false)
+        }
       },
       () => {
-        if (!controller.signal.aborted) setZones([])
+        if (!controller.signal.aborted) setZonesFailed(true)
       },
     )
     return () => controller.abort()
-  }, [links.inventory, partId])
+  }, [links.inventory, partId, placementRevision])
   // Every order this part is promised to, the current one included: the card
   // shows one list rather than singling out the order that was opened last.
   const reservations = detail?.reservations ?? []
@@ -1326,8 +1610,6 @@ function PartDetailScreen({
   const lastGroup = historyGroups.at(-1)
   if (lastGroup) lastGroup.last = true
 
-  /** The asking price the yard set; a sale below it is a discount. */
-  const listPrice = detail?.desiredSalePrice ?? null
   // One table over two different things: a reservation has no price of its
   // own, a sale does. The row keeps that difference rather than hiding it.
   const salesRows = [
@@ -1341,7 +1623,6 @@ function PartDetailScreen({
           quantity: reservation.quantity,
           unitPrice: null as number | null,
           date: null as string | null,
-          discount: 0,
         }))),
     ...(salesTab === 'reserved'
       ? []
@@ -1353,27 +1634,8 @@ function PartDetailScreen({
           quantity: order.quantitySold,
           unitPrice: order.unitPrice,
           date: order.confirmedAt,
-          discount:
-            listPrice === null
-              ? 0
-              : Math.max(0, listPrice - order.unitPrice) * order.quantitySold,
         }))),
   ]
-  /** What the yard gave away against its own asking price. */
-  const soldDiscount =
-    listPrice === null
-      ? 0
-      : soldOrders.reduce(
-          (sum, order) =>
-            sum + Math.max(0, listPrice - order.unitPrice) * order.quantitySold,
-          0,
-        )
-
-  const soldRevenue = soldOrders.reduce(
-    (sum, order) => sum + order.quantitySold * order.unitPrice,
-    0,
-  )
-
   const copyCode = async (code: string) => {
     try {
       if (!navigator.clipboard?.writeText)
@@ -1385,45 +1647,105 @@ function PartDetailScreen({
     }
   }
 
+  const name = detail === null ? t('titleFallback') : detail.name
+  const editHref = `${base}/${partId}/edit`
+  const hasSalesAmounts = salesRows.some((row) => row.kind === 'sold')
+  const salesTotal = salesRows.reduce(
+    (sum, row) => sum + (row.unitPrice ?? 0) * row.quantity,
+    0,
+  )
+
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={base}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToWarehouse')}
+    <div className="grid content-start">
+      {priceOpen && canManage && detail ? (
+        <PartPriceDrawer
+          part={detail}
+          beforeSave={() => requireLatestMutation({ quota: false })}
+          onClose={() => setPriceOpen(false)}
+          onSaved={onPriceSaved}
+          returnFocus={() => priceTrigger.current?.focus()}
+        />
+      ) : null}
+      {placementOpen && links.inventory ? (
+        <Suspense
+          fallback={
+            <Sheet
+              open
+              title={tPlacement('title')}
+              onOpenChange={(open) => {
+                if (!open) setPlacementOpen(false)
+              }}
+            >
+              <SkeletonRows rows={3} />
+            </Sheet>
+          }
+        >
+          <PartPlacementDrawer
+            partId={partId}
+            onClose={() => setPlacementOpen(false)}
+            onSaved={onPlacementSaved}
+          />
+        </Suspense>
+      ) : null}
+      <div className="rz-topbar min-h-topbar h-auto flex-wrap justify-between gap-y-1.5 py-1.5">
+        <p className="rz-crumbs m-0">
+          <Link className="hidden sm:inline" to={base}>
+            {t('breadcrumbWarehouse')}
           </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('breadcrumbWarehouse')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('breadcrumbParts')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button asChild className="px-4 text-sm font-semibold">
+          <ChevronRight aria-hidden className="hidden size-3 sm:block" />
+          <Link to={base}>{t('breadcrumbParts')}</Link>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{name}</span>
+        </p>
+        <div className="rz-topbar__actions flex-wrap items-center">
+          <Button asChild>
             <Link to={`/app/${tenantSlug}/stickers?part=${partId ?? ''}`}>
+              <Printer aria-hidden />
               {t('printSticker')}
             </Link>
           </Button>
           {canManage ? (
             <>
-              <Button asChild className="px-4 text-sm font-semibold">
-                <Link to={`${base}/${partId}/edit`}>{tc('edit')}</Link>
-              </Button>
-              <Button disabled title={t('addToOrderHint')} variant="primary">
-                {t('addToOrder')}
+              <Button asChild>
+                <Link to={editHref}>
+                  <Pencil aria-hidden />
+                  {tc('edit')}
+                </Link>
               </Button>
               <ActionMenu
                 actions={[
+                  ...(links.inventory
+                    ? [
+                        {
+                          key: 'move',
+                          label: t('move'),
+                          icon: <MapPin aria-hidden />,
+                          onSelect: () => setPlacementOpen(true),
+                        },
+                      ]
+                    : []),
+                  ...(detail?.qrCode
+                    ? [
+                        {
+                          key: 'copy',
+                          label: t('copyCode'),
+                          icon: <Copy aria-hidden />,
+                          onSelect: () => void copyCode(detail.qrCode),
+                        },
+                      ]
+                    : []),
+                  {
+                    key: 'add-to-order',
+                    label: t('addToOrder'),
+                    icon: <ShoppingBag aria-hidden />,
+                    disabled: true,
+                    title: t('addToOrderHint'),
+                    onSelect: () => undefined,
+                  },
                   {
                     key: 'delete',
                     label: t('deletePart'),
-                    icon: <Trash2 aria-hidden className="size-4" />,
+                    icon: <Trash2 aria-hidden />,
                     destructive: true,
                     disabled: deleting,
                     onSelect: () => setConfirmingDelete(true),
@@ -1436,42 +1758,16 @@ function PartDetailScreen({
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
-        {deleteError !== null && !confirmingDelete ? (
-          <Notice tone="danger">{deleteError}</Notice>
-        ) : null}
-        {copied === null ? null : (
-          <Notice tone={copied.ok ? 'ok' : 'danger'}>{copied.text}</Notice>
-        )}
-
-        <div className="min-w-0">
+      <div className="rz-page max-w-[1240px]">
+        <div className="grid min-w-0 gap-2">
+          {error ? null : <h1 className="rz-h-page text-balance">{name}</h1>}
           {detail === null ? null : (
-            <div className="flex flex-wrap items-center gap-3">
-              <StatusPill tone={statusPresentation(detail.status, locale).tone}>
-                {statusPresentation(detail.status, locale).label}
-              </StatusPill>
-              {detail.quantityReserved > 0 && detail.quantityAvailable > 0 ? (
-                <StatusPill tone="warn">
-                  {t('reservedCount', { count: detail.quantityReserved })}
-                </StatusPill>
+            <div className="rz-btn-row items-center">
+              {detail.oemCode ? (
+                <span className="rz-code pr-2">
+                  {t('oem', { code: detail.oemCode })}
+                </span>
               ) : null}
-              <span className="text-app-ink flex items-center gap-[7px] text-[13px] font-semibold">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'size-[7px] rounded-full',
-                    CONDITION_DOT[detail.condition] ?? 'bg-app-dim',
-                  )}
-                />
-                {conditionPhrase(detail.condition, locale)}
-              </span>
-            </div>
-          )}
-          <h1 className="mt-3.5 text-[38px] leading-[1.04] font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px] lg:text-[48px]">
-            {detail === null ? t('titleFallback') : detail.name}
-          </h1>
-          {detail === null ? null : (
-            <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
               {detail.qrCode ? (
                 <CodeChip
                   code={detail.qrCode}
@@ -1481,15 +1777,19 @@ function PartDetailScreen({
                   }}
                 />
               ) : null}
-              {detail.oemCode ? (
-                <span className="text-app-muted font-mono text-[13px]">
-                  {t('oem', { code: detail.oemCode })}
-                </span>
+              <StatusPill tone={statusPresentation(detail.status, locale).tone}>
+                {statusPresentation(detail.status, locale).label}
+              </StatusPill>
+              {detail.quantityReserved > 0 && detail.quantityAvailable > 0 ? (
+                <StatusPill tone="warn">
+                  {t('reservedCount', { count: detail.quantityReserved })}
+                </StatusPill>
               ) : null}
+              <span className="text-app-muted">
+                {conditionPhrase(detail.condition, locale)}
+              </span>
               {detail.partType ? (
-                <span className="text-app-muted text-[13px]">
-                  {detail.partType}
-                </span>
+                <span className="text-app-dim">· {detail.partType}</span>
               ) : null}
               <SourceChip
                 href={
@@ -1518,764 +1818,651 @@ function PartDetailScreen({
           )}
         </div>
 
+        {deleteError !== null && !confirmingDelete ? (
+          <Notice tone="danger">{deleteError}</Notice>
+        ) : null}
+        {copied === null ? null : (
+          <Notice tone={copied.ok ? 'ok' : 'danger'}>{copied.text}</Notice>
+        )}
+
         {error ? (
           <ErrorState
+            actions={
+              <Button asChild>
+                <Link to={base}>
+                  <ChevronLeft aria-hidden />
+                  {t('backToWarehouse')}
+                </Link>
+              </Button>
+            }
             description={t('loadErrorDescription')}
             title={t('loadErrorTitle')}
           />
         ) : detail === null ? (
-          <SkeletonRows columns={2} label={t('loading')} rows={4} />
+          <CabinetLoadingContent
+            module="parts"
+            heading={false}
+            label={t('loading')}
+          />
         ) : (
-          <>
-            <div className="mt-4 flex flex-wrap items-start gap-6">
-              <div className="flex min-w-[320px] flex-[1_1_560px] flex-col gap-6">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+              <Card
+                aside={
+                  <span className="text-app-dim">
+                    {t('photosCount', { count: detail.photos.length })}
+                  </span>
+                }
+                title={t('photos')}
+              >
+                <PhotoGrid
+                  emptyLabel={t('galleryEmpty')}
+                  label={t('galleryLabel', { name: detail.name })}
+                  photos={detail.photos.map((photo, index) => ({
+                    id: photo.id,
+                    url: photo.url,
+                    ...(photo.thumbnailUrl
+                      ? { thumbnailUrl: photo.thumbnailUrl }
+                      : {}),
+                    alt: t('photoAlt', {
+                      name: detail.name,
+                      index: index + 1,
+                    }),
+                  }))}
+                  variant="tiles"
+                  coverLabel={t('coverPhoto')}
+                />
+              </Card>
+
+              {reservations.length > 0 || soldOrders.length > 0 ? (
                 <Card
                   aside={
-                    <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
-                      {t('photosCount', { count: detail.photos.length })}
-                    </span>
+                    <div
+                      aria-label={t('salesTabs')}
+                      className="rz-seg max-w-full overflow-x-auto"
+                      role="group"
+                    >
+                      {SALES_TABS.map((tab) => {
+                        const count =
+                          tab.value === 'reserved'
+                            ? reservations.length
+                            : tab.value === 'sold'
+                              ? soldOrders.length
+                              : reservations.length + soldOrders.length
+                        return (
+                          <button
+                            aria-pressed={salesTab === tab.value}
+                            key={tab.value}
+                            onClick={() => setSalesTab(tab.value)}
+                            type="button"
+                          >
+                            {t(tab.label)}
+                            <span className="rz-count">{count}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   }
                   bodyClassName="p-0"
-                  className="min-w-[320px] flex-[1_1_620px]"
-                  headerClassName="pb-4"
-                  title={t('photos')}
+                  title={t('sales')}
                 >
-                  <Gallery
-                    emptyLabel={t('galleryEmpty')}
-                    label={t('galleryLabel', { name: detail.name })}
-                    photos={detail.photos.map((photo, index) => ({
-                      id: photo.id,
-                      url: photo.url,
-                      ...(photo.thumbnailUrl
-                        ? { thumbnailUrl: photo.thumbnailUrl }
-                        : {}),
-                      alt: t('photoAlt', {
-                        name: detail.name,
-                        index: index + 1,
-                      }),
-                    }))}
-                    variant="framed"
-                  />
-                </Card>
-              </div>
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
-                <Card
-                  aside={
-                    canManage && detail.effectiveSalePrice !== null ? (
-                      <Button
-                        asChild
-                        className="min-h-8 px-3 text-[12px] font-bold"
-                      >
-                        <Link to={`${base}/${partId}/edit`}>{t('change')}</Link>
-                      </Button>
-                    ) : null
-                  }
-                  title={t('salePrice')}
-                >
-                  {detail.effectiveSalePrice === null ? (
-                    <div className="border-state-warn/25 bg-state-warn/[0.07] flex flex-wrap items-center justify-between gap-4 rounded-[12px] border px-4 py-3.5">
-                      <div className="min-w-0">
-                        <p className="text-state-warn text-[14px] font-bold">
-                          {t('noPriceTitle')}
-                        </p>
-                        <p className="text-app-muted mt-1 text-[13px] leading-[1.45] text-pretty">
-                          {t('noPriceBody')}
-                        </p>
-                      </div>
-                      {canManage ? (
-                        <Button asChild variant="primary">
-                          <Link to={`${base}/${partId}/edit`}>
-                            {t('setPrice')}
-                          </Link>
-                        </Button>
-                      ) : null}
-                    </div>
+                  {salesRows.length === 0 ? (
+                    <p className="text-app-dim m-0 p-4">
+                      {salesTab === 'reserved'
+                        ? t('noReserves')
+                        : t('notSoldYet')}
+                    </p>
                   ) : (
                     <>
-                      <p className="flex items-baseline gap-2.5">
-                        <Amount
-                          className="font-mono text-[30px] font-medium tracking-[-0.01em] text-white"
-                          currency={partCurrency}
-                          currencyDisplay="code"
-                          value={detail.effectiveSalePrice}
-                        />
-                        <span className="text-app-muted text-[13px]">
-                          {t('perUnit', {
-                            unit: unitLabel(detail.unit, locale),
-                          })}
-                        </span>
-                      </p>
-                      <p className="text-app-muted mt-1.5 text-[13px]">
-                        {detail.quantityAvailable > 0 ? (
-                          <>
-                            {t('freeStockWorth')}{' '}
+                      <div className="rz-table-scroll relative">
+                        <table className="rz-table">
+                          <caption>{t('salesCaption')}</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">{t('colOrder')}</th>
+                              <th scope="col">{t('colCustomer')}</th>
+                              <th scope="col">{t('colStatus')}</th>
+                              <th className="rz-num" scope="col">
+                                {t('colQuantity')}
+                              </th>
+                              {hasSalesAmounts ? (
+                                <th className="rz-num" scope="col">
+                                  {t('colSum')}
+                                </th>
+                              ) : null}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salesRows.map((row) => (
+                              <tr
+                                className={cn(
+                                  row.kind === 'reserved' &&
+                                    links.orders &&
+                                    'cursor-pointer',
+                                )}
+                                key={`${row.kind}-${row.orderId}`}
+                                onClick={
+                                  row.kind !== 'reserved' || !links.orders
+                                    ? undefined
+                                    : (event) => {
+                                        const href = orderHref(row.orderId)
+                                        if (
+                                          href === null ||
+                                          event.defaultPrevented ||
+                                          event.button !== 0 ||
+                                          event.metaKey ||
+                                          event.ctrlKey ||
+                                          event.shiftKey ||
+                                          event.altKey ||
+                                          (event.target instanceof Element &&
+                                            event.target.closest(
+                                              'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [contenteditable]',
+                                            ))
+                                        )
+                                          return
+                                        void navigate(href)
+                                      }
+                                }
+                              >
+                                <th className="py-2 align-top" scope="row">
+                                  {orderHref(row.orderId) === null ? (
+                                    <span className="font-mono">
+                                      {t('orderNumber', {
+                                        number: String(row.orderNumber),
+                                      })}
+                                    </span>
+                                  ) : (
+                                    <Link
+                                      className="font-mono"
+                                      to={orderHref(row.orderId) ?? '#'}
+                                    >
+                                      {t('orderNumber', {
+                                        number: String(row.orderNumber),
+                                      })}
+                                    </Link>
+                                  )}
+                                  {row.date !== null ? (
+                                    <span className="rz-caption block font-mono font-normal">
+                                      <DateValue
+                                        value={row.date}
+                                        withTime={false}
+                                      />
+                                    </span>
+                                  ) : null}
+                                </th>
+                                <td
+                                  className="py-2 align-top"
+                                  data-label={t('colCustomer')}
+                                >
+                                  <span className="text-app-ink block">
+                                    {row.customerName ?? t('noCustomer')}
+                                  </span>
+                                </td>
+                                <td
+                                  className="py-2 align-top"
+                                  data-label={t('colStatus')}
+                                >
+                                  {row.kind === 'reserved' && links.orders ? (
+                                    <Link
+                                      aria-label={`${t('reserve')} · ${t('orderNumber', { number: String(row.orderNumber) })}`}
+                                      className="inline-flex rounded-full"
+                                      to={orderHref(row.orderId) ?? '#'}
+                                    >
+                                      <StatusPill tone="warn">
+                                        {t('reserve')}
+                                      </StatusPill>
+                                    </Link>
+                                  ) : (
+                                    <StatusPill
+                                      tone={
+                                        row.kind === 'reserved' ? 'warn' : 'ok'
+                                      }
+                                    >
+                                      {row.kind === 'reserved'
+                                        ? t('reserve')
+                                        : t('sold')}
+                                    </StatusPill>
+                                  )}
+                                </td>
+                                <td
+                                  className="rz-num py-2 align-top"
+                                  data-label={t('colQuantity')}
+                                >
+                                  {row.quantity}
+                                </td>
+                                {hasSalesAmounts ? (
+                                  <td
+                                    className="rz-num py-2 align-top"
+                                    data-label={t('colSum')}
+                                  >
+                                    {row.unitPrice !== null ? (
+                                      <>
+                                        <Amount
+                                          currency={partCurrency}
+                                          currencyDisplay="code"
+                                          value={row.unitPrice * row.quantity}
+                                        />
+                                        {row.quantity === 1 ? null : (
+                                          <span
+                                            className="rz-caption block"
+                                            title={t('colPrice')}
+                                          >
+                                            {row.quantity} ×{' '}
+                                            <Amount
+                                              currency={partCurrency}
+                                              currencyDisplay="code"
+                                              value={row.unitPrice}
+                                            />
+                                          </span>
+                                        )}
+                                      </>
+                                    ) : null}
+                                  </td>
+                                ) : null}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {hasSalesAmounts ? (
+                        <div className="rz-card__foot">
+                          <span className="text-app-muted">
+                            {t('totalSold')}
+                          </span>
+                          <span className="font-mono text-app-strong">
                             <Amount
                               currency={partCurrency}
                               currencyDisplay="code"
-                              value={
-                                detail.effectiveSalePrice *
-                                detail.quantityAvailable
-                              }
+                              value={salesTotal}
                             />
-                            {detail.quantityReserved > 0
-                              ? t('moreReserved', {
-                                  count: detail.quantityReserved,
-                                  unit: unitLabel(detail.unit, locale),
-                                })
-                              : ''}
-                          </>
-                        ) : detail.quantityReserved > 0 ? (
-                          t('noneFreeReserved', {
-                            count: detail.quantityReserved,
-                            unit: unitLabel(detail.unit, locale),
-                          })
-                        ) : (
-                          t('allSold')
-                        )}
-                      </p>
-                      {detail.desiredSalePrice !== null &&
-                      detail.desiredSalePrice !== detail.effectiveSalePrice ? (
-                        <p className="text-app-dim mt-1 text-[12.5px]">
-                          {t('desired')}{' '}
-                          <Amount
-                            currency={partCurrency}
-                            currencyDisplay="code"
-                            value={detail.desiredSalePrice}
-                          />
-                        </p>
+                          </span>
+                        </div>
                       ) : null}
                     </>
                   )}
                 </Card>
-                <Card
-                  aside={
-                    <span className="text-app-muted text-[13px] font-semibold">
-                      {t('received', {
-                        count: detail.quantityTotal,
-                        unit: unitLabel(detail.unit, locale),
-                      })}
-                    </span>
-                  }
-                  title={t('stock')}
-                >
-                  <dl className="grid gap-2 sm:grid-cols-3">
-                    <StockTile
-                      label={t('tileAvailable')}
-                      sub={
-                        detail.quantityAvailable > 0
-                          ? t('canSell')
-                          : t('noneFree')
-                      }
-                      tone="ok"
-                      value={detail.quantityAvailable}
-                    />
-                    <StockTile
-                      label={t('tileReserved')}
-                      sub={
-                        detail.quantityReserved > 0
-                          ? t('ordersCount', { count: reservations.length })
-                          : t('none')
-                      }
-                      tone="warn"
-                      value={detail.quantityReserved}
-                    />
-                    <StockTile
-                      label={t('tileSold')}
-                      sub={
-                        detail.quantitySoldTotal > 0
-                          ? t('ordersCount', { count: soldOrders.length })
-                          : t('neverSold')
-                      }
-                      tone="plain"
-                      value={detail.quantitySoldTotal}
-                    />
-                  </dl>
+              ) : null}
 
-                  {detail.quantityAvailable === 1 ? (
-                    <p className="text-app-muted mt-3 text-[13px]">
-                      {t('lastUnit')}
-                    </p>
-                  ) : detail.quantityAvailable === 0 &&
-                    detail.quantityReserved > 0 ? (
-                    <p className="text-state-warn mt-3 text-[13px] text-pretty">
-                      {t('allReserved')}
-                    </p>
-                  ) : null}
-
-                  <div className="border-app-line mt-[18px] flex flex-wrap items-center justify-between gap-4 border-t pt-4">
-                    <div className="min-w-0">
-                      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                        {t('placement')}
-                      </p>
-                      <p className="text-app-ink mt-1.5 text-[15px] font-semibold text-pretty">
-                        {detail.quantityAvailable + detail.quantityReserved ===
-                        0
-                          ? t('notInStock', {
-                              place: placementLabel(
-                                zones,
-                                links.inventory,
-                                t,
-                              ).toLocaleLowerCase(locale),
-                            })
-                          : placementLabel(zones, links.inventory, t)}
-                      </p>
-                    </div>
-                    {links.inventory ? (
-                      <Button
-                        asChild
-                        className="min-h-9 px-3 text-[12px] font-bold"
-                      >
-                        <Link to={`${base}/${partId}/inventory`}>
-                          {t('move')}
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </div>
-                </Card>
-              </div>
-            </div>
-
-            {reservations.length > 0 || soldOrders.length > 0 ? (
               <Card
                 aside={
-                  <dl className="flex flex-wrap items-baseline gap-x-7 gap-y-2">
-                    <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">
-                        {t('revenue')}
-                      </dt>
-                      <dd className="font-mono text-[17px] font-medium text-white">
-                        <Amount
-                          currency={partCurrency}
-                          currencyDisplay="code"
-                          value={soldRevenue}
-                        />
-                      </dd>
-                    </div>
-                    <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">
-                        {t('reservedWorth')}
-                      </dt>
-                      <dd
-                        className="text-app-dim font-mono text-[17px] font-medium"
-                        title={t('reserveNoPrice')}
-                      >
-                        —
-                      </dd>
-                    </div>
-                    <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">
-                        {t('discounts')}
-                      </dt>
-                      <dd
-                        className={cn(
-                          'font-mono text-[17px] font-medium',
-                          soldDiscount > 0 ? 'text-state-warn' : 'text-app-dim',
-                        )}
-                      >
-                        <Amount
-                          currency={partCurrency}
-                          currencyDisplay="code"
-                          value={soldDiscount}
-                        />
-                      </dd>
-                    </div>
-                  </dl>
+                  compat === null ? null : (
+                    <span className="text-app-dim">
+                      {t('carsCount', { count: compat.items.length })}
+                    </span>
+                  )
                 }
-                bodyClassName="p-0"
-                headerClassName="pb-0"
-                title={t('sales')}
+                bodyClassName={
+                  compat !== null && compat.items.length > 0 ? 'p-0' : ''
+                }
+                title={t('compatibility')}
               >
-                <div
-                  aria-label={t('salesTabs')}
-                  className="border-app-line flex flex-wrap gap-6 border-b px-6"
-                  role="tablist"
-                >
-                  {SALES_TABS.map((tab) => {
-                    const count =
-                      tab.value === 'reserved'
-                        ? reservations.length
-                        : tab.value === 'sold'
-                          ? soldOrders.length
-                          : reservations.length + soldOrders.length
-                    const active = salesTab === tab.value
-                    return (
-                      <button
-                        aria-selected={active}
-                        className={cn(
-                          'flex min-h-11 items-center gap-2 border-b-2 text-[14px] font-bold transition-colors',
-                          active
-                            ? 'border-brand text-white'
-                            : 'text-app-muted hover:text-app-ink border-transparent',
-                        )}
-                        key={tab.value}
-                        onClick={() => setSalesTab(tab.value)}
-                        role="tab"
-                        type="button"
-                      >
-                        {t(tab.label)}
-                        <span
-                          className={cn(
-                            'rounded-full px-1.5 font-mono text-[11px]',
-                            active
-                              ? 'bg-white/[0.12] text-white'
-                              : 'text-app-muted bg-white/[0.05]',
-                          )}
-                        >
-                          {count}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {salesRows.length === 0 ? (
-                  <p className="text-app-muted px-6 py-6 text-[13px]">
-                    {salesTab === 'reserved'
-                      ? t('noReserves')
-                      : t('notSoldYet')}
+                {compat === null ? (
+                  <SkeletonRows embedded label={t('loadingShort')} rows={2} />
+                ) : compat.items.length === 0 ? (
+                  <p className="text-app-dim m-0 text-pretty">
+                    {t('compatEmpty')}
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[720px] text-left">
-                      <caption className="sr-only">{t('salesCaption')}</caption>
-                      <thead>
-                        <tr className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                          <th className="px-6 pt-4 pb-3 font-normal">
-                            {t('colOrder')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 font-normal">
-                            {t('colCustomer')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 font-normal">
-                            {t('colStatus')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            {t('colQuantity')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            {t('colPrice')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            {t('colSum')}
-                          </th>
-                          <th className="px-6 pt-4 pb-3 font-normal">
-                            <span className="sr-only">{tc('actions')}</span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {salesRows.map((row) => (
-                          <tr
-                            className="border-app-line border-t align-top transition-colors hover:bg-white/[0.025]"
-                            key={`${row.kind}-${row.orderId}`}
-                          >
-                            <td className="px-6 py-4">
-                              {orderHref(row.orderId) === null ? (
-                                <span className="text-app-ink font-mono text-[15px]">
-                                  {t('orderNumber', {
-                                    number: String(row.orderNumber),
-                                  })}
-                                </span>
-                              ) : (
-                                <Link
-                                  className="text-brand font-mono text-[15px] underline-offset-4 hover:underline"
-                                  to={orderHref(row.orderId) ?? '#'}
-                                >
-                                  {t('orderNumber', {
-                                    number: String(row.orderNumber),
-                                  })}
-                                </Link>
-                              )}
-                              <span className="text-app-dim mt-1 block font-mono text-[12px]">
-                                {row.date === null ? (
-                                  '—'
-                                ) : (
-                                  <DateValue
-                                    value={row.date}
-                                    withTime={false}
-                                  />
-                                )}
-                              </span>
-                            </td>
-                            <td className="px-3 py-4">
-                              <span className="text-app-ink block text-[15px] font-semibold">
-                                {row.customerName ?? t('noCustomer')}
-                              </span>
-                              <span
-                                className="text-app-dim mt-1 block text-[13px]"
-                                title={t('deliveryNotOnPart')}
-                              >
-                                {t('deliveryHidden')}
-                              </span>
-                            </td>
-                            <td className="px-3 py-4">
-                              <StatusPill
-                                tone={row.kind === 'reserved' ? 'warn' : 'ok'}
-                              >
-                                {row.kind === 'reserved'
-                                  ? t('reserve')
-                                  : t('sold')}
-                              </StatusPill>
-                              <span
-                                className="text-app-dim mt-1.5 block text-[13px] text-pretty"
-                                title={
-                                  row.kind === 'reserved'
-                                    ? t('reserveNoTerm')
-                                    : undefined
-                                }
-                              >
-                                {row.kind === 'reserved'
-                                  ? t('reserveHolds')
-                                  : t('saleClosed')}
-                              </span>
-                            </td>
-                            <td className="text-app-ink px-3 py-4 text-right font-mono text-[15px]">
-                              {row.quantity}
-                            </td>
-                            <td className="px-3 py-4 text-right">
-                              <span className="text-app-ink block font-mono text-[15px]">
-                                {row.unitPrice === null ? (
-                                  <span title={t('reserveNoPrice')}>—</span>
-                                ) : (
-                                  <Amount
-                                    currency={partCurrency}
-                                    currencyDisplay="code"
-                                    value={row.unitPrice}
-                                  />
-                                )}
-                              </span>
-                              {row.discount > 0 ? (
-                                <span className="text-state-warn mt-1 block font-mono text-[12px]">
-                                  −
-                                  <Amount
-                                    currency={partCurrency}
-                                    currencyDisplay="code"
-                                    value={row.discount}
-                                  />
-                                </span>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-4 text-right font-mono text-[15px] text-white">
-                              {row.unitPrice === null ? (
-                                <span
-                                  className="text-app-dim"
-                                  title={t('reserveNoPrice')}
-                                >
-                                  —
-                                </span>
-                              ) : (
-                                <Amount
-                                  currency={partCurrency}
-                                  currencyDisplay="code"
-                                  value={row.unitPrice * row.quantity}
-                                />
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <Button
-                                className="min-h-9 px-3 text-[12px] font-bold whitespace-nowrap"
-                                disabled
-                                title={
-                                  row.kind === 'reserved'
-                                    ? t('reserveNoTerm')
-                                    : t('returnNotFromPart')
-                                }
-                              >
-                                {row.kind === 'reserved'
-                                  ? t('extend')
-                                  : t('return')}
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-app-line border-t">
-                          <td
-                            className="text-app-muted px-6 py-4 text-right text-[13px]"
-                            colSpan={5}
-                          >
-                            {salesTab === 'reserved'
-                              ? t('totalReserved')
-                              : t('totalSold')}
-                          </td>
-                          <td className="px-3 py-4 text-right font-mono text-[17px] font-medium text-white">
-                            {salesTab === 'reserved' ? (
-                              <span
-                                className="text-app-dim"
-                                title={t('reserveNoPrice')}
-                              >
-                                —
-                              </span>
-                            ) : (
-                              <Amount
-                                currency={partCurrency}
-                                currencyDisplay="code"
-                                value={salesRows.reduce(
-                                  (sum, row) =>
-                                    sum + (row.unitPrice ?? 0) * row.quantity,
-                                  0,
-                                )}
-                              />
-                            )}
-                          </td>
-                          <td className="px-6 py-4" />
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </Card>
-            ) : null}
-
-            <div className="flex flex-wrap items-start gap-6">
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
-                <Card
-                  aside={
-                    compat === null ? null : (
-                      <span className="text-app-muted text-[13px] font-semibold">
-                        {t('carsCount', { count: compat.items.length })}
-                      </span>
-                    )
-                  }
-                  bodyClassName="p-0"
-                  headerClassName="pb-3.5"
-                  title={t('compatibility')}
-                >
-                  {compat === null ? (
-                    <p className="text-app-muted px-6 pb-5 text-[13px]">
-                      {t('loadingShort')}
-                    </p>
-                  ) : compat.items.length === 0 ? (
-                    <p className="text-app-muted px-6 pb-5 text-[13px] leading-5 text-pretty">
-                      {t('compatEmpty')}
-                    </p>
-                  ) : (
-                    <ul className="grid">
-                      {compat.items.map((item) => (
-                        <li
-                          className="border-app-line grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 border-t px-6 py-3"
-                          key={item.id}
-                        >
-                          <span className="min-w-0">
-                            <span className="text-app-ink block text-[14px] font-semibold">
-                              {[item.makeName, item.modelName]
-                                .filter(Boolean)
-                                .join(' ') || item.equipmentTypeName}
-                            </span>
-                            <span className="text-app-dim mt-0.5 block text-[12px]">
-                              {item.evidenceType === 'DonorObservation'
-                                ? t('donorReadonly')
-                                : item.modelName === null
-                                  ? t('anyModel')
-                                  : ''}
-                            </span>
-                          </span>
-                          <span className="text-app-ink font-mono text-[13px] whitespace-nowrap">
+                  <dl className="rz-facts">
+                    {compat.items.map((item) => (
+                      <div key={item.id}>
+                        <dt className="text-app-ink">
+                          {[item.makeName, item.modelName]
+                            .filter(Boolean)
+                            .join(' ') || item.equipmentTypeName}
+                        </dt>
+                        <dd>
+                          <span className="font-mono">
                             {yearSpan(item.yearFrom, item.yearTo, t)}
                           </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Card>
-                <Card title={t('notes')}>
-                  {detail.notes ? (
-                    <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line text-pretty">
-                      {detail.notes}
-                    </p>
-                  ) : (
-                    <p className="text-app-muted text-[14px]">
-                      {t('notesEmpty')}
-                    </p>
-                  )}
-                  {detail.createdByName ? (
-                    <div className="border-app-line text-app-muted mt-4 flex flex-wrap items-center gap-2.5 border-t pt-3.5 text-[13px]">
-                      <span
-                        aria-hidden
-                        className="text-app-ink grid size-[26px] place-items-center rounded-full bg-white/[0.07] text-[11px] font-bold"
-                      >
-                        {initials(detail.createdByName)}
-                      </span>
-                      <span>
-                        {t('createdBy')}{' '}
-                        <span className="text-app-ink font-semibold">
-                          {detail.createdByName}
-                        </span>{' '}
-                        · <DateValue value={detail.createdAt} />
-                      </span>
-                    </div>
-                  ) : null}
-                </Card>
-              </div>
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
-                <Card
-                  aside={
-                    history === null || history.events.length === 0 ? null : (
-                      <div
-                        aria-label={t('historyFilters')}
-                        className="border-app-line flex gap-0.5 rounded-[9px] border bg-white/[0.04] p-[3px]"
-                        role="group"
-                      >
-                        {HISTORY_FILTERS.map((filter) => {
-                          const active = historyFilter === filter.value
-                          return (
-                            <button
-                              aria-pressed={active}
-                              className={cn(
-                                // 26px to match the card's scale; the hit area
-                                // is grown back to 44px by the overlay.
-                                'relative h-[26px] rounded-[6px] px-2.5 text-[12px] font-bold whitespace-nowrap transition-colors',
-                                "after:absolute after:-inset-y-[9px] after:-inset-x-0 after:content-['']",
-                                active
-                                  ? 'bg-white/10 text-white'
-                                  : 'text-app-muted hover:text-app-ink',
-                              )}
-                              key={filter.value}
-                              onClick={() => {
-                                setHistoryFilter(filter.value)
-                                setHistoryAll(false)
-                              }}
-                              type="button"
-                            >
-                              {t(filter.label)}
-                            </button>
-                          )
-                        })}
+                          {item.evidenceType === 'DonorObservation' ? (
+                            <span className="rz-caption ml-2">
+                              {t('donorReadonly')}
+                            </span>
+                          ) : item.modelName === null ? (
+                            <span className="rz-caption ml-2">
+                              {t('anyModel')}
+                            </span>
+                          ) : null}
+                        </dd>
                       </div>
-                    )
-                  }
-                  bodyClassName="p-0"
-                  headerClassName="pb-3"
-                  title={t('history')}
-                >
-                  {history === null ? (
-                    <div className="px-6 pb-6">
-                      <SkeletonRows
-                        columns={1}
-                        label={t('loadingHistory')}
-                        rows={3}
-                      />
-                    </div>
-                  ) : shownHistory.length === 0 ? (
-                    <p className="text-app-muted px-6 pb-5 text-[13px] text-pretty">
-                      {history.events.length === 0
-                        ? t('historyEmpty')
-                        : t('historyFilteredEmpty')}
-                    </p>
-                  ) : (
-                    <div className="px-6 pb-2">
-                      {historyGroups.map((group) => (
-                        <section className="pt-3" key={group.date}>
-                          <h3 className="text-app-dim pb-2 font-mono text-[10px] tracking-[0.14em] uppercase">
-                            {group.date}
-                          </h3>
-                          <ol>
-                            {group.items.map((event, index) => {
-                              const kind = historyKind(
-                                event.eventType,
-                                event.data,
-                              )
-                              const change = historyChange(event.data)
-                              const facts = historyDetails(event.data, locale)
-                              const last =
-                                group.last && index === group.items.length - 1
-                              return (
-                                <li
-                                  className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3"
-                                  key={event.id}
-                                >
-                                  <span className="flex flex-col items-center self-stretch">
-                                    <span
-                                      aria-hidden
-                                      className={cn(
-                                        'grid size-7 shrink-0 place-items-center rounded-full',
-                                        HISTORY_ICON[kind].tint,
-                                      )}
-                                    >
-                                      {HISTORY_ICON[kind].icon}
-                                    </span>
-                                    {last ? null : (
-                                      <span
-                                        aria-hidden
-                                        className="min-h-2.5 w-px flex-1 bg-white/[0.08]"
-                                      />
-                                    )}
-                                  </span>
-                                  <span className="min-w-0 pt-1 pb-4">
-                                    <span className="text-app-ink block text-[14px] font-semibold text-pretty">
-                                      {historyLabel(event.eventType, locale)}
-                                      {event.order ? (
-                                        <>
-                                          {' '}
-                                          <span className="text-brand font-mono text-[13px]">
-                                            {t('orderNumber', {
-                                              number: String(
-                                                event.order.number,
-                                              ),
-                                            })}
-                                          </span>
-                                        </>
-                                      ) : null}
-                                    </span>
-                                    {change === null ? null : (
-                                      <span className="mt-1.5 inline-flex items-center gap-2 rounded-[7px] bg-white/[0.04] px-2.5 py-1 font-mono text-[12px]">
-                                        <span className="text-app-muted line-through">
-                                          {change.from}
-                                        </span>
-                                        <span className="text-app-dim">→</span>
-                                        <span className="text-app-ink">
-                                          {change.to}
-                                        </span>
-                                      </span>
-                                    )}
-                                    {change !== null ||
-                                    facts.length === 0 ? null : (
-                                      <span className="text-app-muted mt-1 block text-[13px] text-pretty">
-                                        {facts.join(' · ')}
-                                      </span>
-                                    )}
-                                    <span className="text-app-dim mt-1.5 flex items-center gap-[7px] text-[12px]">
-                                      <span
-                                        aria-hidden
-                                        className="text-app-muted grid size-[18px] place-items-center rounded-full bg-white/[0.07] text-[8px] font-extrabold"
-                                      >
-                                        {initials(event.user.name)}
-                                      </span>
-                                      {event.user.name}
-                                    </span>
-                                  </span>
-                                  <span className="text-app-muted pt-1.5 font-mono text-[12px] whitespace-nowrap">
-                                    {format.time(event.createdAt) ?? ''}
-                                  </span>
-                                </li>
-                              )
-                            })}
-                          </ol>
-                        </section>
+                    ))}
+                  </dl>
+                )}
+              </Card>
+
+              <Card
+                aside={
+                  history === null || history.events.length === 0 ? null : (
+                    <div
+                      aria-label={t('historyFilters')}
+                      className="rz-seg max-w-full overflow-x-auto"
+                      role="group"
+                    >
+                      {HISTORY_FILTERS.map((filter) => (
+                        <button
+                          aria-pressed={historyFilter === filter.value}
+                          key={filter.value}
+                          onClick={() => {
+                            setHistoryFilter(filter.value)
+                            setHistoryAll(false)
+                          }}
+                          type="button"
+                        >
+                          {t(filter.label)}
+                        </button>
                       ))}
                     </div>
-                  )}
-                  {filteredHistory.length > HISTORY_LIMIT ? (
-                    <Button
-                      className="border-app-line w-full justify-center rounded-none border-0 border-t bg-transparent"
-                      onClick={() => setHistoryAll((value) => !value)}
-                    >
-                      {historyAll
-                        ? t('collapse')
-                        : t('showAll', { count: filteredHistory.length })}
-                    </Button>
-                  ) : null}
-                </Card>
-              </div>
+                  )
+                }
+                bodyClassName={
+                  history !== null && shownHistory.length > 0 ? 'p-0' : ''
+                }
+                title={t('history')}
+              >
+                {history === null ? (
+                  <SkeletonRows
+                    columns={1}
+                    label={t('loadingHistory')}
+                    rows={3}
+                  />
+                ) : shownHistory.length === 0 ? (
+                  <p className="text-app-dim m-0 text-pretty">
+                    {history.events.length === 0
+                      ? t('historyEmpty')
+                      : t('historyFilteredEmpty')}
+                  </p>
+                ) : (
+                  <>
+                    {historyGroups.map((group) => (
+                      <section
+                        className="border-app-line border-t first:border-t-0"
+                        key={group.date}
+                      >
+                        <h3 className="rz-eyebrow m-0 px-3 pt-3">
+                          {group.date}
+                        </h3>
+                        <ol className="rz-timeline">
+                          {group.items.map((event) => {
+                            const kind = historyKind(
+                              event.eventType,
+                              event.data,
+                            )
+                            const change = historyChange(event.data)
+                            const facts = historyDetails(event.data, locale)
+                            return (
+                              <li key={event.id}>
+                                <span aria-hidden className="rz-timeline__icon">
+                                  {HISTORY_ICON[kind]}
+                                </span>
+                                <span className="grid min-w-0 gap-1">
+                                  <span className="text-pretty">
+                                    <span className="font-medium text-app-strong">
+                                      {historyLabel(event.eventType, locale)}
+                                    </span>
+                                    {event.order ? (
+                                      <>
+                                        {' '}
+                                        <span className="text-app-muted font-mono">
+                                          {t('orderNumber', {
+                                            number: String(event.order.number),
+                                          })}
+                                        </span>
+                                      </>
+                                    ) : null}
+                                  </span>
+                                  {change === null ? null : (
+                                    <span className="rz-change">
+                                      <s>{change.from}</s>
+                                      <span
+                                        aria-hidden
+                                        className="text-app-dim"
+                                      >
+                                        →
+                                      </span>
+                                      <span className="text-app-ink">
+                                        {change.to}
+                                      </span>
+                                    </span>
+                                  )}
+                                  {change !== null ||
+                                  facts.length === 0 ? null : (
+                                    <span className="text-app-muted text-pretty">
+                                      {facts.join(' · ')}
+                                    </span>
+                                  )}
+                                  <span className="rz-caption">
+                                    {event.user.name}
+                                  </span>
+                                </span>
+                                <span className="rz-timeline__date">
+                                  {format.time(event.createdAt) ?? ''}
+                                </span>
+                              </li>
+                            )
+                          })}
+                        </ol>
+                      </section>
+                    ))}
+                    {filteredHistory.length > HISTORY_LIMIT ? (
+                      <div className="rz-card__foot justify-center bg-transparent">
+                        <Button
+                          onClick={() => setHistoryAll((value) => !value)}
+                          size="sm"
+                          variant="quiet"
+                        >
+                          {historyAll
+                            ? t('collapse')
+                            : t('showAll', { count: filteredHistory.length })}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </Card>
             </div>
-          </>
+
+            <aside className="grid w-full max-w-[380px] min-w-0 flex-[1_1_280px] gap-4">
+              <Card
+                aside={
+                  canManage && detail.effectiveSalePrice !== null ? (
+                    <Button
+                      ref={priceTrigger}
+                      disabled={priceRestriction !== null}
+                      title={priceRestriction ?? undefined}
+                      size="sm"
+                      onClick={() => setPriceOpen(true)}
+                    >
+                      {t('change')}
+                    </Button>
+                  ) : null
+                }
+                bodyClassName="grid gap-1.5"
+                title={t('salePrice')}
+              >
+                {detail.effectiveSalePrice === null ? (
+                  <>
+                    <Notice block tone="warn">
+                      <strong className="block font-semibold text-app-strong">
+                        {t('noPriceTitle')}
+                      </strong>
+                      <span className="text-app-muted">{t('noPriceBody')}</span>
+                    </Notice>
+                    {canManage ? (
+                      <Button
+                        ref={priceTrigger}
+                        disabled={priceRestriction !== null}
+                        title={priceRestriction ?? undefined}
+                        className="justify-self-start"
+                        variant="primary"
+                        onClick={() => setPriceOpen(true)}
+                      >
+                        {t('setPrice')}
+                      </Button>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <p className="m-0 flex flex-wrap items-baseline gap-1.5">
+                      <Amount
+                        className="rz-display"
+                        currency={partCurrency}
+                        currencyDisplay="code"
+                        value={detail.effectiveSalePrice}
+                      />
+                      <span className="rz-caption">
+                        {t('perUnit', {
+                          unit: unitLabel(detail.unit, locale),
+                        })}
+                      </span>
+                    </p>
+                    <p className="rz-caption m-0">
+                      {detail.quantityAvailable > 0 ? (
+                        <>
+                          {t('freeStockWorth')}{' '}
+                          <Amount
+                            currency={partCurrency}
+                            currencyDisplay="code"
+                            value={
+                              detail.effectiveSalePrice *
+                              detail.quantityAvailable
+                            }
+                          />
+                          {detail.quantityReserved > 0
+                            ? t('moreReserved', {
+                                count: detail.quantityReserved,
+                                unit: unitLabel(detail.unit, locale),
+                              })
+                            : ''}
+                        </>
+                      ) : detail.quantityReserved > 0 ? (
+                        t('noneFreeReserved', {
+                          count: detail.quantityReserved,
+                          unit: unitLabel(detail.unit, locale),
+                        })
+                      ) : (
+                        t('allSold')
+                      )}
+                    </p>
+                    {detail.desiredSalePrice !== null &&
+                    detail.desiredSalePrice !== detail.effectiveSalePrice ? (
+                      <p className="rz-caption m-0">
+                        {t('desired')}{' '}
+                        <Amount
+                          currency={partCurrency}
+                          currencyDisplay="code"
+                          value={detail.desiredSalePrice}
+                        />
+                      </p>
+                    ) : null}
+                  </>
+                )}
+                {priceRestriction ? (
+                  <p className="rz-caption m-0">{priceRestriction}</p>
+                ) : null}
+              </Card>
+
+              <Card
+                aside={
+                  <span className="text-app-dim">
+                    {t('received', {
+                      count: detail.quantityTotal,
+                      unit: unitLabel(detail.unit, locale),
+                    })}
+                  </span>
+                }
+                bodyClassName="p-0"
+                title={t('stock')}
+              >
+                <dl className="rz-kpis m-0 grid-cols-3 rounded-none border-0">
+                  <StockTile
+                    label={t('tileAvailable')}
+                    sub={
+                      detail.quantityAvailable > 0
+                        ? t('canSell')
+                        : t('noneFree')
+                    }
+                    value={detail.quantityAvailable}
+                  />
+                  <StockTile
+                    label={t('tileReserved')}
+                    sub={
+                      detail.quantityReserved > 0
+                        ? t('ordersCount', { count: reservations.length })
+                        : t('none')
+                    }
+                    tone="warn"
+                    value={detail.quantityReserved}
+                  />
+                  <StockTile
+                    label={t('tileSold')}
+                    sub={
+                      detail.quantitySoldTotal > 0
+                        ? t('ordersCount', { count: soldOrders.length })
+                        : t('neverSold')
+                    }
+                    value={detail.quantitySoldTotal}
+                  />
+                </dl>
+                {detail.quantityAvailable === 1 ? (
+                  <div className="rz-card__foot justify-start">
+                    <span className="text-app-muted">{t('lastUnit')}</span>
+                  </div>
+                ) : detail.quantityAvailable === 0 &&
+                  detail.quantityReserved > 0 ? (
+                  <div className="rz-card__foot justify-start">
+                    <span className="text-state-warn text-pretty">
+                      {t('allReserved')}
+                    </span>
+                  </div>
+                ) : null}
+              </Card>
+
+              <PartLocationCard
+                zones={zones}
+                allowed={links.inventory}
+                failed={zonesFailed}
+                inStock={detail.quantityAvailable + detail.quantityReserved > 0}
+                canMove={canManage && links.inventory}
+                onMove={() => setPlacementOpen(true)}
+                onRetry={() => {
+                  setZones(null)
+                  setZonesFailed(false)
+                  onPlacementSaved()
+                }}
+              />
+              <PartNotesCard
+                key={partId}
+                partId={partId}
+                notes={detail.notes}
+                canEdit={canManage && detail.quantityAvailable > 0}
+                beforeSave={() => requireLatestMutation({ quota: false })}
+                onSaved={onNotesSaved}
+                footer={
+                  detail.createdByName ? (
+                    <dl className="rz-facts border-app-line border-t">
+                      <div>
+                        <dt>{t('createdBy')}</dt>
+                        <dd>
+                          {detail.createdByName}{' '}
+                          <span className="rz-caption font-mono">
+                            · <DateValue value={detail.createdAt} />
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                  ) : undefined
+                }
+              />
+            </aside>
+          </div>
         )}
       </div>
 
       <ConfirmDialog
         confirmLabel={tc('delete')}
         consequence={t('deleteConsequence')}
+        destructive
         error={deleteError}
         onConfirm={() => void remove()}
         onOpenChange={setConfirmingDelete}
@@ -2298,6 +2485,7 @@ interface PartFormValues {
   oemCode: string
   partType: string
   desiredSalePrice: string
+  placement?: PartPlacement
 }
 
 const emptyPartForm: PartFormValues = {
@@ -2359,6 +2547,7 @@ const mediaMetaLabel = (item: PartMediaItem, locale: Locale) =>
 /** Section of a form: one heading, one purpose, one surface. */
 function PartMediaFields({
   deferUploads = false,
+  description,
   items,
   requireLatestMutation,
   setItems,
@@ -2366,6 +2555,7 @@ function PartMediaFields({
   variant = 'panel',
 }: {
   deferUploads?: boolean
+  description?: ReactNode
   items: PartMediaItem[]
   requireLatestMutation: ReturnType<
     typeof useLatestMutationGuard
@@ -2466,7 +2656,8 @@ function PartMediaFields({
   return (
     <SectionPanel
       description={
-        deferUploads ? t('mediaDeferDescription') : t('mediaDescription')
+        description ??
+        (deferUploads ? t('mediaDeferDescription') : t('mediaDescription'))
       }
       title={title ?? t('photos')}
       variant={variant}
@@ -2493,7 +2684,7 @@ function PartMediaFields({
             const url = safeMediaUrl(item.url)
             return (
               <li
-                className="border-app-line rounded-control flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border px-3 py-2"
+                className="rz-inset flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-2"
                 key={item.id}
               >
                 {previewUrl ? (
@@ -2504,10 +2695,10 @@ function PartMediaFields({
                   />
                 ) : null}
                 <div className="min-w-0 flex-1 basis-40">
-                  <p className="text-app-ink text-[14.5px] break-words">
+                  <p className="text-app-ink m-0 break-words">
                     {item.name} · {statusLabel(item)}
                   </p>
-                  <p className="text-app-dim text-[12.5px]">
+                  <p className="rz-caption m-0">
                     {mediaMetaLabel(item, locale)}
                   </p>
                 </div>
@@ -2551,7 +2742,7 @@ function PartMediaFields({
           })}
         </ul>
       ) : (
-        <p className="text-app-dim text-[13.5px]">{t('noPhotos')}</p>
+        <p className="text-app-dim text-body">{t('noPhotos')}</p>
       )}
     </SectionPanel>
   )
@@ -2600,89 +2791,6 @@ function partFieldErrors(
   return errors
 }
 
-/** One vehicle in the compatibility list, with its own pair of pickers. */
-function CompatibilityRowCard({
-  index,
-  onChange,
-  onRemove,
-  row,
-}: {
-  index: number
-  onChange: (patch: Partial<CompatibilityRow>) => void
-  onRemove?: (() => void) | undefined
-  row: CompatibilityRow
-}) {
-  // The picker keeps the make's own id so it can list that make's models.
-  const [makeId, setMakeId] = useState<number | null>(null)
-  const t = useT(partFormMessages)
-  const { locale } = useLocale()
-  const problem = rowProblem(row, locale)
-  const title = t('vehicleN', { n: index + 1 })
-
-  return (
-    <section
-      aria-label={title}
-      className="border-app-line bg-app-raised rounded-[14px] border px-4 pt-3.5 pb-4"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {title}
-        </h4>
-        {onRemove === undefined ? null : (
-          <Button
-            className="min-h-8 px-2.5 text-[12px]"
-            onClick={onRemove}
-            type="button"
-            variant="quiet"
-          >
-            <X aria-hidden className="size-3" />
-            {t('remove')}
-          </Button>
-        )}
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <VehicleCatalogPicker
-          disabled={false}
-          label={t('make')}
-          onSelect={(option) => {
-            setMakeId(option.id)
-            onChange({ brand: option.name, model: '' })
-          }}
-          type="make"
-          value={row.brand}
-        />
-        <VehicleCatalogPicker
-          disabled={row.brand === ''}
-          label={t('model')}
-          makeId={makeId}
-          makeName={row.brand}
-          onSelect={(option) => {
-            onChange({ model: option.name })
-          }}
-          type="model"
-          value={row.model}
-        />
-        <Field label={t('year')}>
-          <TextInput
-            inputMode="numeric"
-            onChange={(event) => {
-              onChange({ year: event.target.value })
-            }}
-            value={row.year}
-          />
-        </Field>
-      </div>
-
-      {problem === null ? null : (
-        <Notice className="mt-3" tone="danger">
-          {problem}
-        </Notice>
-      )}
-    </section>
-  )
-}
-
 /** Where the part came from, as one chip that leads to the source. */
 function SourceChip({
   href,
@@ -2707,43 +2815,30 @@ function SourceChip({
   )
   const body = (
     <>
-      <Icon aria-hidden className="text-app-muted size-[15px] shrink-0" />
-      <span className="text-app-muted text-[13px] font-semibold whitespace-nowrap">
-        {label}
-      </span>
-      <span className="text-app-ink text-[14px] font-bold whitespace-nowrap">
+      <Icon aria-hidden className="text-app-dim size-3.5 shrink-0" />
+      <span className="text-app-muted whitespace-nowrap">{label}</span>
+      <span className="font-medium whitespace-nowrap text-app-strong">
         {name}
       </span>
-      {meta === '' ? null : (
-        <span className="border-app-line-2 text-app-ink rounded-[4px] border px-1.5 font-mono text-[11px] leading-5 tracking-[0.06em] whitespace-nowrap">
-          {meta}
-        </span>
-      )}
+      {meta === '' ? null : <span className="rz-code rz-code--sm">{meta}</span>}
       {href === null ? null : (
-        <ChevronRight aria-hidden className="text-brand size-3" />
+        <ChevronRight aria-hidden className="text-app-dim size-3" />
       )}
     </>
   )
   const className =
-    'border-app-line flex items-center gap-2.5 rounded-[8px] border bg-white/[0.03] py-1 pr-2.5 pl-2'
+    'border-app-line inline-flex h-control items-center gap-2 rounded-control border px-2'
 
   return href === null ? (
     <span className={className}>{body}</span>
   ) : (
-    <Link
-      className={`${className} hover:border-app-line-2 hover:bg-white/[0.06]`}
-      to={href}
-    >
+    <Link className={`${className} hover:bg-app-hover`} to={href}>
       {body}
     </Link>
   )
 }
 
-/*
- * What the sales table cannot promise (reserveNoPrice, reserveNoTerm, …): a
- * reservation is a line in an order, not a document of its own: it carries no
- * price until the order is confirmed, and the yard keeps no clock on it.
- */
+/** Reservation rows expose the fields supplied by PartReservationDto. */
 const SALES_TABS = [
   { value: 'all', label: 'tabAll' },
   { value: 'reserved', label: 'tabReserved' },
@@ -2760,20 +2855,11 @@ const HISTORY_FILTERS = [
   { value: 'stock', label: 'filterStock' },
 ] as const
 
-/** A colour and a glyph per kind, so a long history can be skimmed. */
-const HISTORY_ICON: Record<HistoryKind, { icon: ReactNode; tint: string }> = {
-  sale: {
-    icon: <ShoppingBag aria-hidden className="size-3.5" />,
-    tint: 'bg-state-ok/15 text-state-ok',
-  },
-  price: {
-    icon: <Tag aria-hidden className="size-3.5" />,
-    tint: 'bg-state-info/15 text-state-info',
-  },
-  stock: {
-    icon: <MapPin aria-hidden className="size-3.5" />,
-    tint: 'text-app-muted bg-white/[0.07]',
-  },
+/** A glyph per kind, so a long history can be skimmed. */
+const HISTORY_ICON: Record<HistoryKind, ReactNode> = {
+  sale: <ShoppingBag aria-hidden className="size-3" />,
+  price: <Tag aria-hidden className="size-3" />,
+  stock: <MapPin aria-hidden className="size-3" />,
 }
 
 type DetailT = Translate<(typeof partDetailMessages)['uk']>
@@ -2783,24 +2869,23 @@ type DetailT = Translate<(typeof partDetailMessages)['uk']>
  * Years go in as strings so no locale groups them like quantities.
  */
 const yearSpan = (
-  from: number | null,
-  to: number | null,
+  from: number | null | undefined,
+  to: number | null | undefined,
   t: DetailT,
 ): string => {
-  if (from === null && to === null) return t('anyYear')
-  if (from !== null && to !== null)
+  if (from == null && to == null) return '—'
+  if (from != null && to != null)
     return from === to
       ? String(from)
       : t('yearRange', { from: String(from), to: String(to) })
-  return from !== null
-    ? t('yearFrom', { year: String(from) })
-    : t('yearTo', { year: String(to ?? 0) })
+  if (from != null) return t('yearFrom', { year: String(from) })
+  if (to != null) return t('yearTo', { year: String(to) })
+  return '—'
 }
 
 /**
- * Where the part sits, in the words the warehouse uses. Core keeps a system
- * zone for everything nobody has placed yet, so that one reads as "not placed"
- * rather than as a location.
+ * Core represents warehouse-level placement with a system zone. Show the
+ * warehouse and the absence of a physical zone instead of hiding the location.
  */
 const placementLabel = (
   zones: PartInventoryZone[] | null,
@@ -2809,76 +2894,355 @@ const placementLabel = (
 ): string => {
   if (!allowed) return t('placementNeedsModule')
   if (zones === null) return t('loadingShort')
-  const placed = zones.filter((zone) => !zone.isSystemUnassigned)
-  if (placed.length === 0) return t('notPlaced')
-  return placed
-    .map((zone) => `${zone.warehouseName} · ${zone.zoneName}`)
+  if (zones.length === 0) return t('notPlaced')
+  return zones
+    .map((zone) =>
+      [
+        zone.warehouseName,
+        ...(zone.isSystemUnassigned
+          ? [t('locationWarehouseLevel')]
+          : [zone.zoneName, zone.sectionName, zone.shelfName]),
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    )
     .join(', ')
 }
 
-/** The condition, as a colour a person can scan before reading the word. */
-const CONDITION_DOT: Record<string, string> = {
-  good: 'bg-state-ok',
-  fair: 'bg-state-warn',
-  scrap: 'bg-state-danger',
+/**
+ * The part opened beside the list (v2 module 11, frame 1.2): the facts a
+ * person checks before deciding to open the full record — stock, price,
+ * place, source, the latest history. Prev/next walk the current page; the
+ * expand button opens the full record. Read-only by design.
+ */
+function PartPeek({
+  partId,
+  rows,
+  onOpen,
+  onClose,
+  tenantSlug,
+  links,
+}: {
+  partId: string
+  rows: readonly PartSearchItem[]
+  onOpen: (id: string) => void
+  onClose: () => void
+  tenantSlug: string
+  links: { cars: boolean; inventory: boolean }
+}) {
+  const t = useT(partDetailMessages)
+  const tl = useT(partsListMessages)
+  const { locale } = useLocale()
+  const format = useFormat()
+  const { currency } = useAccountingCurrency()
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const [state, setState] = useState<
+    | { kind: 'loading' }
+    | { kind: 'error' }
+    | {
+        kind: 'ready'
+        detail: PartDetail
+        history: Awaited<ReturnType<typeof partsApi.history>> | null
+        zones: PartInventoryZone[] | null
+      }
+  >({ kind: 'loading' })
+
+  useEffect(() => {
+    // Keyed by part id in the parent, so a new part starts from 'loading'.
+    const controller = new AbortController()
+    void Promise.all([
+      partsApi.get(partId, { signal: controller.signal }),
+      partsApi.history(partId, { signal: controller.signal }).catch(() => null),
+      links.inventory
+        ? inventoryApi
+            .getPartZones(partId, { signal: controller.signal })
+            .catch(() => [])
+        : Promise.resolve(null),
+    ]).then(
+      ([detail, history, zones]) => {
+        if (!controller.signal.aborted)
+          setState({ kind: 'ready', detail, history, zones })
+      },
+      () => {
+        if (!controller.signal.aborted) setState({ kind: 'error' })
+      },
+    )
+    return () => controller.abort()
+  }, [links.inventory, partId])
+
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [partId])
+
+  const index = rows.findIndex((row) => row.id === partId)
+  const previous = index > 0 ? rows[index - 1] : undefined
+  const next =
+    index >= 0 && index < rows.length - 1 ? rows[index + 1] : undefined
+  const fallbackName = rows[index]?.name ?? t('titleFallback')
+  const name = state.kind === 'ready' ? state.detail.name : fallbackName
+  const fullHref = `/app/${tenantSlug}/parts/${partId}`
+
+  return (
+    <aside
+      aria-label={tl('peekLabel', { name })}
+      className="rz-peek"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.stopPropagation()
+          onClose()
+        }
+      }}
+    >
+      <div className="rz-peek__head">
+        <div className="flex items-center gap-1">
+          <span className="rz-eyebrow flex-1">{tl('peekEyebrow')}</span>
+          <Button
+            aria-label={tl('peekPrevious')}
+            disabled={previous === undefined}
+            onClick={() => previous && onOpen(previous.id)}
+            size="icon"
+            variant="quiet"
+          >
+            <ChevronUp aria-hidden />
+          </Button>
+          <Button
+            aria-label={tl('peekNext')}
+            disabled={next === undefined}
+            onClick={() => next && onOpen(next.id)}
+            size="icon"
+            variant="quiet"
+          >
+            <ChevronDown aria-hidden />
+          </Button>
+          <Button asChild size="icon" variant="quiet">
+            <Link aria-label={tl('peekOpen')} to={fullHref}>
+              <Maximize2 aria-hidden />
+            </Link>
+          </Button>
+          <Button
+            aria-label={tl('peekClose')}
+            onClick={onClose}
+            size="icon"
+            variant="quiet"
+          >
+            <X aria-hidden />
+          </Button>
+        </div>
+        <h2 className="rz-h-title outline-none" ref={headingRef} tabIndex={-1}>
+          {name}
+        </h2>
+        {state.kind === 'ready' ? (
+          <>
+            <div className="rz-btn-row items-center">
+              {state.detail.oemCode ? (
+                <span className="rz-code pr-2">
+                  {t('oem', { code: state.detail.oemCode })}
+                </span>
+              ) : null}
+              {statusPresentation(state.detail.status, locale).label ===
+              '' ? null : (
+                <StatusPill
+                  tone={statusPresentation(state.detail.status, locale).tone}
+                >
+                  {statusPresentation(state.detail.status, locale).label}
+                </StatusPill>
+              )}
+              {state.detail.condition ? (
+                <span className="text-app-muted">
+                  {conditionLabel(state.detail.condition, locale)}
+                </span>
+              ) : null}
+            </div>
+            <div className="rz-btn-row">
+              <Button asChild>
+                <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
+                  <Printer aria-hidden />
+                  {t('printSticker')}
+                </Link>
+              </Button>
+              <Button disabled title={t('addToOrderHint')}>
+                <ShoppingBag aria-hidden />
+                {t('addToOrder')}
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      {state.kind === 'loading' ? (
+        <div className="rz-peek__section">
+          <SkeletonRows columns={2} label={t('loading')} rows={4} />
+        </div>
+      ) : state.kind === 'error' ? (
+        <div className="rz-peek__section">
+          <Notice tone="danger">{tl('peekLoadFailed')}</Notice>
+        </div>
+      ) : (
+        <>
+          <section className="rz-peek__section" aria-label={t('stock')}>
+            <h3 className="rz-label m-0">{t('stock')}</h3>
+            <dl className="rz-kpis m-0 grid-cols-3">
+              <StockTile
+                label={t('tileAvailable')}
+                sub={
+                  state.detail.quantityAvailable > 0
+                    ? t('canSell')
+                    : t('noneFree')
+                }
+                value={state.detail.quantityAvailable}
+              />
+              <StockTile
+                label={t('tileReserved')}
+                sub={
+                  state.detail.quantityReserved > 0
+                    ? t('ordersCount', {
+                        count: state.detail.reservations?.length ?? 0,
+                      })
+                    : t('none')
+                }
+                tone="warn"
+                value={state.detail.quantityReserved}
+              />
+              <StockTile
+                label={t('tileSold')}
+                sub={
+                  state.detail.quantitySoldTotal > 0
+                    ? t('ordersCount', {
+                        count: state.detail.soldOrders?.length ?? 0,
+                      })
+                    : t('neverSold')
+                }
+                value={state.detail.quantitySoldTotal}
+              />
+            </dl>
+          </section>
+          <dl className="rz-facts m-0 border-app-line border-b">
+            <div>
+              <dt>{t('salePrice')}</dt>
+              <dd>
+                {state.detail.effectiveSalePrice === null ? (
+                  <span className="text-app-muted">{t('noPriceTitle')}</span>
+                ) : (
+                  <>
+                    <Amount
+                      className="text-app-strong font-mono"
+                      currency={currency}
+                      currencyDisplay="code"
+                      value={state.detail.effectiveSalePrice}
+                    />{' '}
+                    <span className="rz-caption">
+                      {t('perUnit', {
+                        unit: unitLabel(state.detail.unit, locale),
+                      })}
+                    </span>
+                  </>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('placement')}</dt>
+              <dd>{placementLabel(state.zones, links.inventory, t)}</dd>
+            </div>
+            <div>
+              <dt>{tl('colCar')}</dt>
+              <dd>
+                {state.detail.carId ? (
+                  links.cars ? (
+                    <Link to={`/app/${tenantSlug}/cars/${state.detail.carId}`}>
+                      {[
+                        state.detail.carBrand,
+                        state.detail.carModel,
+                        state.detail.carYear,
+                      ]
+                        .filter(Boolean)
+                        .join(' ') ||
+                        (state.detail.carCode ?? t('sourceCarFallback'))}
+                    </Link>
+                  ) : (
+                    [
+                      state.detail.carBrand,
+                      state.detail.carModel,
+                      state.detail.carYear,
+                    ]
+                      .filter(Boolean)
+                      .join(' ') ||
+                    (state.detail.carCode ?? t('sourceCarFallback'))
+                  )
+                ) : state.detail.intakeId ? (
+                  t('sourceIntake')
+                ) : (
+                  t('sourceNone')
+                )}
+              </dd>
+            </div>
+          </dl>
+          <section className="rz-peek__section" aria-label={t('history')}>
+            <h3 className="rz-label m-0">{t('history')}</h3>
+            {(state.history?.events ?? []).length === 0 ? (
+              <p className="rz-caption m-0">{t('historyEmpty')}</p>
+            ) : (
+              <ol className="rz-timeline -mx-3">
+                {(state.history?.events ?? []).slice(0, 3).map((event) => (
+                  <li key={event.id}>
+                    <span aria-hidden className="rz-timeline__icon">
+                      {HISTORY_ICON[historyKind(event.eventType, event.data)]}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-app-strong font-medium">
+                        {historyLabel(event.eventType, locale)}
+                      </span>
+                      {event.order ? (
+                        <span className="text-app-muted font-mono">
+                          {' '}
+                          {t('orderNumber', {
+                            number: String(event.order.number),
+                          })}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="rz-timeline__date">
+                      {format.date(event.createdAt) ?? ''}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </>
+      )}
+    </aside>
+  )
 }
 
-/** One of the three counts a part is split into, as its own tile. */
+/** One of the three counts a part is split into, as a `.rz-kpi` cell. */
 function StockTile({
   label,
   sub,
-  tone,
+  tone = 'plain',
   value,
 }: {
   label: string
   sub: string
-  tone: 'ok' | 'warn' | 'plain'
+  tone?: 'warn' | 'plain'
   value: number
 }) {
   return (
-    <div
-      className={cn(
-        'rounded-[14px] border px-3.5 pt-3 pb-3.5',
-        tone === 'ok' && value > 0
-          ? 'border-state-ok/20 bg-state-ok/[0.06]'
-          : 'border-app-line bg-white/[0.02]',
-      )}
-    >
-      <dt
-        className={cn(
-          'flex items-center gap-[7px] text-[12px] font-semibold',
-          tone === 'ok'
-            ? 'text-state-ok'
-            : tone === 'warn'
-              ? 'text-state-warn'
-              : 'text-app-muted',
-        )}
-      >
+    <div className="rz-kpi p-3">
+      <dt className="rz-kpi__label">{label}</dt>
+      <dd className="m-0 grid gap-1.5">
         <span
-          aria-hidden
           className={cn(
-            'size-1.5 shrink-0 rounded-full',
-            tone === 'ok'
-              ? 'bg-state-ok'
+            'font-mono text-page tabular-nums',
+            value === 0
+              ? 'text-app-dim'
               : tone === 'warn'
-                ? 'bg-state-warn'
-                : 'bg-app-dim',
-          )}
-        />
-        {label}
-      </dt>
-      <dd>
-        <span
-          className={cn(
-            'mt-1.5 block text-[26px] leading-none font-extrabold tracking-[-0.02em] tabular-nums',
-            value > 0 ? 'text-white' : 'text-app-dim',
+                ? 'text-state-warn'
+                : 'text-app-strong',
           )}
         >
           {value}
         </span>
-        <span className="text-app-dim mt-1.5 block text-[12px] text-pretty">
-          {sub}
-        </span>
+        <span className="rz-kpi__meta text-pretty">{sub}</span>
       </dd>
     </div>
   )
@@ -2889,83 +3253,6 @@ const SOURCE_KINDS = [
   { value: 'car', label: 'kindCarLabel', hint: 'kindCarHint' },
   { value: 'batch', label: 'kindBatchLabel', hint: 'kindBatchHint' },
 ] as const
-
-/**
- * What each condition means for a buyer. The label alone is a guess; the line
- * under it is what stops "задовільний" and "на запчастини" being used
- * interchangeably.
- */
-const CONDITION_HINTS: Record<
-  string,
-  { hint: 'hintGood' | 'hintFair' | 'hintScrap'; tone: string }
-> = {
-  good: { hint: 'hintGood', tone: 'border-state-ok bg-state-ok' },
-  fair: { hint: 'hintFair', tone: 'border-state-warn bg-state-warn' },
-  scrap: { hint: 'hintScrap', tone: 'border-state-danger bg-state-danger' },
-}
-
-function ConditionTile({
-  label,
-  onPick,
-  picked,
-  value,
-}: {
-  label: string
-  onPick: () => void
-  picked: boolean
-  value: string
-}) {
-  const t = useT(partFormMessages)
-  const meaning = CONDITION_HINTS[value]
-  const hintId = useId()
-  return (
-    <button
-      aria-checked={picked}
-      aria-describedby={hintId}
-      aria-label={label}
-      className={cn(
-        'rounded-control flex min-h-[92px] flex-col items-start gap-2 border px-3.5 py-3 text-left transition-colors',
-        picked
-          ? 'border-app-line-2 bg-white/[0.06]'
-          : 'border-app-line hover:border-app-line-2',
-      )}
-      onClick={onPick}
-      role="radio"
-      type="button"
-    >
-      <span className="flex w-full items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
-            picked ? meaning?.tone.split(' ')[0] : 'border-white/20',
-          )}
-        >
-          <span
-            className={cn(
-              'size-[7px] rounded-full',
-              picked ? meaning?.tone.split(' ')[1] : '',
-            )}
-          />
-        </span>
-        <span
-          className={cn(
-            'text-[14px] font-bold whitespace-nowrap',
-            picked ? 'text-white' : 'text-app-ink',
-          )}
-        >
-          {label}
-        </span>
-      </span>
-      <span
-        className="text-app-dim text-[12px] leading-[1.4] text-pretty"
-        id={hintId}
-      >
-        {meaning ? t(meaning.hint) : null}
-      </span>
-    </button>
-  )
-}
 
 function SourceTile({
   kind,
@@ -2981,17 +3268,21 @@ function SourceTile({
     <button
       aria-pressed={picked}
       className={cn(
-        'rounded-control min-h-16 border px-3.5 py-3 text-left transition-colors',
-        picked
-          ? 'border-app-line-2 bg-white/[0.07] text-white'
-          : 'border-app-line text-app-muted hover:border-app-line-2',
+        'rz-choice-card w-full bg-transparent text-left',
+        picked && 'border-brand bg-brand-soft',
       )}
       onClick={onPick}
       type="button"
     >
-      <span className="block text-[14px] font-bold">{t(kind.label)}</span>
-      <span className="text-app-dim mt-1 block text-[12px] leading-[1.35] text-pretty">
-        {t(kind.hint)}
+      <span
+        aria-hidden
+        className={cn('rz-radio mt-0.5 shrink-0', picked && 'border-brand')}
+      >
+        {picked ? <span className="bg-brand size-1.5 rounded-full" /> : null}
+      </span>
+      <span className="grid min-w-0 gap-1">
+        <span className="font-semibold text-app-strong">{t(kind.label)}</span>
+        <span className="rz-caption text-pretty">{t(kind.hint)}</span>
       </span>
     </button>
   )
@@ -3022,7 +3313,7 @@ function PartFields({
   canViewIntakes: boolean
   errors: PartFieldErrors
   edit?: boolean
-  /** `plain` is the drawer: numbered sections divided by a rule. */
+  /** Framed page sections or plain sections inside an existing surface. */
   variant?: 'panel' | 'plain'
 }) {
   const cabinet = useCabinet()
@@ -3058,11 +3349,14 @@ function PartFields({
     values.sourceType === 'car'
       ? (sourceOptions.cars.find((car) => car.id === values.sourceId) ?? null)
       : null
+  const nextCompatibilityKey = useRef(0)
   const showCompatibility = !edit
   const step = (number: string, title: string) =>
-    variant === 'plain' ? (
+    !edit ? (
       <span className="flex items-baseline gap-2.5">
-        <span className="text-app-dim font-mono text-[11px]">{number}</span>
+        <span aria-hidden className="text-brand-text font-mono text-micro">
+          {number}
+        </span>
         {title}
       </span>
     ) : (
@@ -3076,7 +3370,7 @@ function PartFields({
         variant={variant}
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          {variant === 'plain' && !edit ? (
+          {!edit ? (
             <fieldset className="col-span-full grid gap-2 sm:grid-cols-2">
               <legend className="sr-only">{t('sourceType')}</legend>
               {SOURCE_KINDS.filter(
@@ -3099,88 +3393,80 @@ function PartFields({
               ))}
             </fieldset>
           ) : (
-            <Field
-              hint={edit ? t('sourceTypeEditHint') : t('sourceTypeCreateHint')}
+            <SelectPicker
               label={t('sourceType')}
-            >
-              <SelectInput
-                aria-label={t('sourceType')}
-                disabled={edit}
-                onChange={(event) =>
-                  setValues({
-                    ...values,
-                    sourceType: event.target.value,
-                    sourceId: '',
-                  })
-                }
-                value={values.sourceType}
-              >
-                {canViewCars || values.sourceType === 'car' ? (
-                  <option value="car">{t('optionCar')}</option>
-                ) : null}
-                {canViewIntakes || values.sourceType === 'batch' ? (
-                  <option value="batch">{t('optionBatch')}</option>
-                ) : null}
-              </SelectInput>
-            </Field>
+              searchable={false}
+              hint={edit ? t('sourceTypeEditHint') : t('sourceTypeCreateHint')}
+              disabled={edit ?? false}
+              value={values.sourceType}
+              options={[
+                ...(canViewCars || values.sourceType === 'car'
+                  ? [{ value: 'car', label: t('optionCar') }]
+                  : []),
+                ...(canViewIntakes || values.sourceType === 'batch'
+                  ? [{ value: 'batch', label: t('optionBatch') }]
+                  : []),
+              ]}
+              onValueChange={(value) =>
+                setValues({ ...values, sourceType: value, sourceId: '' })
+              }
+              showLabel
+            />
           )}
           {values.sourceType === 'car' && canViewCars ? (
-            <Field
+            <SelectPicker
+              label={t('sourceCar')}
               error={errors.sourceId}
               hint={edit ? t('carEditHint') : t('carCreateHint')}
-              label={t('sourceCar')}
+              disabled={(edit ?? false) || sourceOptions.carsUnavailable}
+              value={values.sourceId}
+              options={[
+                { value: '', label: t('chooseCarOption') },
+                ...sourceOptions.cars.map((item) => ({
+                  value: item.id,
+                  label: carLabel(item),
+                })),
+                ...(values.sourceId &&
+                !sourceOptions.cars.some((item) => item.id === values.sourceId)
+                  ? [{ value: values.sourceId, label: t('carOutside') }]
+                  : []),
+              ]}
+              onValueChange={(value) =>
+                setValues({ ...values, sourceId: value })
+              }
               required={!edit}
-            >
-              <SelectInput
-                aria-label={t('sourceCar')}
-                disabled={(edit ?? false) || sourceOptions.carsUnavailable}
-                onChange={field('sourceId')}
-                value={values.sourceId}
-              >
-                <option value="">{t('chooseCarOption')}</option>
-                {sourceOptions.cars.map((car) => (
-                  <option key={car.id} value={car.id}>
-                    {carLabel(car)}
-                  </option>
-                ))}
-                {values.sourceId &&
-                !sourceOptions.cars.some(
-                  (car) => car.id === values.sourceId,
-                ) ? (
-                  <option value={values.sourceId}>{t('carOutside')}</option>
-                ) : null}
-              </SelectInput>
-            </Field>
+              showLabel
+            />
           ) : values.sourceType === 'batch' && canViewIntakes ? (
-            <Field
+            <SelectPicker
+              label={t('sourceBatch')}
               error={errors.sourceId}
               hint={edit ? t('batchEditHint') : t('batchCreateHint')}
-              label={t('sourceBatch')}
-              required={!edit}
-            >
-              <SelectInput
-                aria-label={t('sourceBatch')}
-                disabled={(edit ?? false) || sourceOptions.intakesUnavailable}
-                onChange={field('sourceId')}
-                value={values.sourceId}
-              >
-                <option value="">{t('chooseBatchOption')}</option>
-                {sourceOptions.intakes.map((intake) => (
-                  <option key={intake.id} value={intake.id}>
-                    {intakeLabel(intake, locale)}
-                  </option>
-                ))}
-                {values.sourceId &&
+              disabled={(edit ?? false) || sourceOptions.intakesUnavailable}
+              value={values.sourceId}
+              options={[
+                { value: '', label: t('chooseBatchOption') },
+                ...sourceOptions.intakes.map((item) => ({
+                  value: item.id,
+                  label: intakeLabel(item, locale),
+                })),
+                ...(values.sourceId &&
                 !sourceOptions.intakes.some(
-                  (intake) => intake.id === values.sourceId,
-                ) ? (
-                  <option value={values.sourceId}>{t('batchOutside')}</option>
-                ) : null}
-              </SelectInput>
-            </Field>
+                  (item) => item.id === values.sourceId,
+                )
+                  ? [{ value: values.sourceId, label: t('batchOutside') }]
+                  : []),
+              ]}
+              onValueChange={(value) =>
+                setValues({ ...values, sourceId: value })
+              }
+              required={!edit}
+              showLabel
+            />
           ) : null}
         </div>
-        {sourceCreateLink ? (
+        {sourceCreateLink &&
+        (sourceCreateLink !== 'cars' || !values.sourceId) ? (
           <div className="grid gap-1.5">
             <div className="flex flex-wrap gap-2">
               <Button asChild>
@@ -3205,7 +3491,7 @@ function PartFields({
                 </Link>
               </Button>
             </div>
-            <p className="text-app-dim text-[12px] leading-5 text-pretty">
+            <p className="rz-caption m-0 text-pretty">
               {t('createReturnHint')}
             </p>
           </div>
@@ -3255,10 +3541,10 @@ function PartFields({
               value={values.partType}
             />
           </Field>
-          <Field hint={edit ? t('oemEditHint') : t('oemHint')} label={t('oem')}>
+          <Field hint={t('oemHint')} label={t('oem')}>
             <TextInput
               aria-label={t('oem')}
-              disabled={edit}
+              maxLength={100}
               onChange={field('oemCode')}
               value={values.oemCode}
             />
@@ -3279,7 +3565,7 @@ function PartFields({
         title={step('03', t('conditionStep'))}
         variant={variant}
       >
-        {variant === 'plain' ? (
+        {!edit ? (
           <>
             <div
               aria-label={t('conditionStep')}
@@ -3298,7 +3584,7 @@ function PartFields({
                 />
               ))}
             </div>
-            <p className="text-app-dim text-[12px] leading-5 text-pretty">
+            <p className="rz-caption m-0 text-pretty">
               {t('conditionVisible')}
             </p>
           </>
@@ -3319,13 +3605,13 @@ function PartFields({
       >
         <div className="grid items-start gap-3 sm:grid-cols-3">
           <Field error={errors.quantity} label={t('quantity')} required>
-            <TextInput
-              aria-label={t('quantity')}
-              inputMode="numeric"
-              min="1"
-              onChange={field('quantity')}
-              type="number"
-              value={values.quantity}
+            <QuantityStepper
+              label={t('quantityInStock')}
+              min={1}
+              onChange={(next) =>
+                setValues({ ...values, quantity: String(next) })
+              }
+              value={Number(values.quantity) || 1}
             />
           </Field>
           <Field hint={t('unitHint')} label={t('unit')}>
@@ -3366,22 +3652,19 @@ function PartFields({
           variant={variant}
         >
           {sourceCar === null ? null : (
-            <div className="border-app-line flex items-center gap-3.5 rounded-[14px] border bg-white/[0.03] px-4 py-3.5">
-              <span
-                aria-hidden
-                className="bg-app-input text-app-muted grid size-9 shrink-0 place-items-center rounded-[10px]"
-              >
+            <div className="rz-inset flex items-center gap-3">
+              <span aria-hidden className="rz-state__icon shrink-0">
                 <Lock className="size-4" />
               </span>
               <span className="min-w-0">
-                <span className="block text-[15px] font-bold tracking-[-0.01em] text-white">
+                <span className="block font-semibold text-app-strong">
                   {sourceCar.brand} {sourceCar.model}{' '}
                   <span className="text-app-dim">·</span>{' '}
                   <span className="text-app-ink font-mono font-medium">
                     {sourceCar.year}
                   </span>
                 </span>
-                <span className="text-app-muted mt-0.5 block text-[12px] text-pretty">
+                <span className="rz-caption mt-0.5 block text-pretty">
                   {t('compatFromSource')}
                 </span>
               </span>
@@ -3391,25 +3674,19 @@ function PartFields({
             <div className="grid gap-2.5">
               {compatibility.rows.map((row, index) => (
                 <CompatibilityRowCard
-                  index={index}
+                  index={index + (sourceCar === null ? 1 : 2)}
                   key={row.key}
-                  onChange={(patch) => {
+                  onChange={(patch) =>
                     compatibility.setRows(
                       compatibility.rows.map((item) =>
                         item.key === row.key ? { ...item, ...patch } : item,
                       ),
                     )
-                  }}
-                  onRemove={
-                    compatibility.rows.length > 1
-                      ? () => {
-                          compatibility.setRows(
-                            compatibility.rows.filter(
-                              (item) => item.key !== row.key,
-                            ),
-                          )
-                        }
-                      : undefined
+                  }
+                  onRemove={() =>
+                    compatibility.setRows(
+                      compatibility.rows.filter((item) => item.key !== row.key),
+                    )
                   }
                   row={row}
                 />
@@ -3417,9 +3694,12 @@ function PartFields({
               <Button
                 className="w-full justify-center border-dashed"
                 onClick={() => {
+                  nextCompatibilityKey.current += 1
                   compatibility.setRows([
                     ...compatibility.rows,
-                    emptyRow(`row-${String(Date.now())}`),
+                    emptyRow(
+                      `row-${String(Date.now())}-${String(nextCompatibilityKey.current)}`,
+                    ),
                   ])
                 }}
                 type="button"
@@ -3438,8 +3718,8 @@ function PartFields({
 
 /**
  * Source error codes Core sends on create, read in the interface language.
- * An unknown code falls back to the server's own message (it already follows
- * Accept-Language); a failure without a code gets the generic sentence.
+ * Other codes use the shared error translations; a failure without a code gets
+ * the form's generic sentence.
  */
 const SOURCE_ERROR_KEYS: Readonly<
   Record<string, 'archivedSource' | 'invalidSourceType'>
@@ -3456,7 +3736,7 @@ const createFailureMessage = (failure: unknown, locale: Locale): string => {
   const known = SOURCE_ERROR_KEYS[code]
   return known
     ? translate(partFormMessages, locale, known)
-    : problem.message || translate(partFormMessages, locale, 'createFailed')
+    : localizeApiError(problem, locale)
 }
 
 function validFormNumbers(values: PartFormValues) {
@@ -3491,9 +3771,18 @@ function PartForm({
   const [searchParams] = useSearchParams()
   const cabinet = useCabinet()
   const t = useT(partFormMessages)
+  const tPlacement = useT(placementMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
   const { locale } = useLocale()
   const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
+  const canPlace =
+    allowedToView(cabinetModules.inventory, cabinet) &&
+    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
+  const placementOptions = usePlacementOptions(
+    canPlace,
+    cabinet.targetTenant?.id,
+  )
   // Coming back from creating a car or intake restores what was typed.
   const [draft] = useState(() =>
     searchParams.get(DRAFT_PARAM) === '1'
@@ -3503,8 +3792,8 @@ function PartForm({
   useEffect(() => {
     if (draft) clearPartDraft()
   }, [draft])
-  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(() =>
-    draft?.compatibility.length ? draft.compatibility : [emptyRow('row-1')],
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(
+    () => draft?.compatibility.filter((row) => !isBlankRow(row)) ?? [],
   )
   // A part started from a car's page arrives with that car already chosen,
   // so nobody has to find it again in the source list.
@@ -3524,15 +3813,8 @@ function PartForm({
   )
   const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
-  // The owner's first part may finish onboarding: say so here, keep the list.
-  const firstPart = useFirstPartCompletion({
-    tenantId: cabinet.targetTenant?.id ?? null,
-    userId: cabinet.snapshot?.userId ?? null,
-    role: cabinet.snapshot?.role,
-  })
   // A car given by link but missing from the active list is most likely
   // archived; say so now rather than after the whole form is filled.
   const [archivedCarId, setArchivedCarId] = useState<string | null>(null)
@@ -3599,7 +3881,6 @@ function PartForm({
       ).length > 0
     ) {
       setShowErrors(true)
-      setStatus(null)
       setError(t('createInvalid'))
       return
     }
@@ -3630,7 +3911,6 @@ function PartForm({
     const pricing = price.hasPrice && !price.disabled
     pendingRef.current = true
     setPending(true)
-    setStatus(null)
     setError(null)
     try {
       if (
@@ -3731,9 +4011,32 @@ function PartForm({
           resolved.items,
         )
       }
+      const placement = values.placement
+      let placementFailed = false
+      if (canPlace && placement?.zoneId) {
+        try {
+          await inventoryApi.replacePartZones(
+            created.id,
+            [placement.zoneId],
+            { signal: scope.signal },
+            placement.shelfId || undefined,
+            placement.sectionId || undefined,
+          )
+        } catch {
+          placementFailed = true
+        }
+      }
       guard.afterSave(pricing)
-      setStatus(t('created'))
-      firstPart.check()
+      toast?.show({
+        tone: placementFailed ? 'danger' : 'ok',
+        message: placementFailed ? tPlacement('saveFailed') : t('created'),
+      })
+      void navigate(
+        cabinetPath(cabinet.targetTenant!.slug, 'parts', created.id),
+        {
+          replace: true,
+        },
+      )
     } catch (failure) {
       setError(createFailureMessage(failure, locale))
     } finally {
@@ -3764,58 +4067,55 @@ function PartForm({
     rowsProblem(compatRows, locale) === null
 
   return (
-    <Sheet
-      description={
-        <>
-          {t('requiredFields')} <span className="text-brand">*</span>.{' '}
-          {t('restLater')}
-        </>
-      }
-      footer={
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="basis-full empty:hidden">{price.saveNotes}</div>
+    <FormPage
+      backTo={base}
+      busy={pending}
+      footerNote={
+        <div className="grid gap-2">
+          {price.saveNotes}
           <p
             className={cn(
-              'min-w-0 text-[12px] text-pretty',
+              'm-0 text-caption text-pretty',
               ready ? 'text-app-muted' : 'text-state-warn',
             )}
           >
             {footerNote}
           </p>
-          <div className="ml-auto flex items-center gap-2.5">
-            <Button
-              disabled={pending}
-              onClick={() => void navigate(base)}
-              type="button"
-            >
-              {tc('cancel')}
-            </Button>
-            <Button
-              aria-busy={pending || mediaPending}
-              disabled={pending || mediaPending}
-              form={CREATE_PART_FORM}
-              type="submit"
-              variant="primary"
-            >
-              {t('createPart')}
-            </Button>
-          </div>
         </div>
       }
-      eyebrow={t('sheetEyebrow')}
-      onOpenChange={(next: boolean) => {
-        if (!next && !pending) void navigate(base)
-      }}
-      open
-      size="lg"
+      actions={
+        <div className="ml-auto flex items-center gap-2.5">
+          <Button
+            disabled={pending}
+            onClick={() => void navigate(base)}
+            type="button"
+          >
+            {tc('cancel')}
+          </Button>
+          <Button
+            aria-busy={pending || mediaPending}
+            disabled={pending || mediaPending}
+            form={CREATE_PART_FORM}
+            type="submit"
+            variant="primary"
+          >
+            {t('createPart')}
+          </Button>
+        </div>
+      }
+      context={t('sheetEyebrow')}
       title={title}
     >
       <form
-        className="grid"
+        className="grid gap-4"
         id={CREATE_PART_FORM}
         noValidate
         onSubmit={(event) => void submit(event)}
       >
+        <p className="rz-caption m-0 text-pretty">
+          {t('requiredFields')} <span className="text-brand-text">*</span>.{' '}
+          {t('restLater')}
+        </p>
         <PartFields
           canViewCars={canViewCars}
           canViewIntakes={canViewIntakes}
@@ -3827,8 +4127,31 @@ function PartForm({
           setValues={setValues}
           sourceOptions={sourceOptions}
           values={values}
-          variant="plain"
+          variant="panel"
         />
+        {canPlace ? (
+          <SectionPanel
+            title={
+              <span className="flex items-baseline gap-2.5">
+                <span
+                  aria-hidden
+                  className="text-brand-text font-mono text-micro"
+                >
+                  06
+                </span>
+                {tPlacement('title')}
+              </span>
+            }
+            description={tPlacement('hint')}
+            variant="panel"
+          >
+            <PartPlacementPicker
+              value={values.placement ?? emptyPartPlacement}
+              onChange={(placement) => setValues({ ...values, placement })}
+              options={placementOptions}
+            />
+          </SectionPanel>
+        ) : null}
         <PartMediaFields
           deferUploads
           items={mediaItems}
@@ -3836,21 +4159,20 @@ function PartForm({
           setItems={setMediaItems}
           title={
             <span className="flex items-baseline gap-2.5">
-              <span className="text-app-dim font-mono text-[11px]">06</span>
+              <span
+                aria-hidden
+                className="text-brand-text font-mono text-micro"
+              >
+                {canPlace ? '07' : '06'}
+              </span>
               {t('photos')}
             </span>
           }
-          variant="plain"
+          variant="panel"
         />
-        {status ? <Notice tone="ok">{status}</Notice> : null}
-        {firstPart.done && cabinet.targetTenant ? (
-          <OnboardingCompletedNotice
-            dashboardPath={cabinetPath(cabinet.targetTenant.slug, 'dashboard')}
-          />
-        ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
-    </Sheet>
+    </FormPage>
   )
 }
 
@@ -3870,11 +4192,21 @@ function PartEdit({
   >['requireLatestMutation']
 }) {
   const t = useT(partFormMessages)
+  const td = useT(partDetailMessages)
   const tl = useT(lostResponseMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
+  const mountedRef = useRef(true)
   const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
+  const priceRestriction = partEditingRestriction(detail?.status, locale)
+  const [compatState, setCompatState] = useState<{
+    partId: string
+    data: PartCompatibilities | null
+    error: boolean
+  } | null>(null)
+  const compat = compatState?.partId === partId ? compatState : null
   const [mediaItems, setMediaItems] = useState<PartMediaItem[]>([])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -3899,9 +4231,30 @@ function PartEdit({
     onAccept: (accepted) => void save(undefined, accepted),
   })
   useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+  useEffect(() => {
+    const controller = new AbortController()
+    void partsApi.compatibilities(partId, { signal: controller.signal }).then(
+      (result) => {
+        if (!controller.signal.aborted)
+          setCompatState({ partId, data: result, error: false })
+      },
+      () => {
+        if (!controller.signal.aborted)
+          setCompatState({ partId, data: null, error: true })
+      },
+    )
+    return () => controller.abort()
+  }, [partId])
+  useEffect(() => {
     const controller = new AbortController()
     void partsApi.get(partId, { signal: controller.signal }).then(
       (part) => {
+        if (controller.signal.aborted) return
         if (!part) {
           setError(translate(partFormMessages, locale, 'editLoadFailed'))
           return
@@ -3970,7 +4323,15 @@ function PartEdit({
     setPending(true)
     setStatus(null)
     setError(null)
-    const pricing = price.hasPrice && !price.disabled
+    const pricing =
+      price.hasPrice && !price.disabled && priceRestriction === null
+    const finishSave = () => {
+      if (!mountedRef.current) return
+      requireLatestMutation({ quota: false })
+      guard.afterSave(pricing)
+      toast?.show({ tone: 'ok', message: t('saved') })
+      void navigate(backTo, { replace: true })
+    }
     try {
       if (
         guard.needsCheck(pricing) &&
@@ -3982,6 +4343,7 @@ function PartEdit({
         partId,
         {
           name: values.name.trim(),
+          oemCode: optional(values.oemCode) ?? null,
           condition: optional(values.condition) ?? null,
           notes: optional(values.notes) ?? null,
           quantity: parsed.quantity,
@@ -3989,37 +4351,65 @@ function PartEdit({
           unit: PIECES_UNIT,
           photoKeys: committedPhotoKeys(mediaItems),
           // Without an accounting currency the price is left as it is.
-          desiredSalePrice: price.disabled
-            ? { isSet: false }
-            : { isSet: true, value: parsed.price ?? null },
+          desiredSalePrice:
+            price.disabled || priceRestriction !== null
+              ? { isSet: false }
+              : { isSet: true, value: parsed.price ?? null },
         },
         { signal: scope.signal },
       )
-      guard.afterSave(pricing)
-      setStatus(t('saved'))
+      if (scope.signal.aborted) return
+      finishSave()
     } catch (failure) {
+      if (!mountedRef.current) return
       if (!isLostResponse(failure)) {
-        setError(t('saveFailed'))
+        const problem = normalizeApiProblem(failure)
+        const fieldMessage = Object.values(problem.fieldErrors ?? {}).flat()[0]
+        setError(
+          fieldMessage ??
+            (problem.status !== undefined && problem.status < 500
+              ? problem.message
+              : t('saveFailed')),
+        )
         return
       }
       // The PATCH may have landed: read the part back first. Saving the same
       // values again is safe, and the form keeps them meanwhile.
       setStatus(tl('checking'))
       try {
-        const fresh = await partsApi.get(partId)
+        const scope = requireLatestMutation({ quota: false })
+        const fresh = await partsApi.get(partId, { signal: scope.signal })
+        if (!mountedRef.current || scope.signal.aborted) return
+        const photoKeys = committedPhotoKeys(mediaItems)
+        const storedPhotoKeys = (fresh.photos ?? []).map(
+          (photo) => photo.storageKey,
+        )
         const landed =
           fresh.name === values.name.trim() &&
+          (fresh.oemCode ?? null) === (optional(values.oemCode) ?? null) &&
+          fresh.quantityTotal === parsed.quantity &&
+          (fresh.notes ?? null) ===
+            (optional(values.notes) ?? detail?.notes ?? null) &&
+          (fresh.condition ?? null) ===
+            (optional(values.condition) ?? detail?.condition ?? null) &&
+          (fresh.partType ?? null) ===
+            (optional(values.partType) ?? detail?.partType ?? null) &&
+          storedPhotoKeys.length === photoKeys.length &&
+          storedPhotoKeys.every((key, index) => key === photoKeys[index]) &&
           (price.disabled || fresh.desiredSalePrice === (parsed.price ?? null))
-        setStatus(landed ? t('saved') : null)
-        if (landed) guard.afterSave(pricing)
-        else setError(tl('notSaved'))
+        if (landed) finishSave()
+        else {
+          setStatus(null)
+          setError(tl('notSaved'))
+        }
       } catch {
+        if (!mountedRef.current) return
         setStatus(null)
         setError(tl('checkFailed'))
       }
     } finally {
       pendingRef.current = false
-      setPending(false)
+      if (mountedRef.current) setPending(false)
     }
   }
   const navigate = useNavigate()
@@ -4042,32 +4432,32 @@ function PartEdit({
     }
   }
 
+  const editStep = (number: string, title: string) => (
+    <span className="flex items-baseline gap-2.5">
+      <span aria-hidden className="text-brand-text font-mono text-micro">
+        {number}
+      </span>
+      {title}
+    </span>
+  )
+
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={backTo}
+    <FormPage
+      backTo={backTo}
+      busy={pending || deleting}
+      description={detail?.name ?? undefined}
+      context={t('sheetEyebrow')}
+      actions={
+        <div className="flex w-full items-center justify-end gap-2.5">
+          <Button
+            disabled={pending || deleting}
+            onClick={() => void navigate(backTo)}
+            type="button"
           >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToPart')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('breadcrumbWarehouse')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('breadcrumbParts')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button asChild className="px-[18px] text-sm font-semibold">
-            <Link to={backTo}>{tc('cancel')}</Link>
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={pending || mediaPending}
-            className="px-5 text-sm font-bold"
             disabled={pending || mediaPending || values === null}
             form="part-edit"
             type="submit"
@@ -4076,56 +4466,75 @@ function PartEdit({
             {t('saveChanges')}
           </Button>
         </div>
-      </div>
-
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            {detail?.name ?? t('editTitle')}
-          </h1>
-          {detail ? (
-            <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
-              <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[13px]">
-                {detail.qrCode}
-              </span>
-              <span>
-                {t('createdBy', { name: detail.createdByName ?? '' })}{' '}
-                <DateValue value={detail.createdAt} />
-              </span>
-            </p>
-          ) : null}
-        </div>
-
+      }
+      title={t('editTitle')}
+    >
+      <div className="grid gap-5">
         {status ? <Notice tone="ok">{status}</Notice> : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
 
         {values ? (
           <form
-            className="flex flex-wrap items-start gap-6"
+            className="grid gap-4"
             id="part-edit"
             noValidate
             onSubmit={(event) => void save(event)}
           >
-            <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-              <Card
+            <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+              <span className="text-app-muted text-caption">
+                {t('available')}{' '}
+                <span className="text-app-ink font-mono tabular-nums">
+                  {detail?.quantityAvailable ?? 0}{' '}
+                  {unitLabel(values.unit, locale)}
+                </span>
+              </span>
+              <span className="text-app-muted text-caption">
+                {t('reserved')}{' '}
+                <span className="text-app-ink font-mono tabular-nums">
+                  {detail?.quantityReserved ?? 0}{' '}
+                  {unitLabel(values.unit, locale)}
+                </span>
+              </span>
+              {detail?.qrCode ? (
+                <span className="rz-code max-w-full">
+                  <span className="text-app-dim">{t('qrCode')}</span>
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    {detail.qrCode}
+                  </span>
+                </span>
+              ) : null}
+              <Button asChild size="sm" className="sm:ml-auto">
+                <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
+                  <Printer aria-hidden />
+                  {t('printSticker')}
+                </Link>
+              </Button>
+            </div>
+            <div className="grid gap-4">
+              <SectionPanel
                 aside={
-                  <span className="text-app-dim text-[13px]">
+                  <span className="text-app-dim text-body">
                     {t('notEditable')}
                   </span>
                 }
-                title={t('sourceStep')}
+                title={editStep('01', t('sourceStep'))}
+                variant="panel"
               >
-                <p className="text-app-muted text-sm">
-                  {t('sourceSetOnCreate')}
-                </p>
-                <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3.5">
-                  <span className="text-[16px] font-semibold text-white">
-                    {detail?.carId && detail.carCode
-                      ? `${t('fromCar', { code: detail.carCode })}${detail.carBrand ? ` (${detail.carBrand} ${detail.carModel ?? ''})` : ''}`
-                      : detail?.intakeId
-                        ? t('fromIntake')
-                        : sourceLabel(values.sourceType, locale)}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="grid min-w-0 gap-1">
+                    <span className="font-semibold break-words text-app-strong">
+                      {detail?.carId && detail.carCode
+                        ? t('fromCar', { code: detail.carCode })
+                        : detail?.intakeId
+                          ? t('fromIntake')
+                          : sourceLabel(values.sourceType, locale)}
+                    </span>
+                    {detail?.carId && detail.carBrand ? (
+                      <span className="text-app-muted text-body">
+                        {detail.carBrand} {detail.carModel}
+                      </span>
+                    ) : null}
+                  </div>
                   {detail?.carId && canViewCars ? (
                     <Button asChild>
                       <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
@@ -4144,13 +4553,13 @@ function PartEdit({
                     </Button>
                   ) : null}
                 </div>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('describeStep')}>
+              <SectionPanel
+                title={editStep('02', t('describeStep'))}
+                variant="panel"
+              >
                 <div className="grid gap-4">
-                  <p className="text-app-muted text-sm">
-                    {t('describeEditDescription')}
-                  </p>
                   <Field error={errors.name} label={t('name')} required>
                     <TextInput
                       name="name"
@@ -4179,11 +4588,18 @@ function PartEdit({
                         value={values.partType}
                       />
                     </Field>
-                    <Field hint={t('oemServerHint')} label={t('oem')}>
+                    <Field hint={t('oemHint')} label={t('oem')}>
                       <TextInput
                         className="font-mono"
-                        disabled
+                        maxLength={100}
                         name="oemCode"
+                        onChange={(event) =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, oemCode: event.target.value }
+                              : current,
+                          )
+                        }
                         value={values.oemCode}
                       />
                     </Field>
@@ -4204,174 +4620,183 @@ function PartEdit({
                     />
                   </Field>
                 </div>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('conditionStep')}>
+              <SectionPanel
+                title={editStep('03', t('conditionStep'))}
+                variant="panel"
+              >
                 <div className="grid gap-4">
-                  <p className="text-app-muted text-sm">
+                  <p className="text-app-muted text-body">
                     {t('conditionDescription')}
                   </p>
-                  <PillGroup
-                    className="flex-wrap"
-                    label={t('conditionStep')}
-                    onChange={(next) =>
-                      setValues((current) =>
-                        current ? { ...current, condition: next } : current,
-                      )
-                    }
-                    options={partConditions(locale)}
-                    value={values.condition}
-                  />
-                </div>
-              </Card>
-
-              <Card title={t('quantityStep')}>
-                <p className="text-app-muted text-sm">
-                  {t('quantityDescription')}
-                </p>
-                <div className="grid items-start gap-4 sm:grid-cols-3">
-                  <Field error={errors.quantity} label={t('quantity')} required>
-                    <QuantityStepper
-                      label={t('quantityInStock')}
-                      min={0}
-                      onChange={(next) =>
-                        setValues((current) =>
-                          current
-                            ? { ...current, quantity: String(next) }
-                            : current,
-                        )
-                      }
-                      value={Number(values.quantity) || 0}
-                    />
-                  </Field>
-                  <Field hint={t('unitHint')} label={t('unit')}>
-                    <TextInput
-                      name="unit"
-                      readOnly
-                      value={unitLabel(values.unit, locale)}
-                    />
-                  </Field>
-                  <Field
-                    error={errors.desiredSalePrice}
-                    hint={price.hint}
-                    label={t('desiredPrice')}
+                  <div
+                    aria-label={t('conditionStep')}
+                    className="grid gap-2 sm:grid-cols-3"
+                    role="radiogroup"
                   >
-                    <MoneyInput
-                      currency={price.currency}
-                      disabled={price.disabled}
-                      inputMode="decimal"
-                      name="desiredSalePrice"
-                      onChange={(event) =>
-                        setValues((current) =>
-                          current
-                            ? {
-                                ...current,
-                                desiredSalePrice: event.target.value,
-                              }
-                            : current,
-                        )
-                      }
-                      value={values.desiredSalePrice}
-                    />
-                  </Field>
+                    {partConditions(locale).map((option) => (
+                      <ConditionTile
+                        key={option.value}
+                        label={option.label}
+                        onPick={() =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, condition: option.value }
+                              : current,
+                          )
+                        }
+                        picked={values.condition === option.value}
+                        value={option.value}
+                      />
+                    ))}
+                  </div>
+                  <p className="rz-caption m-0 text-pretty">
+                    {t('conditionVisible')}
+                  </p>
                 </div>
-                {price.note}
-                {price.saveNotes}
-              </Card>
+              </SectionPanel>
 
-              <Card
+              <SectionPanel
+                description={t('quantityDescription')}
+                title={editStep('04', t('quantityStep'))}
+                variant="panel"
+              >
+                <div className="grid gap-3">
+                  <div className="grid items-start gap-3 sm:grid-cols-3">
+                    <Field
+                      error={errors.quantity}
+                      label={t('quantity')}
+                      required
+                    >
+                      <QuantityStepper
+                        label={t('quantityInStock')}
+                        min={0}
+                        onChange={(next) =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, quantity: String(next) }
+                              : current,
+                          )
+                        }
+                        value={Number(values.quantity) || 0}
+                      />
+                    </Field>
+                    <Field hint={t('unitHint')} label={t('unit')}>
+                      <TextInput
+                        name="unit"
+                        readOnly
+                        value={unitLabel(values.unit, locale)}
+                      />
+                    </Field>
+                    <Field
+                      error={errors.desiredSalePrice}
+                      hint={priceRestriction ?? price.hint}
+                      label={t('desiredPrice')}
+                    >
+                      <MoneyInput
+                        currency={price.currency}
+                        disabled={price.disabled || priceRestriction !== null}
+                        inputMode="decimal"
+                        name="desiredSalePrice"
+                        onChange={(event) =>
+                          setValues((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  desiredSalePrice: event.target.value,
+                                }
+                              : current,
+                          )
+                        }
+                        value={values.desiredSalePrice}
+                      />
+                    </Field>
+                  </div>
+                  {price.note}
+                  {price.saveNotes}
+                </div>
+              </SectionPanel>
+
+              <SectionPanel
                 aside={
-                  <span className="text-app-dim text-[13px]">
+                  <span className="text-app-dim text-body">
                     {t('readOnly')}
                   </span>
                 }
-                title={t('compatStep')}
+                title={editStep('05', t('compatStep'))}
+                variant="panel"
               >
-                <p className="text-app-muted text-sm">{t('compatReadOnly')}</p>
-                <SpecGrid
-                  specs={[
-                    { label: t('make'), value: detail?.compatCarBrand ?? '—' },
-                    { label: t('model'), value: detail?.compatCarModel ?? '—' },
-                    {
-                      label: t('year'),
-                      value:
-                        detail?.compatCarYear === null ||
-                        detail?.compatCarYear === undefined
-                          ? '—'
-                          : String(detail.compatCarYear),
-                    },
-                  ]}
-                />
-              </Card>
-
-              <Card title={t('photos')}>
-                <p className="text-app-muted text-sm">{t('photosUploadNow')}</p>
-                <PartMediaFields
-                  items={mediaItems}
-                  requireLatestMutation={requireLatestMutation}
-                  setItems={setMediaItems}
-                />
-                <p className="text-app-dim text-[13px]">
-                  {t('buyersSeePhotos')}
+                <p className="text-app-muted text-body">
+                  {t('compatReadOnly')}
                 </p>
-              </Card>
+                {compat?.error ? (
+                  <Notice tone="danger">{t('compatLoadFailed')}</Notice>
+                ) : compat === null ? (
+                  <p className="text-app-muted text-body">
+                    {td('loadingShort')}
+                  </p>
+                ) : compat.data?.items.length === 0 ? (
+                  <p className="text-app-muted text-body">
+                    {td('compatEmpty')}
+                  </p>
+                ) : (
+                  <div className="grid gap-3">
+                    {compat.data?.items.map((item) => (
+                      <SpecGrid
+                        key={item.id}
+                        specs={[
+                          {
+                            label: t('make'),
+                            value: item.makeName ?? item.equipmentTypeName,
+                          },
+                          {
+                            label: t('model'),
+                            value: item.modelName ?? td('anyModel'),
+                          },
+                          {
+                            label: t('year'),
+                            value: yearSpan(item.yearFrom, item.yearTo, td),
+                          },
+                        ]}
+                      />
+                    ))}
+                  </div>
+                )}
+              </SectionPanel>
+
+              <PartMediaFields
+                description={t('photosUploadNow')}
+                title={editStep('06', t('photos'))}
+                items={mediaItems}
+                requireLatestMutation={requireLatestMutation}
+                setItems={setMediaItems}
+                variant="panel"
+              />
             </div>
 
-            <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-              <Card title={t('summary')}>
-                <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {t('available')}
-                  </dt>
-                  <dd className="font-mono text-[16px] text-white tabular-nums">
-                    {detail?.quantityAvailable ?? 0}{' '}
-                    {unitLabel(values.unit, locale)}
-                  </dd>
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {t('reserved')}
-                  </dt>
-                  <dd className="font-mono text-[16px] text-white tabular-nums">
-                    {detail?.quantityReserved ?? 0}{' '}
-                    {unitLabel(values.unit, locale)}
-                  </dd>
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {t('qrCode')}
-                  </dt>
-                  <dd className="font-mono text-[14px] break-all text-white">
-                    {detail?.qrCode ?? '—'}
-                  </dd>
-                </dl>
-                <Button asChild className="mt-4 w-full text-sm font-semibold">
-                  <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
-                    <Printer aria-hidden />
-                    {t('printSticker')}
-                  </Link>
-                </Button>
-              </Card>
-
-              <Card title={t('deletion')}>
-                <p className="text-app-muted text-sm">
-                  {detail && detail.quantityReserved > 0
-                    ? t('deleteBlocked')
-                    : t('deleteAllowed')}
-                </p>
-                <Button
-                  className="w-full text-sm font-semibold"
-                  onClick={() => setConfirmingDelete(true)}
-                  type="button"
-                  variant="danger"
-                >
-                  <Trash2 aria-hidden />
-                  {t('deletePart')}
-                </Button>
-              </Card>
-            </aside>
+            <PanelFooter
+              leading={
+                detail && detail.quantityReserved > 0
+                  ? t('deleteBlocked')
+                  : t('deleteAllowed')
+              }
+            >
+              <Button
+                disabled={pending || deleting}
+                onClick={() => setConfirmingDelete(true)}
+                type="button"
+                variant="danger"
+              >
+                <Trash2 aria-hidden />
+                {t('deletePart')}
+              </Button>
+            </PanelFooter>
           </form>
         ) : !error ? (
-          <SkeletonRows
-            columns={2}
+          <SkeletonFields
+            count={8}
             label={translate(partDetailMessages, locale, 'loading')}
-            rows={4}
           />
         ) : null}
       </div>
@@ -4387,6 +4812,6 @@ function PartEdit({
         pending={deleting}
         title={t('deleteTitle')}
       />
-    </div>
+    </FormPage>
   )
 }

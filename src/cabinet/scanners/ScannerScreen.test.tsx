@@ -513,10 +513,10 @@ it('keeps the yard actions on the 56px gloved-thumb touch floor', () => {
   )
 
   expect(screen.getByRole('button', { name: 'Увімкнути камеру' })).toHaveClass(
-    'min-h-14',
+    'rz-btn--glove',
   )
   expect(screen.getByRole('button', { name: 'Знайти деталь' })).toHaveClass(
-    'min-h-14',
+    'rz-btn--glove',
   )
 })
 
@@ -528,7 +528,9 @@ it('renders the scanner and a resolved part in British English', async () => {
       </MemoryRouter>
     </LocaleProvider>,
   )
-  expect(screen.getByText('QR scanner')).toBeInTheDocument()
+  expect(
+    screen.getByRole('heading', { level: 1, name: 'QR scanner' }),
+  ).toBeInTheDocument()
   expect(screen.getByText('Ready to scan')).toBeInTheDocument()
   expect(
     screen.getByRole('button', { name: 'Turn on camera' }),

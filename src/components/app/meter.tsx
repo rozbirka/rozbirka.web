@@ -11,7 +11,7 @@ const fillTone: Record<MeterTone, string> = {
 }
 
 const textTone: Record<MeterTone, string> = {
-  brand: 'text-brand',
+  brand: 'text-brand-text',
   ok: 'text-state-ok',
   warn: 'text-state-warn',
   danger: 'text-state-danger',
@@ -60,11 +60,11 @@ export function Meter({
   if (!hasScale) {
     return (
       <div className={cn('grid justify-items-end gap-1', className)}>
-        <span className="text-app-muted text-sm tabular-nums">
+        <span className="text-app-muted font-mono tabular-nums">
           {valueLabel}
         </span>
         {emptyLabel === undefined ? null : (
-          <span className="text-app-dim text-[12.5px]">{emptyLabel}</span>
+          <span className="rz-caption">{emptyLabel}</span>
         )}
       </div>
     )
@@ -81,7 +81,9 @@ export function Meter({
   return (
     <div className={cn('grid justify-items-end gap-1.5', className)}>
       {valueLabel === null || valueLabel === undefined ? null : (
-        <span className="text-sm tabular-nums text-white">{valueLabel}</span>
+        <span className="text-app-strong font-mono tabular-nums">
+          {valueLabel}
+        </span>
       )}
       <span
         aria-label={label}
@@ -89,7 +91,7 @@ export function Meter({
         aria-valuemin={0}
         aria-valuenow={percent}
         aria-valuetext={`${String(percent)}%`}
-        className="bg-app-line-2 block h-1.5 w-full max-w-36 overflow-hidden rounded-full"
+        className="rz-meter w-full max-w-36"
         role="progressbar"
       >
         <span className="flex h-full">
@@ -109,7 +111,9 @@ export function Meter({
           ) : null}
         </span>
       </span>
-      <span className={cn('text-[12.5px] tabular-nums', textTone[tone])}>
+      <span
+        className={cn('text-caption font-mono tabular-nums', textTone[tone])}
+      >
         {hint ?? `${String(percent)}%`}
       </span>
     </div>

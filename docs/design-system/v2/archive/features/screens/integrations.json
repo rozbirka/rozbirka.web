@@ -1,0 +1,98 @@
+{
+ "id": "C19",
+ "module": "integrations",
+ "crumbs": [
+  "Налаштування"
+ ],
+ "title": "Інтеграції",
+ "route": "/app/:tenant/settings/integrations",
+ "source": "integrations/*, orders/delivery/messages.ts",
+ "unverified": "назви вкладок НП",
+ "states": [
+  [
+   "data",
+   "Дані"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ],
+  [
+   "broken",
+   "Інтеграція не працює"
+  ]
+ ],
+ "main": [
+  {
+   "type": "table",
+   "title": "Перевізники",
+   "columns": [
+    {
+     "label": "Інтеграція"
+    },
+    {
+     "label": "Стан",
+     "pill": {
+      "Підключено": "rz-pill rz-pill--ok",
+      "Помилка": "rz-pill rz-pill--danger"
+     }
+    },
+    {
+     "label": "Точок відправлення",
+     "align": "end"
+    }
+   ],
+   "rows": [
+    [
+     "Нова пошта",
+     "Підключено",
+     "2"
+    ]
+   ]
+  }
+ ],
+ "aside": [
+  {
+   "type": "text",
+   "title": "Ключ API",
+   "text": "Збережений ключ — це доступ до чужого акаунта, тому розділ потребує права team.manage."
+  }
+ ],
+ "overrides": {
+  "broken": {
+   "main": [
+    {
+     "type": "notice",
+     "tone": "danger",
+     "icon": "icon-plug-zap",
+     "text": "Замовлення лишається доставковим: гроші й етапи працюють, а накладну не створити й не оновити, доки інтеграцію не відновлять."
+    },
+    {
+     "type": "table",
+     "title": "Перевізники",
+     "columns": [
+      {
+       "label": "Інтеграція"
+      },
+      {
+       "label": "Стан",
+       "pill": {
+        "Помилка": "rz-pill rz-pill--danger"
+       }
+      }
+     ],
+     "rows": [
+      [
+       "Нова пошта",
+       "Помилка"
+      ]
+     ]
+    }
+   ]
+  }
+ }
+}

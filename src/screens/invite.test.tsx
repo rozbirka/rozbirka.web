@@ -317,7 +317,7 @@ it('keeps an accept failure on screen with its reason and a retry', async () => 
   )
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Сервер тимчасово недоступний',
+    'Сталася помилка сервера. Спробуйте пізніше.',
   )
   const retry = screen.getByRole('button', { name: 'Спробувати ще раз' })
   expect(retry).toBeEnabled()

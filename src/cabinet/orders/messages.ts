@@ -106,6 +106,7 @@ export const orderMessages = defineMessages({
     itemsPages: 'Пагінація позицій замовлення',
     addPayment: 'Додати платіж',
     confirmOrder: 'Підтвердити замовлення',
+    confirmTitle: 'Підтвердити замовлення #{number}?',
     startRefund: 'Оформити повернення',
     refundHint: 'Повернення поверне позиції на склад і виведе кошти з каси.',
     history: 'Історія',
@@ -203,6 +204,7 @@ export const orderMessages = defineMessages({
     itemsPages: 'Order item pages',
     addPayment: 'Add payment',
     confirmOrder: 'Confirm order',
+    confirmTitle: 'Confirm order #{number}?',
     startRefund: 'Issue refund',
     refundHint:
       'A refund puts the items back in stock and takes the money out of the till.',
@@ -313,6 +315,7 @@ export const orderMessages = defineMessages({
     itemsPages: 'Strony pozycji zamówienia',
     addPayment: 'Dodaj płatność',
     confirmOrder: 'Potwierdź zamówienie',
+    confirmTitle: 'Potwierdzić zamówienie #{number}?',
     startRefund: 'Zrób zwrot',
     refundHint: 'Zwrot przywróci pozycje na stan i wypłaci środki z kasy.',
     history: 'Historia',

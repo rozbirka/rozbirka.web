@@ -1,5 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
+import { matchRoutes } from 'react-router'
 import { createAppRoutes } from './routes'
 
 const cabinetRoute = () =>
@@ -22,6 +23,20 @@ const elementTypeNames = (node: ReactNode): string[] => {
 }
 
 describe('production route boundary', () => {
+  it('opens the cabinet not-found screen for the removed batch-entry URL in both environments', async () => {
+    for (const includePrototypeRoutes of [false, true]) {
+      const matches = matchRoutes(
+        createAppRoutes(includePrototypeRoutes),
+        '/app/demo/intakes/intake-1/parts/batch',
+      )
+      const route = matches?.at(-1)?.route
+      expect(route?.path).toBe('*')
+      const loaded = await loadRoute(route!)
+      expect(elementTypeNames(loaded.element)).toEqual([
+        'CabinetNotFoundScreen',
+      ])
+    }
+  })
   it('omits prototype routes in production', () => {
     const paths = createAppRoutes(false).map((route) => route.path)
     expect(paths).not.toContain('/screens')
@@ -67,6 +82,8 @@ describe('production route boundary', () => {
 
     expect(app?.lazy).toEqual(expect.any(Function))
     expect(childPaths).toContain('dashboard')
+    expect(childPaths).toContain('inventory/zones/:zoneId')
+    expect(childPaths).toContain('inventory/sections/:sectionId')
     expect(childPaths).toContain('settings/billing/plans')
     expect(childPaths).toContain('settings/billing/payments')
     expect(app?.children?.at(-1)?.path).toBe('*')
@@ -89,6 +106,18 @@ describe('production route boundary', () => {
 
   it.each([
     ['dashboard', 'DashboardScreen'],
+    ['inventory', 'InventoryScreen'],
+    ['inventory/sessions/new', 'InventoryScreen'],
+    ['inventory/sessions/:sessionId', 'InventoryScreen'],
+    ['inventory/warehouses/:warehouseId', 'LegacyWarehouseRedirect'],
+    ['inventory/zones/:zoneId', 'LegacyWarehouseRedirect'],
+    ['inventory/sections/:sectionId', 'LegacyWarehouseRedirect'],
+    ['parts/:partId/inventory', 'WarehousesScreen'],
+    ['warehouses', 'WarehousesScreen'],
+    ['warehouses/:warehouseId', 'WarehousesScreen'],
+    ['warehouses/:warehouseId/unassigned', 'WarehousesScreen'],
+    ['warehouses/zones/:zoneId', 'WarehousesScreen'],
+    ['warehouses/sections/:sectionId', 'WarehousesScreen'],
     ['cars', 'CarsScreen'],
     ['cars/new', 'CarsScreen'],
     ['cars/:carId', 'CarsScreen'],
@@ -98,7 +127,6 @@ describe('production route boundary', () => {
     ['intakes/:intakeId', 'IntakesScreen'],
     ['intakes/:intakeId/edit', 'IntakesScreen'],
     ['intakes/:intakeId/parts/new', 'IntakesScreen'],
-    ['intakes/:intakeId/parts/batch', 'IntakesScreen'],
     ['parts', 'PartsScreen'],
     ['parts/new', 'PartsScreen'],
     ['parts/:partId', 'PartsScreen'],

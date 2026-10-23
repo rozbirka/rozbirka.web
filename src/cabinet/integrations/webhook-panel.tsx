@@ -11,6 +11,8 @@ import {
   DateValue,
   Field,
   Notice,
+  SkeletonRows,
+  StatusPill,
   TextInput,
   useToast,
 } from '@/components/app'
@@ -35,11 +37,11 @@ type LoadState =
 
 function Card({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
-    <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-6 py-5">
-      <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-        {title}
-      </h2>
-      <div className="mt-4 grid gap-3.5">{children}</div>
+    <section className="rz-card min-w-0">
+      <header className="rz-card__head">
+        <h2 className="rz-h-card">{title}</h2>
+      </header>
+      <div className="rz-card__body grid gap-3">{children}</div>
     </section>
   )
 }
@@ -114,9 +116,7 @@ export function WebhookPanel({
   const reload = useCallback(() => setReloads((value) => value + 1), [])
 
   if (tenant === null) {
-    return (
-      <p className="text-app-muted text-sm">{t('pickBusinessDiagnostics')}</p>
-    )
+    return <p className="rz-muted m-0">{t('pickBusinessDiagnostics')}</p>
   }
 
   const status = state.kind === 'ready' ? state.status : null
@@ -222,9 +222,9 @@ export function WebhookPanel({
   }
 
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <p className="text-app-muted max-w-[62ch] text-[14px] leading-6 text-pretty">
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="rz-muted m-0 max-w-[62ch] text-pretty">
           {t('webhookIntro')}
         </p>
         <Button disabled={busy !== null} onClick={reload}>
@@ -238,7 +238,7 @@ export function WebhookPanel({
         <Notice tone="danger">
           {t('queueError')}{' '}
           <button
-            className="underline underline-offset-4"
+            className="text-brand-text cursor-pointer border-0 bg-transparent p-0 underline underline-offset-4"
             onClick={reload}
             type="button"
           >
@@ -249,7 +249,7 @@ export function WebhookPanel({
       )}
 
       {state.kind === 'loading' && (
-        <p className="text-app-muted text-sm">{t('queueLoading')}</p>
+        <SkeletonRows label={t('queueLoading')} rows={3} />
       )}
 
       {status !== null && (
@@ -313,44 +313,41 @@ export function WebhookPanel({
             />
           </KpiStrip>
 
-          <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
             <section
               aria-label={t('exhaustedTitle')}
-              className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+              className="rz-card min-w-0"
             >
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
-                <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                  {t('exhaustedTitle')}
-                </h2>
+              <header className="rz-card__head">
+                <h2 className="rz-h-card">{t('exhaustedTitle')}</h2>
                 {status.deadLetterIds.length > 0 && (
                   <Button
                     aria-busy={busy === 'retry'}
                     disabled={busy !== null}
                     onClick={() => void retryAll(status.deadLetterIds)}
+                    size="sm"
                   >
                     {t('retryAll')}
                   </Button>
                 )}
-              </div>
+              </header>
               {status.deadLetterIds.length === 0 ? (
-                <div className="border-app-line grid justify-items-center gap-2 border-t px-6 py-10 text-center">
-                  <p className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                    {t('noProcessingErrors')}
-                  </p>
-                  <p className="text-app-muted max-w-[44ch] text-[13px] leading-5 text-pretty">
+                <div className="rz-state min-h-0 py-8">
+                  <p className="rz-state__title">{t('noProcessingErrors')}</p>
+                  <p className="rz-state__body text-pretty">
                     {t('listExplain')}
                   </p>
                 </div>
               ) : (
                 <>
-                  <ul className="divide-app-line border-app-line grid divide-y border-t">
+                  <ul className="divide-app-line m-0 grid list-none divide-y p-0">
                     {status.deadLetterIds.map((eventId) => (
                       <li
-                        className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3.5"
+                        className="flex min-h-row flex-wrap items-center gap-x-4 gap-y-2 px-[var(--rz-card-p)] py-1.5"
                         key={eventId}
                       >
                         <span
-                          className="text-app-muted min-w-0 flex-1 truncate font-mono text-[13px]"
+                          className="rz-mono text-app-muted min-w-0 flex-1 truncate"
                           title={t('noEventDetail')}
                         >
                           {t('eventLabel', { id: eventId.slice(0, 8) })}
@@ -359,6 +356,7 @@ export function WebhookPanel({
                           aria-busy={retrying === eventId}
                           disabled={busy !== null}
                           onClick={() => void retryOne(eventId)}
+                          size="sm"
                         >
                           {retrying === eventId ? t('retrying') : t('retry')}
                         </Button>
@@ -366,7 +364,7 @@ export function WebhookPanel({
                     ))}
                   </ul>
                   <p
-                    className="text-app-dim border-app-line border-t px-6 py-4 text-[13px] leading-5 text-pretty"
+                    className="rz-card__foot rz-caption m-0 text-pretty"
                     title={t('noEventDetail')}
                   >
                     {t('deadListNote')}
@@ -378,19 +376,19 @@ export function WebhookPanel({
             <Card title={t('secretCard')}>
               {editingSecret ? (
                 <form
-                  className="grid gap-3.5"
+                  className="grid gap-3"
                   noValidate
                   onSubmit={(event) => void saveSecret(event)}
                 >
                   <Field hint={t('secretHint')} label={t('newSecret')} required>
                     <TextInput
                       autoComplete="off"
-                      className="font-mono"
+                      className="rz-mono"
                       onChange={(event) => setSecret(event.target.value)}
                       value={secret}
                     />
                   </Field>
-                  <div className="flex flex-wrap gap-2.5">
+                  <div className="rz-btn-row">
                     <Button
                       aria-busy={busy === 'secret'}
                       disabled={busy !== null || secret.trim() === ''}
@@ -412,19 +410,19 @@ export function WebhookPanel({
                 </form>
               ) : (
                 <>
-                  <div className="border-app-line bg-app-input flex flex-wrap items-center gap-3 rounded-[11px] border px-3.5 py-3">
-                    <span className="text-app-muted min-w-0 font-mono text-[15px] tracking-[0.12em]">
+                  <div className="rz-inset flex flex-wrap items-center gap-3">
+                    <span className="rz-mono text-app-muted min-w-0">
                       {status.enabled
                         ? '••••••••••••••••'
                         : t('secretNotSaved')}
                     </span>
                     {status.enabled && (
-                      <span className="text-state-ok ml-auto text-[12px] font-bold">
+                      <StatusPill className="ml-auto" tone="ok">
                         {tc('saved')}
-                      </span>
+                      </StatusPill>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2.5">
+                  <div className="rz-btn-row">
                     <Button
                       disabled={busy !== null}
                       onClick={() => setEditingSecret(true)}
@@ -443,7 +441,7 @@ export function WebhookPanel({
               )}
               <Notice tone="warn">{t('secretWarn')}</Notice>
               <p
-                className="text-app-dim text-[12.5px] leading-5 text-pretty"
+                className="rz-caption m-0 text-pretty"
                 title={t('noFeedStats')}
               >
                 {t('feedStatsNote')}

@@ -13,7 +13,6 @@ import {
 } from '@/i18n/locales'
 import { useLocale } from '@/i18n/LocaleProvider'
 import { useT } from '@/i18n/hooks'
-import { cn } from '@/lib/utils'
 import { languageNameMessages, profileMessages } from './profile-messages'
 
 type Choice = Locale | 'auto'
@@ -37,7 +36,7 @@ function nativeLanguageName(tag: string): string {
  * is then kept on this device and said so. It never changes the public-site
  * language (`siteLocalePreference`).
  */
-export function LanguageCard() {
+export function LanguageCard({ embedded = false }: { embedded?: boolean }) {
   const auth = useAuth()
   const { locale, resolution, devicePreference, setDevicePreference } =
     useLocale()
@@ -122,89 +121,87 @@ export function LanguageCard() {
     <section
       aria-busy={pending || undefined}
       aria-labelledby={`${groupName}-title`}
-      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5"
+      className={embedded ? 'grid min-w-0 gap-3' : 'rz-card min-w-0'}
     >
-      <h2
-        className="text-app-ink text-[15px] font-bold"
-        id={`${groupName}-title`}
+      <div
+        className={
+          embedded
+            ? 'grid gap-1'
+            : 'rz-card__head grid content-center gap-1 py-2.5'
+        }
       >
-        {t('langTitle')}
-      </h2>
-      <p className="text-app-muted mt-1 text-[13.5px]">{t('langHint')}</p>
-
-      {saveState === 'error' && (
-        <div className="mt-3" ref={alertRef} tabIndex={-1}>
-          <Notice
-            action={
-              <Button onClick={() => void save()}>{t('retryLanguage')}</Button>
-            }
-            tone="danger"
-          >
-            <strong>{t('errTitle')}</strong> {t('errBody')}
-          </Notice>
-        </div>
-      )}
-      {saveState === 'device' && (
-        <Notice className="mt-3" tone="info">
-          {t('savedDevice')}
-        </Notice>
-      )}
-
-      <fieldset className="mt-3.5 grid gap-2" disabled={pending}>
-        <legend className="sr-only">{t('langTitle')}</legend>
-        {rows.map((row) => {
-          const checked = choice === row.value
-          return (
-            <label
-              className={cn(
-                'rounded-control flex min-h-[60px] cursor-pointer items-center gap-3 border px-3.5 py-2.5 sm:min-h-11',
-                checked
-                  ? 'border-app-line-2 bg-white/[0.06]'
-                  : 'border-app-line bg-app-input',
-              )}
-              key={row.value}
+        <h2 className="rz-h-card" id={`${groupName}-title`}>
+          {t('langTitle')}
+        </h2>
+        <p className="rz-caption m-0">{t('langHint')}</p>
+      </div>
+      <div className={embedded ? 'grid gap-3' : 'rz-card__body grid gap-3'}>
+        {saveState === 'error' && (
+          <div ref={alertRef} tabIndex={-1}>
+            <Notice
+              action={
+                <Button onClick={() => void save()}>
+                  {t('retryLanguage')}
+                </Button>
+              }
+              tone="danger"
             >
-              <input
-                checked={checked}
-                className="accent-brand size-4 shrink-0"
-                name={groupName}
-                onChange={() => {
-                  setChoice(row.value)
-                  if (saveState !== 'pending') setSaveState('idle')
-                }}
-                type="radio"
-                value={row.value}
-              />
-              <span className="grid min-w-0">
-                <span
-                  className="text-app-ink text-[14.5px] font-semibold"
-                  lang={row.lang}
-                >
-                  {row.name}
-                </span>
-                {row.sub && (
-                  <span className="text-app-muted text-[12.5px]">
-                    {row.sub}
+              <strong>{t('errTitle')}</strong> {t('errBody')}
+            </Notice>
+          </div>
+        )}
+        {saveState === 'device' && (
+          <Notice tone="info">{t('savedDevice')}</Notice>
+        )}
+
+        <fieldset className="m-0 grid gap-1.5 border-0 p-0" disabled={pending}>
+          <legend className="sr-only">{t('langTitle')}</legend>
+          {rows.map((row) => {
+            const checked = choice === row.value
+            return (
+              <label
+                className="rz-choice-card items-center py-2"
+                key={row.value}
+              >
+                <input
+                  checked={checked}
+                  className="rz-radio shrink-0"
+                  name={groupName}
+                  onChange={() => {
+                    setChoice(row.value)
+                    if (saveState !== 'pending') setSaveState('idle')
+                  }}
+                  type="radio"
+                  value={row.value}
+                />
+                <span className="grid min-w-0">
+                  <span className="rz-strong font-medium" lang={row.lang}>
+                    {row.name}
                   </span>
-                )}
-              </span>
-            </label>
-          )
-        })}
-      </fieldset>
-
-      {showFallback && choice === 'auto' && (
-        <Notice className="mt-3" tone="info">
-          {t('fallback', {
-            language: nativeLanguageName(resolution.browserLanguage ?? ''),
+                  {row.sub && <span className="rz-caption">{row.sub}</span>}
+                </span>
+              </label>
+            )
           })}
-        </Notice>
-      )}
+        </fieldset>
 
-      <div className="border-app-line mt-4 flex justify-end border-t pt-4">
+        {showFallback && choice === 'auto' && (
+          <Notice tone="info">
+            {t('fallback', {
+              language: nativeLanguageName(resolution.browserLanguage ?? ''),
+            })}
+          </Notice>
+        )}
+      </div>
+      <div
+        className={
+          embedded
+            ? 'border-app-line flex justify-end border-t pt-3'
+            : 'rz-card__foot justify-end'
+        }
+      >
         <Button
           aria-busy={pending || undefined}
-          className="px-5 text-sm font-bold"
           disabled={pending || choice === saved}
           onClick={() => void save()}
           variant="primary"

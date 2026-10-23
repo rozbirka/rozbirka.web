@@ -126,8 +126,13 @@ export interface PartSearchRequest {
   query?: string | null
   statuses?: string[]
   carIds?: string[]
+  intakeIds?: string[]
   warehouseIds?: string[]
   zoneIds?: string[]
+  sectionIds?: string[]
+  shelfIds?: string[]
+  missingShelf?: boolean | null
+  missingSection?: boolean | null
   conditions?: PartCondition[]
   originTypes?: PartOrigin[]
   compatibility?: PartCompatibilityFilter
@@ -248,6 +253,17 @@ export interface PartCompatibilities {
   items: PartCompatibilityItem[]
 }
 
+const normalizeCompatibilities = (
+  result: PartCompatibilities,
+): PartCompatibilities => ({
+  ...result,
+  items: (result.items ?? []).map((item) => ({
+    ...item,
+    yearFrom: item.yearFrom ?? null,
+    yearTo: item.yearTo ?? null,
+  })),
+})
+
 export interface CreatePartRequest {
   sourceType: string
   carId?: string | null
@@ -273,6 +289,8 @@ export interface CreatePartRequest {
 }
 export interface UpdatePartRequest {
   name?: string | null
+  /** Omit to preserve, null to clear the manufacturer’s code. */
+  oemCode?: string | null
   condition?: string | null
   notes?: string | null
   quantity?: number | null
@@ -425,7 +443,7 @@ export const partsApi = {
         requestConfig(options),
       )
     ).data
-    return { ...result, items: result.items ?? [] }
+    return normalizeCompatibilities(result)
   },
   /**
    * Replaces the manual rows only: what Core observed from the donor car
@@ -442,17 +460,21 @@ export const partsApi = {
         { expectedVersion, items },
       )
     ).data
-    return { ...result, items: result.items ?? [] }
+    return normalizeCompatibilities(result)
   },
   async update(
     id: string,
     request: UpdatePartRequest,
     options: RequestOptions = {},
   ): Promise<PartDetail> {
+    const { desiredSalePrice, ...fields } = request
+    const body = desiredSalePrice.isSet
+      ? { ...fields, desiredSalePrice: desiredSalePrice.value ?? null }
+      : fields
     return (
       await apiClient.put<PartDetail>(
         `/parts/${encodeURIComponent(id)}`,
-        request,
+        body,
         requestConfig(options),
       )
     ).data

@@ -17,12 +17,13 @@ interface Numbers {
 
 type Tone = 'ink' | 'ok' | 'warn' | 'danger' | 'dim'
 
-const VALUE_TONE: Record<Tone, string> = {
-  ink: 'text-white',
-  ok: 'text-state-ok',
-  warn: 'text-state-warn',
-  danger: 'text-state-danger',
-  dim: 'text-app-muted',
+/** The figure's colour: the kit's `.rz-kpi--warn/--dim`, or a state token. */
+const KPI_TONE: Record<Tone, string> = {
+  ink: '',
+  ok: '[&_.rz-display]:text-state-ok',
+  warn: 'rz-kpi--warn',
+  danger: '[&_.rz-display]:text-state-danger',
+  dim: 'rz-kpi--dim',
 }
 
 const META_TONE: Record<Tone, string> = {
@@ -30,7 +31,7 @@ const META_TONE: Record<Tone, string> = {
   ok: 'text-state-ok',
   warn: 'text-state-warn',
   danger: 'text-state-danger',
-  dim: 'text-app-dim',
+  dim: '',
 }
 
 interface Kpi {
@@ -76,44 +77,26 @@ export function DashboardKpis({
 
   if (tiles.length === 0) return null
 
+  // `.rz-kpis` lays the tiles out itself (auto-fit, one column on a phone).
+  // A `dl` rather than the shared `KpiStrip`, so every figure stays a
+  // term/definition pair under one named list.
   return (
-    <dl
-      aria-label={t('kpis')}
-      className={cn(
-        'border-app-line bg-app-line grid grid-cols-1 gap-px overflow-hidden rounded-[20px] border',
-        tiles.length === 1
-          ? 'sm:grid-cols-1'
-          : tiles.length === 3
-            ? 'sm:grid-cols-3'
-            : 'sm:grid-cols-2',
-      )}
-    >
+    <dl aria-label={t('kpis')} className="rz-kpis m-0">
       {tiles.map((tile) => (
-        <div
-          className="bg-app-raised px-[22px] pt-5 pb-[22px]"
-          key={tile.label}
-        >
-          <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-            {tile.label}
-          </dt>
-          <dd>
-            <span className="mt-3 flex items-baseline gap-2">
-              <span
-                className={cn(
-                  'text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-                  VALUE_TONE[tile.tone],
-                )}
-              >
-                {tile.value}
-              </span>
+        <div className={cn('rz-kpi', KPI_TONE[tile.tone])} key={tile.label}>
+          <dt className="rz-kpi__label">{tile.label}</dt>
+          <dd className="m-0 grid gap-1.5">
+            <span className="rz-kpi__value">
+              <span className="rz-display">{tile.value}</span>
               {tile.unit === '' ? null : (
-                <span className="text-app-muted font-mono text-[13px] font-medium">
-                  {tile.unit}
-                </span>
+                <span className="rz-kpi__unit">{tile.unit}</span>
               )}
             </span>
             <span
-              className={cn('mt-3 block text-[13px]', META_TONE[tile.metaTone])}
+              className={cn(
+                'rz-kpi__meta text-pretty',
+                META_TONE[tile.metaTone],
+              )}
             >
               {tile.meta}
             </span>

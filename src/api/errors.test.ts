@@ -31,7 +31,7 @@ describe('normalizeApiProblem', () => {
       kind: 'validation',
       status: 422,
       code: 'INVALID',
-      message: 'Invalid request',
+      message: 'Перевірте правильність введених даних.',
     })
   })
 
@@ -47,7 +47,26 @@ describe('normalizeApiProblem', () => {
     ).toMatchObject({
       kind: 'forbidden',
       code: 'FORBIDDEN',
-      fieldErrors: { name: ['Required'] },
+      fieldErrors: { name: ['Це поле обов’язкове.'] },
+    })
+  })
+
+  it('reads Core validation details from a 400 response', () => {
+    expect(
+      normalizeApiProblem(
+        axiosFailure(400, {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Перевірте введені дані',
+            details: [{ field: 'desiredSalePrice', message: 'Завелика сума' }],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      status: 400,
+      fieldErrors: {
+        desiredSalePrice: ['Перевірте правильність введених даних.'],
+      },
     })
   })
 
@@ -145,10 +164,78 @@ describe('fallback messages follow the request locale', () => {
     )
   })
 
-  it('keeps the server message as received', () => {
+  it('replaces unknown server text with an interface-language fallback', () => {
     requestLocale.set('en-GB')
     expect(
       normalizeApiProblem(axiosFailure(409, { message: 'Вже існує' })).message,
-    ).toBe('Вже існує')
+    ).toBe('Couldn’t complete the action because of a data conflict.')
+  })
+})
+
+describe('part editing restrictions', () => {
+  afterEach(() => requestLocale.set(null))
+
+  it.each([
+    [
+      'uk',
+      'reserved',
+      'Запчастина у резерві. Редагування та зміна ціни недоступні.',
+    ],
+    [
+      'uk',
+      'sold',
+      'Запчастину вже продано. Редагування та зміна ціни недоступні.',
+    ],
+    [
+      'en-GB',
+      'reserved',
+      'This part is reserved. Editing and price changes are unavailable.',
+    ],
+    [
+      'en-GB',
+      'sold',
+      'This part has been sold. Editing and price changes are unavailable.',
+    ],
+    [
+      'pl',
+      'reserved',
+      'Ta część jest zarezerwowana. Edycja i zmiana ceny są niedostępne.',
+    ],
+    [
+      'pl',
+      'sold',
+      'Ta część została sprzedana. Edycja i zmiana ceny są niedostępne.',
+    ],
+  ] as const)(
+    'explains %s / %s after client and screen normalisation',
+    (locale, status, message) => {
+      requestLocale.set(locale)
+      const problem = normalizeApiProblem(
+        axiosFailure(409, {
+          error: {
+            code: 'PART_NOT_EDITABLE',
+            message: `Part is ${status} and cannot be edited.`,
+          },
+        }),
+      )
+      expect(problem).toMatchObject({
+        code: 'PART_NOT_EDITABLE',
+        status: 409,
+        message,
+      })
+      expect(normalizeApiProblem(problem).message).toBe(message)
+    },
+  )
+
+  it('keeps a safe editing explanation when the server omits the status', () => {
+    expect(
+      normalizeApiProblem(
+        axiosFailure(409, {
+          error: { code: 'PART_NOT_EDITABLE', message: 'private diagnostic' },
+        }),
+      ).message,
+    ).toBe(
+      'Редагування та зміна ціни недоступні: запчастина у резерві або вже продана.',
+    )
   })
 })

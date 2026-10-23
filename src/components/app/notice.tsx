@@ -5,10 +5,10 @@ import { cn } from '@/lib/utils'
 export type NoticeTone = 'info' | 'ok' | 'warn' | 'danger'
 
 const toneClass: Record<NoticeTone, string> = {
-  info: 'border-state-info/30 bg-state-info-soft text-state-info',
-  ok: 'border-state-ok/30 bg-state-ok-soft text-state-ok',
-  warn: 'border-state-warn/30 bg-state-warn-soft text-state-warn',
-  danger: 'border-state-danger/30 bg-state-danger-soft text-state-danger',
+  info: 'rz-notice--info',
+  ok: 'rz-notice--ok',
+  warn: 'rz-notice--warn',
+  danger: 'rz-notice--danger',
 }
 
 const toneIcon: Record<NoticeTone, typeof Info> = {
@@ -43,18 +43,15 @@ export function Notice({
 
   return (
     <div
-      className={cn(
-        'rounded-control flex flex-wrap items-start gap-2.5 border px-3.5 py-2.5 text-[14.5px]',
-        toneClass[tone],
-        className,
-      )}
+      data-slot="app-notice"
+      className={cn('rz-notice', toneClass[tone], className)}
       role={role}
     >
-      <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
+      <Icon aria-hidden />
       {block ? (
-        <div className="text-app-ink min-w-0 flex-1">{children}</div>
+        <div className="rz-notice__body">{children}</div>
       ) : (
-        <span className="text-app-ink min-w-0 flex-1">{children}</span>
+        <span className="rz-notice__body">{children}</span>
       )}
       {action}
     </div>

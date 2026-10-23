@@ -457,6 +457,7 @@ describe('cabinetModules', () => {
       '/settings/profile',
       '/stickers',
       '/team',
+      '/warehouses',
     ])
     expect(new Set(routeSegments).size).toBe(routeSegments.length)
   })
@@ -473,7 +474,8 @@ describe('cabinetModules', () => {
           definition.navigation?.label.trim() !== '' &&
           definition.navigation?.icon !== undefined &&
           (definition.navigation?.placement === 'primary' ||
-            definition.navigation?.placement === 'account'),
+            definition.navigation?.placement === 'account' ||
+            definition.navigation?.placement === 'nested'),
       ),
     ).toBe(true)
   })

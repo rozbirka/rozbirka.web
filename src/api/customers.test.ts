@@ -12,6 +12,38 @@ afterEach(() => {
 })
 
 describe('customersApi', () => {
+  it('reads an omitted customer phone as missing in the directory', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: {
+        items: [
+          { id: 'customer-1', name: 'Тестовий клієнт', ordersCount: 0 },
+          {
+            id: 'customer-2',
+            name: 'Ірина',
+            phone: '+380501112233',
+            ordersCount: 1,
+          },
+        ],
+        page: 1,
+        pageSize: 20,
+        total: 2,
+        totalPages: 1,
+        counts: { all: 2, regular: 0, occasional: 1, noOrders: 1 },
+      },
+    })
+
+    const result = await customersApi.directory({
+      segment: 'all',
+      sort: 'name_asc',
+      page: 1,
+    })
+
+    expect(result.items.map(({ phone }) => phone)).toEqual([
+      null,
+      '+380501112233',
+    ])
+  })
+
   it('sends every directory control to the server endpoint', async () => {
     const controller = new AbortController()
     const result = {
@@ -131,6 +163,7 @@ describe('customer address', () => {
     await expect(customersApi.getById('customer-1')).resolves.toEqual({
       id: 'customer-1',
       name: 'Ірина',
+      phone: null,
       orders: [],
       countryCode: null,
       city: null,
@@ -190,6 +223,7 @@ describe('customer address', () => {
       customer: {
         id: 'customer-1',
         name: 'Anna',
+        phone: null,
         countryCode: 'PL',
         city: null,
         street: null,

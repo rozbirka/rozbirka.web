@@ -1,6 +1,99 @@
 @import 'tailwindcss';
+/* Design system v2 (docs/design-system). Tokens are plain custom properties;
+   the kit sits in the components layer so Tailwind utilities still win. */
+@import './styles/rz-tokens.css';
+@import './styles/rz-kit.css' layer(components);
+@import './styles/rz-react.css' layer(components);
 
 @custom-variant dark (&:is(.dark *));
+
+/*
+ * Cabinet and product UI read the design system's tokens. `inline` keeps the
+ * var() in every utility, so `data-theme` / `data-density` on any ancestor
+ * re-themes the subtree. Names are the code's; values come from v2.
+ */
+@theme inline {
+  --font-rz: var(--rz-font);
+  --font-rz-mono: var(--rz-font-mono);
+
+  --color-brand-soft: var(--rz-brand-soft);
+  --color-brand-text: var(--rz-brand-text);
+
+  --color-app-canvas: var(--rz-bg);
+  --color-app-sidebar: var(--rz-bg-sidebar);
+  --color-app-raised: var(--rz-surface);
+  --color-app-input: var(--rz-surface-2);
+  --color-app-inset: var(--rz-surface-2);
+  --color-app-overlay: var(--rz-overlay);
+  --color-app-line: var(--rz-border);
+  --color-app-line-2: var(--rz-border-strong);
+  --color-app-scrim: var(--rz-scrim);
+
+  --color-app-strong: var(--rz-text-strong);
+  --color-app-ink: var(--rz-text);
+  --color-app-muted: var(--rz-text-muted);
+  --color-app-dim: var(--rz-text-dim);
+
+  --color-app-hover: var(--rz-fill-hover);
+  --color-app-active: var(--rz-fill-active);
+  --color-app-selected: var(--rz-fill-selected);
+  --color-app-row-selected: var(--rz-row-selected);
+  --color-app-neutral-soft: var(--rz-neutral-soft);
+  /* Dialogs & sheets, scheme 1b */
+  --color-app-sheet-band: var(--rz-sheet-band);
+  --color-app-sheet-body: var(--rz-sheet-body);
+  --color-app-sheet-field: var(--rz-sheet-field);
+  --color-on-solid: var(--rz-on-solid);
+
+  --color-state-ok: var(--rz-ok);
+  --color-state-ok-soft: var(--rz-ok-soft);
+  --color-state-warn: var(--rz-warn);
+  --color-state-warn-soft: var(--rz-warn-soft);
+  --color-state-danger: var(--rz-danger);
+  --color-state-danger-soft: var(--rz-danger-soft);
+  --color-state-info: var(--rz-info);
+  --color-state-info-soft: var(--rz-info-soft);
+
+  /* Radius: 4 steps. control/panel/sheet are the code's names for sm/md/lg. */
+  --radius-rz-xs: var(--rz-r-xs);
+  --radius-rz-sm: var(--rz-r-sm);
+  --radius-rz-md: var(--rz-r-md);
+  --radius-rz-lg: var(--rz-r-lg);
+  --radius-control: var(--rz-r-sm);
+  --radius-panel: var(--rz-r-md);
+  --radius-sheet: var(--rz-r-lg);
+
+  /* Type scale: 11 · 12 · 13 · 14 · 16 · 20 · 28 */
+  --text-micro: var(--rz-fs-micro);
+  --text-caption: var(--rz-fs-caption);
+  --text-body: var(--rz-fs-body);
+  --text-input: var(--rz-fs-input);
+  --text-title: var(--rz-fs-title);
+  --text-page: var(--rz-fs-page);
+  --text-display: var(--rz-fs-display);
+
+  --shadow-popover: var(--rz-shadow-popover);
+  --shadow-dialog: var(--rz-shadow-dialog);
+
+  /* Icon scale: 10 · 12 · 14 · 16 · 20 (size-icon-xs … size-icon-lg) */
+  --spacing-icon-xs: var(--rz-icon-xs);
+  --spacing-icon-sm: var(--rz-icon-sm);
+  --spacing-icon: var(--rz-icon);
+  --spacing-icon-md: var(--rz-icon-md);
+  --spacing-icon-lg: var(--rz-icon-lg);
+  --spacing-control: var(--rz-control-h);
+  --spacing-control-lg: var(--rz-control-h-lg);
+  --spacing-row: var(--rz-row-h);
+  --spacing-touch: var(--rz-target-touch);
+  --spacing-glove: var(--rz-target-glove);
+  --spacing-sidebar: var(--rz-sidebar-w);
+  --spacing-topbar: var(--rz-topbar-h);
+  --spacing-peek: var(--rz-peek-w);
+  --container-content: var(--rz-content-max);
+
+  --ease-rz: var(--rz-ease);
+  --ease-rz-out: var(--rz-ease-out);
+}
 
 @font-face {
   font-family: 'Visuelt Hero';
@@ -71,34 +164,6 @@
   --page-width-lg: 1400px;
   --page-width-md: 1200px;
 
-  /* Cabinet surfaces — the app shell reads denser than the marketing site. */
-  --color-app-canvas: #0b0b0b;
-  --color-app-raised: #121212;
-  --color-app-input: #191919;
-  --color-app-overlay: #1f1e1d;
-  --color-app-line: rgb(255 255 255 / 0.07);
-  --color-app-line-2: rgb(255 255 255 / 0.13);
-
-  /* Cabinet neutrals — warm-shifted so they sit with the brand orange. */
-  --color-app-ink: #f6f4f2;
-  --color-app-muted: #a29b93;
-  --color-app-dim: #8a847c;
-
-  /* State semantics — deliberately separate from the brand colour. */
-  --color-state-ok: #4cc38a;
-  --color-state-ok-soft: rgb(76 195 138 / 0.13);
-  --color-state-warn: #e8b13c;
-  --color-state-warn-soft: rgb(232 177 60 / 0.13);
-  --color-state-danger: #f2645a;
-  --color-state-danger-soft: rgb(242 100 90 / 0.13);
-  --color-state-info: #6ea8fe;
-  --color-state-info-soft: rgb(110 168 254 / 0.13);
-
-  /* Control geometry (cabinet). Landing radii (--radius-card/section) stay below. */
-  --radius-control: 10px;
-  --radius-panel: 12px;
-  --radius-sheet: 16px;
-
   /* Radius (used by shadcn + sections) */
   --radius: 0.625rem;
   --radius-sm: calc(var(--radius) * 0.6);
@@ -156,7 +221,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
-  --color-input: var(--input);
+  --color-ui-input: var(--input);
   --color-ring: var(--ring);
 }
 
@@ -201,7 +266,19 @@ html {
 }
 
 .cabinet-shell__content {
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+
+/* Focus and in-page scrolling stop above the phone tab bar, not under it. */
+@media (max-width: 767px) {
+  html:has(.rz-tabbar) {
+    scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Separate consecutive inline messages across cabinet screens and dialogs. */
+[data-slot='app-notice'] + [data-slot='app-notice'] {
+  margin-block-start: 0.75rem;
 }
 
 /*
@@ -218,97 +295,28 @@ html {
   height: 0;
 }
 
-/*
- * The redesign's typography, scoped to the screens that have adopted it.
- * Redefining the two font variables is enough: every Tailwind font utility
- * resolves them at use, so `font-mono` inside this subtree becomes JetBrains
- * Mono without touching a single class.
- */
-.type-redesign {
-  --font-sans: 'Manrope', system-ui, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
-  font-family: var(--font-sans);
-}
-
-/*
- * Below 768px a data table restacks into one card per record. The DOM is
- * unchanged — only the display — so the row is never duplicated; explicit ARIA
- * roles in DataTable keep the table semantics that `display: block` drops.
- */
-@media (max-width: 767px) {
-  .data-table,
-  .data-table tbody,
-  .data-table tr,
-  .data-table td {
-    display: block;
-    width: 100%;
-  }
-
-  .data-table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .data-table tr {
-    border: 1px solid var(--color-app-line);
-    border-radius: var(--radius-panel);
-    padding: 0.75rem 0.8rem;
-  }
-
-  .data-table tbody tr + tr {
-    margin-top: 0.5rem;
-  }
-
-  .data-table td {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.15rem 0;
-    text-align: left;
-  }
-
-  .data-table td[data-label]::before {
-    content: attr(data-label);
-    flex: none;
-    color: var(--color-app-dim);
-    font-size: 11.5px;
-  }
-}
-
 .cabinet-rail-tooltip {
   position: absolute;
   top: 50%;
-  left: calc(100% + 0.75rem);
-  z-index: 60;
+  left: calc(100% + 8px);
+  z-index: var(--rz-z-toast);
   width: max-content;
   max-width: 14rem;
   transform: translateY(-50%);
   pointer-events: none;
-  border: 1px solid rgb(255 255 255 / 0.1);
-  border-radius: 0.5rem;
-  background: var(--color-surface-2);
-  padding: 0.375rem 0.625rem;
-  color: white;
-  font-size: 0.75rem;
-  line-height: 1rem;
+  border: 1px solid var(--rz-border-strong);
+  border-radius: var(--rz-r-sm);
+  background: var(--rz-overlay);
+  padding: 4px 8px;
+  color: var(--rz-text-strong);
+  font-size: var(--rz-fs-caption);
   white-space: nowrap;
-  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 0.35);
+  box-shadow: var(--rz-shadow-popover);
 }
 
 @media (min-width: 768px) {
   .cabinet-shell__content {
-    padding-bottom: 2rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  .cabinet-shell__content {
-    padding-bottom: 2.5rem;
+    padding-bottom: 0;
   }
 }
 
@@ -373,6 +381,15 @@ html {
 }
 
 /* Reusable motion keyframes */
+@keyframes location-filter-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;
