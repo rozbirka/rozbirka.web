@@ -30,6 +30,9 @@ export const ALL_PERMISSIONS = [
 
 /** Canonical permissions accepted when authoring the cabinet registry. */
 export type Permission = (typeof ALL_PERMISSIONS)[number]
+export type ModulePermission =
+  | `modules.${string}.view`
+  | `modules.${string}.manage`
 
 export type CoreMePermissionsDto = CoreComponents['schemas']['MePermissionsDto']
 
