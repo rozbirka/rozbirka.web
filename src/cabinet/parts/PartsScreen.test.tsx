@@ -2582,6 +2582,51 @@ it('clears the working set from the bulk bar and gives the toolbar back', async 
   expect(screen.getByRole('search')).toBeVisible()
 })
 
+it('keeps the list and known part name while the side card loads, then replaces its skeleton', async () => {
+  const user = userEvent.setup()
+  let resolvePart!: (value: unknown) => void
+  const pendingPart = new Promise((resolve) => {
+    resolvePart = resolve
+  })
+  partMocks.get.mockReturnValue(pendingPart)
+  renderDirectory()
+
+  const row = (await screen.findByRole('link', { name: 'Фара ліва' })).closest(
+    'tr',
+  )!
+  await user.click(within(row).getByRole('cell', { name: /2/ }))
+  const peek = await screen.findByRole('complementary', {
+    name: 'Деталь: Фара ліва',
+  })
+  expect(peek).toHaveAttribute('aria-busy', 'true')
+  expect(within(peek).getByRole('heading', { name: 'Фара ліва' })).toBeVisible()
+  expect(within(peek).getByRole('status')).toHaveTextContent(
+    'Завантажуємо деталь',
+  )
+  expect(screen.getByRole('link', { name: 'Бампер передній' })).toBeVisible()
+  expect(within(peek).queryByRole('link', { name: 'Друк стікера' })).toBeNull()
+
+  await act(async () => {
+    resolvePart({
+      id: 'part-1',
+      name: 'Фара ліва',
+      status: 'available',
+      condition: 'good',
+      quantityAvailable: 2,
+      quantityReserved: 0,
+      quantitySoldTotal: 0,
+      effectiveSalePrice: 1800,
+      unit: 'pcs',
+      photos: [],
+    })
+    await pendingPart
+  })
+  expect(peek).toHaveAttribute('aria-busy', 'false')
+  expect(within(peek).queryByRole('status')).toBeNull()
+  expect(within(peek).getByRole('link', { name: 'Друк стікера' })).toBeVisible()
+  expect(within(peek).getByText('Наявність')).toBeVisible()
+})
+
 it('opens a part beside the list on row click and walks the page from there', async () => {
   const user = userEvent.setup()
   partMocks.get.mockImplementation((id: string) =>
@@ -3177,7 +3222,7 @@ it('keeps the donor row by replacing compatibility after creating a car part', a
   )
 })
 
-it('says the part cannot be ordered from its own page yet, instead of pretending', async () => {
+it('omits the unsupported order action from the part menu', async () => {
   partMocks.get.mockResolvedValue({
     id: 'part-1',
     name: 'Bumper',
@@ -3209,18 +3254,16 @@ it('says the part cannot be ordered from its own page yet, instead of pretending
     </MemoryRouter>,
   )
 
-  // The action lives in the record's menu, switched off with its reason.
+  // The record menu contains only supported actions.
   await userEvent
     .setup()
     .click(await screen.findByRole('button', { name: 'Інші дії з деталлю' }))
-  const order = await screen.findByRole('menuitem', {
-    name: 'Додати в замовлення',
-  })
-  expect(order).toHaveAttribute('aria-disabled', 'true')
-  expect(order).toHaveAttribute(
-    'title',
-    expect.stringContaining('ще не підключене'),
-  )
+  expect(
+    screen.queryByRole('menuitem', { name: 'Додати в замовлення' }),
+  ).toBeNull()
+  expect(
+    screen.getByRole('menuitem', { name: 'Видалити деталь' }),
+  ).toBeVisible()
 })
 
 it('offers the price only as a warning while the part has none', async () => {

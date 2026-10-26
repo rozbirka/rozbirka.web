@@ -28,12 +28,7 @@ import { cabinetPath } from '../cabinet-paths'
 import { ModuleAccessDeniedError } from '../policy'
 import { PaymentHistorySkeleton } from '../overview-skeletons'
 import { Kpi, KpiStrip } from '../redesign-kpi'
-import {
-  BillingCard,
-  BillingDead,
-  BillingShell,
-  RecordColumns,
-} from './billing-shell'
+import { BillingCard, BillingShell, RecordColumns } from './billing-shell'
 import { translate, useLocale, useT, type Locale } from '@/i18n'
 import {
   daysText,
@@ -298,9 +293,6 @@ function SubscriptionPanel({
   )
   const features = subscription.features
 
-  const changeCard = (
-    <BillingDead title={t('noCardManagement')}>{t('changeCard')}</BillingDead>
-  )
   const summary = (
     <>
       <div className="grid min-w-0 flex-[1_1_320px] gap-1">
@@ -344,7 +336,6 @@ function SubscriptionPanel({
         </p>
       </div>
       <div className="rz-btn-row">
-        {changeCard}
         {canCheckout && (
           <BillingMutationGate decision={manageDecision}>
             <Button aria-busy={busy} disabled={busy} onClick={onSubscribe}>
@@ -524,7 +515,6 @@ function SubscriptionPanel({
               <Button asChild>
                 <Link to={plansPath}>{t('allPlans')}</Link>
               </Button>
-              {alarming ? null : changeCard}
               {isMono && subscription.canCancel && (
                 <BillingMutationGate decision={manageDecision}>
                   <Button

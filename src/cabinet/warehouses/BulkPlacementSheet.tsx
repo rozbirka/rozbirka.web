@@ -10,6 +10,7 @@ import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { LocationSelect } from '../inventory/LocationSelect'
 import { Resource } from '../inventory/InventoryResource'
+import { PlacementFieldsSkeleton } from '../inventory/PlacementSkeleton'
 import { useLoad } from '../inventory/use-stock-resource'
 import { unassignedMessages } from './unassigned-messages'
 import { placementMessages } from '../inventory/placement-messages'
@@ -254,14 +255,24 @@ export function BulkPlacementSheet({
         </>
       }
     >
-      <div className="grid gap-4">
+      <div
+        className="grid gap-4"
+        data-placement-parts={parts.map((part) => part.id).join(',')}
+      >
         <div className="grid gap-1.5">
           <h3 className="rz-h-card">
             {t('selectedCount', { count: parts.length })}
           </h3>
           <p className="text-app-muted m-0 text-pretty">{t('bulkHint')}</p>
         </div>
-        <Resource state={resource.state} retry={resource.reload} framed={false}>
+        <Resource
+          state={resource.state}
+          retry={resource.reload}
+          framed={false}
+          loadingContent={
+            <PlacementFieldsSkeleton fields={['zone', 'section', 'shelf']} />
+          }
+        >
           {() => (
             <>
               {!zones.length ? (
@@ -289,6 +300,9 @@ export function BulkPlacementSheet({
                       state={sectionResource.state}
                       retry={sectionResource.reload}
                       framed={false}
+                      loadingContent={
+                        <PlacementFieldsSkeleton fields={['section']} />
+                      }
                     >
                       {() => (
                         <div className="grid gap-1.5 mt-3">
@@ -310,6 +324,9 @@ export function BulkPlacementSheet({
                               state={shelfResource.state}
                               retry={shelfResource.reload}
                               framed={false}
+                              loadingContent={
+                                <PlacementFieldsSkeleton fields={['shelf']} />
+                              }
                             >
                               {() => (
                                 <div className="grid gap-1.5 mt-3">

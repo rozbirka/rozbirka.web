@@ -749,7 +749,7 @@ it('does not surface a late mutation failure from a stale cabinet generation', a
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-it('says which billing controls are unavailable instead of faking them', async () => {
+it('omits unsupported payment controls', async () => {
   renderScreen(<PaymentsScreen />)
 
   await screen.findByText('Платежів ще не було.')
@@ -758,19 +758,14 @@ it('says which billing controls are unavailable instead of faking them', async (
     'Експорт CSV',
     'Змінити реквізити',
   ])
-    expect(screen.getByRole('button', { name: label })).toBeDisabled()
-  expect(
-    screen.getByRole('button', { name: 'Додати спосіб оплати' }).title,
-  ).toContain('Підписка тримає одну картку')
+    expect(screen.queryByRole('button', { name: label })).toBeNull()
 })
 
-it('keeps the card-change control on the subscription overview disabled', async () => {
+it('omits the unsupported card-change control from the subscription overview', async () => {
   renderScreen(<SubscriptionScreen />)
 
   await screen.findByText('Платежів ще не було.')
-  const card = screen.getByRole('button', { name: 'Змінити карту' })
-  expect(card).toBeDisabled()
-  expect(card.title).toContain('Замінити картку тут не можна')
+  expect(screen.queryByRole('button', { name: 'Змінити карту' })).toBeNull()
 })
 
 it.each([

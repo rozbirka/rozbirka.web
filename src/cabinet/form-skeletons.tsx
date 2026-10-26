@@ -9,14 +9,17 @@ import {
 function Section({
   children,
   description = true,
+  aside = false,
 }: {
   children: ReactNode
   description?: boolean
+  aside?: boolean
 }) {
   return (
     <SectionPanel
       title={<Skeleton className="h-3 w-36" />}
       {...(description ? { description: <Skeleton className="w-3/5" /> } : {})}
+      {...(aside ? { aside: <Skeleton className="h-3 w-20" /> } : {})}
     >
       {children}
     </SectionPanel>
@@ -79,23 +82,55 @@ function Choices({ count }: { count: number }) {
 }
 
 /** Mirrors the single-column source, description, condition and stock form. */
-export function PartFormSkeleton() {
+export function PartFormSkeleton({
+  edit = false,
+  footer = true,
+}: {
+  edit?: boolean
+  footer?: boolean
+}) {
   return (
-    <div aria-hidden className="grid min-w-0 gap-4" data-form-skeleton="part">
-      <Section>
-        <Choices count={2} />
-        <div className="sm:w-1/2">
-          <Field />
+    <div
+      aria-hidden
+      className="grid min-w-0 gap-4"
+      data-form-skeleton="part"
+      data-form-mode={edit ? 'edit' : 'create'}
+    >
+      {edit ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+          <Skeleton className="w-24" />
+          <Skeleton className="w-24" />
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-control w-36 sm:ml-auto" />
         </div>
-        <Skeleton className="h-control w-40" />
-        <Skeleton className="h-2 w-4/5" />
+      ) : null}
+      <Section description={!edit} aside={edit}>
+        {edit ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="grid min-w-0 gap-2">
+              <Skeleton className="w-64 max-w-full" />
+              <Skeleton className="w-32" />
+            </div>
+            <Skeleton className="h-control w-32" />
+          </div>
+        ) : (
+          <>
+            <Choices count={2} />
+            <div className="sm:w-1/2">
+              <Field />
+            </div>
+            <Skeleton className="h-control w-40" />
+            <Skeleton className="h-2 w-4/5" />
+          </>
+        )}
       </Section>
-      <Section>
+      <Section description={!edit}>
         <Field hint={false} />
         <SkeletonFields count={2} />
         <Notes />
       </Section>
-      <Section>
+      <Section description={!edit}>
+        {edit ? <Skeleton className="w-3/5" /> : null}
         <Choices count={3} />
         <Skeleton className="h-2 w-3/5" />
       </Section>
@@ -113,30 +148,55 @@ export function PartFormSkeleton() {
           <Field />
         </div>
       </Section>
-      <Section>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field />
-          <Field />
-          <Field />
-        </div>
-        <Skeleton className="h-control w-40" />
+      <Section description={!edit} aside={edit}>
+        {edit ? (
+          <>
+            <Skeleton className="w-3/5" />
+            <div className="rz-inset grid gap-3 sm:grid-cols-3">
+              {[0, 1, 2].map((index) => (
+                <div className="grid gap-2" key={index}>
+                  <Skeleton className="h-2 w-16" />
+                  <Skeleton className="w-3/5" />
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field />
+              <Field />
+              <Field />
+            </div>
+            <Skeleton className="h-control w-40" />
+          </>
+        )}
       </Section>
-      <Section>
-        <div className="sm:w-1/2">
-          <Field hint={false} />
-        </div>
-      </Section>
+      {edit ? null : (
+        <Section>
+          <div className="sm:w-1/2">
+            <Field hint={false} />
+          </div>
+        </Section>
+      )}
       <Section description={false}>
         <Photos />
       </Section>
-      <PanelFooter
-        className="bg-app-raised sticky bottom-16 z-10 md:bottom-0"
-        leading={<Skeleton className="w-48 max-w-full" />}
-        standalone
-      >
-        <Skeleton className="h-control w-24" />
-        <Skeleton className="h-control w-36" />
-      </PanelFooter>
+      {edit ? (
+        <PanelFooter leading={<Skeleton className="w-3/5" />}>
+          <Skeleton className="h-control w-44" />
+        </PanelFooter>
+      ) : null}
+      {footer ? (
+        <PanelFooter
+          className="bg-app-raised sticky bottom-16 z-10 md:bottom-0"
+          leading={<Skeleton className="w-48 max-w-full" />}
+          standalone
+        >
+          <Skeleton className="h-control w-24" />
+          <Skeleton className="h-control w-36" />
+        </PanelFooter>
+      ) : null}
     </div>
   )
 }

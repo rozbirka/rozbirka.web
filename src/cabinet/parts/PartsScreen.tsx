@@ -4,7 +4,10 @@ import { PartSourceFilter } from './PartSourceFilter'
 import { PartLocationCard } from './PartLocationCard'
 import { PartNotesCard } from './PartNotesCard'
 import { PartPriceDrawer } from './PartPriceDrawer'
+import { PartPeekHeaderSkeleton, PartPeekSkeleton } from './PartPeekSkeleton'
 import { CabinetLoadingContent } from '../loading-screen'
+import { PartFormSkeleton } from '../form-skeletons'
+import { PlacementSkeleton } from '../inventory/PlacementSkeleton'
 import { FormPage } from '../form-page'
 import {
   lazy,
@@ -62,7 +65,6 @@ import {
   QuantityStepper,
   Skeleton,
   SkeletonRows,
-  SkeletonFields,
   SpecGrid,
   BulkBar,
   Button,
@@ -1677,7 +1679,7 @@ function PartDetailScreen({
                 if (!open) setPlacementOpen(false)
               }}
             >
-              <SkeletonRows rows={3} />
+              <PlacementSkeleton />
             </Sheet>
           }
         >
@@ -1735,14 +1737,6 @@ function PartDetailScreen({
                         },
                       ]
                     : []),
-                  {
-                    key: 'add-to-order',
-                    label: t('addToOrder'),
-                    icon: <ShoppingBag aria-hidden />,
-                    disabled: true,
-                    title: t('addToOrderHint'),
-                    onSelect: () => undefined,
-                  },
                   {
                     key: 'delete',
                     label: t('deletePart'),
@@ -2997,6 +2991,7 @@ function PartPeek({
 
   return (
     <aside
+      aria-busy={state.kind === 'loading'}
       aria-label={tl('peekLabel', { name })}
       className="rz-peek"
       onKeyDown={(event) => {
@@ -3073,19 +3068,15 @@ function PartPeek({
                   {t('printSticker')}
                 </Link>
               </Button>
-              <Button disabled title={t('addToOrderHint')}>
-                <ShoppingBag aria-hidden />
-                {t('addToOrder')}
-              </Button>
             </div>
           </>
+        ) : state.kind === 'loading' ? (
+          <PartPeekHeaderSkeleton />
         ) : null}
       </div>
 
       {state.kind === 'loading' ? (
-        <div className="rz-peek__section">
-          <SkeletonRows columns={2} label={t('loading')} rows={4} />
-        </div>
+        <PartPeekSkeleton />
       ) : state.kind === 'error' ? (
         <div className="rz-peek__section">
           <Notice tone="danger">{tl('peekLoadFailed')}</Notice>
@@ -4458,7 +4449,10 @@ function PartEdit({
     <FormPage
       backTo={backTo}
       busy={pending || deleting}
-      description={detail?.name ?? undefined}
+      description={
+        detail?.name ??
+        (!error ? <Skeleton className="h-3 w-56 max-w-full" /> : undefined)
+      }
       context={t('sheetEyebrow')}
       actions={
         <div className="flex w-full items-center justify-end gap-2.5">
@@ -4807,10 +4801,12 @@ function PartEdit({
             </PanelFooter>
           </form>
         ) : !error ? (
-          <SkeletonFields
-            count={8}
-            label={translate(partDetailMessages, locale, 'loading')}
-          />
+          <div aria-busy="true">
+            <p className="sr-only" role="status">
+              {td('loading')}
+            </p>
+            <PartFormSkeleton edit footer={false} />
+          </div>
         ) : null}
       </div>
 

@@ -48,7 +48,13 @@ export function PartLocationCard({
           </Button>
         </Notice>
       ) : zones === null ? (
-        <SkeletonRows rows={2} embedded label={t('loadingShort')} />
+        <SkeletonRows
+          rows={4}
+          embedded
+          columnWidths={['2fr', '3fr']}
+          variant="content"
+          label={t('loadingShort')}
+        />
       ) : placed.length === 0 ? (
         <p className="text-app-dim m-0">{t('notPlaced')}</p>
       ) : (

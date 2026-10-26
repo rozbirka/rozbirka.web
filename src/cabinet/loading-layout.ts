@@ -66,6 +66,9 @@ export function loadingLayout(
   module: CabinetModuleKey,
   pathname: string,
 ): LoadingLayout {
+  // This parts route is rendered by the warehouses module boundary.
+  if (module === 'warehouses' && /\/parts\/[^/]+\/inventory\/?$/.test(pathname))
+    return { ...layouts.parts, kind: 'form', stats: 0, photo: false }
   const baseSegments = cabinetModules[module].routeSegment
     .split('/')
     .filter(Boolean).length

@@ -204,18 +204,3 @@ export function BillingCard({
     </section>
   )
 }
-
-/** A control the design asks for and the API cannot back: shown, not faked. */
-export function BillingDead({
-  children,
-  title,
-}: {
-  children: ReactNode
-  title: string
-}) {
-  return (
-    <button className="rz-btn" disabled title={title} type="button">
-      {children}
-    </button>
-  )
-}

@@ -24,6 +24,12 @@ describe('route-specific loading layouts', () => {
     ).toBe('form')
   })
 
+  it('uses a placement form for the part inventory route owned by warehouses', () => {
+    expect(
+      loadingLayout('warehouses', '/app/demo/parts/p1/inventory'),
+    ).toMatchObject({ kind: 'form', stats: 0, photo: false })
+  })
+
   it('keeps adding an order item on the order record instead of a standalone form', () => {
     expect(
       loadingLayout('orders', '/app/demo/orders/order-1/items/new').kind,

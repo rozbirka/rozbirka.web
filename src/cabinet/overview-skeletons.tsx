@@ -6,7 +6,10 @@ import {
   SkeletonFields,
   SkeletonRows,
 } from '@/components/app'
-import { RecordColumns } from './billing/billing-shell'
+import { BillingCard, RecordColumns } from './billing/billing-shell'
+import { useT } from '@/i18n'
+import { teamMessages } from './team/messages'
+import { plansMessages } from './billing/plans-messages'
 
 function Panel({
   children,
@@ -111,6 +114,99 @@ function Actions() {
       <Skeleton className="h-control w-24" />
       <Skeleton className="h-control w-28" />
     </PanelFooter>
+  )
+}
+
+/** Team filters, member rows, seat usage and the separate invitation card. */
+export function TeamSkeleton() {
+  const t = useT(teamMessages)
+  return (
+    <div aria-hidden className="grid min-w-0 gap-4" data-screen-skeleton="team">
+      <div className="rz-toolbar">
+        <Skeleton className="h-control w-full sm:w-64" />
+        <Skeleton className="h-control w-full sm:w-44" />
+        <Skeleton className="h-control w-56 max-w-full" />
+        <Skeleton className="rz-toolbar__end h-2 w-36" />
+      </div>
+      <section className="rz-table-wrap min-w-0">
+        <div className="rz-table-scroll">
+          <table className="rz-table">
+            <caption>{t('membersCaption')}</caption>
+            <thead>
+              <tr>
+                <th className="w-1/3" scope="col">
+                  {t('columnUser')}
+                </th>
+                <th className="w-1/5" scope="col">
+                  {t('columnRole')}
+                </th>
+                <th className="w-1/5" scope="col">
+                  {t('columnActivity')}
+                </th>
+                <th className="w-1/5" scope="col">
+                  {t('columnStatus')}
+                </th>
+                <th className="w-8" scope="col">
+                  <Skeleton className="h-2 w-4" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {[0, 1, 2, 3].map((index) => (
+                <tr key={index}>
+                  <th className="py-1.5" scope="row">
+                    <div className="grid gap-2">
+                      <Skeleton className={index % 2 ? 'w-24' : 'w-32'} />
+                      <Skeleton className="h-2 w-28" />
+                    </div>
+                  </th>
+                  <td className="py-1.5" data-label={t('columnRole')}>
+                    <Skeleton className="w-20" />
+                  </td>
+                  <td className="py-1.5" data-label={t('columnActivity')}>
+                    <Skeleton className="h-2 w-16" />
+                  </td>
+                  <td className="py-1.5" data-label={t('columnStatus')}>
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                  </td>
+                  <td className="py-1.5">
+                    <Skeleton className="ml-auto size-5" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="rz-pager">
+          <Skeleton className="h-2 w-20" />
+          <div className="rz-pager__nav">
+            <Skeleton className="h-control w-16" />
+            <Skeleton className="h-control w-16" />
+          </div>
+        </div>
+        <div className="rz-card__foot flex-wrap">
+          <Skeleton className="h-2 w-64 max-w-full" />
+          <Skeleton className="ml-auto h-2 w-24" />
+        </div>
+      </section>
+      <SectionPanel
+        title={<Skeleton className="w-28" />}
+        description={<Skeleton className="h-2 w-64 max-w-full" />}
+        aside={<Skeleton className="h-2 w-12" />}
+      >
+        <div className="flex min-w-0 items-center gap-3 py-1">
+          <div className="grid min-w-0 flex-1 gap-2">
+            <Skeleton className="w-28" />
+            <Skeleton className="h-2 w-56 max-w-full" />
+          </div>
+          <Skeleton className="h-5 w-20 rounded-full" />
+          <Skeleton className="size-5" />
+        </div>
+        <div className="border-app-line border-t pt-3">
+          <Skeleton className="h-control w-36" />
+        </div>
+      </SectionPanel>
+    </div>
   )
 }
 
@@ -234,6 +330,113 @@ export function PaymentHistorySkeleton({ label }: { label: string }) {
         {label}
       </p>
       <Rows header count={4} columns={['2fr', '4fr', '1fr', '1fr']} />
+    </div>
+  )
+}
+
+/** Two full plan cards followed by the limits/features comparison table. */
+export function PlansSkeleton({ tabs = false }: { tabs?: boolean }) {
+  const t = useT(plansMessages)
+  return (
+    <div
+      aria-hidden
+      className="grid min-w-0 gap-4"
+      data-screen-skeleton="plans"
+    >
+      {tabs ? (
+        <div className="border-app-line flex gap-4 border-b pb-3">
+          {[0, 1, 2].map((index) => (
+            <Skeleton className="h-3 w-20" key={index} />
+          ))}
+        </div>
+      ) : null}
+      <Skeleton className="h-10 w-full" />
+      <div
+        className="grid min-w-0 items-start gap-4 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))]"
+        data-plan-cards
+      >
+        {[0, 1].map((index) => (
+          <SectionPanel
+            key={index}
+            title={<Skeleton className="w-20" />}
+            {...(index === 1
+              ? {
+                  aside: <Skeleton className="h-5 w-28 rounded-full" />,
+                  footer: <Skeleton className="h-2 w-44" />,
+                }
+              : {})}
+          >
+            <div className="grid gap-2">
+              <div className="flex items-baseline gap-2">
+                <Skeleton className="h-6 w-20" />
+                <Skeleton className="h-2 w-16" />
+              </div>
+              <Skeleton className="h-2 w-28" />
+            </div>
+            <dl className="rz-facts px-0 py-0">
+              {[0, 1, 2, 3, 4, 5].map((row) => (
+                <div key={row}>
+                  <dt>
+                    <Skeleton className="h-2 w-24 max-w-full" />
+                  </dt>
+                  <dd>
+                    <Skeleton className="ml-auto h-3 w-8" />
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <ul className="border-app-line m-0 grid list-none gap-1.5 border-t p-0 pt-3">
+              {[0, 1, 2, 3, 4].map((row) => (
+                <li className="flex items-center gap-2" key={row}>
+                  <Skeleton className="size-3.5 shrink-0" />
+                  <Skeleton className={row % 2 ? 'w-3/5' : 'w-4/5'} />
+                </li>
+              ))}
+            </ul>
+          </SectionPanel>
+        ))}
+      </div>
+      <BillingCard title={t('whatsIncluded')} bodyClassName="p-0">
+        <div className="rz-table-scroll">
+          <table className="rz-table">
+            <caption>{t('comparison')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('feature')}</th>
+                <th scope="col">
+                  <Skeleton className="ml-auto h-2 w-16" />
+                </th>
+                <th scope="col">
+                  <Skeleton className="ml-auto h-2 w-20" />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((row) => (
+                <tr key={row}>
+                  <th scope="row">
+                    <Skeleton
+                      className={
+                        row % 2 ? 'w-32 max-w-full' : 'w-44 max-w-full'
+                      }
+                    />
+                  </th>
+                  {[0, 1].map((column) => (
+                    <td key={column}>
+                      <Skeleton
+                        className={
+                          row < 5 ? 'ml-auto h-3 w-6' : 'ml-auto size-3.5'
+                        }
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </BillingCard>
+      <Skeleton className="h-2 w-4/5" />
     </div>
   )
 }

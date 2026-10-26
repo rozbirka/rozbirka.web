@@ -25,7 +25,6 @@ import {
   Undo2,
   ClipboardList,
   Plus,
-  Printer,
   SearchX,
   Trash2,
   X,
@@ -1517,10 +1516,6 @@ function OrderDetailScreen({
     <RedesignShell
       actions={
         <>
-          <Button disabled title={t('printUnavailable')}>
-            <Printer aria-hidden />
-            {t('print')}
-          </Button>
           {orderEditable ? (
             <ActionMenu
               actions={[

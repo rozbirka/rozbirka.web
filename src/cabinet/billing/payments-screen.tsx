@@ -23,7 +23,7 @@ import { normalizeApiProblem } from '@/api/errors'
 import type { PagedResult, PaymentDto, SubscriptionDto } from '@/api/types'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
-import { BillingCard, BillingDead, BillingShell } from './billing-shell'
+import { BillingCard, BillingShell } from './billing-shell'
 import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
 import { paymentStatusMeta, paymentTypeLabel } from './billing-vocabulary'
 import { billingMessages } from './messages'
@@ -403,16 +403,7 @@ export function PaymentsScreen() {
           </p>
         </div>
       </section>
-      <div className="grid min-w-0 items-start gap-4 md:grid-cols-2">
-        <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
-        <BillingCard footer={t('noInvoiceDetails')} title={t('invoiceDetails')}>
-          <div className="rz-btn-row">
-            <BillingDead title={t('noInvoiceDetails')}>
-              {t('changeInvoiceDetails')}
-            </BillingDead>
-          </div>
-        </BillingCard>
-      </div>
+      <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
     </PaymentsFrame>
   )
 }
@@ -527,14 +518,6 @@ function PaymentMethod({
       ) : (
         <p className="rz-muted m-0">{t('noCard')}</p>
       )}
-      <div className="rz-btn-row">
-        <BillingDead title={t('noCardList')}>
-          {t('addPaymentMethod')}
-        </BillingDead>
-        <BillingDead title={t('noPaymentsExport')}>
-          {t('exportCsv')}
-        </BillingDead>
-      </div>
     </BillingCard>
   )
 }

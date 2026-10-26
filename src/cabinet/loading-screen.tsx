@@ -17,6 +17,7 @@ import {
   PartFormSkeleton,
 } from './form-skeletons'
 import { PartRecordSkeleton } from './parts/PartRecordSkeleton'
+import { PlacementSkeleton } from './inventory/PlacementSkeleton'
 import {
   CustomerRecordSkeleton,
   OrderRecordSkeleton,
@@ -25,6 +26,8 @@ import {
   DashboardSkeleton,
   ProfileSkeleton,
   SubscriptionSkeleton,
+  PlansSkeleton,
+  TeamSkeleton,
 } from './overview-skeletons'
 
 /** The existing skeleton primitives, composed to match this route's content. */
@@ -45,22 +48,27 @@ export function CabinetLoadingContent({
   const key = module ?? loadingModule(pathname)
   const profile = loadingLayout(key, pathname)
   const kind = override ?? profile.kind
-  const specialized =
-    key === 'customers' && kind === 'record' ? (
-      <CustomerRecordSkeleton />
-    ) : key === 'orders' && kind === 'record' ? (
-      <OrderRecordSkeleton />
-    ) : key === 'dashboard' && kind === 'dashboard' ? (
-      <DashboardSkeleton />
-    ) : key === 'cash' && kind === 'list' ? (
-      <CashOverviewSkeleton />
-    ) : key === 'billing' && kind === 'settings' ? (
-      <SubscriptionSkeleton />
-    ) : key === 'business' && kind === 'settings' ? (
-      <BusinessSkeleton />
-    ) : key === 'profile' && kind === 'settings' ? (
-      <ProfileSkeleton />
-    ) : null
+  const specialized = /\/parts\/[^/]+\/inventory\/?$/.test(pathname) ? (
+    <PlacementSkeleton page announce={false} />
+  ) : key === 'team' && kind === 'list' ? (
+    <TeamSkeleton />
+  ) : key === 'plans' && kind === 'plans' ? (
+    <PlansSkeleton tabs={heading} />
+  ) : key === 'customers' && kind === 'record' ? (
+    <CustomerRecordSkeleton />
+  ) : key === 'orders' && kind === 'record' ? (
+    <OrderRecordSkeleton />
+  ) : key === 'dashboard' && kind === 'dashboard' ? (
+    <DashboardSkeleton />
+  ) : key === 'cash' && kind === 'list' ? (
+    <CashOverviewSkeleton />
+  ) : key === 'billing' && kind === 'settings' ? (
+    <SubscriptionSkeleton />
+  ) : key === 'business' && kind === 'settings' ? (
+    <BusinessSkeleton />
+  ) : key === 'profile' && kind === 'settings' ? (
+    <ProfileSkeleton />
+  ) : null
   const rows = (count = profile.rows, embedded = false) => (
     <SkeletonRows
       announce={false}
@@ -129,32 +137,12 @@ export function CabinetLoadingContent({
             <CarFormSkeleton />
           ) : null}
           {kind === 'form' && profile.form === 'part' ? (
-            <PartFormSkeleton />
+            <PartFormSkeleton edit={pathname.endsWith('/edit')} />
           ) : null}
           {kind === 'form' && profile.form === 'intake' ? (
             <IntakeFormSkeleton edit={pathname.endsWith('/edit')} />
           ) : null}
           {kind === 'list' ? rows() : null}
-          {kind === 'plans' ? (
-            <div className="grid min-w-0 gap-4 md:grid-cols-3" aria-hidden>
-              {[0, 1, 2].map((index) => (
-                <div
-                  className="rz-card rz-card__body grid min-w-0 gap-5"
-                  key={index}
-                >
-                  <Skeleton className="h-4 w-1/2" />
-                  <Skeleton className="h-7 w-2/3" />
-                  {[0, 1, 2, 3, 4].map((line) => (
-                    <Skeleton
-                      className={line % 2 ? 'w-2/3' : 'w-4/5'}
-                      key={line}
-                    />
-                  ))}
-                  <Skeleton className="h-control w-full" />
-                </div>
-              ))}
-            </div>
-          ) : null}
           {kind === 'reports' ? (
             <>
               <div className="rz-card rz-card__body">
