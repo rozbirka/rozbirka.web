@@ -3046,15 +3046,17 @@ for (const viewport of [
     const full = await dialog.locator('img').first().boundingBox()
     expect(full!.y).toBeGreaterThanOrEqual(0)
     expect(full!.y + full!.height).toBeLessThanOrEqual(viewport.height)
-    const strip = dialog.locator('ul')
+    const strip = dialog.getByRole('tablist', { name: 'Мініатюри' })
     const firstReachable = await strip.evaluate(
       (element) =>
         element.firstElementChild!.getBoundingClientRect().left >=
         element.getBoundingClientRect().left,
     )
     expect(firstReachable).toBe(true)
-    await dialog.getByRole('button', { name: 'Фото 10', exact: true }).click()
-    await expect(dialog.getByText('Фото недоступне')).toBeVisible()
+    await dialog.getByRole('tab', { name: /^Фото 10 з 10:/ }).click()
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Не вдалося завантажити фото',
+    )
     await page.keyboard.press('Escape')
     await expect(opener).toBeFocused()
     await page.goto('/app/koval/cars/car-1/edit')
