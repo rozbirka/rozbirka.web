@@ -236,6 +236,15 @@ function Lightbox({
               : 'grid-rows-[56px_minmax(0,1fr)]',
           )}
           data-theme="dark"
+          onClick={(event) => {
+            // A click on the empty dark area closes, as on the backdrop.
+            const target = event.target
+            if (
+              target instanceof Element &&
+              !target.closest('button, img, header, [role="alert"]')
+            )
+              onClose()
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault()
             returnFocus.current?.focus()

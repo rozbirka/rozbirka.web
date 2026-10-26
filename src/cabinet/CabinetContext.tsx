@@ -12,6 +12,7 @@ import {
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { Compass, Loader2, PauseCircle, RotateCcw } from 'lucide-react'
 import { Button, ErrorState, StateScreen } from '@/components/app'
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 import { useT, type MessageKey } from '@/i18n'
 import { billingApi } from '../api/billing'
 import { tenantPreference } from '../api/tenant-preference'
@@ -499,6 +500,7 @@ function ShellFrame({
   account?: boolean
   children: ReactNode
 }) {
+  useDesignSystemRoot()
   const t = useT(shellMessages)
   return (
     <div className="rz grid min-h-dvh place-items-center px-4 py-10">

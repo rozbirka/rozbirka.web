@@ -169,7 +169,12 @@ function OwnedLocationPartsList({
         next.delete(`${prefix}Page`)
         return next
       },
-      { replace: true, preventScrollReset: true, state: navigationState },
+      {
+        replace: true,
+        preventScrollReset: true,
+        state: navigationState,
+        flushSync: true,
+      },
     )
   /* Nothing to place at all: the list gives way to one calm state, without a
      search that could only ever find nothing. */

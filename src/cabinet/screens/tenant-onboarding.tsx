@@ -167,7 +167,7 @@ export function TenantOnboardingScreen() {
 
         <form
           aria-busy={create.pending}
-          className="rz-card"
+          className="rz-form-page rz-card"
           noValidate
           onSubmit={submit}
         >

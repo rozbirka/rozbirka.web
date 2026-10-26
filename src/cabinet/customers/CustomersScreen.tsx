@@ -402,6 +402,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
           onChange={(event) =>
             setParams(
               event.target.value ? { q: event.target.value, page: '1' } : {},
+              { flushSync: true },
             )
           }
           placeholder={t('searchPlaceholder')}

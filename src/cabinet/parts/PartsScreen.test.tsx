@@ -2,6 +2,7 @@ import type { UpdatePartRequest } from '@/api/parts'
 import { FeatureFlagsProvider } from '../FeatureFlags'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { flushSync } from 'react-dom'
 import {
   createMemoryRouter,
   MemoryRouter,
@@ -2482,6 +2483,63 @@ function renderDirectory() {
   )
 }
 
+it('preserves spaces while typing a multi-word parts search and trims only the API query', async () => {
+  const user = userEvent.setup()
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts',
+        element: (
+          <>
+            <PartsScreen definition={partsDefinition as never} />
+            <LocationProbe />
+          </>
+        ),
+      },
+    ],
+    { initialEntries: ['/app/yard/parts'] },
+  )
+  render(
+    <RouterProvider
+      flushSync={(callback) => {
+        flushSync(callback)
+        return undefined
+      }}
+      router={router}
+    />,
+  )
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  const search = screen.getByLabelText('Пошук деталей')
+
+  await user.type(search, 'Фара ')
+  expect(search).toHaveValue('Фара ')
+  await user.type(search, 'ліва ')
+  expect(search).toHaveValue('Фара ліва ')
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: 'Фара ліва' }),
+      expect.anything(),
+    ),
+  )
+  const params = new URLSearchParams(
+    screen.getByLabelText('Поточний маршрут').textContent ?? '',
+  )
+  expect(params.get('q')).toBe('Фара ліва ')
+
+  await user.clear(search)
+  expect(search).toHaveValue('')
+  await vi.waitFor(() =>
+    expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('query'),
+  )
+})
+
 it('tells the operator that the parts search accepts a VIN', async () => {
   renderDirectory()
 
@@ -4841,6 +4899,107 @@ it.each(['reserved', 'sold'])(
       status === 'reserved'
         ? 'Запчастина у резерві. Редагування та зміна ціни недоступні.'
         : 'Запчастину вже продано. Редагування та зміна ціни недоступні.',
+    )
+  },
+)
+
+it.each([0, 1])(
+  'shows the parts skeleton while clearing filters from an empty result (reset button %s)',
+  async (buttonIndex) => {
+    partMocks.search.mockReset().mockResolvedValue({
+      items: [],
+      page: 1,
+      pageSize: 30,
+      total: 0,
+      totalPages: 0,
+    })
+    partMocks.facets.mockReset().mockResolvedValue({
+      statuses: [],
+      warehouses: [],
+      zones: [],
+      conditions: [],
+      equipmentTypes: [],
+      makes: [],
+      models: [],
+      generations: [],
+      origins: [],
+      qualityFlags: [],
+      inventoryLocks: [],
+      discrepancies: [],
+    })
+    const { container } = render(
+      <MemoryRouter
+        initialEntries={['/app/yard/parts?warehouse=wh-1&zone=zone-1']}
+      >
+        <Routes>
+          <Route
+            path="/app/:tenant/parts"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Нічого не знайдено')
+    const nextPage = {
+      items: pickableRows,
+      page: 1,
+      pageSize: 30,
+      total: 2,
+      totalPages: 1,
+    }
+    let resolveSearch!: (value: typeof nextPage) => void
+    let resolveFacets!: (value: unknown) => void
+    const searchReady = new Promise<typeof nextPage>((resolve) => {
+      resolveSearch = resolve
+    })
+    const facetsReady = new Promise<unknown>((resolve) => {
+      resolveFacets = resolve
+    })
+    partMocks.search.mockReturnValueOnce(searchReady)
+    partMocks.facets.mockReturnValueOnce(facetsReady)
+    await userEvent
+      .setup()
+      .click(
+        screen.getAllByRole('button', { name: 'Скинути фільтри' })[
+          buttonIndex
+        ]!,
+      )
+    expect(
+      container.querySelector('[data-loading-layout="parts:list"]'),
+    ).toBeVisible()
+    expect(screen.queryByText('Тут поки порожньо')).toBeNull()
+    expect(screen.queryByText('Нічого не знайдено')).toBeNull()
+    await act(async () => {
+      resolveSearch(nextPage)
+      await searchReady
+    })
+    expect(
+      container.querySelector('[data-loading-layout="parts:list"]'),
+    ).toBeVisible()
+    await act(async () => {
+      resolveFacets({
+        statuses: [{ id: 'available', name: 'available', count: 2 }],
+        warehouses: [],
+        zones: [],
+        conditions: [],
+        equipmentTypes: [],
+        makes: [],
+        models: [],
+        generations: [],
+        origins: [],
+        qualityFlags: [],
+        inventoryLocks: [],
+        discrepancies: [],
+      })
+      await facetsReady
+    })
+    expect(await screen.findByRole('link', { name: 'Фара ліва' })).toBeVisible()
+    expect(
+      container.querySelector('[data-loading-layout="parts:list"]'),
+    ).toBeNull()
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      { page: 1, pageSize: 30 },
+      expect.anything(),
     )
   },
 )

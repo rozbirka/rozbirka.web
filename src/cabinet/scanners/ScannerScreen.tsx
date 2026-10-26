@@ -658,7 +658,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
 
         <SectionPanel description={t('manualHint')} title={t('manualTitle')}>
           <form
-            className="grid gap-3"
+            className="rz-form-page grid gap-3"
             onSubmit={(event) => {
               event.preventDefault()
               void resolve(code)
