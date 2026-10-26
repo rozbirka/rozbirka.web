@@ -194,6 +194,11 @@ function Lightbox({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-app-scrim" />
         <Dialog.Content
+          onClick={(event) => {
+            const target = event.target
+            if (target instanceof Element && !target.closest('button, img'))
+              onClose()
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault()
             returnFocus.current?.focus()
@@ -241,7 +246,7 @@ function Lightbox({
             ) : (
               <span />
             )}
-            <div className="relative h-full min-h-0 w-full min-w-0">
+            <div className="relative flex h-full min-h-0 w-full min-w-0 items-center justify-center">
               {failedSource === source ? (
                 <span
                   role="status"
@@ -254,7 +259,7 @@ function Lightbox({
                 <img
                   key={source}
                   alt={alt}
-                  className="absolute inset-0 h-full w-full rounded-control object-contain"
+                  className="h-auto max-h-full w-auto max-w-full rounded-control object-contain"
                   onError={() => setFailedSource(source)}
                   src={source}
                 />

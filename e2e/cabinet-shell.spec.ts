@@ -1735,6 +1735,87 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
   await expect(page.getByText('Крило')).toBeVisible()
 })
 
+test('directory searches retain spaces and rapid typing @search-spaces', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { businessOperations: true })
+  const pageOf = (items: unknown[]) => ({
+    items,
+    page: 1,
+    pageSize: 30,
+    total: items.length,
+    totalPages: 1,
+  })
+  await page.route('**/api/v1/customers*', (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path !== '/api/v1/customers' && path !== '/api/v1/customers/directory')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'customer-search',
+          name: 'Тестовий клієнт',
+          phone: null,
+          ordersCount: 1,
+          totalAmount: 100,
+          averageAmount: 100,
+          firstOrderAt: null,
+          lastOrderAt: null,
+          isActive: true,
+          createdAt: '2026-09-02T10:00:00Z',
+        },
+      ]),
+    )
+  })
+  await page.route('**/api/v1/orders*', (route) => {
+    if (new URL(route.request().url()).pathname !== '/api/v1/orders')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'order-search',
+          number: 1,
+          status: 'pending',
+          customerName: 'Тестовий клієнт',
+          totalAmount: 100,
+          currency: 'USD',
+          createdAt: '2026-09-02T10:00:00Z',
+          itemsCount: 1,
+          paymentAccountNames: [],
+          partNames: ['Тестова деталь'],
+        },
+      ]),
+    )
+  })
+  await loginFrom(page)
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const [route, label] of [
+      ['customers', 'Пошук клієнта'],
+      ['orders', 'Пошук замовлень'],
+    ]) {
+      await page.goto(`/app/koval/${route}`)
+      const search = page.getByRole('searchbox', { name: label, exact: true })
+      await search.pressSequentially('Тест ')
+      await expect(search).toHaveValue('Тест ')
+      await search.pressSequentially('пошук ')
+      await expect(search).toHaveValue('Тест пошук ')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.get('q'))
+        .toBe('Тест пошук ')
+      await search.fill('  Довга назва  ')
+      await expect(search).toHaveValue('  Довга назва  ')
+      await search.clear()
+      await expect(search).toHaveValue('')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.has('q'))
+        .toBe(false)
+    }
+  }
+})
+
 test('compact location browser searches and pages large shelf lists @location-browser', async ({
   page,
 }) => {
@@ -1913,7 +1994,10 @@ test('compact location browser searches and pages large shelf lists @location-br
     await expect(
       page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
     ).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук секції' }).fill('S7')
+    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
+    await sectionSearch.pressSequentially('Секція ')
+    await expect(sectionSearch).toHaveValue('Секція ')
+    await sectionSearch.fill('S7')
     await page.getByRole('link', { name: 'Секція 7, S7', exact: true }).click()
     await expect(page).toHaveURL(/warehouses\/sections\/section-6$/)
     const table = page.getByRole('table', { name: 'Полиці: Секція 7' })
@@ -1923,7 +2007,10 @@ test('compact location browser searches and pages large shelf lists @location-br
       .getByRole('button', { name: /Наступна/ })
       .click()
     await expect(page.getByText('S7-P16', { exact: true })).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('S7-P100')
+    const shelfSearch = page.getByRole('searchbox', { name: 'Пошук полиці' })
+    await shelfSearch.pressSequentially('Полиця ')
+    await expect(shelfSearch).toHaveValue('Полиця ')
+    await shelfSearch.fill('S7-P100')
     await page
       .getByRole('link', {
         name: 'Переглянути запчастини: Полиця 100',

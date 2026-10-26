@@ -347,7 +347,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     if (value) next.set(name, value)
     else next.delete(name)
     next.set('page', '1')
-    setParams(next)
+    setParams(next, { flushSync: name === 'q' })
   }
   const goToPage = (nextPage: number) => {
     const next = new URLSearchParams(params)

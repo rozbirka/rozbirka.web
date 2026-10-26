@@ -277,7 +277,7 @@ export function BusinessSettingsScreen() {
           <>
             <Step number="01" title={t('details')}>
               <form
-                className="rz-form-grid"
+                className="rz-form-page rz-form-grid"
                 id={FORM_ID}
                 onSubmit={(event) => void save(event)}
               >

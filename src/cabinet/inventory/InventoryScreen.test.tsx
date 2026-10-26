@@ -3345,7 +3345,7 @@ it('shows an archive conflict inside the confirmation and leaves the warehouse o
 it('searches warehouse codes and resets the current page without losing other parameters', async () => {
   const user = userEvent.setup()
   api.getWarehouses.mockResolvedValue(
-    Array.from({ length: 12 }, (_, index) => ({
+    Array.from({ length: 17 }, (_, index) => ({
       id: `wh-${index + 1}`,
       name: `Склад ${index + 1}`,
       code: `WH${index + 1}`,
@@ -3356,7 +3356,7 @@ it('searches warehouse codes and resets the current page without losing other pa
   )
   renderAt('/app/yard/warehouses?locationPage=2&keep=1')
   expect(
-    await screen.findByRole('link', { name: 'Відкрити склад Склад 11' }),
+    await screen.findByRole('link', { name: 'Відкрити склад Склад 16' }),
   ).toBeVisible()
   await user.type(
     screen.getByRole('searchbox', { name: 'Пошук складу' }),
@@ -3366,7 +3366,7 @@ it('searches warehouse codes and resets the current page without losing other pa
     screen.getByRole('link', { name: 'Відкрити склад Склад 2' }),
   ).toHaveAttribute('href', '/app/yard/warehouses/wh-2')
   expect(
-    screen.queryByRole('link', { name: 'Відкрити склад Склад 11' }),
+    screen.queryByRole('link', { name: 'Відкрити склад Склад 16' }),
   ).toBeNull()
   expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
   expect(screen.getByTestId('inventory-url')).not.toHaveTextContent(

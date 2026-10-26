@@ -581,6 +581,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         <form
           aria-busy={isCreating}
           aria-label={t('createForm')}
+          className="rz-form-page"
           noValidate
           onSubmit={(event) => {
             event.preventDefault()

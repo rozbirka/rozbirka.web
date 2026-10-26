@@ -177,7 +177,7 @@ export function ProfileScreen() {
               </div>
 
               <form
-                className="rz-form-grid"
+                className="rz-form-page rz-form-grid"
                 id={FORM_ID}
                 onSubmit={(event) => void handleSubmit(event)}
               >

@@ -227,7 +227,7 @@ export function AccountingCurrencySection() {
 
   const picker = (
     <form
-      className="grid gap-3"
+      className="rz-form-page grid gap-3"
       noValidate
       onSubmit={(event) => {
         event.preventDefault()

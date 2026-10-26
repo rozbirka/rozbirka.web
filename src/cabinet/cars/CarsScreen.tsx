@@ -1832,7 +1832,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     )
 
   return (
-    <div className="grid content-start">
+    <div className="rz-form-page grid content-start">
       <form aria-busy={busy} onSubmit={(event) => void submit(event)}>
         <RedesignShell
           actions={
@@ -2340,7 +2340,9 @@ function NewCarExpenses({
   return (
     <>
       {expenses.length === 0 ? (
-        <p className="rz-inset rz-muted m-0">{tf('noNewExpenses')}</p>
+        <p className="rz-inset rz-muted bg-app-sheet-field m-0">
+          {tf('noNewExpenses')}
+        </p>
       ) : (
         <ul className="m-0 grid list-none p-0">
           {expenses.map((expense, index) => {
