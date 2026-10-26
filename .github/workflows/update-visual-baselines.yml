@@ -2,9 +2,9 @@ name: Update Visual Baselines
 
 # CI compares landing screenshots against the committed `*-linux-chromium.png`
 # baselines but never rewrites them. Run this after an intended visual change:
-# it captures fresh Linux baselines on the same runner image and Playwright
-# version the E2E gate uses and uploads them as an artifact to review and
-# commit. It does not push anything. macOS baselines (without `-linux`) serve
+# it captures fresh Linux baselines in the same Playwright container image the
+# E2E gate uses and uploads them as an artifact to review and commit. It does
+# not push anything. macOS baselines (without `-linux`) serve
 # local runs on a Mac and are refreshed there.
 
 on:
@@ -30,6 +30,14 @@ jobs:
   landing:
     name: Landing baselines (Linux Chromium)
     runs-on: ubuntu-latest
+    # Keep the image identical to the E2E job in deploy-node-static-template.yml:
+    # the baselines are only valid for the fonts and Chromium build it ships.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 20
 
     steps:
@@ -43,34 +51,6 @@ jobs:
       - run: npm install --global npm@11.16.0
 
       - run: npm ci
-
-      - id: playwright-version
-        name: Resolve Playwright version
-        run: |
-          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
-
-      - name: Install Chromium
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Same approach as the E2E gate: system packages once with a long
-          # bound (retrying apt only races the dpkg lock), then the browser
-          # download with retries.
-          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99-dpkg-lock-timeout >/dev/null
-          timeout 900 npx playwright install-deps chromium
-          for attempt in 1 2 3; do
-            if timeout 300 npx playwright install chromium; then
-              exit 0
-            fi
-            echo "playwright browser download attempt ${attempt} failed or timed out; retrying"
-            sleep 10
-          done
-          exit 1
 
       - name: Capture landing baselines
         run: npx playwright test e2e/landing.spec.ts --project=chromium --update-snapshots=${{ inputs.mode }}
