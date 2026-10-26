@@ -9,6 +9,7 @@ export interface LoadingLayout {
     | 'settings'
     | 'reports'
     | 'plans'
+  form?: 'part' | 'intake' | 'car'
   rows: number
   columns: readonly string[]
   stats: number
@@ -73,8 +74,32 @@ export function loadingLayout(
     .filter(Boolean)
     .slice(2 + baseSegments)
   const base = layouts[module]
-  if (segments.some((segment) => segment === 'new' || segment === 'edit'))
-    return { ...base, kind: 'form', stats: 0 }
+  const orderItemDrawer =
+    module === 'orders' &&
+    segments.length === 3 &&
+    segments[1] === 'items' &&
+    segments[2] === 'new'
+  if (
+    !orderItemDrawer &&
+    segments.some((segment) => segment === 'new' || segment === 'edit')
+  )
+    return {
+      ...base,
+      kind: 'form',
+      stats: 0,
+      ...(module === 'parts' &&
+      (segments[0] === 'new' || segments[1] === 'edit')
+        ? { form: 'part' as const }
+        : module === 'cars'
+          ? { form: 'car' as const }
+          : module === 'intakes'
+            ? {
+                form: segments.includes('parts')
+                  ? ('part' as const)
+                  : ('intake' as const),
+              }
+            : {}),
+    }
   if (module === 'parts' && segments.includes('inventory'))
     return { ...base, kind: 'form', stats: 0, photo: false }
   if (module === 'parts' && segments[0] === 'imports')

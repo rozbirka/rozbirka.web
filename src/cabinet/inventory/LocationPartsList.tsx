@@ -30,7 +30,6 @@ import {
 interface Props {
   target: LocationContentsTarget
   context: 'sheet' | 'section' | 'unassigned'
-  onPlace?: ((part: PartSearchItem) => void) | undefined
   refreshKey?: number
   emptyText?: string
   /** The card title; the target's own name when absent. */
@@ -76,7 +75,6 @@ function OwnedLocationPartsList({
   context,
   owner,
   slug,
-  onPlace,
   refreshKey = 0,
   emptyText,
   selection,
@@ -312,36 +310,6 @@ function OwnedLocationPartsList({
                     </StatusPill>
                   ),
                 },
-                ...(onPlace
-                  ? [
-                      {
-                        key: 'place',
-                        label: t('place'),
-                        headerHidden: true,
-                        align: 'end' as const,
-                        cell: (part: PartSearchItem) => (
-                          <span className="inline-grid max-w-full justify-items-end gap-1">
-                            {hasPlacementStock(part) ? (
-                              <Button
-                                className="rz-mono text-brand-text px-0"
-                                variant="quiet"
-                                onClick={() => onPlace(part)}
-                                disabled={part.isInventoryLocked}
-                                aria-label={t('placePart', { name: part.name })}
-                              >
-                                {t('place')}
-                              </Button>
-                            ) : null}
-                            {part.isInventoryLocked ? (
-                              <span className="rz-caption max-w-52 whitespace-normal">
-                                {t('placementLocked')}
-                              </span>
-                            ) : null}
-                          </span>
-                        ),
-                      },
-                    ]
-                  : []),
               ]}
               empty={
                 <p className="text-app-muted m-0 px-[var(--rz-card-p)] py-5">

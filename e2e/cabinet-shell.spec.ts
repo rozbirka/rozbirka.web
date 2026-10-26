@@ -3252,3 +3252,135 @@ test('placement drawer searches large section and shelf choices without moving t
     await expect(page).toHaveURL(/\/parts\/part-picker$/)
   }
 })
+
+for (const width of [375, 1440]) {
+  test(`permission save errors remain visible at the drawer footer at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installCabinetApiBoundary(page)
+    await page.route(
+      '**/api/v1/team/users/user-2/permissions',
+      async (route) => {
+        if (route.request().method() !== 'PUT') return route.fallback()
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: null,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Cannot change own permissions.',
+              details: null,
+            },
+          }),
+        })
+      },
+    )
+    await loginFrom(page)
+    await page.goto('/app/koval/team')
+    await page
+      .getByRole('button', { name: 'Дії з учасником Іван Менеджер' })
+      .click()
+    await page.getByRole('menuitem', { name: 'Права' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Права: Іван Менеджер' })
+    await dialog.getByRole('checkbox').last().scrollIntoViewIfNeeded()
+    const save = dialog.getByRole('button', { name: 'Зберегти права' })
+    await save.click()
+    const alert = dialog.getByRole('alert')
+    await expect(alert).toHaveText(
+      'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
+    )
+    await expect(
+      dialog.locator('.rz-sheet__foot').getByRole('alert'),
+    ).toBeVisible()
+    const bounds = await alert.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds!.y).toBeGreaterThanOrEqual(0)
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900)
+    await expect(save).toBeEnabled()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('permission-error-footer.png'),
+    })
+  })
+}
+
+test('unassigned quantity and status columns stay compact at the right edge', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await installCabinetApiBoundary(page, { partsManage: true })
+  await page.route('**/api/v1/warehouses/warehouse-1', (route) =>
+    fulfillData(route, {
+      id: 'warehouse-1',
+      name: 'Основний склад',
+      code: 'main',
+      isActive: true,
+      isSystemDefault: true,
+      unassignedPartCount: 40,
+      zones: [
+        {
+          id: 'system-zone-1',
+          name: 'Без зони',
+          code: 'unassigned',
+          isActive: true,
+          isSystemUnassigned: true,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/v1/parts/search', (route) =>
+    fulfillData(route, {
+      items: Array.from({ length: 20 }, (_, index) => ({
+        id: `part-${index}`,
+        name: `Запчастина ${index + 1}`,
+        oemCode: `OEM-${index + 1}`,
+        externalCode: null,
+        quantity: index === 1 ? 7 : 1,
+        quantityAvailable: index === 10 ? 0 : 1,
+        quantityReserved: index === 10 ? 1 : 0,
+        unit: 'шт',
+        condition: 'used',
+        sourceType: 'manual',
+        status: index === 10 ? 'reserved' : 'available',
+        createdAt: '2026-10-26T08:00:00Z',
+        isInventoryLocked: false,
+        hasDiscrepancy: false,
+        thumbnailUrl: null,
+        car: null,
+      })),
+      page: 1,
+      pageSize: 20,
+      total: 40,
+      totalPages: 2,
+    }),
+  )
+  await loginFrom(page)
+  await page.goto('/app/koval/warehouses/warehouse-1/unassigned')
+  const table = page.locator('.location-parts--unassigned .rz-table')
+  await expect(
+    table.getByRole('link', { name: 'Запчастина 1', exact: true }),
+  ).toBeVisible()
+  const row = table.locator('tbody tr').first()
+  await expect(row.getByRole('button')).toHaveCount(0)
+  const cell = row.locator('td').last()
+  const badge = cell.locator('.rz-pill')
+  const cellBounds = await cell.boundingBox()
+  const badgeBounds = await badge.boundingBox()
+  expect(cellBounds).not.toBeNull()
+  expect(badgeBounds).not.toBeNull()
+  expect(cellBounds!.width).toBeLessThanOrEqual(160)
+  expect(
+    cellBounds!.x + cellBounds!.width - badgeBounds!.x - badgeBounds!.width,
+  ).toBeLessThanOrEqual(20)
+  await expect(table.getByRole('columnheader', { name: 'Статус' })).toHaveCSS(
+    'text-align',
+    'right',
+  )
+  await page.screenshot({ path: testInfo.outputPath('unassigned-columns.png') })
+})

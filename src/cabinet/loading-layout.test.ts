@@ -24,6 +24,38 @@ describe('route-specific loading layouts', () => {
     ).toBe('form')
   })
 
+  it('keeps adding an order item on the order record instead of a standalone form', () => {
+    expect(
+      loadingLayout('orders', '/app/demo/orders/order-1/items/new').kind,
+    ).toBe('record')
+    expect(loadingLayout('orders', '/app/demo/orders/new').kind).toBe('form')
+  })
+
+  it('selects the actual part and intake form compositions, including parts created from an intake', () => {
+    expect(loadingLayout('parts', '/app/demo/parts/new')).toMatchObject({
+      kind: 'form',
+      form: 'part',
+    })
+    expect(loadingLayout('parts', '/app/demo/parts/p1/edit')).toMatchObject({
+      kind: 'form',
+      form: 'part',
+    })
+    expect(loadingLayout('cars', '/app/demo/cars/new')).toMatchObject({
+      kind: 'form',
+      form: 'car',
+    })
+    expect(loadingLayout('intakes', '/app/demo/intakes/new')).toMatchObject({
+      kind: 'form',
+      form: 'intake',
+    })
+    expect(
+      loadingLayout('intakes', '/app/demo/intakes/i1/parts/new'),
+    ).toMatchObject({ kind: 'form', form: 'part' })
+    expect(
+      loadingLayout('parts', '/app/demo/parts/imports/import-1').form,
+    ).toBeUndefined()
+  })
+
   it('adapts the warehouse hierarchy and unassigned parts separately', () => {
     const warehouses = loadingLayout('warehouses', '/app/demo/warehouses')
     const sections = loadingLayout(

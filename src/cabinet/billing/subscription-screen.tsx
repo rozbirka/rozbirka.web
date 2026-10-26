@@ -8,7 +8,6 @@ import {
   DataTable,
   DateValue,
   Notice,
-  SkeletonRows,
   StatusPill,
   useOperation,
   useToast,
@@ -27,6 +26,7 @@ import type { TenantAccessSnapshot } from '../access-types'
 import { cn } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
 import { ModuleAccessDeniedError } from '../policy'
+import { PaymentHistorySkeleton } from '../overview-skeletons'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import {
   BillingCard,
@@ -602,7 +602,7 @@ function SubscriptionPanel({
               title={t('history')}
             >
               {history === null ? (
-                <SkeletonRows embedded label={tb('loadingPayments')} rows={3} />
+                <PaymentHistorySkeleton label={tb('loadingPayments')} />
               ) : history.length === 0 ? (
                 <p className="rz-muted m-0">{tb('noPayments')}</p>
               ) : (

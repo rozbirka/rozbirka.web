@@ -85,3 +85,51 @@ it('opens a photo tile at its selected index and returns focus after Escape', as
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(tile).toHaveFocus()
 })
+
+it('keeps a failed record tile readable and lets its existing button open the full photo', async () => {
+  const user = userEvent.setup()
+  render(
+    <PhotoGrid
+      label="Фото деталі"
+      variant="tiles"
+      photos={[{ ...photo, alt: 'Обкладинка деталі' }]}
+    />,
+  )
+  const tile = screen.getByRole('button', { name: 'Обкладинка деталі' })
+  fireEvent.error(within(tile).getByRole('img'))
+  expect(
+    within(tile).getByText('Фото недоступне', { exact: true }),
+  ).toBeVisible()
+  expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
+  await user.click(tile)
+  expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
+    'src',
+    fullSource,
+  )
+})
+
+it('keeps every photo in a horizontal strip and opens the selected one', async () => {
+  const user = userEvent.setup()
+  const photos = Array.from({ length: 5 }, (_, index) => ({
+    id: String(index),
+    url: `https://example.test/${index}.webp`,
+    alt: `Фото ${index + 1}`,
+  }))
+  render(
+    <PhotoGrid
+      label="Фото деталі"
+      variant="tiles"
+      layout="strip"
+      photos={photos}
+    />,
+  )
+  expect(screen.getAllByRole('button')).toHaveLength(5)
+  expect(screen.getByRole('list', { name: 'Фото деталі' })).toHaveClass(
+    'rz-photo-strip',
+  )
+  await user.click(screen.getByRole('button', { name: 'Фото 5' }))
+  expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
+    'src',
+    photos[4]!.url,
+  )
+})
