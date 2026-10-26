@@ -1880,6 +1880,7 @@ function PartDetailScreen({
                 <PhotoGrid
                   emptyLabel={t('galleryEmpty')}
                   label={t('galleryLabel', { name: detail.name })}
+                  title={detail.name}
                   photos={detail.photos.map((photo, index) => ({
                     id: photo.id,
                     url: photo.url,

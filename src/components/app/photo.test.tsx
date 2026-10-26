@@ -75,7 +75,7 @@ it('keeps the viewer open when clicking photos, arrows and thumbnails', async ()
     within(dialog).getByRole('button', { name: 'Наступне фото' }),
   )
   expect(within(dialog).getByRole('img', { name: 'Друге фото' })).toBeVisible()
-  await user.click(within(dialog).getByRole('button', { name: 'Фото 1' }))
+  await user.click(within(dialog).getByRole('tab', { name: /^Фото 1 з 2:/ }))
   const image = within(dialog).getByRole('img', { name: 'Перше фото' })
   expect(image).toBeVisible()
   await user.click(image.parentElement!)
