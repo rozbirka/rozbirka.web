@@ -6,10 +6,17 @@ import {
   type RefObject,
   type ReactNode,
 } from 'react'
-import { ChevronLeft, ChevronRight, ImageOff, X } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  ImageOff,
+  LoaderCircle,
+  MoveHorizontal,
+  RotateCw,
+  X,
+} from 'lucide-react'
 import { Dialog, Slot } from 'radix-ui'
 import { cn } from '@/lib/utils'
-import { Button } from './button'
 import { useT } from '@/i18n/hooks'
 import { appMessages } from './app-messages'
 import { fullPhotoSource } from './photo-source'
@@ -145,16 +152,22 @@ export function Thumbnail({
   )
 }
 
+/** Prev/next arrow of the viewer: a 44px round control over the stage edge. */
+const viewerArrow =
+  'absolute top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full border border-(--rz-border-strong) bg-(--rz-surface) p-0 text-(--rz-text-strong) cursor-pointer disabled:cursor-default disabled:opacity-35 max-sm:hidden'
+
 /**
- * The full-size view, opened from a grid or a gallery. Arrows on screen as well
- * as on the keyboard, a swipe on a phone, and a position counter — a viewer
- * that only answers to arrow keys is a viewer half the people cannot page
- * through.
+ * The full-size view, opened from a grid or a gallery — module 47 of the
+ * design system. Always dark whatever the cabinet theme: the photo is the only
+ * thing on screen. Arrows and Home/End page through without wrapping, a swipe
+ * does the same on a phone, and the strip shows where the current photo sits.
  */
 function Lightbox({
   photos,
   index,
   label,
+  title,
+  coverLabel,
   onIndex,
   onClose,
   returnFocus,
@@ -162,151 +175,258 @@ function Lightbox({
   photos: readonly Photo[]
   index: number
   label: string
+  /** The record the photos belong to; shown above the photo. */
+  title?: string
+  coverLabel?: string
   onIndex: (next: number) => void
   onClose: () => void
   returnFocus: RefObject<HTMLButtonElement | null>
 }) {
   const t = useT(appMessages)
   const total = photos.length
-  const step = useCallback(
-    (delta: number) => onIndex((index + delta + total) % total),
+  const go = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(total - 1, next))
+      if (clamped !== index) onIndex(clamped)
+    },
     [index, onIndex, total],
   )
-  const [failedSource, setFailedSource] = useState<string | null>(null)
+  // Load state belongs to one file, and a retry starts that file over.
+  const [load, setLoad] = useState({
+    source: '',
+    state: 'loading' as 'loading' | 'loaded' | 'failed',
+    attempt: 0,
+  })
   const touchStart = useRef<number | null>(null)
+  const [brokenThumbs, setBrokenThumbs] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowRight') step(1)
-      if (event.key === 'ArrowLeft') step(-1)
+      const next = {
+        ArrowLeft: index - 1,
+        ArrowRight: index + 1,
+        Home: 0,
+        End: total - 1,
+      }[event.key]
+      if (next === undefined) return
+      event.preventDefault()
+      go(next)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [step])
+  }, [go, index, total])
 
   const photo = photos[index]
+  const source = photo ? fullPhotoSource(photo) : ''
+  if (load.source !== source) setLoad({ source, state: 'loading', attempt: 0 })
   if (!photo) return null
-  const source = fullPhotoSource(photo)
-  const alt = photo.alt ?? `${label} ${String(index + 1)}`
+  const name = photo.alt ?? `${label} ${String(index + 1)}`
+  const several = total > 1
 
   return (
     <Dialog.Root onOpenChange={(next) => !next && onClose()} open>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-app-scrim" />
         <Dialog.Content
+          className={cn(
+            'rz fixed inset-0 z-50 grid bg-(--rz-camera-bg) text-(--rz-text) outline-none',
+            several
+              ? 'grid-rows-[56px_minmax(0,1fr)_auto_74px] sm:grid-rows-[56px_minmax(0,1fr)_96px]'
+              : 'grid-rows-[56px_minmax(0,1fr)]',
+          )}
+          data-theme="dark"
           onCloseAutoFocus={(event) => {
             event.preventDefault()
             returnFocus.current?.focus()
           }}
-          className="fixed inset-0 z-50 grid grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-3 sm:p-4"
         >
-          <Dialog.Title className="sr-only">{label}</Dialog.Title>
-          <Dialog.Description className="sr-only">{alt}</Dialog.Description>
-          <header className="flex items-center justify-between gap-3">
-            <p className="text-app-muted font-mono text-caption tabular-nums">
-              {t('photoPosition', {
+          <header className="flex min-w-0 items-center gap-3 border-b border-(--rz-border) pr-1 pl-4 sm:pr-3 sm:pl-5">
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <Dialog.Title className="rz-strong m-0 truncate font-semibold">
+                {title ?? label}
+              </Dialog.Title>
+              <Dialog.Description className="rz-caption m-0 truncate">
+                {name}
+              </Dialog.Description>
+            </span>
+            <span
+              aria-label={t('photoPosition', {
                 index: String(index + 1),
                 total: String(total),
               })}
-            </p>
+              className="rz-mono text-(--rz-text-strong) tabular-nums"
+            >
+              {index + 1} / {total}
+            </span>
+            <span aria-hidden className="rz-kbd max-sm:hidden">
+              Esc
+            </span>
             <Dialog.Close asChild>
-              <Button aria-label={t('closePhoto')} size="icon" variant="quiet">
-                <X aria-hidden />
-              </Button>
+              <button
+                aria-label={t('closeViewer')}
+                className="rz-btn rz-btn--icon rz-btn--ghost max-sm:size-11"
+                type="button"
+              >
+                <X aria-hidden className="size-icon-md" />
+              </button>
             </Dialog.Close>
           </header>
 
           <div
-            className="grid min-h-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2"
+            className="relative grid min-h-0 place-items-center py-4 sm:px-[84px] sm:py-6"
             onTouchEnd={(event) => {
               const from = touchStart.current
               const to = event.changedTouches[0]?.clientX
               touchStart.current = null
               if (from === null || to === undefined) return
-              if (Math.abs(to - from) > 48) step(to < from ? 1 : -1)
+              if (Math.abs(to - from) > 48) go(index + (to < from ? 1 : -1))
             }}
             onTouchStart={(event) => {
               touchStart.current = event.touches[0]?.clientX ?? null
             }}
           >
-            {total > 1 ? (
-              <Button
-                aria-label={t('previousPhoto')}
-                onClick={() => step(-1)}
-                size="icon"
-                variant="quiet"
-              >
-                <ChevronLeft aria-hidden />
-              </Button>
-            ) : (
-              <span />
-            )}
-            <div className="relative h-full min-h-0 w-full min-w-0">
-              {failedSource === source ? (
+            <div className="relative grid aspect-4/3 w-full place-items-center overflow-hidden border-y border-(--rz-border) bg-(--rz-surface-2) sm:h-full sm:w-auto sm:max-w-full sm:rounded-(--rz-r-sm) sm:border-x">
+              {load.state === 'failed' ? (
                 <span
-                  role="status"
-                  className="text-app-muted absolute inset-0 grid place-content-center justify-items-center gap-2"
+                  className="grid max-w-80 justify-items-center gap-2 text-center"
+                  role="alert"
                 >
-                  <ImageOff aria-hidden />
-                  {t('photoUnavailable')}
-                </span>
-              ) : (
-                <img
-                  key={source}
-                  alt={alt}
-                  className="absolute inset-0 h-full w-full rounded-control object-contain"
-                  onError={() => setFailedSource(source)}
-                  src={source}
-                />
-              )}
-            </div>
-            {total > 1 ? (
-              <Button
-                aria-label={t('nextPhoto')}
-                onClick={() => step(1)}
-                size="icon"
-                variant="quiet"
-              >
-                <ChevronRight aria-hidden />
-              </Button>
-            ) : (
-              <span />
-            )}
-          </div>
-
-          {total > 1 ? (
-            <ul className="flex justify-start gap-1.5 overflow-x-auto pb-1">
-              {photos.map((item, position) => (
-                <li
-                  className="shrink-0 first:ml-auto last:mr-auto"
-                  key={item.id}
-                >
+                  <ImageOff
+                    aria-hidden
+                    className="size-icon-lg text-(--rz-text-dim)"
+                  />
+                  <span className="rz-strong font-semibold">
+                    {t('photoLoadFailed')}
+                  </span>
+                  <span className="rz-muted text-pretty">
+                    {t('photoLoadFailedHint')}
+                  </span>
                   <button
-                    aria-current={position === index ? 'true' : undefined}
-                    aria-label={t('photoNumber', {
-                      number: String(position + 1),
-                    })}
-                    className={cn(
-                      'block size-control-lg shrink-0 overflow-hidden rounded-control border',
-                      position === index
-                        ? 'border-brand'
-                        : 'border-app-line opacity-60',
-                    )}
-                    onClick={() => onIndex(position)}
+                    className="rz-btn rz-btn--sm"
+                    onClick={() =>
+                      setLoad((current) => ({
+                        ...current,
+                        state: 'loading',
+                        attempt: current.attempt + 1,
+                      }))
+                    }
                     type="button"
                   >
+                    <RotateCw aria-hidden />
+                    {t('retryPhoto')}
+                  </button>
+                </span>
+              ) : (
+                <>
+                  <img
+                    alt={name}
+                    className={cn(
+                      'absolute inset-0 h-full w-full object-contain',
+                      load.state !== 'loaded' && 'opacity-0',
+                    )}
+                    key={`${source}#${String(load.attempt)}`}
+                    onError={() =>
+                      setLoad((current) => ({ ...current, state: 'failed' }))
+                    }
+                    onLoad={() =>
+                      setLoad((current) => ({ ...current, state: 'loaded' }))
+                    }
+                    src={source}
+                  />
+                  {load.state === 'loading' ? (
+                    <span
+                      className="grid justify-items-center gap-2 text-(--rz-text-dim)"
+                      role="status"
+                    >
+                      <LoaderCircle
+                        aria-hidden
+                        className="rz-spin size-icon-lg"
+                      />
+                      {t('photoLoading')}
+                    </span>
+                  ) : null}
+                  {index === 0 && coverLabel ? (
+                    <span className="rz-photo__badge">{coverLabel}</span>
+                  ) : null}
+                </>
+              )}
+            </div>
+            {several ? (
+              <>
+                <button
+                  aria-label={t('previousPhoto')}
+                  className={cn(viewerArrow, 'left-4')}
+                  disabled={index === 0}
+                  onClick={() => go(index - 1)}
+                  type="button"
+                >
+                  <ChevronLeft aria-hidden className="size-icon-lg" />
+                </button>
+                <button
+                  aria-label={t('nextPhoto')}
+                  className={cn(viewerArrow, 'right-4')}
+                  disabled={index === total - 1}
+                  onClick={() => go(index + 1)}
+                  type="button"
+                >
+                  <ChevronRight aria-hidden className="size-icon-lg" />
+                </button>
+              </>
+            ) : null}
+          </div>
+
+          {several ? (
+            <p className="m-0 flex items-center justify-center gap-2 px-4 pb-2 text-caption text-(--rz-text-muted) sm:hidden">
+              <MoveHorizontal aria-hidden className="size-icon" />
+              {t('swipeHint')}
+            </p>
+          ) : null}
+          {several ? (
+            <div
+              aria-label={t('thumbnails')}
+              className="flex items-center gap-2 overflow-x-auto border-t border-(--rz-border) px-4 py-1 [scrollbar-width:none] sm:[&>:first-child]:ml-auto sm:[&>:last-child]:mr-auto"
+              role="tablist"
+            >
+              {photos.map((item, position) => (
+                <button
+                  aria-label={t('thumbnailOf', {
+                    index: String(position + 1),
+                    total: String(total),
+                    name: item.alt ?? `${label} ${String(position + 1)}`,
+                  })}
+                  aria-selected={position === index}
+                  className={cn(
+                    'grid h-[42px] w-14 flex-none cursor-pointer place-items-center overflow-hidden rounded-(--rz-r-sm) border border-(--rz-border) bg-(--rz-surface-2) p-0 sm:h-[54px] sm:w-[72px]',
+                    position === index &&
+                      'outline-2 outline-offset-2 outline-(--rz-brand)',
+                  )}
+                  key={item.id}
+                  onClick={() => go(position)}
+                  role="tab"
+                  type="button"
+                >
+                  {brokenThumbs.has(item.id) ? (
+                    <ImageOff
+                      aria-hidden
+                      className="size-icon-md text-(--rz-text-dim)"
+                    />
+                  ) : (
                     <img
                       alt=""
                       className="h-full w-full object-cover"
+                      onError={() =>
+                        setBrokenThumbs((current) =>
+                          new Set(current).add(item.id),
+                        )
+                      }
                       src={item.thumbnailUrl ?? item.url}
                     />
-                  </button>
-                </li>
+                  )}
+                </button>
               ))}
-            </ul>
-          ) : (
-            <span />
-          )}
+            </div>
+          ) : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -357,10 +477,13 @@ export function PhotoGrid({
   variant = 'compact',
   layout = 'grid',
   coverLabel,
+  title,
 }: {
   photos: readonly Photo[]
   /** Names the group, and seeds the alt text of each photo. */
   label: string
+  /** The record the photos belong to, as the viewer heads it. */
+  title?: string
   emptyLabel?: string
   className?: string
   /** Record tiles use a wider frame and keep the shared thumbnail loading. */
@@ -419,6 +542,8 @@ export function PhotoGrid({
           returnFocus={opener}
           index={Math.min(openIndex, photos.length - 1)}
           label={label}
+          {...(title === undefined ? {} : { title })}
+          {...(coverLabel === undefined ? {} : { coverLabel })}
           onClose={() => setOpenIndex(null)}
           onIndex={setOpenIndex}
           photos={photos}
@@ -441,10 +566,16 @@ export function Gallery({
   ratio = 'wide',
   variant = 'panel',
   className,
+  title,
+  coverLabel,
 }: {
   photos: readonly Photo[]
   /** Names the gallery, and seeds the alt text of each photo. */
   label: string
+  /** The record the photos belong to, as the viewer heads it. */
+  title?: string
+  /** Marks the first photo as the record cover in the viewer. */
+  coverLabel?: string
   emptyLabel?: ReactNode
   /** Shape of the large frame. */
   ratio?: 'wide' | 'square'
@@ -567,6 +698,8 @@ export function Gallery({
           returnFocus={opener}
           index={Math.min(openIndex, photos.length - 1)}
           label={label}
+          {...(title === undefined ? {} : { title })}
+          {...(coverLabel === undefined ? {} : { coverLabel })}
           onClose={() => setOpenIndex(null)}
           onIndex={(next) => {
             setOpenIndex(next)

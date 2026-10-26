@@ -1019,6 +1019,8 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                       </span>
                     }
                     label={t('galleryLabel', { code: car.code })}
+                    title={`${car.brand} ${car.model} · ${String(car.year)}`}
+                    coverLabel={tf('coverPhoto')}
                     photos={photos}
                   />
                 </section>
