@@ -210,8 +210,11 @@ function UnassignedPartsView({ id }: { id: string }) {
                               {
                                 key: 'place',
                                 label: t('placeSelected'),
-                                onRun: () =>
-                                  setBulkParts([...selectedParts.values()]),
+                                onRun: () => {
+                                  const parts = [...selectedParts.values()]
+                                  if (parts.length === 1) setPlacing(parts[0]!)
+                                  else setBulkParts(parts)
+                                },
                               },
                               ...(targetTenant
                                 ? [
@@ -237,11 +240,6 @@ function UnassignedPartsView({ id }: { id: string }) {
                           />
                         ) : null,
                       }
-                    : undefined
-                }
-                onPlace={
-                  canManage && warehouse.isActive
-                    ? (part) => setPlacing(part)
                     : undefined
                 }
               />

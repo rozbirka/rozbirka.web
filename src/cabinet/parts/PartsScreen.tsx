@@ -60,6 +60,7 @@ import {
   Sheet,
   PillGroup,
   QuantityStepper,
+  Skeleton,
   SkeletonRows,
   SkeletonFields,
   SpecGrid,
@@ -1760,7 +1761,18 @@ function PartDetailScreen({
 
       <div className="rz-page max-w-[1240px]">
         <div className="grid min-w-0 gap-2">
-          {error ? null : <h1 className="rz-h-page text-balance">{name}</h1>}
+          {error ? null : detail === null ? (
+            <div aria-hidden className="grid gap-2">
+              <Skeleton className="h-5 w-64 max-w-full" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            </div>
+          ) : (
+            <h1 className="rz-h-page text-balance">{name}</h1>
+          )}
           {detail === null ? null : (
             <div className="rz-btn-row items-center">
               {detail.oemCode ? (
@@ -1870,6 +1882,7 @@ function PartDetailScreen({
                     }),
                   }))}
                   variant="tiles"
+                  layout="strip"
                   coverLabel={t('coverPhoto')}
                 />
               </Card>

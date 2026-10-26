@@ -3,6 +3,9 @@ import { defineMessages } from '@/i18n'
 /** Cabinet frame: navigation, tenant switching, Cmd+K and shell states. */
 export const shellMessages = defineMessages({
   uk: {
+    'theme.light': 'Світла тема',
+    'theme.toLight': 'Увімкнути світлу тему',
+    'theme.toDark': 'Увімкнути темну тему',
     'nav.desktop': 'Навігація кабінету',
     'nav.tablet': 'Навігація планшета',
     'nav.mobile': 'Мобільна навігація',
@@ -66,6 +69,9 @@ export const shellMessages = defineMessages({
     'shell.toActive': 'До активної розбірки',
   },
   'en-GB': {
+    'theme.light': 'Light theme',
+    'theme.toLight': 'Switch to light theme',
+    'theme.toDark': 'Switch to dark theme',
     'nav.desktop': 'Cabinet navigation',
     'nav.tablet': 'Tablet navigation',
     'nav.mobile': 'Mobile navigation',
@@ -128,6 +134,9 @@ export const shellMessages = defineMessages({
     'shell.toActive': 'Go to active business',
   },
   pl: {
+    'theme.light': 'Jasny motyw',
+    'theme.toLight': 'Włącz jasny motyw',
+    'theme.toDark': 'Włącz ciemny motyw',
     'nav.desktop': 'Nawigacja panelu',
     'nav.tablet': 'Nawigacja tabletu',
     'nav.mobile': 'Nawigacja mobilna',

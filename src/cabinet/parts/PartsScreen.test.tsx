@@ -1653,7 +1653,7 @@ it('confirms deletion, prevents duplicates, and reports a server conflict', asyn
       </Routes>
     </MemoryRouter>,
   )
-  await screen.findByRole('heading', { name: 'Деталь' })
+  await screen.findByRole('button', { name: 'Інші дії з деталлю' })
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name: 'Інші дії з деталлю' }))
   await user.click(

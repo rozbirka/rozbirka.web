@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { partsApi, type PartListItem, type PartSearchItem } from '@/api/parts'
-import { Button, SkeletonRows, StatusPill } from '@/components/app'
+import { Button, StatusPill } from '@/components/app'
 import {
   SearchPicker,
   SearchPickerOption,
@@ -9,6 +9,7 @@ import {
 import { formatMoney, useLocale, useT, type Locale } from '@/i18n'
 import { partPickerMessages } from './part-picker-messages'
 import './part-search-picker.css'
+import { PartSearchSkeleton } from './PartSearchSkeleton'
 
 export interface PartPickerItem extends PartListItem {
   effectiveSalePrice: number | null
@@ -209,7 +210,7 @@ export function PartSearchPicker({
           </Button>
         </div>
       ) : loading && items.length === 0 ? (
-        <SkeletonRows embedded label={t('searching')} rows={3} />
+        <PartSearchSkeleton compact={compact} label={t('searching')} />
       ) : items.length === 0 ? (
         <p className="rz-muted m-0 px-4 py-6 text-center">{t('nothing')}</p>
       ) : (

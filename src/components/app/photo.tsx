@@ -13,6 +13,7 @@ import { Button } from './button'
 import { useT } from '@/i18n/hooks'
 import { appMessages } from './app-messages'
 import { fullPhotoSource } from './photo-source'
+import { Skeleton } from './skeleton'
 
 export interface Photo {
   id: string
@@ -33,6 +34,7 @@ export function Thumbnail({
   className,
   ratio = 'square',
   size = 'thumbnail',
+  fallback = 'compact',
 }: {
   photo: Pick<Photo, 'url' | 'thumbnailUrl'>
   alt: string
@@ -45,6 +47,8 @@ export function Thumbnail({
    * small one.
    */
   size?: 'thumbnail' | 'full'
+  /** Roomier unavailable state for record tiles; never changes the image frame. */
+  fallback?: 'compact' | 'tile'
 }) {
   const t = useT(appMessages)
   const source =
@@ -74,6 +78,7 @@ export function Thumbnail({
       className={cn(
         'bg-app-input border-app-line rounded-control relative block overflow-hidden border',
         ratio === 'square' ? 'aspect-square' : 'aspect-4/3',
+        fallback === 'tile' && '@container',
         className,
       )}
     >
@@ -81,16 +86,22 @@ export function Thumbnail({
         <span
           className={cn(
             'text-app-dim absolute inset-0 flex flex-col items-center justify-center text-center whitespace-normal',
-            size === 'thumbnail'
-              ? 'p-0.5 text-[9px] leading-tight'
-              : 'gap-1 p-2 text-caption leading-tight',
+            fallback === 'tile'
+              ? 'gap-2 p-3 text-caption leading-snug @max-[140px]:gap-1 @max-[140px]:p-1 @max-[140px]:pt-6 @max-[140px]:text-micro @max-[140px]:leading-tight'
+              : size === 'thumbnail'
+                ? 'p-0.5 text-[9px] leading-tight'
+                : 'gap-1 p-2 text-caption leading-tight',
           )}
         >
-          {size === 'full' ? (
+          {fallback === 'tile' ? (
+            <span className="border-app-line bg-app-raised grid size-9 shrink-0 place-items-center rounded-control border @max-[140px]:size-5">
+              <ImageOff aria-hidden className="size-5 @max-[140px]:size-3" />
+            </span>
+          ) : size === 'full' ? (
             <ImageOff aria-hidden className="size-4 shrink-0" />
           ) : null}
           <span className="w-full min-w-0 wrap-anywhere">
-            {size === 'thumbnail'
+            {size === 'thumbnail' && fallback === 'compact'
               ? t('photoUnavailable')
                   .split(' ')
                   .map((word, index) => (
@@ -302,6 +313,37 @@ function Lightbox({
   )
 }
 
+function photoGridClassName(
+  variant: 'compact' | 'tiles',
+  layout: 'grid' | 'strip',
+  className?: string,
+) {
+  return cn(
+    'rz-photos m-0 list-none p-0',
+    variant === 'tiles' && 'rz-photos--tiles',
+    layout === 'strip' &&
+      'rz-photo-strip min-w-0 w-full grid-flow-col grid-cols-none auto-cols-[calc((100%-12px)/2)] gap-3 overflow-x-auto overscroll-x-contain pb-1 sm:auto-cols-[min(180px,calc((100%-36px)/4))] [scrollbar-width:thin] [scrollbar-color:var(--rz-border-strong)_transparent]',
+    className,
+  )
+}
+
+/** Pending record photos use the exact same tracks as the loaded strip. */
+export function PhotoStripSkeleton() {
+  return (
+    <div
+      aria-hidden
+      className={photoGridClassName('tiles', 'strip', 'overflow-hidden')}
+    >
+      {[0, 1, 2, 3].map((index) => (
+        <Skeleton
+          className="aspect-4/3 h-auto w-full rounded-control"
+          key={index}
+        />
+      ))}
+    </div>
+  )
+}
+
 /**
  * The photo strip of a record. Clicking opens the full image, so the grid can
  * stay small without hiding detail; without photos it says so instead of
@@ -313,6 +355,7 @@ export function PhotoGrid({
   emptyLabel,
   className,
   variant = 'compact',
+  layout = 'grid',
   coverLabel,
 }: {
   photos: readonly Photo[]
@@ -322,6 +365,8 @@ export function PhotoGrid({
   className?: string
   /** Record tiles use a wider frame and keep the shared thumbnail loading. */
   variant?: 'compact' | 'tiles'
+  /** One scrollable row keeps record tiles at their existing size. */
+  layout?: 'grid' | 'strip'
   /** When supplied, identifies the first photo as the record cover. */
   coverLabel?: string
 }) {
@@ -341,11 +386,7 @@ export function PhotoGrid({
     <>
       <ul
         aria-label={label}
-        className={cn(
-          'rz-photos m-0 list-none p-0',
-          variant === 'tiles' && 'rz-photos--tiles',
-          className,
-        )}
+        className={photoGridClassName(variant, layout, className)}
       >
         {photos.map((photo, index) => (
           <li key={photo.id}>
@@ -362,6 +403,7 @@ export function PhotoGrid({
                 alt={photo.alt ?? `${label} ${String(index + 1)}`}
                 photo={photo}
                 ratio={variant === 'tiles' ? 'wide' : 'square'}
+                fallback={variant === 'tiles' ? 'tile' : 'compact'}
               />
               {index === 0 && coverLabel ? (
                 <span className="rz-photo__badge pointer-events-none">

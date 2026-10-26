@@ -630,6 +630,22 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   )
 })
 
+test('accepts a full OTP keyboard replacement in any digit field @auth-smoke', async ({
+  page,
+}) => {
+  await installApiBoundary(page)
+  await page.goto('/login')
+  await page.getByLabel('Номер телефону').fill(phone)
+  await page.getByRole('button', { name: 'Отримати код' }).click()
+  await page.getByLabel('Цифра 1').fill(otp)
+  for (const [index, digit] of [...otp].entries())
+    await expect(page.getByLabel(`Цифра ${index + 1}`)).toHaveValue(digit)
+  await page.getByLabel('Цифра 3').fill(otp)
+  await expect(page.getByLabel('Цифра 6')).toBeFocused()
+  await page.getByRole('button', { name: 'Підтвердити' }).click()
+  await expect(page).toHaveURL(/\/app\/koval\/dashboard$/)
+})
+
 test('invalid OTP reaches the Ukrainian login error through the Worker without leaking upstream details @auth-smoke', async ({
   page,
 }) => {

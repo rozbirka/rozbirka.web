@@ -40,6 +40,7 @@ import {
   Sheet,
 } from '@/components/app'
 import { commonMessages, translate, useFormat, useLocale, useT } from '@/i18n'
+import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
 import { roleLabel, teamMessages } from './messages'
 import { RoleSearchPicker } from './RoleSearchPicker'
@@ -187,7 +188,6 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const canManageAccess =
     accessRefreshState === 'ready' &&
     cabinet.snapshot?.permissions.has('team.manage') === true
-
   const canManage = useCallback(
     () =>
       !accessRefreshRequiredRef.current &&
@@ -251,11 +251,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       setError(null)
       try {
         await operation(signal)
-      } catch {
+      } catch (failure) {
         // A dead request is reported where the user triggered it; a tenant
         // switch is not a failure, it is the old screen going away.
         if (signal.aborted) return false
-        throw new Error(translate(teamMessages, locale, 'actionFailed'))
+        throw failure
       }
       if (signal.aborted) return false
 
@@ -263,7 +263,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       await refreshAccess()
       return true
     },
-    [accessLostMessage, canManage, locale, refreshAccess, toast],
+    [accessLostMessage, canManage, refreshAccess, toast],
   )
 
   const teamData =
@@ -344,8 +344,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       )
     },
     {
-      errorMessage: () => t('permissionsSaveFailed'),
-      onSuccess: () => closePermissions(),
+      errorMessage: (failure) => {
+        const problem = normalizeApiProblem(failure)
+        return problem.fieldErrors?.['']?.[0] ?? problem.message
+      },
+      onSuccess: (updated) => {
+        if (updated) closePermissions()
+      },
     },
   )
 
@@ -1052,30 +1057,38 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             role: roleLabel(permissionMember.role, locale),
           })}
           footer={
-            <>
-              <Button
-                disabled={memberPermissions.pending}
-                onClick={closePermissions}
-                size="lg"
-                type="button"
-              >
-                {tc('cancel')}
-              </Button>
-              <Button
-                aria-busy={memberPermissions.pending}
-                disabled={
-                  memberPermissions.pending ||
-                  !canManageAccess ||
-                  permissionsLoad !== 'ready'
-                }
-                form={MEMBER_PERMISSIONS_FORM}
-                size="lg"
-                type="submit"
-                variant="primary"
-              >
-                {t('savePermissions')}
-              </Button>
-            </>
+            <div className="grid w-full gap-3">
+              {memberPermissions.error ||
+              (!memberPermissions.pending && !canManageAccess) ? (
+                <Notice tone="danger">
+                  {memberPermissions.error ?? accessLostMessage}
+                </Notice>
+              ) : null}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  disabled={memberPermissions.pending}
+                  onClick={closePermissions}
+                  size="lg"
+                  type="button"
+                >
+                  {tc('cancel')}
+                </Button>
+                <Button
+                  aria-busy={memberPermissions.pending}
+                  disabled={
+                    memberPermissions.pending ||
+                    !canManageAccess ||
+                    permissionsLoad !== 'ready'
+                  }
+                  form={MEMBER_PERMISSIONS_FORM}
+                  size="lg"
+                  type="submit"
+                  variant="primary"
+                >
+                  {t('savePermissions')}
+                </Button>
+              </div>
+            </div>
           }
           onOpenChange={(open) => {
             if (!open && !memberPermissions.pending) closePermissions()
@@ -1096,9 +1109,6 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               memberPermissions.run()
             }}
           >
-            {memberPermissions.error === null ? null : (
-              <Notice tone="danger">{memberPermissions.error}</Notice>
-            )}
             {permissionsLoad === 'failed' ? (
               <Notice tone="danger">{t('permissionsLoadFailed')}</Notice>
             ) : permissionsLoad === 'loading' ? (
