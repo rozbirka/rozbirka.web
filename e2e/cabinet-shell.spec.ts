@@ -1,13 +1,13 @@
 import AxeBuilder from '@axe-core/playwright'
 import {
+  upstreamOrigin,
   expect,
   test,
   type APIRequestContext,
   type Page,
   type Route,
-} from '@playwright/test'
+} from './fixtures'
 
-const upstreamOrigin = 'http://127.0.0.1:4174'
 const phone = '501112233'
 const otp = '123456'
 
@@ -433,7 +433,7 @@ async function installCabinetApiBoundary(
     if (isRecognizedDashboardPath(path)) {
       const authorization = request.headers().authorization
       const upstreamResponse = await fetch(
-        `${upstreamOrigin}${path}${requestUrl.search}`,
+        `${upstreamOrigin()}${path}${requestUrl.search}`,
         {
           method: request.method(),
           headers: {
@@ -894,7 +894,7 @@ async function installCabinetApiBoundary(
 }
 
 async function resetUpstream(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/reset`, {
+  const response = await request.post(`${upstreamOrigin()}/_test/reset`, {
     data: {},
   })
   expect(response.ok()).toBeTruthy()
@@ -903,7 +903,7 @@ async function resetUpstream(request: APIRequestContext) {
 async function upstreamStats(
   request: APIRequestContext,
 ): Promise<DashboardUpstreamStats> {
-  const response = await request.get(`${upstreamOrigin}/_test/stats`)
+  const response = await request.get(`${upstreamOrigin()}/_test/stats`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as DashboardUpstreamStats
 }
@@ -918,7 +918,7 @@ async function resetDashboardUpstream(
   } = {},
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/reset`,
+    `${upstreamOrigin()}/_test/dashboard/reset`,
     { data: options },
   )
   expect(response.ok()).toBeTruthy()
@@ -929,7 +929,7 @@ async function armDelayedDashboard(
   tenantId: string,
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/delay`,
+    `${upstreamOrigin()}/_test/dashboard/delay`,
     { data: { tenantId } },
   )
   expect(response.ok()).toBeTruthy()
@@ -937,18 +937,20 @@ async function armDelayedDashboard(
 
 async function releaseDelayedDashboard(request: APIRequestContext) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/release`,
+    `${upstreamOrigin()}/_test/dashboard/release`,
   )
   expect(response.ok()).toBeTruthy()
 }
 
 async function armDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/delay`)
+  const response = await request.post(`${upstreamOrigin()}/_test/logout/delay`)
   expect(response.ok()).toBeTruthy()
 }
 
 async function releaseDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/release`)
+  const response = await request.post(
+    `${upstreamOrigin()}/_test/logout/release`,
+  )
   expect(response.ok()).toBeTruthy()
 }
 
