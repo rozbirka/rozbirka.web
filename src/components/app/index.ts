@@ -45,6 +45,7 @@ export {
   type ToastTone,
 } from './toast-context'
 export { ActiveFilters, Toolbar, type ActiveFilter } from './toolbar'
+export { FilterOption, FilterPopover } from './filter-popover'
 export {
   FileField,
   PhotoFileField,

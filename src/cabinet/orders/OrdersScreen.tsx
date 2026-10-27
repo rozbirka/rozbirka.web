@@ -113,6 +113,7 @@ import { useCabinet } from '../CabinetContext'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
+import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
   customerPhoneForSave,
@@ -1324,6 +1325,7 @@ function OrderDetailScreen({
     cabinet.snapshot?.permissions.has('team.manage') === true
       ? `${moduleBase}/settings/integrations`
       : null
+  const waybillsPath = `${moduleBase}${cabinetModules.waybills.routeSegment}`
   const summary = orderMoney(order)
   /**
    * Sale prices are accounting prices: the first-price check applies. Runs
@@ -1606,6 +1608,7 @@ function OrderDetailScreen({
             novaPoshtaAvailable={novaPoshta.available}
             order={order}
             partsPath={partsPath}
+            waybillsPath={waybillsPath}
           />
           {notesCard}
         </>

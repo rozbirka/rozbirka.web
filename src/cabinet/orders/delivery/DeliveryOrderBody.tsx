@@ -43,11 +43,7 @@ import { ExternalWaybillSheet } from './ExternalWaybillSheet'
 import { PaymentDrawer } from './PaymentDrawer'
 import { WaybillCreateSheet } from './WaybillCreateSheet'
 import { WaybillCancelDialog, WaybillRecreateDialog } from './WaybillDialogs'
-import {
-  WaybillDataDrawer,
-  WaybillLabelDrawer,
-  WaybillReadinessDrawer,
-} from './WaybillDrawers'
+import { WaybillLabelDrawer, WaybillReadinessDrawer } from './WaybillDrawers'
 import { WaybillEditSheet, type RecreateReason } from './WaybillEditSheet'
 import { WaybillReconcileSheet } from './WaybillReconcileSheet'
 import { lifecycle } from './delivery-view'
@@ -65,7 +61,6 @@ type Drawer =
   | { kind: 'create' }
   | { kind: 'reconcile' }
   | { kind: 'edit' }
-  | { kind: 'waybill' }
   | { kind: 'attach' }
   | { kind: 'label' }
   | { kind: 'step'; step: DeliveryStep }
@@ -129,6 +124,7 @@ export function DeliveryOrderBody({
   novaPoshtaAvailable = true,
   order,
   partsPath,
+  waybillsPath = null,
 }: {
   /** The tenant's country; kept for callers, the form is Ukrainian only. */
   countryCode?: BusinessCountry | null
@@ -146,6 +142,8 @@ export function DeliveryOrderBody({
   novaPoshtaAvailable?: boolean
   order: OrderDetail
   partsPath: string | null
+  /** «Накладні НП»; «Дані ТТН» and «Відкрити ТТН» open the waybill card there. */
+  waybillsPath?: string | null
 }) {
   void countryCode
   const toast = useOptionalToast()
@@ -351,7 +349,6 @@ export function DeliveryOrderBody({
     recheck: () => open({ kind: 'form', then: 'check', prefill: null }),
     reconcile: () => open({ kind: 'reconcile' }),
     print: () => open({ kind: 'label' }),
-    data: () => open({ kind: 'waybill' }),
     refresh: () => {
       if (integrationId !== null)
         void runShipment(() => shippingApi.refresh(integrationId, order.id))
@@ -516,6 +513,11 @@ export function DeliveryOrderBody({
                 shipment={shipment}
                 stage={stage}
                 waiting={waiting}
+                waybillPath={
+                  waybillsPath === null || shipment === null
+                    ? null
+                    : `${waybillsPath}/${encodeURIComponent(shipment.id)}`
+                }
               />
 
               <DeliverySteps delivery={delivery} shipment={shipment} />
@@ -787,15 +789,6 @@ export function DeliveryOrderBody({
           }
         />
       ) : null}
-
-      {drawer?.kind === 'waybill' && shipment !== null && (
-        <WaybillDataDrawer
-          delivery={delivery}
-          onClose={() => setDrawer(null)}
-          orderNumber={order.number}
-          shipment={shipment}
-        />
-      )}
 
       {drawer?.kind === 'label' &&
         integrationId !== null &&

@@ -105,6 +105,10 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
     const { OrdersScreen } = await import('@/cabinet/orders/OrdersScreen')
     return OrdersScreen
   }),
+  waybills: cabinetScreenRoute('waybills', async () => {
+    const { WaybillsScreen } = await import('@/cabinet/waybills/WaybillsScreen')
+    return WaybillsScreen
+  }),
   cash: cabinetScreenRoute('cash', async () => {
     const { CashScreen } = await import('@/cabinet/cash/CashScreen')
     return CashScreen
@@ -294,6 +298,15 @@ const commerceDetailRoutes: RouteObject[] = [
         },
         path,
       ),
+  ),
+  cabinetScreenRoute(
+    'waybills',
+    async () => {
+      const { WaybillsScreen } =
+        await import('@/cabinet/waybills/WaybillsScreen')
+      return WaybillsScreen
+    },
+    'sales/waybills/:shipmentId',
   ),
   ...['cash/new', 'cash/:registerId', 'cash/:registerId/edit'].map((path) =>
     cabinetScreenRoute(

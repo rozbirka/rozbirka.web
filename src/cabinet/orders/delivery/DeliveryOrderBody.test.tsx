@@ -232,6 +232,7 @@ const renderBody = (value: DeliveryOrderLoad) =>
         mutationsAllowed
         order={order}
         partsPath="/app/koval/parts"
+        waybillsPath="/app/koval/sales/waybills"
       />
     </MemoryRouter>,
     { wrapper: ToastProvider },
@@ -451,6 +452,7 @@ it('speaks British English on both halves of the card', async () => {
           mutationsAllowed
           order={order}
           partsPath="/app/koval/parts"
+          waybillsPath="/app/koval/sales/waybills"
         />
       </MemoryRouter>
     </LocaleProvider>,
@@ -469,7 +471,7 @@ it('speaks British English on both halves of the card', async () => {
   expect(within(carrier).getByText('Waybill created')).toBeVisible()
   expect(within(carrier).getByText('1 piece · 42 kg')).toBeVisible()
   expect(
-    within(carrier).getByRole('button', { name: 'Waybill details' }),
+    within(carrier).getByRole('link', { name: 'Waybill details' }),
   ).toBeVisible()
   expect(
     screen.queryByText(/[А-Яа-яІіЇїЄєҐґ]{4,}/u, { selector: 'button' }),
@@ -577,8 +579,8 @@ it('says a waybill of a lost cabinet no longer updates and offers recovery', asy
     within(card).queryByRole('button', { name: 'Оновити статус' }),
   ).toBeNull()
   expect(
-    within(card).getByRole('button', { name: 'Відкрити ТТН' }),
-  ).toBeVisible()
+    within(card).getByRole('link', { name: 'Відкрити ТТН' }),
+  ).toHaveAttribute('href', '/app/koval/sales/waybills/ship-1')
 
   await user.click(
     within(card).getByRole('button', { name: 'Відновити доступ' }),
@@ -610,4 +612,9 @@ it('leaves a waybill of a working cabinet as it is', async () => {
     await screen.findByRole('button', { name: 'Оновити статус' }),
   ).toBeVisible()
   expect(screen.queryByText('Немає доступу')).toBeNull()
+  // «Дані ТТН» opens the waybill card (module 46 §8), not a sheet.
+  expect(screen.getByRole('link', { name: 'Дані ТТН' })).toHaveAttribute(
+    'href',
+    '/app/koval/sales/waybills/ship-1',
+  )
 })

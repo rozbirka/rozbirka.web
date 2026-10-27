@@ -21,6 +21,7 @@ import { cabinetPath } from './cabinet-paths'
 import { onOpenCommandPalette } from './command-palette-open'
 import { moduleLabel } from './module-messages'
 import { cabinetModules, type CabinetModuleKey } from './module-registry'
+import { useHiddenModules } from './nova-poshta-presence'
 import { evaluateModuleAccess } from './policy'
 import { shellMessages } from './shell-messages'
 
@@ -70,10 +71,12 @@ export function CommandPalette({
   const [active, setActive] = useState(0)
   const listId = useId()
 
+  const hidden = useHiddenModules(tenant, snapshot)
   const canView = useMemo(() => {
     const allowed = new Set<CabinetModuleKey>()
     for (const definition of Object.values(cabinetModules))
       if (
+        !hidden.has(definition.key) &&
         evaluateModuleAccess(
           definition,
           { status: 'ready', snapshot, error: null },
@@ -82,7 +85,7 @@ export function CommandPalette({
       )
         allowed.add(definition.key)
     return allowed
-  }, [snapshot])
+  }, [hidden, snapshot])
 
   const destinations = useMemo<Command[]>(
     () =>

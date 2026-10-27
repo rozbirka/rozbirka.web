@@ -102,7 +102,6 @@ export const deliveryDrawerMessages = defineMessages({
 
     // Waybill drawers
     partCheck: 'перевірка перед ТТН',
-    partWaybill: 'накладна',
     partLabel: 'етикетка',
     readinessContinue: 'Далі — отримувач, посилка й розрахунок',
     readinessBlocked: 'Перешкод: {count}',
@@ -113,27 +112,6 @@ export const deliveryDrawerMessages = defineMessages({
     readinessChecks: 'Що сервіс перевіряє сам',
     readinessLastRow:
       'Останній рядок — не перевірка: маршрут і габарити Нова пошта оцінює сама під час створення, тож відмова можлива навіть після зеленого списку.',
-    rowNumber: 'Номер',
-    rowCreated: 'Створена',
-    rowSenderBranch: 'Відділення відправника',
-    rowRecipient: 'Отримувач',
-    rowBranchChosen: 'відділення обрано',
-    rowCod: 'Післяплата в накладній',
-    rowBalance: 'Залишок за замовленням',
-    rowDeclared: 'Оголошена вартість',
-    rowParcel: 'Посилка',
-    rowParcelValue: {
-      one: '{count} місце · {weight} кг',
-      few: '{count} місця · {weight} кг',
-      many: '{count} місць · {weight} кг',
-      other: '{count} місця · {weight} кг',
-    },
-    rowCarrierStatus: 'Статус перевізника',
-    rowNoStatus: 'ще не надходив',
-    waybillTitle: 'Дані накладної',
-    codMismatch:
-      'Післяплата в накладній розійшлася із залишком за замовленням. Нова пошта видасть посилку за сумою в накладній — розбіжність доведеться вирішувати вручну.',
-    shipmentStatuses: 'Статуси відправлення',
     attachDescription:
       'Накладна, створена в кабінеті Нової пошти, стає накладною цього замовлення.',
     attachSubmit: 'Прив’язати до замовлення',
@@ -299,7 +277,6 @@ export const deliveryDrawerMessages = defineMessages({
       'Both amounts come from Nova Poshta. The deposit covers the business’s risk: if the parcel isn’t collected, you pay for both ways.',
 
     partCheck: 'pre-waybill check',
-    partWaybill: 'waybill',
     partLabel: 'label',
     readinessContinue: 'Next: recipient, parcel and quote',
     readinessBlocked: {
@@ -313,25 +290,6 @@ export const deliveryDrawerMessages = defineMessages({
     readinessChecks: 'What the service checks itself',
     readinessLastRow:
       'The last row isn’t a check: Nova Poshta assesses the route and dimensions itself on creation, so it may refuse even after an all-green list.',
-    rowNumber: 'Number',
-    rowCreated: 'Created',
-    rowSenderBranch: 'Sender branch',
-    rowRecipient: 'Recipient',
-    rowBranchChosen: 'branch selected',
-    rowCod: 'Cash on delivery on the waybill',
-    rowBalance: 'Order balance',
-    rowDeclared: 'Declared value',
-    rowParcel: 'Parcel',
-    rowParcelValue: {
-      one: '{count} piece · {weight} kg',
-      other: '{count} pieces · {weight} kg',
-    },
-    rowCarrierStatus: 'Carrier status',
-    rowNoStatus: 'none received yet',
-    waybillTitle: 'Waybill details',
-    codMismatch:
-      'The cash on delivery on the waybill no longer matches the order balance. Nova Poshta will hand over the parcel for the amount on the waybill — the difference will have to be sorted out manually.',
-    shipmentStatuses: 'Shipment statuses',
     attachDescription:
       'A waybill created in the Nova Poshta account becomes this order’s waybill.',
     attachSubmit: 'Link to order',
@@ -501,7 +459,6 @@ export const deliveryDrawerMessages = defineMessages({
       'Obie kwoty wyliczyła Nova Poshta. Kaucja pokrywa ryzyko firmy: jeśli przesyłka nie zostanie odebrana, płacisz za obie drogi.',
 
     partCheck: 'kontrola przed listem przewozowym',
-    partWaybill: 'list przewozowy',
     partLabel: 'etykieta',
     readinessContinue: 'Dalej — odbiorca, paczka i wycena',
     readinessBlocked: 'Przeszkody: {count}',
@@ -512,27 +469,6 @@ export const deliveryDrawerMessages = defineMessages({
     readinessChecks: 'Co serwis sprawdza sam',
     readinessLastRow:
       'Ostatni wiersz to nie kontrola: trasę i wymiary Nova Poshta ocenia sama przy tworzeniu, więc odmowa jest możliwa nawet po zielonej liście.',
-    rowNumber: 'Numer',
-    rowCreated: 'Utworzono',
-    rowSenderBranch: 'Oddział nadawcy',
-    rowRecipient: 'Odbiorca',
-    rowBranchChosen: 'oddział wybrany',
-    rowCod: 'Pobranie w liście przewozowym',
-    rowBalance: 'Saldo zamówienia',
-    rowDeclared: 'Wartość deklarowana',
-    rowParcel: 'Przesyłka',
-    rowParcelValue: {
-      one: '{count} paczka · {weight} kg',
-      few: '{count} paczki · {weight} kg',
-      many: '{count} paczek · {weight} kg',
-      other: '{count} paczki · {weight} kg',
-    },
-    rowCarrierStatus: 'Status przewoźnika',
-    rowNoStatus: 'jeszcze nie otrzymano',
-    waybillTitle: 'Dane listu przewozowego',
-    codMismatch:
-      'Pobranie w liście przewozowym różni się od salda zamówienia. Nova Poshta wyda przesyłkę za kwotę z listu — różnicę trzeba będzie rozwiązać ręcznie.',
-    shipmentStatuses: 'Statusy przesyłki',
     attachDescription:
       'List przewozowy utworzony na koncie Nova Poshta staje się listem tego zamówienia.',
     attachSubmit: 'Powiąż z zamówieniem',

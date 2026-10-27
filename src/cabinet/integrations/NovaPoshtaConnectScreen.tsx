@@ -41,6 +41,7 @@ import {
   useSetupProblem,
 } from './np-setup-model'
 import { integrationsMessages } from './integrations-messages'
+import { forgetNovaPoshtaPresence } from '../nova-poshta-presence'
 import { isNovaPoshtaAvailable } from './integration-labels'
 import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
 
@@ -251,6 +252,7 @@ export function NovaPoshtaConnectScreen() {
         configured.version,
       )
       pendingSetup.clear(tenant.id, integrationId)
+      forgetNovaPoshtaPresence()
       toast?.show({ tone: 'ok', message: t('connected') })
       void navigate(cabinetPath(tenant.slug, 'integrations', integrationId))
     } catch (problem) {

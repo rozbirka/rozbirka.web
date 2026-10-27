@@ -1,4 +1,5 @@
 import type { Ref } from 'react'
+import { Link } from 'react-router'
 import {
   Ban,
   Calculator,
@@ -52,7 +53,6 @@ export interface ShipmentBlockActions {
   recheck: () => void
   reconcile: () => void
   print: () => void
-  data: () => void
   refresh: () => void
   copy: () => void
   editWaybill: () => void
@@ -85,6 +85,7 @@ export function DeliveryShipmentBlock({
   shipment,
   stage,
   waiting,
+  waybillPath,
 }: {
   actions: ShipmentBlockActions
   /** When the waybill was attached from the carrier's cabinet here (6.12). */
@@ -105,6 +106,8 @@ export function DeliveryShipmentBlock({
   stage: WaybillStage
   /** A result check found no proof yet (5.15). */
   waiting: boolean
+  /** The waybill card (module 46 §8); null when it cannot be opened. */
+  waybillPath: string | null
 }) {
   const { locale } = useLocale()
   const format = useFormat()
@@ -479,10 +482,14 @@ export function DeliveryShipmentBlock({
                 <KeyRound aria-hidden />
                 {tr('recover')}
               </Button>
-              <Button disabled={busy} onClick={actions.data} variant="quiet">
-                <ExternalLink aria-hidden />
-                {tr('openWaybill')}
-              </Button>
+              {waybillPath === null ? null : (
+                <Button asChild variant="quiet">
+                  <Link to={waybillPath}>
+                    <ExternalLink aria-hidden />
+                    {tr('openWaybill')}
+                  </Link>
+                </Button>
+              )}
             </>
           ) : null
         }
@@ -515,10 +522,14 @@ export function DeliveryShipmentBlock({
               <Printer aria-hidden />
               {tm('printLabel')}
             </Button>
-            <Button disabled={busy} onClick={actions.data}>
-              <FileText aria-hidden />
-              {tm('waybillData')}
-            </Button>
+            {waybillPath === null ? null : (
+              <Button asChild>
+                <Link to={waybillPath}>
+                  <FileText aria-hidden />
+                  {tm('waybillData')}
+                </Link>
+              </Button>
+            )}
             <Button
               aria-busy={busy}
               disabled={busy}

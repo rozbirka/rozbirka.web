@@ -142,6 +142,8 @@ describe('production route boundary', () => {
     ['orders/new', 'OrdersScreen'],
     ['orders/:orderId', 'OrdersScreen'],
     ['orders/:orderId/items/new', 'OrdersScreen'],
+    ['sales/waybills', 'WaybillsScreen'],
+    ['sales/waybills/:shipmentId', 'WaybillsScreen'],
     ['cash', 'CashScreen'],
     ['cash/new', 'CashScreen'],
     ['cash/:registerId', 'CashScreen'],
