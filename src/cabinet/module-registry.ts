@@ -1,3 +1,5 @@
+import type { ComponentType } from 'react'
+import type { CabinetModuleScreenProps } from './ModuleBoundary'
 import {
   BadgeDollarSign,
   Building2,
@@ -25,7 +27,7 @@ import {
   type FeatureCode,
   type PlanUsageDto,
 } from '../api/types'
-import type { Permission } from './access-types'
+import type { Permission, ModulePermission } from './access-types'
 
 export type CabinetModuleKey =
   | 'dashboard'
@@ -81,8 +83,8 @@ export interface CabinetNavigationItem {
 export interface CabinetModuleDefinition {
   key: CabinetModuleKey
   routeSegment: string
-  viewPermission?: Permission
-  mutationPermission?: Permission
+  viewPermission?: Permission | ModulePermission
+  mutationPermission?: Permission | ModulePermission
   requiredFeature?: FeatureCode
   allowedSubscriptionStates?: readonly BillingState[]
   quotaResource?: QuotaResource
@@ -346,3 +348,45 @@ export const cabinetModules: Readonly<
     },
   },
 }
+
+export interface FeatureModuleEntry {
+  readonly code: string
+  readonly labelKey: string
+  readonly parentModule: CabinetModuleKey
+  readonly loadScreen: () => Promise<{
+    default: ComponentType<CabinetModuleScreenProps>
+  }>
+}
+
+export interface RegisteredFeatureModule extends FeatureModuleEntry {
+  readonly viewPermission: `modules.${string}.view`
+  readonly mutationPermission: `modules.${string}.manage`
+  readonly routeSegment: string
+}
+
+export function defineFeatureModules(
+  entries: readonly FeatureModuleEntry[],
+): readonly RegisteredFeatureModule[] {
+  const codes = new Set<string>()
+  return Object.freeze(
+    entries.map((entry) => {
+      if (
+        !/^[a-z][a-z0-9-]{0,31}$/.test(entry.code) ||
+        codes.has(entry.code) ||
+        !Object.hasOwn(cabinetModules, entry.parentModule)
+      ) {
+        throw new Error('Invalid or duplicate module registration')
+      }
+      codes.add(entry.code)
+      return Object.freeze({
+        ...entry,
+        viewPermission: `modules.${entry.code}.view` as const,
+        mutationPermission: `modules.${entry.code}.manage` as const,
+        routeSegment: `/modules/${entry.code}/parts`,
+      })
+    }),
+  )
+}
+
+// Explicit, build-time extensions of this registry. Provider implementations register here later.
+export const independentModules = defineFeatureModules([])

@@ -6,6 +6,7 @@ import type { SubscriptionDto } from '../api/types'
 import type { CabinetContextValue } from './CabinetContext'
 import { useCabinet } from './CabinetContext'
 import { ModuleBoundary, type CabinetModuleScreenProps } from './ModuleBoundary'
+import { evaluateModuleAccess } from './policy'
 import type { CabinetModuleKey } from './module-registry'
 
 vi.mock('./CabinetContext', () => ({
@@ -87,6 +88,55 @@ beforeEach(() => {
 })
 
 describe('ModuleBoundary', () => {
+  it('requires the independent module permission even when the parent is accessible', () => {
+    mockedUseCabinet.mockReturnValue(cabinet(['parts.view']))
+    render(
+      <MemoryRouter>
+        <ModuleBoundary
+          module="parts"
+          extension={{
+            viewPermission: 'modules.demo.view',
+            mutationPermission: 'modules.demo.manage',
+            routeSegment: '/modules/demo/parts',
+          }}
+          screen={() => <p>Independent content</p>}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByText('Independent content')).not.toBeInTheDocument()
+  })
+
+  it('keeps module mutations read-only when only the parent manage permission is granted', () => {
+    const state = cabinet(['parts.view', 'parts.manage', 'modules.demo.view'])
+    mockedUseCabinet.mockReturnValue(state)
+    function Feature({ definition }: CabinetModuleScreenProps) {
+      const decision = evaluateModuleAccess(
+        definition,
+        { status: 'ready', snapshot: state.snapshot!, error: null },
+        'mutation',
+      )
+      return (
+        <p>
+          {decision.kind === 'allowed' ? 'Can edit module' : 'Read-only module'}
+        </p>
+      )
+    }
+    render(
+      <MemoryRouter>
+        <ModuleBoundary
+          module="parts"
+          extension={{
+            viewPermission: 'modules.demo.view',
+            mutationPermission: 'modules.demo.manage',
+            routeSegment: '/modules/demo/parts',
+          }}
+          screen={Feature}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Read-only module')).toBeVisible()
+  })
+
   it('holds a local preview until released, preserving the other URL filters', () => {
     function ActualScreen() {
       const location = useLocation()

@@ -1,6 +1,10 @@
 import type { Tenant } from '../api/types'
 import { readPlanCode } from '../lib/plan-selection'
-import { cabinetModules, type CabinetModuleKey } from './module-registry'
+import {
+  cabinetModules,
+  type CabinetModuleKey,
+  type RegisteredFeatureModule,
+} from './module-registry'
 
 export const CABINET_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62})$/
 
@@ -53,4 +57,33 @@ export function resolveAccountDestination(
         : destination
     }
   }
+}
+
+type ModuleFeatureDestination =
+  | { kind: 'list' }
+  | { kind: 'view'; id: string }
+  | { kind: 'create'; partId: string }
+
+export function moduleFeaturePath(
+  slug: string,
+  entry: RegisteredFeatureModule,
+  destination: ModuleFeatureDestination,
+): string {
+  if (
+    !CABINET_SLUG_PATTERN.test(slug) ||
+    !/^[a-z][a-z0-9-]{0,31}$/.test(entry.code)
+  ) {
+    throw new Error('Invalid module destination')
+  }
+  const base = `/app/${slug}/modules/${entry.code}/parts`
+  if (destination.kind === 'list') return base
+  const id = destination.kind === 'view' ? destination.id : destination.partId
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+  ) {
+    throw new Error('Invalid module resource ID')
+  }
+  return destination.kind === 'view'
+    ? `${base}/${id}`
+    : `${base}/new?partId=${id}`
 }

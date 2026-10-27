@@ -7,6 +7,7 @@ import { RouteLoadingFallback } from './route-loading-fallback'
 import type { CabinetModuleScreenProps } from '@/cabinet/ModuleBoundary'
 import {
   cabinetModules,
+  independentModules,
   type CabinetModuleKey,
 } from '@/cabinet/module-registry'
 
@@ -304,6 +305,27 @@ const cabinetChildren = (): RouteObject[] => [
     return releasedCabinetRoutes[key] ?? cabinetModuleRoute(key)
   }),
   ...commerceDetailRoutes,
+  ...independentModules.map(
+    (entry): RouteObject => ({
+      path: `${entry.routeSegment.slice(1)}/*`,
+      hydrateFallbackElement,
+      lazy: async () => {
+        const [{ ModuleBoundary }, { default: Screen }] = await Promise.all([
+          import('@/cabinet/ModuleBoundary'),
+          entry.loadScreen(),
+        ])
+        return {
+          element: (
+            <ModuleBoundary
+              module={entry.parentModule}
+              extension={entry}
+              screen={Screen}
+            />
+          ),
+        }
+      },
+    }),
+  ),
   {
     path: '*',
     hydrateFallbackElement,

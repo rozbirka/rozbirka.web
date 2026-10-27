@@ -17,6 +17,7 @@ import {
   cabinetModules,
   type CabinetModuleDefinition,
   type CabinetModuleKey,
+  type RegisteredFeatureModule,
 } from './module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from './policy'
 import {
@@ -33,6 +34,10 @@ export interface CabinetModuleScreenProps {
 }
 
 export interface ModuleBoundaryProps {
+  extension?: Pick<
+    RegisteredFeatureModule,
+    'viewPermission' | 'mutationPermission' | 'routeSegment'
+  >
   module: CabinetModuleKey
   screen: ComponentType<CabinetModuleScreenProps>
 }
@@ -48,13 +53,19 @@ export function CabinetModuleRoute({ module }: { module: CabinetModuleKey }) {
 
 export function ModuleBoundary({
   module,
+  extension,
   screen: Screen,
 }: ModuleBoundaryProps) {
   const cabinet = useCabinet()
   const t = useT(accessMessages)
-  const definition = cabinetModules[module]
+  const parent = cabinetModules[module]
+  const definition = extension ? { ...parent, ...extension } : parent
   const access = cabinetAccessState(cabinet)
-  const decision = evaluateModuleAccess(definition, access, 'view')
+  const parentDecision = evaluateModuleAccess(parent, access, 'view')
+  const decision =
+    parentDecision.kind === 'allowed'
+      ? evaluateModuleAccess(definition, access, 'view')
+      : parentDecision
 
   if (decision.kind === 'allowed') {
     return (
