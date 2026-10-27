@@ -21,12 +21,6 @@ export const deliveryDrawerMessages = defineMessages({
     receiveConfirm: 'Зафіксувати отримання',
     receiveNote:
       'Післяплату в касу інтеграція не зараховує — це окрема дія в касі.',
-    returnTitle: 'Оформити повернення',
-    returnDescription:
-      'Позиції повертаються на склад, замовлення отримує статус «Повернено». Кошти при цьому не повертаються — повернення грошей оформлюється окремо по кожному платежу в касі.',
-    returnConfirm: 'Підтвердити повернення',
-    returnNote:
-      'Сервіс приймає лише повне повернення без пошкоджень. Часткове або пошкоджене він відхиляє й нічого на склад не повертає — такий випадок розбирається вручну.',
 
     // Booking
     bookingTitle: 'Оформлення відправлення',
@@ -201,12 +195,6 @@ export const deliveryDrawerMessages = defineMessages({
     receiveConfirm: 'Record receipt',
     receiveNote:
       'The integration doesn’t put cash on delivery into the till — that’s a separate action in the till.',
-    returnTitle: 'Process return',
-    returnDescription:
-      'The items go back to stock and the order gets the “Returned” status. No money is refunded here — refunds are made separately for each payment in the till.',
-    returnConfirm: 'Confirm return',
-    returnNote:
-      'Only a full, undamaged return is accepted. A partial or damaged one is refused and nothing goes back to stock — such cases are handled manually.',
 
     bookingTitle: 'Book shipment',
     bookingDescription: 'Within Ukraine, branch to branch.',
@@ -377,12 +365,6 @@ export const deliveryDrawerMessages = defineMessages({
     receiveConfirm: 'Zapisz odbiór',
     receiveNote:
       'Integracja nie księguje pobrania w kasie — to osobne działanie w kasie.',
-    returnTitle: 'Przyjmij zwrot',
-    returnDescription:
-      'Pozycje wracają na stan, zamówienie otrzymuje status „Zwrócone”. Pieniądze nie są przy tym zwracane — zwrot środków robi się osobno dla każdej płatności w kasie.',
-    returnConfirm: 'Potwierdź zwrot',
-    returnNote:
-      'Przyjmowany jest tylko pełny zwrot bez uszkodzeń. Częściowy lub uszkodzony zostanie odrzucony i nic nie wróci na stan — taki przypadek rozwiązuje się ręcznie.',
 
     bookingTitle: 'Nadanie przesyłki',
     bookingDescription: 'Na terenie Ukrainy, z oddziału do oddziału.',
