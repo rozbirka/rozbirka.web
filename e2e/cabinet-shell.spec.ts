@@ -3176,172 +3176,211 @@ for (const viewport of [
   })
 }
 
-test('placement drawer searches large section and shelf choices without moving the page @placement-picker', async ({
-  page,
-}) => {
-  await installCabinetApiBoundary(page, { partsManage: true })
-  const sectionData = Array.from({ length: 100 }, (_, index) => ({
-    id: `section-${index + 1}`,
-    zoneId: 'zone-1',
-    zoneName: 'Зона А',
-    warehouseId: 'warehouse-1',
-    warehouseName: 'Основний склад',
-    name: `Секція ${index + 1}`,
-    code: `S${index + 1}`,
-    isActive: true,
-    qrCode: `section:${index}`,
-  }))
-  const shelfData = Array.from({ length: 100 }, (_, index) => ({
-    id: `shelf-${index + 1}`,
-    sectionId: 'section-100',
-    sectionName: 'Секція 100',
-    zoneId: 'zone-1',
-    zoneName: 'Зона А',
-    warehouseId: 'warehouse-1',
-    warehouseName: 'Основний склад',
-    name: `Полиця ${index + 1}`,
-    code: `P${index + 1}`,
-    isActive: true,
-    qrCode: `shelf:${index}`,
-  }))
-  let saved: Record<string, unknown> | null = null
-  await page.route('**/api/v1/**', async (route) => {
-    const request = route.request()
-    const path = new URL(request.url()).pathname
-    if (path === '/api/v1/parts/part-picker')
-      return fulfillData(route, {
-        id: 'part-picker',
-        name: 'Тестова фара',
-        qrCode: 'part:picker',
-        unit: 'шт',
-        quantityTotal: 1,
-        quantityAvailable: 1,
-        quantityReserved: 0,
-        quantitySold: 0,
-        status: 'available',
-        condition: 'good',
-        photos: [],
-        source: 'batch',
-        car: null,
-        intake: null,
-        desiredSalePrice: null,
-        createdAt: '2026-10-16T10:00:00Z',
-        createdBy: { name: 'Тест' },
+test.describe('placement picker viewport regression', () => {
+  test.beforeEach(async ({ context }, testInfo) => {
+    if (testInfo.project.name === 'ios')
+      await context.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true,
       })
-    if (path === '/api/v1/parts/part-picker/history')
-      return fulfillData(route, { events: [] })
-    if (path === '/api/v1/parts/part-picker/inventory-zones') {
-      if (request.method() === 'PUT')
-        saved = request.postDataJSON() as Record<string, unknown>
-      return fulfillData(route, [
-        {
-          zoneId: 'zone-1',
-          zoneName: 'Зона А',
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Основний склад',
-          zoneCode: 'A',
-          zoneQrCode: 'zone:1',
-          isSystemUnassigned: false,
-        },
-      ])
-    }
-    if (path === '/api/v1/inventory/zones')
-      return fulfillData(route, [
-        {
-          id: 'zone-1',
-          name: 'Зона А',
-          code: 'A',
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Основний склад',
-          qrCode: 'zone:1',
-          isActive: true,
-          isSystemUnassigned: false,
-        },
-      ])
-    if (path === '/api/v1/inventory/sections')
-      return fulfillData(route, sectionData)
-    if (path === '/api/v1/inventory/shelves')
-      return fulfillData(route, shelfData)
-    if (path === '/api/v1/parts/facets')
-      return fulfillData(route, {
-        zones: [],
-        warehouses: [],
-        origins: [],
-        makes: [],
-        models: [],
-        statuses: [],
-        conditions: [],
-      })
-    await route.fallback()
   })
-  await loginFrom(page)
-  for (const width of [1440, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 })
-    await page.goto('/app/koval/parts/part-picker')
-    await page.getByRole('button', { name: 'Перемістити', exact: true }).click()
-    const drawer = page.getByRole('dialog', { name: 'Розміщення на складі' })
-    const sectionTrigger = drawer.getByRole('searchbox', {
-      name: 'Пошук секції',
-    })
-    await expect(sectionTrigger).toBeVisible()
-    const pageScroll = await page.evaluate(() => scrollY)
-    await expect(page.getByRole('option')).toHaveCount(0)
-    await sectionTrigger.click()
-    const initialList = page.locator('[data-search-picker-scroll]')
-    const initialMetrics = await initialList.evaluate((el) => ({
-      height: el.clientHeight,
-      scrollHeight: el.scrollHeight,
+  test.afterEach(async ({ context }, testInfo) => {
+    if (testInfo.project.name === 'ios') {
+      const path = testInfo.outputPath('placement-trace.zip')
+      await context.tracing.stop({ path })
+      await testInfo.attach('trace', { path, contentType: 'application/zip' })
+    }
+  })
+
+  test('placement drawer searches large section and shelf choices without moving the page @placement-picker', async ({
+    page,
+  }) => {
+    await installCabinetApiBoundary(page, { partsManage: true })
+    const sectionData = Array.from({ length: 100 }, (_, index) => ({
+      id: `section-${index + 1}`,
+      zoneId: 'zone-1',
+      zoneName: 'Зона А',
+      warehouseId: 'warehouse-1',
+      warehouseName: 'Основний склад',
+      name: `Секція ${index + 1}`,
+      code: `S${index + 1}`,
+      isActive: true,
+      qrCode: `section:${index}`,
     }))
-    expect(initialMetrics.height).toBeLessThanOrEqual(460)
-    expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.height)
-    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
-    await sectionSearch.fill('s100')
-    await expect(page.getByRole('option')).toHaveCount(2)
-    await page.getByRole('option', { name: /Секція 100/ }).click()
-    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
-    await expect(page.getByRole('option')).toHaveCount(2)
-    const popup = page.getByRole('listbox')
-    const bounds = await popup.boundingBox()
-    expect(bounds).not.toBeNull()
-    expect(bounds!.width).toBeLessThanOrEqual(width)
-    expect(bounds!.height).toBeLessThanOrEqual(460)
-    await page.keyboard.press('Escape')
-    await expect(drawer).toBeVisible()
-    await expect(page.getByRole('listbox')).toHaveCount(0)
-    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
-    await page.keyboard.press('Enter')
-    await expect(
-      drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
-    ).toHaveValue('Полиця 100')
-    const overflow = await page.evaluate(() => ({
-      width: innerWidth,
-      scroll: document.documentElement.scrollWidth,
-      nodes: [...document.querySelectorAll('body *')]
-        .filter((el) => {
-          const r = el.getBoundingClientRect()
-          return r.width > 0 && r.right > innerWidth + 1
-        })
-        .slice(-12)
-        .map((el) => ({
-          tag: el.tagName,
-          class: el.className,
-          right: el.getBoundingClientRect().right,
-          text: el.textContent?.slice(0, 60),
-        })),
-    }))
-    expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(width)
-    expect(await page.evaluate(() => scrollY)).toBe(pageScroll)
-    await drawer.getByRole('button', { name: 'Зберегти розміщення' }).click()
-    await expect(drawer).toHaveCount(0)
-    expect(saved).toEqual({
-      zoneIds: ['zone-1'],
+    const shelfData = Array.from({ length: 100 }, (_, index) => ({
+      id: `shelf-${index + 1}`,
       sectionId: 'section-100',
-      shelfId: 'shelf-100',
+      sectionName: 'Секція 100',
+      zoneId: 'zone-1',
+      zoneName: 'Зона А',
+      warehouseId: 'warehouse-1',
+      warehouseName: 'Основний склад',
+      name: `Полиця ${index + 1}`,
+      code: `P${index + 1}`,
+      isActive: true,
+      qrCode: `shelf:${index}`,
+    }))
+    let saved: Record<string, unknown> | null = null
+    await page.route('**/api/v1/**', async (route) => {
+      const request = route.request()
+      const path = new URL(request.url()).pathname
+      if (path === '/api/v1/parts/part-picker')
+        return fulfillData(route, {
+          id: 'part-picker',
+          name: 'Тестова фара',
+          qrCode: 'part:picker',
+          unit: 'шт',
+          quantityTotal: 1,
+          quantityAvailable: 1,
+          quantityReserved: 0,
+          quantitySold: 0,
+          status: 'available',
+          condition: 'good',
+          photos: [],
+          source: 'batch',
+          car: null,
+          intake: null,
+          desiredSalePrice: null,
+          createdAt: '2026-10-16T10:00:00Z',
+          createdBy: { name: 'Тест' },
+        })
+      if (path === '/api/v1/parts/part-picker/history')
+        return fulfillData(route, { events: [] })
+      if (path === '/api/v1/parts/part-picker/inventory-zones') {
+        if (request.method() === 'PUT')
+          saved = request.postDataJSON() as Record<string, unknown>
+        return fulfillData(route, [
+          {
+            zoneId: 'zone-1',
+            zoneName: 'Зона А',
+            warehouseId: 'warehouse-1',
+            warehouseName: 'Основний склад',
+            zoneCode: 'A',
+            zoneQrCode: 'zone:1',
+            isSystemUnassigned: false,
+          },
+        ])
+      }
+      if (path === '/api/v1/inventory/zones')
+        return fulfillData(route, [
+          {
+            id: 'zone-1',
+            name: 'Зона А',
+            code: 'A',
+            warehouseId: 'warehouse-1',
+            warehouseName: 'Основний склад',
+            qrCode: 'zone:1',
+            isActive: true,
+            isSystemUnassigned: false,
+          },
+        ])
+      if (path === '/api/v1/inventory/sections')
+        return fulfillData(route, sectionData)
+      if (path === '/api/v1/inventory/shelves')
+        return fulfillData(route, shelfData)
+      if (path === '/api/v1/parts/facets')
+        return fulfillData(route, {
+          zones: [],
+          warehouses: [],
+          origins: [],
+          makes: [],
+          models: [],
+          statuses: [],
+          conditions: [],
+        })
+      await route.fallback()
     })
-    await expect(page).toHaveURL(/\/parts\/part-picker$/)
-  }
+    const scenarioStarted = Date.now()
+    await loginFrom(page)
+    for (const width of [1440, 390, 320]) {
+      await test.step(`placement choices at ${width}px`, async () => {
+        console.info(
+          `[placement-picker] ${width}px start ${Date.now() - scenarioStarted}ms`,
+        )
+        await page.setViewportSize({ width, height: 900 })
+        await page.goto('/app/koval/parts/part-picker')
+        await page
+          .getByRole('button', { name: 'Перемістити', exact: true })
+          .click()
+        const drawer = page.getByRole('dialog', {
+          name: 'Розміщення на складі',
+        })
+        const sectionTrigger = drawer.getByRole('searchbox', {
+          name: 'Пошук секції',
+        })
+        await expect(sectionTrigger).toBeVisible()
+        const pageScroll = await page.evaluate(() => scrollY)
+        await expect(page.getByRole('option')).toHaveCount(0)
+        await sectionTrigger.click()
+        const initialList = page.locator('[data-search-picker-scroll]')
+        const initialMetrics = await initialList.evaluate((el) => ({
+          height: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+        }))
+        expect(initialMetrics.height).toBeLessThanOrEqual(460)
+        expect(initialMetrics.scrollHeight).toBeGreaterThan(
+          initialMetrics.height,
+        )
+        const sectionSearch = page.getByRole('searchbox', {
+          name: 'Пошук секції',
+        })
+        await sectionSearch.fill('s100')
+        await expect(page.getByRole('option')).toHaveCount(2)
+        await page.getByRole('option', { name: /Секція 100/ }).click()
+        await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+        await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+        await expect(page.getByRole('option')).toHaveCount(2)
+        const popup = page.getByRole('listbox')
+        const bounds = await popup.boundingBox()
+        expect(bounds).not.toBeNull()
+        expect(bounds!.width).toBeLessThanOrEqual(width)
+        expect(bounds!.height).toBeLessThanOrEqual(460)
+        await page.keyboard.press('Escape')
+        await expect(drawer).toBeVisible()
+        await expect(page.getByRole('listbox')).toHaveCount(0)
+        await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+        await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+        await page.keyboard.press('Enter')
+        await expect(
+          drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
+        ).toHaveValue('Полиця 100')
+        const overflow = await page.evaluate(() => ({
+          width: innerWidth,
+          scroll: document.documentElement.scrollWidth,
+          nodes: [...document.querySelectorAll('body *')]
+            .filter((el) => {
+              const r = el.getBoundingClientRect()
+              return r.width > 0 && r.right > innerWidth + 1
+            })
+            .slice(-12)
+            .map((el) => ({
+              tag: el.tagName,
+              class: el.className,
+              right: el.getBoundingClientRect().right,
+              text: el.textContent?.slice(0, 60),
+            })),
+        }))
+        expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(
+          width,
+        )
+        expect(await page.evaluate(() => scrollY)).toBe(pageScroll)
+        await drawer
+          .getByRole('button', { name: 'Зберегти розміщення' })
+          .click()
+        await expect(drawer).toHaveCount(0)
+        expect(saved).toEqual({
+          zoneIds: ['zone-1'],
+          sectionId: 'section-100',
+          shelfId: 'shelf-100',
+        })
+        await expect(page).toHaveURL(/\/parts\/part-picker$/)
+        console.info(
+          `[placement-picker] ${width}px complete ${Date.now() - scenarioStarted}ms`,
+        )
+      })
+    }
+  })
 })
 
 for (const width of [375, 1440]) {
