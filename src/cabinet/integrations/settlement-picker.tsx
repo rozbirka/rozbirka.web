@@ -31,6 +31,7 @@ const prohibited = (
  * it, so the field only accepts what the list returned.
  */
 export function SettlementPicker({
+  error,
   integrationId,
   label,
   onPick,
@@ -39,6 +40,8 @@ export function SettlementPicker({
   search,
   use,
 }: {
+  /** A form's own verdict on the field, e.g. «Оберіть населений пункт». */
+  error?: string | undefined
   integrationId: string
   label?: string
   onPick: (settlement: NovaPoshtaSettlement | null) => void
@@ -131,7 +134,7 @@ export function SettlementPicker({
   return (
     <div ref={boxRef}>
       <Field
-        error={failure ?? undefined}
+        error={failure ?? error ?? undefined}
         hint={
           term === '' && savedHint !== undefined
             ? savedHint

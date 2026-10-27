@@ -11,7 +11,6 @@ import {
   readinessNextStep,
   readinessPassed,
   shipmentChip,
-  shipmentFacts,
 } from './delivery-view'
 
 const payment = (over: Partial<DeliveryPayment> = {}): DeliveryPayment => ({
@@ -141,32 +140,6 @@ it('names the order and the parcel separately', () => {
   expect(
     shipmentChip(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').label,
   ).toBe('Передано перевізнику')
-})
-
-it('reads post-payment against what the order still owes', () => {
-  const matching = shipmentFacts(delivery(), shipment(), 'uk')
-  expect(matching[1]).toMatchObject({
-    label: 'Післяплата',
-    note: 'дорівнює залишку',
-    tone: 'ok',
-  })
-
-  const drifted = shipmentFacts(
-    delivery({ outstandingUah: 1200 }),
-    shipment({ codUah: 0 }),
-    'uk',
-  )
-  expect(drifted[1]).toMatchObject({
-    note: 'не дорівнює залишку',
-    tone: 'danger',
-  })
-})
-
-it('sums the parcel and keeps its dimensions beside it', () => {
-  expect(shipmentFacts(delivery(), shipment(), 'uk')[2]).toMatchObject({
-    value: '1 місце · 42 кг',
-    note: '60 × 40 × 35 см',
-  })
 })
 
 it('offers exactly the step the order is waiting for', () => {

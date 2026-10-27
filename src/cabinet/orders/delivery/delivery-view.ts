@@ -163,104 +163,6 @@ export function shipmentChip(
   return { label: tr(locale, 'shipNone'), tone: 'warn' }
 }
 
-export interface ShipmentFact {
-  key: string
-  label: string
-  value: string
-  note: string
-  tone: 'ink' | 'ok' | 'warn' | 'danger' | 'dim'
-}
-
-/**
- * The four facts a manager checks before touching anything. Post-payment is
- * the one that decides whether the waybill may be created at all: Core keeps
- * it equal to what the order still owes, and a mismatch is a refusal waiting
- * to happen.
- */
-export function shipmentFacts(
-  delivery: DeliveryOrder,
-  shipment: Shipment | null,
-  locale: Locale,
-): ShipmentFact[] {
-  const created = hasWaybill(shipment)
-  const parcels = shipment?.draft.parcels ?? []
-  const weight = parcels.reduce((sum, parcel) => sum + parcel.weightKg, 0)
-  const first = parcels[0]
-  const codMatches =
-    shipment?.codUah != null && shipment.codUah === delivery.outstandingUah
-
-  return [
-    {
-      key: 'waybill',
-      label: tr(locale, 'stepWaybill'),
-      value: created ? (shipment?.number ?? '—') : tr(locale, 'factNotCreated'),
-      note: created
-        ? ''
-        : delivery.outstandingUah > 0
-          ? tr(locale, 'factWithCod')
-          : tr(locale, 'factCanCreate'),
-      tone: created ? 'ink' : 'warn',
-    },
-    {
-      key: 'cod',
-      label: tr(locale, 'factCod'),
-      value: shipment?.codUah == null ? '—' : uah(shipment.codUah, locale),
-      note: !created
-        ? ''
-        : codMatches
-          ? tr(locale, 'factCodMatches')
-          : tr(locale, 'factCodMismatch'),
-      tone: !created ? 'dim' : codMatches ? 'ok' : 'danger',
-    },
-    {
-      key: 'parcels',
-      label: tr(locale, 'factParcel'),
-      value:
-        parcels.length === 0
-          ? '—'
-          : tr(locale, 'factParcelValue', {
-              count: parcels.length,
-              weight,
-            }),
-      note:
-        first === undefined
-          ? ''
-          : tr(locale, 'factDimensions', {
-              length: first.lengthCm,
-              width: first.widthCm,
-              height: first.heightCm,
-            }),
-      tone: parcels.length === 0 ? 'dim' : 'ink',
-    },
-    {
-      key: 'deposit',
-      label: tr(locale, 'factDeposit'),
-      value:
-        delivery.requiredDepositUah <= 0
-          ? '—'
-          : uah(delivery.requiredDepositUah, locale),
-      note: !delivery.depositRequired
-        ? tr(locale, 'depositNotRequired')
-        : delivery.depositWaived
-          ? tr(locale, 'depositWaivedTrusted')
-          : delivery.requiredDepositUah <= 0
-            ? tr(locale, 'depositAfterQuote')
-            : delivery.depositSatisfied
-              ? tr(locale, 'depositPaid')
-              : tr(locale, 'depositShort', {
-                  amount: uah(delivery.depositShortfallUah, locale),
-                }),
-      tone: !delivery.depositRequired
-        ? 'dim'
-        : delivery.depositWaived || delivery.depositSatisfied
-          ? 'ok'
-          : delivery.requiredDepositUah <= 0
-            ? 'dim'
-            : 'warn',
-    },
-  ]
-}
-
 /**
  * How far the money has got. «Частково» has to mean what it says: an order
  * nobody has paid anything against is not partly paid, and calling it that
@@ -401,11 +303,14 @@ export function readiness(
         !delivery.depositRequired ||
         delivery.depositWaived ||
         (delivery.requiredDepositUah > 0 && delivery.depositSatisfied),
-      // Before the quote there is no figure to pay at all.
+      // Before the quote there is no figure to pay at all, and a deposit
+      // still owed is paid in the order, not in the integration's settings:
+      // neither keeps the order off the confirmation, which says why it
+      // cannot create the waybill yet.
       pending:
         delivery.depositRequired &&
         !delivery.depositWaived &&
-        delivery.requiredDepositUah <= 0,
+        (delivery.requiredDepositUah <= 0 || !delivery.depositSatisfied),
     },
     {
       key: 'quote',

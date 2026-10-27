@@ -182,6 +182,9 @@ const order: OrderDetail = {
   createdByName: 'Дмитро',
 }
 
+const draftShipment = (over: Partial<Shipment> = {}): Shipment =>
+  shipment({ state: 'Draft', number: null, quoteAt: null, ...over })
+
 /** An active dispatch point, so the settings half of readiness passes. */
 const point = () => ({
   id: 'point-1',
@@ -246,7 +249,9 @@ it('opens on what was sold and keeps the parcel behind its own tab', async () =>
   expect(screen.queryByRole('region', { name: 'Нова пошта' })).toBeNull()
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  expect(screen.getByRole('region', { name: 'Нова пошта' })).toBeVisible()
+  expect(
+    screen.getByRole('region', { name: 'Доставка · Нова пошта' }),
+  ).toBeVisible()
   expect(screen.queryByRole('region', { name: 'Позиції' })).toBeNull()
 })
 
@@ -388,16 +393,20 @@ it('lets an unpaid, uncalculated order reach the booking drawer', async () => {
     load({
       money: delivery({ outstandingUah: 1200, requiredDepositUah: 0 }),
       points: [point()],
+      shipment: draftShipment(),
     }),
   )
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  await user.click(screen.getByRole('button', { name: 'Оформити доставку' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
 
   const drawer = await screen.findByRole('dialog', {
     name: 'Перевірка перед створенням ТТН',
   })
-  expect(drawer).toHaveTextContent('Наступний крок — розрахувати доставку')
+  expect(drawer).toHaveTextContent('Перешкод не знайдено')
+  expect(drawer).toHaveTextContent('зробимо на наступному кроці')
   expect(
     within(drawer).getByRole('button', { name: 'Продовжити оформлення' }),
   ).toBeEnabled()
@@ -406,10 +415,18 @@ it('lets an unpaid, uncalculated order reach the booking drawer', async () => {
 it('stops only at what the booking drawer cannot fix', async () => {
   const user = userEvent.setup()
   // No active dispatch point: that one lives in settings, not on the next step.
-  renderBody(load({ money: delivery({ outstandingUah: 1200 }), points: [] }))
+  renderBody(
+    load({
+      money: delivery({ outstandingUah: 1200 }),
+      points: [],
+      shipment: draftShipment(),
+    }),
+  )
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  await user.click(screen.getByRole('button', { name: 'Оформити доставку' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
 
   const drawer = await screen.findByRole('dialog', {
     name: 'Перевірка перед створенням ТТН',
@@ -448,7 +465,7 @@ it('speaks British English on both halves of the card', async () => {
   ).toBeVisible()
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
-  const carrier = screen.getByRole('region', { name: 'Nova Poshta' })
+  const carrier = screen.getByRole('region', { name: 'Delivery · Nova Poshta' })
   expect(within(carrier).getByText('Waybill created')).toBeVisible()
   expect(within(carrier).getByText('1 piece · 42 kg')).toBeVisible()
   expect(
@@ -549,7 +566,7 @@ it('says a waybill of a lost cabinet no longer updates and offers recovery', asy
   )
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  const card = screen.getByRole('region', { name: 'Нова пошта' })
+  const card = screen.getByRole('region', { name: 'Доставка · Нова пошта' })
   expect(
     await within(card).findByText(
       'Статус ТТН 20 4500 1187 2209 не оновлюється: ключ попереднього кабінету більше не діє.',

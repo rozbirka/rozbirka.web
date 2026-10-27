@@ -25,7 +25,7 @@ export interface FormDialogProps {
   /** Wider dialog for forms with two columns. */
   size?: 'md' | 'lg'
   /** Runs when the dialog closes, for callers that restore focus themselves. */
-  onCloseAutoFocus?: (event: Event) => void
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
 }
 
 /**
@@ -163,7 +163,7 @@ export function Sheet({
   /** Let a nested editor consume Escape before the sheet dismisses. */
   onEscapeKeyDown?: (event: KeyboardEvent) => void
   /** Restore focus to a caller-owned trigger when the sheet closes. */
-  onCloseAutoFocus?: (event: Event) => void
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
 }) {
   const tc = useT(commonMessages)
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CustomerSearchPicker } from '@/components/customers/CustomerSearchPicker'
 import {
   Button,
@@ -14,145 +14,142 @@ import {
   type NovaPoshtaDivision,
   type NovaPoshtaSettlement,
 } from '@/api/integrations'
-import { cn } from '@/lib/utils'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
-import {
-  shippingApi,
-  type ParcelInput,
-  type PayerType,
-  type Shipment,
-  type ShipmentDraft,
-} from '@/api/shipping'
-import type { BusinessCountry } from '@/api/tenant-settings'
-import { commonMessages, formatMoney, useFormat, useLocale, useT } from '@/i18n'
+import { shippingApi, type Shipment, type ShipmentDraft } from '@/api/shipping'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import { isValidContactPhone, normalizePhone } from '@/lib/phone'
+import { cn } from '@/lib/utils'
 import { SettlementPicker } from '../../integrations/settlement-picker'
-import {
-  prepayment,
-  quotePresentation,
-  quoteState,
-  sameDraft,
-  type QuoteState,
-} from './delivery-labels'
-import { deliveryDrawerMessages } from './drawer-messages'
 import { SheetGroup } from '../sheet-group'
-import { uah, wholeUah } from './delivery-money'
+import { hryvnia, uah } from './delivery-money'
+import { deliveryDrawerMessages } from './drawer-messages'
+import { deliveryProblemMessage } from './nova-poshta-availability'
+import { waybillMessages } from './waybill-messages'
 import {
-  deliveryProblemMessage,
-  phoneExample,
-} from './nova-poshta-availability'
+  dimensionsLine,
+  parcelsFrom,
+  parseDimensions,
+  weightOf,
+} from './waybill-view'
 
-const PHONE = /^\+?[1-9]\d{7,14}$/
+type FieldKey =
+  | 'name'
+  | 'phone'
+  | 'settlement'
+  | 'division'
+  | 'point'
+  | 'places'
+  | 'weight'
+  | 'dimensions'
+  | 'goods'
 
-interface ParcelDraft {
-  weightKg: string
-  lengthCm: string
-  widthCm: string
-  heightCm: string
-}
+const ORDER: readonly FieldKey[] = [
+  'name',
+  'phone',
+  'settlement',
+  'division',
+  'point',
+  'places',
+  'weight',
+  'dimensions',
+  'goods',
+]
 
-const emptyParcel: ParcelDraft = {
-  weightKg: '',
-  lengthCm: '',
-  widthCm: '',
-  heightCm: '',
-}
+const MISSING = {
+  name: 'missingName',
+  phone: 'missingPhone',
+  settlement: 'missingSettlement',
+  division: 'missingDivision',
+  point: 'missingPoint',
+  places: 'missingPlaces',
+  weight: 'missingWeight',
+  dimensions: 'missingDimensions',
+  goods: 'missingGoods',
+} as const
 
-const toParcelDraft = (parcel: ParcelInput): ParcelDraft => ({
-  weightKg: String(parcel.weightKg),
-  lengthCm: String(parcel.lengthCm),
-  widthCm: String(parcel.widthCm),
-  heightCm: String(parcel.heightCm),
-})
+const ERROR = {
+  name: 'errorName',
+  phone: 'errorPhone',
+  settlement: 'errorSettlement',
+  division: 'errorDivision',
+  point: 'errorPoint',
+  places: 'errorPlaces',
+  weight: 'errorWeight',
+  dimensions: 'errorDimensions',
+  goods: 'missingGoods',
+} as const
 
 const decimal = (value: string): number | null => {
   const parsed = Number(value.replace(',', '.').trim())
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  return value.trim() !== '' && Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : null
 }
+
+const formatNumber = (value: number) => String(value).replace('.', ',')
 
 /**
- * The agreed goods total, where an empty field is an answer: goods already
- * paid for owe nothing and the parcel travels without a post-payment. `decimal`
- * treats zero as absent, which is right for a weight and wrong here.
- */
-const hryvnia = (value: string): number | null => {
-  const text = value.trim()
-  if (text === '') return 0
-  const parsed = Number(text.replace(',', '.'))
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
-}
-
-function Section({
-  title,
-  aside,
-  children,
-}: {
-  title: string
-  aside?: React.ReactNode
-  children: React.ReactNode
-}) {
-  // Scheme 1b: titled groups separated by the body's gap, no rules.
-  return (
-    <SheetGroup aside={aside} className="gap-3" title={title}>
-      {children}
-    </SheetGroup>
-  )
-}
-
-/**
- * Booking one delivery for one order. The form is a draft on Core until it is
- * quoted, and Core clears the quote whenever the draft changes — so the panel
- * never offers a waybill on numbers that no longer answer the form.
+ * «Оформлення доставки» (module 46, 4.2–4.3): who receives the parcel, where
+ * it goes, where it leaves from and what it is. It saves a draft and nothing
+ * more — the waybill is created separately, after the readiness check and
+ * the quote — so the sheet never talks to the carrier beyond its catalogues.
+ *
+ * A missing detail is named in the notice at the top and on the field
+ * itself; what was typed stays in the form.
  */
 export function DeliveryDrawer({
-  countryCode = null,
   customerSearchAllowed = false,
   customerName,
   customerPhone,
-  declaredValue,
   delivery,
   dispatchPoints,
-  paid,
   integrationId,
-  onChanged,
   onClose,
+  onCloseAutoFocus,
   onMoneyChanged,
+  onSaved,
   orderId,
+  orderNumber,
+  prefill = null,
   shipment,
 }: {
-  /** The tenant's country; only picks the phone example. */
-  countryCode?: BusinessCountry | null
   customerSearchAllowed?: boolean
   customerName: string | null
   customerPhone: string | null
-  declaredValue: number | null
-  /** The order's money, so the post-payment can be set where it is decided. */
+  /** The order's money: the post-payment is whatever it still owes. */
   delivery: DeliveryOrder
-  /**
-   * What the customer has already handed over, in whatever currency they used.
-   * A dollar payment is invisible to the hryvnia post-payment arithmetic, so
-   * the only thing standing between the customer and paying twice is seeing it
-   * here, beside the field that decides what the carrier collects.
-   */
-  paid: { amount: number; currency: string } | null
   dispatchPoints: NovaPoshtaDispatchPoint[]
   integrationId: string
-  onChanged: (shipment: Shipment) => void
   onClose: () => void
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
   onMoneyChanged: (delivery: DeliveryOrder) => void
+  onSaved: (shipment: Shipment) => void
   orderId: string
+  orderNumber: number
+  /**
+   * What to start from when there is no live draft: the waybill just
+   * cancelled for a change, with that change already applied.
+   */
+  prefill?: ShipmentDraft | null
   shipment: Shipment | null
 }) {
   const { locale } = useLocale()
-  const t = useT(deliveryDrawerMessages)
+  const t = useT(waybillMessages)
+  const td = useT(deliveryDrawerMessages)
   const tc = useT(commonMessages)
-  const format = useFormat()
-  const example = phoneExample(countryCode)
-  const saved = shipment?.draft ?? null
+  const saved =
+    (shipment?.state === 'Draft' ? shipment.draft : null) ?? prefill ?? null
+  const activePoint = (id: string | null | undefined) =>
+    dispatchPoints.find((point) => point.id === id) ?? null
   const defaultPoint =
     dispatchPoints.find((point) => point.isDefault) ?? dispatchPoints[0] ?? null
 
+  // A draft pointing at a retired dispatch point moves to the current one:
+  // the old sender is exactly what has to be checked again (frame 2.9).
   const [pointId, setPointId] = useState(
-    shipment?.dispatchPointId ?? defaultPoint?.id ?? '',
+    activePoint(saved?.dispatchPointId ?? shipment?.dispatchPointId)?.id ??
+      defaultPoint?.id ??
+      '',
   )
   const [name, setName] = useState(saved?.recipient.name ?? customerName ?? '')
   const [recipientCustomerId, setRecipientCustomerId] = useState<string | null>(
@@ -161,17 +158,15 @@ export function DeliveryDrawer({
   const [phone, setPhone] = useState(
     saved?.recipient.phone ?? customerPhone ?? '',
   )
-  const [isCompany, setIsCompany] = useState(
-    saved?.recipient.companyName != null,
-  )
-  const [companyName, setCompanyName] = useState(
-    saved?.recipient.companyName ?? '',
-  )
-  const [companyTin, setCompanyTin] = useState(
-    saved?.recipient.companyTin ?? '',
-  )
   const [settlement, setSettlement] = useState<NovaPoshtaSettlement | null>(
-    null,
+    saved?.recipient.settlementRef
+      ? {
+          ref: saved.recipient.settlementRef,
+          name: saved.recipient.settlementName ?? '',
+          prohibitedSending: null,
+          prohibitedIssuance: null,
+        }
+      : null,
   )
   const [loadedDivisions, setLoadedDivisions] = useState<{
     settlementRef: string
@@ -180,31 +175,33 @@ export function DeliveryDrawer({
   const [divisionChoice, setDivisionChoice] = useState<string | null>(
     saved?.recipient.warehouseRef ?? null,
   )
-  const [parcels, setParcels] = useState<ParcelDraft[]>(
-    saved?.parcels.length ? saved.parcels.map(toParcelDraft) : [emptyParcel],
+  const [places, setPlaces] = useState(
+    saved?.parcels.length ? String(saved.parcels.length) : '1',
   )
-  const [description, setDescription] = useState(
-    saved?.description ?? t('cargoDescriptionDefault'),
+  const [weight, setWeight] = useState(
+    saved?.parcels.length ? formatNumber(weightOf(saved.parcels)) : '',
   )
-  const [declared, setDeclared] = useState(
-    String(saved?.declaredValueUah ?? declaredValue ?? ''),
+  const [dims, setDims] = useState(
+    saved?.parcels.length ? dimensionsLine(saved.parcels) : '',
   )
-  const [payer, setPayer] = useState<PayerType>(saved?.payerType ?? 'Recipient')
-  // The price of the goods, in hryvnia. The post-payment follows from it —
-  // never the other way round, or editing what the carrier collects would
-  // quietly rewrite what the order is worth.
-  const [goods, setGoods] = useState(
-    delivery.agreedTotalUah > 0 ? String(delivery.agreedTotalUah) : '',
-  )
+  // Core keeps the agreed hryvnia total apart from the order lines and only
+  // learns it here; an order configured without one has to be told what the
+  // goods cost before the post-payment means anything.
+  const askGoods = delivery.agreedTotalUah <= 0
+  const [goods, setGoods] = useState('')
 
-  const [busy, setBusy] = useState<null | 'draft' | 'estimate' | 'create'>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [quoteFailure, setQuoteFailure] = useState<string | null>(null)
   const [lookupError, setLookupError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<Partial<Record<FieldKey, true>>>({})
+  const alertRef = useRef<HTMLDivElement | null>(null)
+  // One box per field: the pickers own their inputs, so focus finds the
+  // control inside the box rather than needing a ref into each component.
+  const boxes = useRef<Partial<Record<FieldKey, HTMLDivElement | null>>>({})
+  const focusField = (key: FieldKey) =>
+    boxes.current[key]?.querySelector<HTMLElement>('input, select')?.focus()
 
-  // The saved draft's settlement stands until another is picked.
-  const settlementRef =
-    settlement?.ref ?? saved?.recipient.settlementRef ?? null
+  const settlementRef = settlement?.ref ?? null
 
   useEffect(() => {
     if (settlementRef === null) return
@@ -213,22 +210,21 @@ export function DeliveryDrawer({
       .divisions(integrationId, settlementRef, 1, { signal: controller.signal })
       .then(
         (page) => {
-          if (!controller.signal.aborted) {
+          if (!controller.signal.aborted)
             setLoadedDivisions({
               settlementRef,
               items: page.items.filter((item) => item.receivingAllowed),
             })
-          }
         },
         () => {
           if (!controller.signal.aborted) {
             setLoadedDivisions({ settlementRef, items: [] })
-            setLookupError(t('divisionsUnavailable'))
+            setLookupError(td('divisionsUnavailable'))
           }
         },
       )
     return () => controller.abort()
-  }, [integrationId, settlementRef, t])
+  }, [integrationId, settlementRef, td])
 
   const divisions =
     settlementRef !== null && loadedDivisions?.settlementRef === settlementRef
@@ -236,524 +232,437 @@ export function DeliveryDrawer({
       : null
   const division =
     divisions?.find((item) => item.ref === divisionChoice) ?? null
-  const warehouseRef = division?.ref ?? null
+  const point = activePoint(pointId)
 
-  const trimmedPhone = phone.replace(/[\s()-]/g, '')
-  const parcelValues = parcels.map((parcel) => ({
-    weightKg: decimal(parcel.weightKg),
-    lengthCm: decimal(parcel.lengthCm),
-    widthCm: decimal(parcel.widthCm),
-    heightCm: decimal(parcel.heightCm),
-  }))
-  const parcelsReady =
-    parcelValues.length > 0 &&
-    parcelValues.every(
-      (parcel) =>
-        parcel.weightKg !== null &&
-        parcel.lengthCm !== null &&
-        parcel.widthCm !== null &&
-        parcel.heightCm !== null,
-    )
-  const declaredValueUah = decimal(declared)
-  const goodsUah = hryvnia(goods)
-  // What Nova Poshta will hold at the counter: the goods less what the
-  // customer has already handed over.
-  const codUah =
-    goodsUah === null ? null : Math.max(0, goodsUah - delivery.appliedUah)
-  const ready =
-    name.trim() !== '' &&
-    PHONE.test(trimmedPhone) &&
-    settlementRef !== null &&
-    warehouseRef !== null &&
-    parcelsReady &&
-    declaredValueUah !== null &&
-    description.trim() !== '' &&
-    pointId !== '' &&
-    (!isCompany || (companyName.trim() !== '' && companyTin.trim() !== ''))
+  const e164 = normalizePhone(phone, 'UA')
+  const placesValue = /^\d+$/.test(places.trim()) ? Number(places) : null
+  const weightValue = decimal(weight)
+  const dimsValue = parseDimensions(dims)
+  const goodsValue = askGoods ? hryvnia(goods) : delivery.agreedTotalUah
+  const declared = askGoods ? (goodsValue ?? 0) : delivery.agreedTotalUah
+  const balance = askGoods
+    ? Math.max(0, (goodsValue ?? 0) - delivery.appliedUah)
+    : delivery.outstandingUah
 
-  const draft: ShipmentDraft | null = ready
-    ? {
-        recipient: {
-          name: name.trim(),
-          phone: trimmedPhone,
-          settlementRef: settlementRef,
-          warehouseRef: warehouseRef,
-          // Carried for the cabinet to show; the carrier reads the references.
-          warehouseName: division?.name ?? null,
-          settlementName: settlement?.name ?? null,
-          companyName: isCompany ? companyName.trim() : null,
-          companyTin: isCompany ? companyTin.trim() : null,
-        },
-        parcels: parcelValues as ParcelInput[],
-        declaredValueUah: declaredValueUah,
-        payerType: payer,
-        description: description.trim(),
-        dispatchPointId: pointId,
+  const problems = (): FieldKey[] =>
+    ORDER.filter((key) => {
+      switch (key) {
+        case 'name':
+          return name.trim() === ''
+        case 'phone':
+          return !isValidContactPhone(e164)
+        case 'settlement':
+          return settlementRef === null
+        case 'division':
+          return division === null
+        case 'point':
+          return point === null
+        case 'places':
+          return placesValue === null || placesValue < 1
+        case 'weight':
+          return weightValue === null
+        case 'dimensions':
+          return dimsValue === null
+        case 'goods':
+          return askGoods && (goodsValue === null || goodsValue <= 0)
       }
-    : null
+    })
 
-  const dirty =
-    saved === null ||
-    draft === null ||
-    !sameDraft(draft, { ...saved, dispatchPointId: pointId })
+  // Focus lands on the first required field still empty (section 11).
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const first = problems()[0] ?? 'name'
+      focusField(first)
+    })
+    return () => window.cancelAnimationFrame(frame)
+    // Only on open: later focus belongs to the person typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const state: QuoteState = quoteState({
-    shipment,
-    dirty,
-    busy: busy === 'estimate',
-    failure: quoteFailure,
-  })
-  const quote = quotePresentation(state, locale)
-  const total = prepayment(shipment)
-
-  const run = async <T,>(
-    kind: 'draft' | 'estimate' | 'create',
-    action: () => Promise<T>,
-  ): Promise<T | null> => {
-    setBusy(kind)
+  const save = async () => {
+    if (busy) return
+    const missing = problems()
+    if (missing.length > 0) {
+      setErrors(Object.fromEntries(missing.map((key) => [key, true])))
+      setError(null)
+      window.requestAnimationFrame(() => focusField(missing[0]!))
+      return
+    }
+    setErrors({})
+    const draft: ShipmentDraft = {
+      recipient: {
+        name: name.trim(),
+        phone: e164,
+        settlementRef: settlementRef!,
+        warehouseRef: division!.ref,
+        // Carried for the cabinet to show; the carrier reads the references.
+        warehouseName: division!.name,
+        settlementName: settlement?.name ?? null,
+        companyName: saved?.recipient.companyName ?? null,
+        companyTin: saved?.recipient.companyTin ?? null,
+      },
+      parcels: parcelsFrom(placesValue!, weightValue!, dimsValue!),
+      declaredValueUah: declared,
+      payerType: saved?.payerType ?? 'Recipient',
+      description: saved?.description ?? td('cargoDescriptionDefault'),
+      dispatchPointId: point!.id,
+    }
+    setBusy(true)
     setError(null)
     try {
-      return await action()
+      if (askGoods && goodsValue !== null)
+        onMoneyChanged(await deliveryApi.configure(orderId, goodsValue))
+      onSaved(await shippingApi.saveDraft(integrationId, orderId, draft))
     } catch (problem) {
-      const message = deliveryProblemMessage(problem, locale)
-      if (kind === 'estimate') setQuoteFailure(message)
-      else setError(message)
-      return null
+      setError(deliveryProblemMessage(problem, locale))
+      window.requestAnimationFrame(() => alertRef.current?.focus())
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
-  const saveDraft = async (): Promise<Shipment | null> => {
-    if (draft === null) return null
-    const result = await run('draft', () =>
-      shippingApi.saveDraft(integrationId, orderId, draft),
-    )
-    if (result !== null) onChanged(result)
-    return result
-  }
-
-  const estimate = async () => {
-    setQuoteFailure(null)
-    if (dirty && (await saveDraft()) === null) return
-    const result = await run('estimate', () =>
-      shippingApi.estimate(integrationId, orderId),
-    )
-    if (result !== null) onChanged(result)
-  }
-
-  const create = async () => {
-    // A figure that does not parse is not a zero: sending one would ship the
-    // parcel collecting nothing while the operator believes they typed a sum.
-    if (goodsUah === null) return
-    if (goodsUah !== delivery.agreedTotalUah) {
-      const money = await run('create', () =>
-        deliveryApi.configure(orderId, goodsUah),
-      )
-      if (money === null) return
-      onMoneyChanged(money)
-    }
-    const result = await run('create', () =>
-      shippingApi.create(integrationId, orderId),
-    )
-    if (result !== null) onChanged(result)
-  }
-
-  const point = dispatchPoints.find((item) => item.id === pointId) ?? null
+  const missing = ORDER.filter((key) => errors[key] === true)
+  const fieldError = (key: FieldKey) =>
+    errors[key] === true ? t(ERROR[key]) : undefined
+  const clear = (key: FieldKey) =>
+    setErrors((current) => {
+      if (current[key] !== true) return current
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
 
   return (
     <Sheet
-      description={t('bookingDescription')}
-      eyebrow={t('eyebrowNp')}
+      description={t('formDescription', { number: String(orderNumber) })}
       footer={
         <>
-          <Button
-            aria-busy={busy === 'draft'}
-            disabled={busy !== null || draft === null}
-            onClick={() => void saveDraft()}
-          >
-            {t('saveDraft')}
+          <p className="text-app-muted m-0 min-w-0 flex-1">
+            {missing.length > 0 ? '' : t('formNote')}
+          </p>
+          <Button disabled={busy} onClick={onClose}>
+            {tc('cancel')}
           </Button>
           <Button
-            aria-busy={busy === 'create'}
-            disabled={busy !== null || !quote.canCreate}
-            onClick={() => void create()}
-            title={quote.canCreate ? undefined : t('createNeedsQuote')}
+            aria-busy={busy}
+            disabled={busy}
+            onClick={() => void save()}
             variant="primary"
           >
-            {t('createWaybill')}
+            {td('saveDraft')}
           </Button>
         </>
       }
+      onCloseAutoFocus={onCloseAutoFocus}
       onOpenChange={(open) => {
-        if (!open && busy === null) onClose()
+        if (!open && !busy) onClose()
       }}
       open
       size="lg"
-      title={t('bookingTitle')}
+      title={t('formTitle')}
     >
-      {error !== null && <Notice tone="danger">{error}</Notice>}
-      {lookupError !== null && <Notice tone="warn">{lookupError}</Notice>}
+      {missing.length === 0 ? null : (
+        <Notice tone="danger">
+          {t('missing', {
+            list: missing.map((key) => t(MISSING[key])).join(', '),
+          })}
+        </Notice>
+      )}
+      {error === null ? null : (
+        <div ref={alertRef} tabIndex={-1}>
+          <Notice tone="danger">{error}</Notice>
+        </div>
+      )}
+      {lookupError === null ? null : <Notice tone="warn">{lookupError}</Notice>}
 
-      <div className="grid gap-5">
-        <Section title={t('sectionDispatch')}>
-          {dispatchPoints.length === 0 ? (
-            <Notice tone="warn">{t('noDispatchPoints')}</Notice>
-          ) : (
-            <>
-              <Field label={t('dispatchPoint')} required>
-                <SelectInput
-                  onChange={(event) => setPointId(event.target.value)}
-                  value={pointId}
-                >
-                  {dispatchPoints.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                      {item.isDefault ? t('defaultPoint') : ''}
-                    </option>
-                  ))}
-                </SelectInput>
-              </Field>
-              {point !== null && (
-                <p className="rz-caption m-0 text-pretty">
-                  {t('sender', {
-                    details: [point.senderName, point.phone, point.companyName]
-                      .filter((part) => part !== null && part !== '')
-                      .join(' · '),
-                  })}
-                </p>
-              )}
-            </>
-          )}
-        </Section>
-
-        <Section title={t('sectionRecipient')}>
+      <SheetGroup n="1" title={t('groupRecipient')}>
+        <div className="grid gap-3 sm:grid-cols-2">
           {customerSearchAllowed ? (
-            <CustomerSearchPicker
-              disabled={busy !== null}
-              hint={t('recipientLookupHint')}
-              label={t('recipientName')}
-              query={name}
-              selectedId={recipientCustomerId}
-              onQueryChange={(next) => {
-                setName(next)
-                setRecipientCustomerId(null)
+            <div
+              ref={(element) => {
+                boxes.current.name = element
               }}
-              onSelect={(customer) => {
-                setName(customer.name)
-                setPhone(customer.phone ?? '')
-                setRecipientCustomerId(customer.id)
-              }}
-              required
-              showLabel
-            />
+            >
+              <CustomerSearchPicker
+                disabled={busy}
+                label={t('fullName')}
+                onQueryChange={(next) => {
+                  setName(next)
+                  setRecipientCustomerId(null)
+                  clear('name')
+                }}
+                onSelect={(customer) => {
+                  setName(customer.name)
+                  setPhone(customer.phone ?? '')
+                  setRecipientCustomerId(customer.id)
+                  clear('name')
+                }}
+                query={name}
+                required
+                selectedId={recipientCustomerId}
+                showLabel
+              />
+            </div>
           ) : (
-            <Field label={t('recipientName')} required>
+            <div
+              ref={(element) => {
+                boxes.current.name = element
+              }}
+            >
+              <Field error={fieldError('name')} label={t('fullName')} required>
+                <TextInput
+                  onChange={(event) => {
+                    setName(event.target.value)
+                    clear('name')
+                  }}
+                  value={name}
+                />
+              </Field>
+            </div>
+          )}
+          <div
+            ref={(element) => {
+              boxes.current.phone = element
+            }}
+          >
+            <Field error={fieldError('phone')} label={t('phone')} required>
               <TextInput
-                onChange={(event) => setName(event.target.value)}
-                placeholder={t('recipientNamePlaceholder')}
-                value={name}
+                className="font-mono"
+                inputMode="tel"
+                onChange={(event) => {
+                  setPhone(event.target.value)
+                  setRecipientCustomerId(null)
+                  clear('phone')
+                }}
+                placeholder="+380 XX XXX XX XX"
+                value={phone}
               />
             </Field>
-          )}
-          <Field
-            error={
-              phone !== '' && !PHONE.test(trimmedPhone)
-                ? t('phoneFormat', { example })
-                : undefined
-            }
-            label={t('phone')}
-            required
-          >
-            <TextInput
-              className="font-mono"
-              inputMode="tel"
-              onChange={(event) => {
-                setPhone(event.target.value)
-                setRecipientCustomerId(null)
-              }}
-              placeholder={example}
-              value={phone}
-            />
-          </Field>
-          <SettlementPicker
-            integrationId={integrationId}
-            onPick={setSettlement}
-            picked={settlement}
-            savedHint={saved === null ? undefined : t('savedSettlement')}
-            use="receiving"
-          />
+          </div>
+        </div>
+      </SheetGroup>
 
-          <Field
-            hint={
-              settlementRef === null
-                ? t('divisionPickSettlement')
-                : t('divisionHint')
-            }
-            label={t('division')}
-            required
+      <SheetGroup n="2" title={t('groupTo')}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div
+            ref={(element) => {
+              boxes.current.settlement = element
+            }}
           >
-            <SelectInput
-              disabled={settlementRef === null || divisions === null}
-              onChange={(event) =>
-                setDivisionChoice(
-                  event.target.value === '' ? null : event.target.value,
-                )
-              }
-              value={warehouseRef ?? ''}
-            >
-              <option value="">
-                {divisions === null ? t('divisionsLoading') : t('divisionPick')}
-              </option>
-              {(divisions ?? []).map((item) => (
-                <option key={item.ref} value={item.ref}>
-                  {item.name}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-          <label className="rz-choice w-fit px-0 hover:bg-transparent">
-            <input
-              checked={isCompany}
-              className="rz-check"
-              onChange={(event) => setIsCompany(event.target.checked)}
-              type="checkbox"
+            <SettlementPicker
+              error={fieldError('settlement')}
+              integrationId={integrationId}
+              onPick={(next) => {
+                setSettlement(next)
+                setDivisionChoice(null)
+                clear('settlement')
+              }}
+              picked={settlement}
+              use="receiving"
             />
-            <span className="text-app-muted">{t('isCompany')}</span>
-          </label>
-          {isCompany && (
-            <>
-              <Field label={t('companyName')} required>
+          </div>
+          <div
+            ref={(element) => {
+              boxes.current.division = element
+            }}
+          >
+            <Field
+              error={fieldError('division')}
+              label={t('division')}
+              required
+            >
+              <SelectInput
+                disabled={settlementRef === null || divisions === null}
+                onChange={(event) => {
+                  setDivisionChoice(
+                    event.target.value === '' ? null : event.target.value,
+                  )
+                  clear('division')
+                }}
+                value={division?.ref ?? ''}
+              >
+                <option value="">
+                  {settlementRef !== null && divisions === null
+                    ? td('divisionsLoading')
+                    : t('divisionPick')}
+                </option>
+                {(divisions ?? []).map((item) => (
+                  <option key={item.ref} value={item.ref}>
+                    {item.name}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+          </div>
+        </div>
+      </SheetGroup>
+
+      <SheetGroup n="3" title={t('groupFrom')}>
+        {dispatchPoints.length === 0 ? (
+          <Notice tone="warn">{td('noDispatchPoints')}</Notice>
+        ) : (
+          <div
+            ref={(element) => {
+              boxes.current.point = element
+            }}
+          >
+            <Field
+              error={fieldError('point')}
+              hint={
+                point === null
+                  ? undefined
+                  : t('senderHint', {
+                      name: point.companyName ?? point.senderName,
+                    })
+              }
+              label={t('dispatchPoint')}
+            >
+              <SelectInput
+                onChange={(event) => {
+                  setPointId(event.target.value)
+                  clear('point')
+                }}
+                value={pointId}
+              >
+                {point === null ? <option value="" /> : null}
+                {dispatchPoints.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+          </div>
+        )}
+      </SheetGroup>
+
+      <SheetGroup n="4" title={t('groupParcel')}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div
+            ref={(element) => {
+              boxes.current.places = element
+            }}
+          >
+            <Field error={fieldError('places')} label={t('places')} required>
+              <TextInput
+                inputMode="numeric"
+                numeric
+                onChange={(event) => {
+                  setPlaces(event.target.value)
+                  clear('places')
+                }}
+                value={places}
+              />
+            </Field>
+          </div>
+          <div
+            ref={(element) => {
+              boxes.current.weight = element
+            }}
+          >
+            <Field error={fieldError('weight')} label={t('weight')} required>
+              <div className="flex items-center gap-1.5">
                 <TextInput
-                  onChange={(event) => setCompanyName(event.target.value)}
-                  value={companyName}
+                  inputMode="decimal"
+                  numeric
+                  onChange={(event) => {
+                    setWeight(event.target.value)
+                    clear('weight')
+                  }}
+                  value={weight}
                 />
-              </Field>
-              <Field label={t('companyTin')} required>
+                <span aria-hidden className="rz-dim font-mono text-caption">
+                  {t('kg')}
+                </span>
+              </div>
+            </Field>
+          </div>
+          <div
+            className="col-span-2"
+            ref={(element) => {
+              boxes.current.dimensions = element
+            }}
+          >
+            <Field
+              error={fieldError('dimensions')}
+              label={t('dimensions')}
+              required
+            >
+              <div className="flex items-center gap-1.5">
                 <TextInput
                   className="font-mono"
-                  onChange={(event) => setCompanyTin(event.target.value)}
-                  placeholder={t('companyTinPlaceholder')}
-                  value={companyTin}
+                  onChange={(event) => {
+                    setDims(event.target.value)
+                    clear('dimensions')
+                  }}
+                  placeholder="60×40×30"
+                  value={dims}
                 />
-              </Field>
-            </>
-          )}
-        </Section>
-
-        <Section
-          aside={
-            <span className="rz-eyebrow">
-              {t('parcelsCount', { count: parcels.length })}
-            </span>
-          }
-          title={t('sectionParcels')}
-        >
-          {parcels.map((parcel, index) => (
-            <div className="rz-inset grid gap-3" key={index}>
-              <div className="flex items-center justify-between gap-3">
-                <span className="rz-eyebrow">
-                  {t('parcelPlace', { number: index + 1 })}
+                <span aria-hidden className="rz-dim font-mono text-caption">
+                  {t('cm')}
                 </span>
-                {parcels.length > 1 && (
-                  <Button
-                    aria-label={t('parcelRemove', { number: index + 1 })}
-                    size="sm"
-                    onClick={() =>
-                      setParcels((list) =>
-                        list.filter((_, position) => position !== index),
-                      )
-                    }
-                  >
-                    {tc('delete')}
-                  </Button>
+              </div>
+            </Field>
+          </div>
+        </div>
+      </SheetGroup>
+
+      <SheetGroup hint={t('codRule')} n="5" title={t('groupCod')}>
+        {askGoods ? (
+          <div
+            ref={(element) => {
+              boxes.current.goods = element
+            }}
+          >
+            <Field
+              error={fieldError('goods')}
+              hint={td('goodsHint')}
+              label={td('goodsLabel')}
+              required
+            >
+              <TextInput
+                inputMode="decimal"
+                numeric
+                onChange={(event) => {
+                  setGoods(event.target.value)
+                  clear('goods')
+                }}
+                value={goods}
+              />
+            </Field>
+          </div>
+        ) : null}
+        <dl className="border-app-line m-0 grid rounded-rz-md border bg-(--rz-sheet-field) px-3 py-1">
+          {(
+            [
+              [t('codBalance'), uah(balance, locale), false],
+              [t('codDeclared'), uah(declared, locale), false],
+              [t('codOnWaybill'), uah(balance, locale), true],
+            ] as const
+          ).map(([label, value, strong]) => (
+            <div
+              className="border-app-line flex items-baseline justify-between gap-4 border-t py-1.5 first:border-t-0"
+              key={label}
+            >
+              <dt
+                className={cn(
+                  strong ? 'rz-strong font-semibold' : 'text-app-muted',
                 )}
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {(
-                  [
-                    ['weightKg', t('weight')],
-                    ['lengthCm', t('length')],
-                    ['widthCm', t('width')],
-                    ['heightCm', t('height')],
-                  ] as const
-                ).map(([key, label]) => (
-                  <Field
-                    key={key}
-                    label={label}
-                    srLabel={t('parcelSr', { number: index + 1 })}
-                    required
-                  >
-                    <TextInput
-                      inputMode="decimal"
-                      numeric
-                      onChange={(event) =>
-                        setParcels((list) =>
-                          list.map((item, position) =>
-                            position === index
-                              ? { ...item, [key]: event.target.value }
-                              : item,
-                          ),
-                        )
-                      }
-                      value={parcel[key]}
-                    />
-                  </Field>
-                ))}
-              </div>
+              >
+                {label}
+              </dt>
+              <dd
+                className={cn(
+                  'm-0 font-mono',
+                  strong ? 'text-app-strong font-bold' : 'text-app-ink',
+                )}
+              >
+                {value}
+              </dd>
             </div>
           ))}
-          <Button onClick={() => setParcels((list) => [...list, emptyParcel])}>
-            {t('addParcel')}
-          </Button>
-        </Section>
-
-        <Section title={t('sectionCargo')}>
-          <Field label={t('cargoDescription')} required>
-            <TextInput
-              onChange={(event) => setDescription(event.target.value)}
-              value={description}
-            />
-          </Field>
-          <Field hint={t('declaredHint')} label={t('declaredLabel')} required>
-            <TextInput
-              inputMode="decimal"
-              numeric
-              onChange={(event) => setDeclared(event.target.value)}
-              value={declared}
-            />
-          </Field>
-          <Field label={t('payer')} required>
-            <SelectInput
-              onChange={(event) => setPayer(event.target.value as PayerType)}
-              value={payer}
-            >
-              <option value="Recipient">{t('payerRecipient')}</option>
-              <option value="Sender">{t('payerSender')}</option>
-            </SelectInput>
-          </Field>
-        </Section>
-      </div>
-
-      <section
-        className={`grid gap-3 rounded-panel border p-3 ${
-          quote.tone === 'ok'
-            ? 'border-state-ok/30 bg-state-ok-soft'
-            : quote.tone === 'warn'
-              ? 'border-state-warn/30 bg-state-warn-soft'
-              : quote.tone === 'danger'
-                ? 'border-state-danger/30 bg-state-danger-soft'
-                : 'border-app-line bg-app-inset'
-        }`}
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h3 className="rz-h-card">{quote.title}</h3>
-          {shipment?.quoteAt != null && (
-            <span className="rz-dim font-mono text-micro">
-              {t('quotedAt', {
-                when:
-                  format.dateWith(shipment.quoteAt, {
-                    day: '2-digit',
-                    month: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  }) ?? shipment.quoteAt,
-              })}
-            </span>
-          )}
-        </div>
-        <p className="text-app-muted m-0 text-pretty">{quote.note}</p>
-
-        {paid === null ? null : (
-          <Notice tone="info">
-            {t('alreadyPaidBefore')}{' '}
-            <span className="font-mono">
-              {formatMoney(paid.amount, paid.currency, locale)}
-            </span>
-            {t('alreadyPaidAfter')}
-          </Notice>
-        )}
-
-        <Field
-          error={goodsUah === null ? t('goodsError') : undefined}
-          hint={t('goodsHint')}
-          label={t('goodsLabel')}
-        >
-          <TextInput
-            inputMode="decimal"
-            numeric
-            onChange={(event) => setGoods(event.target.value)}
-            placeholder="0"
-            value={goods}
-          />
-        </Field>
-
-        {/* Derived, never typed: the carrier collects what the order still
-            owes, and showing it as a field invited editing the price of the
-            goods by accident. */}
-        <dl className="rz-inset m-0 grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2 bg-app-raised">
-          <dt className="text-app-muted">{t('alreadyPaid')}</dt>
-          <dd className="rz-num m-0">{uah(delivery.appliedUah, locale)}</dd>
-          <dt className="rz-strong font-semibold">{t('codOnWaybill')}</dt>
-          <dd
-            className={cn(
-              'rz-num m-0 font-semibold',
-              codUah === null || codUah === 0
-                ? 'text-app-muted'
-                : 'text-app-strong',
-            )}
-          >
-            {codUah === null ? '—' : uah(codUah, locale)}
-          </dd>
-          <p className="rz-caption col-span-2 m-0 text-pretty">
-            {codUah === 0 ? t('codNothing') : t('codNote')}
-          </p>
         </dl>
-
-        {quote.showMoney && shipment?.quoteUah != null && (
-          <dl
-            className={`rz-inset m-0 grid gap-2 bg-app-raised ${
-              quote.dimMoney ? 'opacity-70' : ''
-            }`}
-          >
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">{t('deliveryThere')}</dt>
-              <dd className="rz-mono m-0">
-                {wholeUah(shipment.quoteUah, locale)}
-              </dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">{t('deliveryBack')}</dt>
-              <dd className="rz-mono m-0">
-                {wholeUah(shipment.returnEstimateUah, locale)}
-              </dd>
-            </div>
-            <div className="border-app-line flex items-baseline justify-between gap-4 border-t pt-2">
-              <dt className="rz-strong font-semibold">
-                {t('prepaymentNeeded')}
-              </dt>
-              <dd className="rz-mono rz-strong m-0 font-semibold">
-                {total === null ? '—' : wholeUah(total, locale)}
-              </dd>
-            </div>
-          </dl>
-        )}
-
-        <div>
-          <Button
-            aria-busy={busy === 'estimate'}
-            disabled={busy !== null || draft === null}
-            onClick={() => void estimate()}
-            title={draft === null ? t('fillForm') : undefined}
-            variant={quote.canCreate ? 'ghost' : 'primary'}
-          >
-            {quote.action}
-          </Button>
-        </div>
-        {quote.showMoney && (
-          <p className="rz-caption m-0 text-pretty">{t('quoteExplained')}</p>
-        )}
-      </section>
+      </SheetGroup>
     </Sheet>
   )
 }

@@ -1,30 +1,21 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type ReactNode, type Ref } from 'react'
 import { Check, Plus, Truck } from 'lucide-react'
-import { Button, Notice, StatusPill, type StatusTone } from '@/components/app'
+import { Button, StatusPill, type StatusTone } from '@/components/app'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { uah } from './delivery-money'
 import { deliveryMessages } from './messages'
+import { waybillMessages } from './waybill-messages'
 import {
   lifecycle,
   paymentKindLabel,
   paymentStanding,
   primaryAction,
   shipmentChip,
-  shipmentFacts,
   type LifecycleStep,
   type PrimaryAction,
-  type ShipmentFact,
 } from './delivery-view'
 import type { DeliveryOrderState } from './use-delivery-order'
-
-const TONE: Record<ShipmentFact['tone'], string> = {
-  ink: 'text-app-strong',
-  ok: 'text-state-ok',
-  warn: 'text-state-warn',
-  danger: 'text-state-danger',
-  dim: 'text-app-dim',
-}
 
 /** The four moments of a delivery order, drawn as one rail across the card. */
 export function DeliveryLifecycle({
@@ -116,97 +107,108 @@ export function DeliveryTabs({
   )
 }
 
-/** The carrier half: the waybill, the parcel, and what the money allows. */
-export function ShipmentCard({
-  actions,
-  chip,
-  delivery,
-  notice,
-  shipment,
-}: {
-  actions: ReactNode
-  /** Replaces the parcel pill, e.g. «Немає доступу» for a lost cabinet. */
-  chip?: { label: string; tone: StatusTone } | undefined
-  delivery: NonNullable<DeliveryOrderState['money']>
-  /** A sentence above the actions about why they are what they are. */
-  notice?: ReactNode
-  shipment: DeliveryOrderState['shipment']
-}) {
-  const { locale } = useLocale()
-  const t = useT(deliveryMessages)
-  const parcel = chip ?? shipmentChip(delivery, shipment, locale)
-  const facts = shipmentFacts(delivery, shipment, locale)
-
-  return (
-    <section aria-label={t('novaPoshta')} className="rz-card">
-      <div className="rz-card__head py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="rz-h-card">{t('novaPoshta')}</h2>
-          <StatusPill tone={parcel.tone}>{parcel.label}</StatusPill>
-        </div>
-      </div>
-      <dl className="rz-kpis m-0 rounded-none border-0">
-        {facts.map((fact) => (
-          <div className="rz-kpi" key={fact.key}>
-            <dt className="rz-kpi__label">{fact.label}</dt>
-            <dd className="m-0 grid gap-1">
-              <span className={cn('rz-mono', TONE[fact.tone])}>
-                {fact.value}
-              </span>
-              {fact.note === '' ? null : (
-                <span className="rz-kpi__meta text-pretty">{fact.note}</span>
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {notice === undefined || notice === null ? null : (
-        <div className="border-app-line border-t px-(--rz-card-p) pt-2.5">
-          {notice}
-        </div>
-      )}
-      {actions === null ? null : (
-        <div
-          className={cn(
-            'rz-btn-row border-app-line px-(--rz-card-p) py-2.5',
-            notice === undefined || notice === null ? 'border-t' : '',
-          )}
-        >
-          {actions}
-        </div>
-      )}
-    </section>
-  )
+export interface ShipmentFactRow {
+  key: string
+  label: string
+  value: ReactNode
+  /** A short caption after the value: «створена …», «дорівнює залишку». */
+  sub?: string
+  mono?: boolean
+  tone?: 'strong' | 'dim' | 'warn' | 'ok' | 'danger'
 }
 
-/** Who the parcel goes to, as the waybill draft records it. */
-export function RecipientCard({
-  phone,
-  shipment,
+const FACT_TONE: Record<NonNullable<ShipmentFactRow['tone']>, string> = {
+  strong: 'text-app-strong font-semibold',
+  dim: 'text-app-dim',
+  warn: 'text-state-warn',
+  ok: 'text-state-ok',
+  danger: 'text-state-danger',
+}
+
+/**
+ * The order's «Доставка · Нова пошта» block (module 46 §4–6): a pill, the
+ * carrier's last word under the title, the waybill facts, then the notices
+ * and the buttons the waybill's stage allows. What goes in is decided by
+ * `DeliveryShipmentBlock`; this only draws it.
+ */
+export function ShipmentCard({
+  actions,
+  caption,
+  facts,
+  hint,
+  notices,
+  numberRef,
+  pill,
 }: {
-  phone: string | null
-  shipment: DeliveryOrderState['shipment']
+  actions: ReactNode
+  /** One muted line above the buttons. */
+  caption?: string | undefined
+  facts: readonly ShipmentFactRow[] | null
+  hint?: string | undefined
+  notices?: ReactNode
+  /** The waybill number, which takes focus once a waybill is created. */
+  numberRef?: Ref<HTMLSpanElement> | undefined
+  pill?: { label: string; tone: StatusTone } | null | undefined
 }) {
-  const t = useT(deliveryMessages)
-  const recipient = shipment?.draft.recipient ?? null
-  if (recipient === null) return null
+  const t = useT(waybillMessages)
+  const hasActions =
+    actions !== null && actions !== undefined && actions !== false
+  const hasForm =
+    (notices !== undefined && notices !== null && notices !== false) ||
+    (caption !== undefined && caption !== '') ||
+    hasActions
 
   return (
-    <section aria-label={t('recipient')} className="rz-card">
-      <div className="rz-card__head py-2">
-        <h2 className="rz-h-card">{t('recipient')}</h2>
-      </div>
-      <div className="rz-card__body grid gap-1">
-        <p className="rz-strong m-0 font-semibold">{recipient.name}</p>
-        <p className="rz-muted m-0 font-mono">
-          {recipient.phone || (phone ?? '—')}
-        </p>
-        {/* The carrier identifies a branch by a GUID, so the draft carries the
-            name it was chosen by — that is the only readable form there is. */}
-        <p className="rz-dim m-0">
-          {recipient.warehouseName ?? t('branchChosen')}
-        </p>
-      </div>
+    <section aria-labelledby="np-delivery-block" className="rz-card">
+      <header className="rz-card__head py-2.5">
+        <div className="grid min-w-0 gap-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="rz-h-card" id="np-delivery-block">
+              {t('blockTitle')}
+            </h2>
+            {pill == null ? null : (
+              <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+            )}
+          </div>
+          {hint === undefined || hint === '' ? null : (
+            <p className="rz-caption m-0 text-pretty">{hint}</p>
+          )}
+        </div>
+      </header>
+      {facts === null ? null : (
+        <dl className="rz-facts">
+          {facts.map((fact) => (
+            <div key={fact.key}>
+              <dt>{fact.label}</dt>
+              <dd>
+                <span
+                  className={cn(
+                    fact.mono === true ? 'rz-mono' : undefined,
+                    fact.tone === undefined ? undefined : FACT_TONE[fact.tone],
+                  )}
+                  {...(fact.key === 'number' && numberRef !== undefined
+                    ? { ref: numberRef, tabIndex: -1 }
+                    : {})}
+                >
+                  {fact.value}
+                </span>
+                {fact.sub === undefined || fact.sub === '' ? null : (
+                  <span className="rz-caption ml-2 font-mono">{fact.sub}</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {hasForm ? (
+        <div className="border-app-line grid gap-2.5 border-t px-(--rz-card-p) py-2.5">
+          {notices}
+          {caption === undefined || caption === '' ? null : (
+            <p className="rz-caption m-0 text-pretty">{caption}</p>
+          )}
+          {hasActions ? <div className="rz-btn-row">{actions}</div> : null}
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -444,28 +446,5 @@ export function DeliverySteps({
         ))}
       </ol>
     </section>
-  )
-}
-
-/** The one sentence standing between this order and a waybill. */
-export function DeliveryGateCard({
-  delivery,
-}: {
-  delivery: NonNullable<DeliveryOrderState['money']>
-}) {
-  const t = useT(deliveryMessages)
-  const { locale } = useLocale()
-  const blocked = delivery.outstandingUah > 0
-  return (
-    <Notice block tone={blocked ? 'warn' : 'ok'}>
-      <p className="rz-strong m-0 font-semibold">
-        {blocked ? t('gateCodTitle') : t('gateReadyTitle')}
-      </p>
-      <p className="m-0 mt-1">
-        {blocked
-          ? t('gateCodNote', { amount: uah(delivery.outstandingUah, locale) })
-          : t('createHintPaid')}
-      </p>
-    </Notice>
   )
 }

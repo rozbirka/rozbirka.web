@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link as RouterLink } from 'react-router'
-import { ExternalLink, KeyRound, Plus, Printer } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Button, Notice, useOptionalToast } from '@/components/app'
 import { cashApi, type CashRegister } from '@/api/cash'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
-import { shippingApi, type Shipment } from '@/api/shipping'
+import { shippingApi, type Shipment, type ShipmentDraft } from '@/api/shipping'
 import { normalizeApiProblem } from '@/api/errors'
 import type { OrderDetail } from '@/api/orders'
 import type { BusinessCountry } from '@/api/tenant-settings'
@@ -28,36 +28,51 @@ import { orderEventTitle } from '../order-labels'
 import { DeliveryDrawer } from './DeliveryDrawer'
 import {
   DeliveryDueCard,
-  DeliveryGateCard,
   DeliveryLifecycle,
   DeliveryPaymentsCard,
   DeliverySteps,
   DeliveryTabs,
-  RecipientCard,
-  ShipmentCard,
   type DeliveryTab,
 } from './DeliveryOrderCard'
-import { DeliveryStepDrawer, type DeliveryStep } from './DeliveryStepDrawer'
-import { PaymentDrawer } from './PaymentDrawer'
 import {
-  WaybillAttachDrawer,
+  DeliveryShipmentBlock,
+  type CancelledWaybill,
+} from './DeliveryShipmentBlock'
+import { DeliveryStepDrawer, type DeliveryStep } from './DeliveryStepDrawer'
+import { ExternalWaybillSheet } from './ExternalWaybillSheet'
+import { PaymentDrawer } from './PaymentDrawer'
+import { WaybillCreateSheet } from './WaybillCreateSheet'
+import { WaybillCancelDialog, WaybillRecreateDialog } from './WaybillDialogs'
+import {
   WaybillDataDrawer,
   WaybillLabelDrawer,
   WaybillReadinessDrawer,
 } from './WaybillDrawers'
-import { hasWaybill, lifecycle } from './delivery-view'
+import { WaybillEditSheet, type RecreateReason } from './WaybillEditSheet'
+import { WaybillReconcileSheet } from './WaybillReconcileSheet'
+import { lifecycle } from './delivery-view'
 import { deliveryMessages } from './messages'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 import type { DeliveryOrderLoad } from './use-delivery-order'
+import { waybillMessages } from './waybill-messages'
+import { liveWaybillStage, unresolvedStage, waybillStage } from './waybill-view'
 
 type Drawer =
   | { kind: 'pay'; mode: 'record' | 'link' }
+  /** The delivery form; `then` says whether the readiness check follows. */
+  | { kind: 'form'; then: 'close' | 'check'; prefill: ShipmentDraft | null }
   | { kind: 'readiness' }
-  | { kind: 'booking' }
+  | { kind: 'create' }
+  | { kind: 'reconcile' }
+  | { kind: 'edit' }
   | { kind: 'waybill' }
   | { kind: 'attach' }
   | { kind: 'label' }
   | { kind: 'step'; step: DeliveryStep }
+
+type WaybillDialog =
+  | { kind: 'cancel' }
+  | { kind: 'recreate'; draft: ShipmentDraft; reason: RecreateReason }
 
 type PaymentOperation = 'delivery-payment' | 'delivery-link'
 
@@ -94,6 +109,10 @@ const usePaymentIdempotencyKeys = () => {
  * alone and keeps working whatever the carrier is doing; only the waybill half
  * waits on Nova Poshta.
  *
+ * The waybill half is module 46 §4–6: the «Доставка · Нова пошта» block and
+ * the sheets that create, edit, cancel, reconcile and attach a waybill. Its
+ * stage is read once (`waybillStage`) and every button follows from it.
+ *
  * Outside Ukraine there is no Nova Poshta: an existing delivery order stays
  * readable, but nothing that books, prints or tracks a waybill is offered.
  */
@@ -111,7 +130,7 @@ export function DeliveryOrderBody({
   order,
   partsPath,
 }: {
-  /** The tenant's country, for the phone example in the booking form. */
+  /** The tenant's country; kept for callers, the form is Ukrainian only. */
   countryCode?: BusinessCountry | null
   /** The order lines' currency; `null` when not chosen or not reported. */
   accountingCurrency?: string | null
@@ -121,15 +140,18 @@ export function DeliveryOrderBody({
   financeAllowed: boolean
   integrationsPath: string | null
   load: DeliveryOrderLoad
+  /** «Керування замовленнями»: create, edit, cancel and attach waybills. */
   mutationsAllowed: boolean
   /** False for a business outside Ukraine. */
   novaPoshtaAvailable?: boolean
   order: OrderDetail
   partsPath: string | null
 }) {
+  void countryCode
   const toast = useOptionalToast()
   const { locale, timeZone } = useLocale()
   const t = useT(deliveryMessages)
+  const tw = useT(waybillMessages)
   const tc = useT(commonMessages)
   const tr = useT(npRecoveryMessages)
   const format = useFormat()
@@ -141,10 +163,25 @@ export function DeliveryOrderBody({
 
   const [tab, setTab] = useState<DeliveryTab>('sales')
   const [drawer, setDrawer] = useState<Drawer | null>(null)
+  const [dialog, setDialog] = useState<WaybillDialog | null>(null)
+  const [dialogPending, setDialogPending] = useState(false)
+  const [dialogError, setDialogError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tills, setTills] = useState<CashRegister[]>([])
+  // Session facts Core does not keep on the waybill: a cancelled waybill is
+  // no longer returned for the order, an attached one looks like a created
+  // one, and «no proof yet» is only known from the last check.
+  const [cancelled, setCancelled] = useState<CancelledWaybill | null>(null)
+  const [nextDraft, setNextDraft] = useState<ShipmentDraft | null>(null)
+  const [attachedAt, setAttachedAt] = useState<string | null>(null)
+  const [waiting, setWaiting] = useState(false)
   const paymentKeys = usePaymentIdempotencyKeys()
+  // Focus goes back to the control that opened a sheet, or to the waybill
+  // number once one was created (module 46, section 11).
+  const openerRef = useRef<HTMLElement | null>(null)
+  const focusNumber = useRef(false)
+  const numberRef = useRef<HTMLSpanElement | null>(null)
 
   useEffect(() => {
     if (!financeAllowed) return
@@ -160,7 +197,12 @@ export function DeliveryOrderBody({
     return () => controller.abort()
   }, [financeAllowed])
 
-  const created = hasWaybill(shipment)
+  const stage = waybillStage(
+    delivery,
+    shipment,
+    points.map((point) => point.id),
+  )
+  const live = liveWaybillStage(stage)
 
   // A waybill of an earlier carrier cabinet whose key no longer works (3.2).
   // Core lists cabinets only with the integrations right — the same right the
@@ -168,13 +210,35 @@ export function DeliveryOrderBody({
   const canRecover = integrationsPath !== null
   const npConnections = useNpConnections(
     integrationId,
-    canRecover && created && shipment?.connectionId != null,
+    canRecover && live && shipment?.connectionId != null,
   )
-  const lost = created
+  const lost = live
     ? lostAccessConnection(npConnections.connections, shipment?.connectionId)
     : null
   const [recoverOpen, setRecoverOpen] = useState(false)
   const recoverRef = useRef<HTMLButtonElement | null>(null)
+  const settingsPath =
+    integrationsPath === null || integrationId === null
+      ? integrationsPath
+      : `${integrationsPath}/${integrationId}`
+
+  const open = (next: Drawer) => {
+    openerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    setDrawer(next)
+  }
+  const restoreFocus = (event: Event) => {
+    event.preventDefault()
+    if (focusNumber.current) {
+      focusNumber.current = false
+      window.requestAnimationFrame(() => numberRef.current?.focus())
+      return
+    }
+    const opener = openerRef.current
+    if (opener?.isConnected === true) opener.focus()
+  }
 
   const runMoney = async (action: () => Promise<DeliveryOrder>) => {
     if (busy) return
@@ -231,12 +295,104 @@ export function DeliveryOrderBody({
     }
   }
 
+  /** A created waybill: the toast, and focus on its number in the block. */
+  const created = (next: Shipment) => {
+    setWaiting(false)
+    setCancelled(null)
+    setNextDraft(null)
+    load.setShipment(next)
+    focusNumber.current = true
+    setDrawer(null)
+    toast?.show({
+      tone: 'ok',
+      message: tw('createdToast', { number: next.number ?? '' }),
+    })
+  }
+
+  const cancelWaybill = async (recreate: ShipmentDraft | null) => {
+    if (integrationId === null || shipment === null) return
+    setDialogPending(true)
+    setDialogError(null)
+    try {
+      await shippingApi.cancel(integrationId, order.id)
+      setCancelled({
+        shipment: { ...shipment, state: 'Cancelled' },
+        at: new Date().toISOString(),
+        recreate: recreate !== null,
+      })
+      setNextDraft(recreate)
+      setAttachedAt(null)
+      load.setShipment(null)
+      setDialog(null)
+      toast?.show({ tone: 'info', message: tw('cancelledToast') })
+    } catch (problem) {
+      // An answer that never came leaves the cancel unknown: the block then
+      // asks for the result check instead of a second cancel.
+      const latest = await shippingApi
+        .get(integrationId, order.id)
+        .catch(() => null)
+      if (
+        latest !== null &&
+        (latest.state === 'CancelUnknown' || latest.state === 'Cancelling')
+      ) {
+        load.setShipment(latest)
+        setDialog(null)
+      } else setDialogError(deliveryProblemMessage(problem, locale))
+    } finally {
+      setDialogPending(false)
+    }
+  }
+
+  const blockActions = {
+    start: () => open({ kind: 'form', then: 'close', prefill: null }),
+    edit: () => open({ kind: 'form', then: 'close', prefill: null }),
+    check: () => open({ kind: 'readiness' }),
+    attach: () => open({ kind: 'attach' }),
+    recheck: () => open({ kind: 'form', then: 'check', prefill: null }),
+    reconcile: () => open({ kind: 'reconcile' }),
+    print: () => open({ kind: 'label' }),
+    data: () => open({ kind: 'waybill' }),
+    refresh: () => {
+      if (integrationId !== null)
+        void runShipment(() => shippingApi.refresh(integrationId, order.id))
+    },
+    copy: () => void copyNumber(),
+    editWaybill: () => open({ kind: 'edit' }),
+    cancelWaybill: () => {
+      openerRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null
+      setDialogError(null)
+      setDialog({ kind: 'cancel' })
+    },
+    createNew: () =>
+      open({
+        kind: 'form',
+        then: 'check',
+        prefill: nextDraft ?? cancelled?.shipment.draft ?? null,
+      }),
+    changeDelivery: () =>
+      open({
+        kind: 'form',
+        then: 'close',
+        prefill: cancelled?.shipment.draft ?? null,
+      }),
+    payDeposit: () => open({ kind: 'pay', mode: 'record' }),
+    recover: () => setRecoverOpen(true),
+  }
+
   const primary = (kind: string) => {
-    if (kind === 'pay') setDrawer({ kind: 'pay', mode: 'record' })
-    if (kind === 'create') setDrawer({ kind: 'readiness' })
-    if (kind === 'dispatch') setDrawer({ kind: 'step', step: 'dispatch' })
-    if (kind === 'receive') setDrawer({ kind: 'step', step: 'receive' })
-    if (kind === 'return') setDrawer({ kind: 'step', step: 'return' })
+    if (kind === 'pay') open({ kind: 'pay', mode: 'record' })
+    if (kind === 'create') {
+      if (stage === 'none') blockActions.start()
+      else if (stage === 'draftStale') blockActions.recheck()
+      else if (unresolvedStage(stage)) blockActions.reconcile()
+      else blockActions.check()
+    }
+    if (kind === 'dispatch') open({ kind: 'step', step: 'dispatch' })
+    if (kind === 'receive') open({ kind: 'step', step: 'receive' })
+    if (kind === 'return') open({ kind: 'step', step: 'return' })
   }
 
   const tillName = (accountId: string) =>
@@ -291,15 +447,13 @@ export function DeliveryOrderBody({
                     <>
                       <Button
                         disabled={busy}
-                        onClick={() => setDrawer({ kind: 'pay', mode: 'link' })}
+                        onClick={() => open({ kind: 'pay', mode: 'link' })}
                       >
                         {t('linkTransaction')}
                       </Button>
                       <Button
                         disabled={busy}
-                        onClick={() =>
-                          setDrawer({ kind: 'pay', mode: 'record' })
-                        }
+                        onClick={() => open({ kind: 'pay', mode: 'record' })}
                       >
                         <Plus aria-hidden />
                         {t('recordPayment')}
@@ -346,101 +500,23 @@ export function DeliveryOrderBody({
                 </Notice>
               ) : null}
 
-              <ShipmentCard
-                {...(lost === null
-                  ? {}
-                  : {
-                      chip: { label: tr('noAccess'), tone: 'danger' as const },
-                      notice: (
-                        <Notice tone="danger">
-                          {tr('statusStale', {
-                            number: shipment?.number ?? '',
-                          })}
-                        </Notice>
-                      ),
-                    })}
-                actions={
-                  integrationId === null ? null : lost !== null ? (
-                    <>
-                      <Button
-                        disabled={busy}
-                        onClick={() => setRecoverOpen(true)}
-                        ref={recoverRef}
-                        variant="primary"
-                      >
-                        <KeyRound aria-hidden />
-                        {tr('recover')}
-                      </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() => setDrawer({ kind: 'waybill' })}
-                        variant="quiet"
-                      >
-                        <ExternalLink aria-hidden />
-                        {tr('openWaybill')}
-                      </Button>
-                    </>
-                  ) : created ? (
-                    <>
-                      <Button
-                        disabled={busy}
-                        onClick={() => setDrawer({ kind: 'waybill' })}
-                      >
-                        {t('waybillData')}
-                      </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() => setDrawer({ kind: 'label' })}
-                      >
-                        <Printer aria-hidden />
-                        {t('printLabel')}
-                      </Button>
-                      <Button disabled={busy} onClick={() => void copyNumber()}>
-                        {t('copyNumber')}
-                      </Button>
-                      <Button
-                        aria-busy={busy}
-                        disabled={busy}
-                        onClick={() =>
-                          void runShipment(() =>
-                            shippingApi.refresh(integrationId, order.id),
-                          )
-                        }
-                      >
-                        {t('refreshStatus')}
-                      </Button>
-                    </>
-                  ) : (
-                    mutationsAllowed && (
-                      <>
-                        <Button
-                          disabled={busy}
-                          onClick={() => setDrawer({ kind: 'readiness' })}
-                          variant="primary"
-                        >
-                          {shipment === null
-                            ? t('startDelivery')
-                            : t('continueDelivery')}
-                        </Button>
-                        <Button
-                          disabled={busy}
-                          onClick={() => setDrawer({ kind: 'attach' })}
-                        >
-                          {t('attachWaybill')}
-                        </Button>
-                      </>
-                    )
-                  )
-                }
+              <DeliveryShipmentBlock
+                actions={blockActions}
+                attachedAt={attachedAt}
+                busy={busy}
+                canManage={mutationsAllowed}
+                canPay={financeAllowed}
+                cancelled={cancelled}
+                carrierReady={novaPoshtaAvailable && integrationId !== null}
                 delivery={delivery}
+                lost={lost !== null}
+                numberRef={numberRef}
+                points={points}
+                recoverRef={recoverRef}
                 shipment={shipment}
+                stage={stage}
+                waiting={waiting}
               />
-
-              {created || !novaPoshtaAvailable ? null : (
-                <DeliveryGateCard delivery={delivery} />
-              )}
-
-              <RecipientCard phone={state.customerPhone} shipment={shipment} />
 
               <DeliverySteps delivery={delivery} shipment={shipment} />
             </>
@@ -489,45 +565,197 @@ export function DeliveryOrderBody({
         />
       )}
 
+      {drawer?.kind === 'form' && integrationId !== null && (
+        <DeliveryDrawer
+          customerName={order.customerName}
+          customerPhone={state.customerPhone}
+          customerSearchAllowed={customerSearchAllowed}
+          delivery={delivery}
+          dispatchPoints={points}
+          integrationId={integrationId}
+          onClose={() => setDrawer(null)}
+          onCloseAutoFocus={restoreFocus}
+          onMoneyChanged={load.setMoney}
+          onSaved={(next) => {
+            load.setShipment(next)
+            setCancelled(null)
+            setNextDraft(null)
+            setDrawer(drawer.then === 'check' ? { kind: 'readiness' } : null)
+          }}
+          orderId={order.id}
+          orderNumber={order.number}
+          prefill={drawer.prefill}
+          shipment={shipment}
+        />
+      )}
+
       {drawer?.kind === 'readiness' && novaPoshtaAvailable && (
         <WaybillReadinessDrawer
           busy={busy}
           delivery={delivery}
-          dispatchPointActive={points.length > 0}
+          dispatchPointActive={
+            shipment === null
+              ? points.length > 0
+              : points.some((point) => point.id === shipment.dispatchPointId)
+          }
           onClose={() => setDrawer(null)}
-          onContinue={() => setDrawer({ kind: 'booking' })}
+          onCloseAutoFocus={restoreFocus}
+          onContinue={() => setDrawer({ kind: 'create' })}
+          orderNumber={order.number}
+          settingsPath={settingsPath}
+          shipment={shipment}
+        />
+      )}
+
+      {drawer?.kind === 'create' &&
+        integrationId !== null &&
+        shipment !== null && (
+          <WaybillCreateSheet
+            delivery={delivery}
+            integrationId={integrationId}
+            onClose={() => setDrawer(null)}
+            onCloseAutoFocus={restoreFocus}
+            onCreated={created}
+            onReconcile={() => setDrawer({ kind: 'reconcile' })}
+            onShipment={(next) => {
+              load.setShipment(next)
+              // A refused or failed attempt may have moved the deposit.
+              void deliveryApi
+                .get(order.id)
+                .then(load.setMoney)
+                .catch(() => undefined)
+            }}
+            orderId={order.id}
+            orderNumber={order.number}
+            shipment={shipment}
+          />
+        )}
+
+      {drawer?.kind === 'reconcile' &&
+        integrationId !== null &&
+        shipment !== null && (
+          <WaybillReconcileSheet
+            delivery={delivery}
+            integrationId={integrationId}
+            onClose={() => setDrawer(null)}
+            onCloseAutoFocus={restoreFocus}
+            onResolved={(next) => {
+              setWaiting(false)
+              if (next.state === 'Cancelled') {
+                setCancelled({
+                  shipment: next,
+                  at: new Date().toISOString(),
+                  recreate: nextDraft !== null,
+                })
+                load.setShipment(null)
+                setDrawer(null)
+                toast?.show({ tone: 'info', message: tw('cancelledToast') })
+              } else if (next.number !== null && next.state === 'Created') {
+                created(next)
+              } else {
+                load.setShipment(next)
+                setDrawer(null)
+              }
+            }}
+            onWaiting={() => {
+              setWaiting(true)
+              setDrawer(null)
+            }}
+            orderId={order.id}
+            orderNumber={order.number}
+            shipment={shipment}
+          />
+        )}
+
+      {drawer?.kind === 'edit' &&
+        integrationId !== null &&
+        shipment !== null && (
+          <WaybillEditSheet
+            integrationId={integrationId}
+            onClose={() => setDrawer(null)}
+            onCloseAutoFocus={restoreFocus}
+            onRecreate={(draft, reason) => {
+              setDrawer(null)
+              setDialogError(null)
+              setDialog({ kind: 'recreate', draft, reason })
+            }}
+            onSaved={(next) => {
+              load.setShipment(next)
+              setDrawer(null)
+              toast?.show({ tone: 'ok', message: tw('editConfirmed') })
+            }}
+            orderId={order.id}
+            shipment={shipment}
+          />
+        )}
+
+      {drawer?.kind === 'attach' && integrationId !== null && (
+        <ExternalWaybillSheet
+          delivery={delivery}
+          integrationId={integrationId}
+          onAttached={(money) => {
+            load.setMoney(money)
+            setAttachedAt(new Date().toISOString())
+            setCancelled(null)
+            setDrawer(null)
+            focusNumber.current = true
+            toast?.show({
+              tone: 'ok',
+              message: tw('attachedToast', { number: String(order.number) }),
+            })
+            void shippingApi
+              .get(integrationId, order.id)
+              .then(load.setShipment)
+              .catch(() => load.reload())
+          }}
+          onClose={() => setDrawer(null)}
+          onCloseAutoFocus={restoreFocus}
+          onStartDelivery={
+            mutationsAllowed
+              ? () => setDrawer({ kind: 'form', then: 'close', prefill: null })
+              : null
+          }
+          orderId={order.id}
           orderNumber={order.number}
           shipment={shipment}
         />
       )}
 
-      {drawer?.kind === 'booking' && integrationId !== null && (
-        <DeliveryDrawer
-          customerSearchAllowed={customerSearchAllowed}
-          customerName={order.customerName}
-          countryCode={countryCode}
-          customerPhone={state.customerPhone}
-          declaredValue={delivery.agreedTotalUah}
-          delivery={delivery}
-          dispatchPoints={points}
-          paid={
-            order.totalPaid !== null &&
-            order.totalPaid > 0 &&
-            order.paymentCurrency !== null
-              ? { amount: order.totalPaid, currency: order.paymentCurrency }
-              : null
-          }
-          integrationId={integrationId}
-          onChanged={(next) => {
-            load.setShipment(next)
-            if (next.state !== 'Draft') setDrawer(null)
+      {shipment?.number != null ? (
+        <WaybillCancelDialog
+          error={dialogError}
+          number={shipment.number}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            openerRef.current?.focus()
           }}
-          onClose={() => setDrawer(null)}
-          onMoneyChanged={load.setMoney}
-          orderId={order.id}
-          shipment={shipment}
+          onConfirm={() => void cancelWaybill(null)}
+          onOpenChange={(next) => {
+            if (!next) setDialog(null)
+          }}
+          open={dialog?.kind === 'cancel'}
+          orderNumber={order.number}
+          pending={dialogPending}
         />
-      )}
+      ) : null}
+
+      {shipment?.number != null && dialog?.kind === 'recreate' ? (
+        <WaybillRecreateDialog
+          error={dialogError}
+          number={shipment.number}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            openerRef.current?.focus()
+          }}
+          onConfirm={() => void cancelWaybill(dialog.draft)}
+          onOpenChange={(next) => {
+            if (!next) setDialog(null)
+          }}
+          open
+          pending={dialogPending}
+          reason={dialog.reason}
+        />
+      ) : null}
 
       {lost !== null && integrationId !== null ? (
         <NpAccessRecoverySheet
@@ -569,23 +797,13 @@ export function DeliveryOrderBody({
         />
       )}
 
-      {drawer?.kind === 'attach' && integrationId !== null && (
-        <WaybillAttachDrawer
-          delivery={delivery}
-          integrationId={integrationId}
-          onAttached={load.setShipment}
-          onClose={() => setDrawer(null)}
-          orderId={order.id}
-          orderNumber={order.number}
-        />
-      )}
-
       {drawer?.kind === 'label' &&
         integrationId !== null &&
         shipment?.number != null && (
           <WaybillLabelDrawer
             integrationId={integrationId}
             onClose={() => setDrawer(null)}
+            onCloseAutoFocus={restoreFocus}
             orderId={order.id}
             orderNumber={order.number}
             waybillNumber={shipment.number}
