@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import type { UpdatePartRequest } from '@/api/parts'
 import { FeatureFlagsProvider } from '../FeatureFlags'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
@@ -1805,6 +1806,64 @@ it('applies the parts quota only to create, not edit or delete', async () => {
       }),
     ),
   )
+})
+
+it('reports failed and successful part-code copies in the toast outlet', async () => {
+  const user = userEvent.setup()
+  const writeText = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('clipboard denied'))
+    .mockResolvedValue(undefined)
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Фара',
+    source: 'free',
+    status: 'available',
+    qrCode: 'PART-001',
+    condition: 'good',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    notes: null,
+    photos: [],
+    desiredSalePrice: null,
+    effectiveSalePrice: null,
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  render(
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/:partId"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Копіювати код' }))
+
+  const failure = await screen.findByText('Не вдалося скопіювати код.')
+  const failureToast = failure.closest<HTMLElement>('.rz-toast')!
+  expect(failureToast).toHaveAttribute('role', 'alert')
+  expect(failure.closest('.rz-notice')).toBeNull()
+  await user.click(within(failureToast).getByRole('button'))
+  expect(screen.queryByText('Код скопійовано.')).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Копіювати код' }))
+
+  expect(writeText).toHaveBeenCalledWith('PART-001')
+  expect(screen.queryByText('Не вдалося скопіювати код.')).toBeNull()
+  const confirmation = await screen.findByText('Код скопійовано.')
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(confirmation.closest('.rz-notice')).toBeNull()
 })
 
 it('renders the immutable detail and history contract with permission-aware links', async () => {
@@ -3699,21 +3758,31 @@ it('resets a saved free source filter visibly without sending it to search', asy
     totalPages: 0,
   })
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts?origin=free']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/parts"
-          element={<PartsScreen definition={partsDefinition as never} />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <StrictMode>
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/app/yard/parts?origin=free']}>
+          <Routes>
+            <Route
+              path="/app/:tenant/parts"
+              element={<PartsScreen definition={partsDefinition as never} />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
+    </StrictMode>,
   )
   expect(
-    await screen.findByText(/Фільтр «Вільні запчастини» скинуто/),
+    (
+      await screen.findByText(/Фільтр «Вільні запчастини» скинуто/, {
+        selector: '.rz-toast__msg',
+      })
+    ).closest('[role="status"]'),
   ).toBeVisible()
   expect(
     screen.queryByRole('button', { name: /^Вільна/ }),
   ).not.toBeInTheDocument()
+  expect(document.querySelectorAll('.rz-toast')).toHaveLength(1)
+  expect(document.querySelector('.rz-notice--info')).toBeNull()
   for (const call of partMocks.search.mock.calls)
     expect(call[0]).not.toHaveProperty('originTypes')
 })
@@ -4395,14 +4464,16 @@ function openPartWithNotes(notes: string | null = 'Стара нотатка') {
     },
   )
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/parts/:partId"
-          element={<PartsScreen definition={partsDefinition as never} />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/:partId"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
   return part
 }
@@ -4566,7 +4637,10 @@ it('accepts a lost note save only when the readback matches it', async () => {
   await user.type(input, 'Збережена нотатка')
   partMocks.get.mockResolvedValue({ ...part, notes: 'Збережена нотатка' })
   await user.click(within(region).getByRole('button', { name: 'Зберегти' }))
-  expect(await within(region).findByText('Збережено')).toBeVisible()
+  expect(
+    await screen.findByText('Збережено', { selector: '.rz-toast__msg' }),
+  ).toBeVisible()
+  expect(within(region).queryByText('Збережено')).toBeNull()
   expect(within(region).queryByRole('textbox')).toBeNull()
   expect(region).toHaveTextContent('Збережена нотатка')
 })

@@ -1,7 +1,8 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { Card } from './card'
+import { ToastProvider } from './toast'
 import { InlineNotes, type InlineNotesProps } from './inline-notes'
 
 const editor = (props: Omit<InlineNotesProps, 'children'>) => (
@@ -97,3 +98,43 @@ it('cannot begin editing while another guarded operation is busy', () => {
   expect(screen.getByRole('button', { name: 'Редагувати' })).toBeDisabled()
   expect(screen.queryByRole('textbox')).toBeNull()
 })
+
+it.each(['direct', 'verified after a lost response'] as const)(
+  'shows one bottom toast after notes are saved %s, keeping the card free of success text',
+  async (mode) => {
+    const user = userEvent.setup()
+    const onSave =
+      mode === 'direct'
+        ? vi.fn().mockResolvedValue('Updated note')
+        : vi.fn().mockRejectedValue({ kind: 'network', message: 'offline' })
+    render(
+      <ToastProvider>
+        {editor({
+          value: null,
+          canEdit: true,
+          onSave,
+          readBack: vi.fn().mockResolvedValue('Updated note'),
+        })}
+      </ToastProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Редагувати' }))
+    await user.type(screen.getByRole('textbox'), 'Updated note')
+    await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+    const message = await screen.findByText('Збережено', {
+      selector: '.rz-toast__msg',
+    })
+    expect(message.closest('[role="status"]')).toBeVisible()
+    expect(screen.getAllByText('Збережено')).toHaveLength(1)
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(
+      screen.getByRole('region', { name: 'Нотатки' }),
+    ).not.toHaveTextContent('Збережено')
+    expect(
+      within(screen.getByRole('region', { name: 'Нотатки' })).queryByRole(
+        'status',
+      ),
+    ).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Закрити сповіщення' }))
+    expect(screen.queryByText('Збережено')).toBeNull()
+  },
+)

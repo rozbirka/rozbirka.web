@@ -155,3 +155,21 @@ it('offers a secret when the feed is not receiving anything yet', async () => {
     'np-secret',
   )
 })
+
+it('reports a failed receiving-address copy in the toast outlet', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(
+    new Error('clipboard denied'),
+  )
+  renderScreen()
+
+  await user.click(
+    await screen.findByRole('button', { name: 'Скопіювати адресу прийому' }),
+  )
+
+  const failure = await screen.findByText(
+    'Не вдалося скопіювати адресу прийому.',
+  )
+  expect(failure.closest('.rz-toast')).toHaveAttribute('role', 'alert')
+  expect(failure.closest('.rz-notice')).toBeNull()
+})

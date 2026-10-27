@@ -30,7 +30,7 @@ const list = (columns: readonly string[], rows = 6): LoadingLayout => ({
 const layouts: Record<CabinetModuleKey, LoadingLayout> = {
   dashboard: { ...list(['2fr', '1fr'], 4), kind: 'dashboard', stats: 4 },
   warehouses: { ...list(['4fr', '1fr', '1fr'], 3), stats: 2 },
-  inventory: { ...list(['3fr', '1fr', '1fr', '1fr']), stats: 3 },
+  inventory: { ...list(['3fr', '1fr', '1fr', '1fr']), stats: 4 },
   cars: { ...list(['3fr', '1fr', '1fr', '1fr', '1fr']), thumbnails: true },
   parts: { ...list(['4fr', '1fr', '1fr', '1fr', '1fr'], 8), thumbnails: true },
   customers: list(['3fr', '2fr', '1fr', '1fr']),
@@ -77,6 +77,13 @@ export function loadingLayout(
     .filter(Boolean)
     .slice(2 + baseSegments)
   const base = layouts[module]
+  if (
+    module === 'inventory' &&
+    segments.length === 2 &&
+    segments[0] === 'sessions' &&
+    segments[1] === 'new'
+  )
+    return base
   const orderItemDrawer =
     module === 'orders' &&
     segments.length === 3 &&

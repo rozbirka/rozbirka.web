@@ -320,6 +320,15 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
     }
   }, [cabinet.snapshot, scopeKey])
 
+  useEffect(
+    () => () => {
+      currentScopeRef.current = null
+      createFlightRef.current?.controller.abort('report-screen-unmounted')
+      downloadFlightRef.current?.controller.abort('report-screen-unmounted')
+    },
+    [],
+  )
+
   useEffect(() => {
     const key = scopeKey
     createFlightRef.current?.controller.abort('tenant-scope-changed')
@@ -478,8 +487,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
     }
     // Keep the handle for PDF navigation/printing: the noopener feature itself
     // makes open() return null even when the browser opens the window.
-    const popup = print ? window.open('', '_blank') : null
-    if (popup) popup.opener = null
+    let popup: Window | null = null
     const controller = new AbortController()
     const signal = AbortSignal.any([
       controller.signal,
@@ -489,6 +497,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
     downloadFlightRef.current = { key: access.key, controller }
     setDownloading({ key: access.key, id: report.id })
     try {
+      popup = print ? window.open('', '_blank') : null
+      if (popup) popup.opener = null
       const file = await reportsApi.download(report.id, { signal })
       if (signal.aborted || currentScopeRef.current !== access.key) {
         popup?.close()
@@ -497,6 +507,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       if (print && popup === null) throw new PrintWindowBlockedError()
       const url = URL.createObjectURL(file.blob)
       if (print && popup) {
+        const printPopup = popup
         // Keep the blank window's document: navigating it to a PDF discards
         // listeners on the old Window. The frame's load belongs to the PDF.
         const frame = popup.document.createElement('iframe')
@@ -512,7 +523,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         frame.addEventListener(
           'load',
           () => {
-            popup.focus()
+            printPopup.focus()
             frame.contentWindow?.print()
           },
           { once: true },
@@ -530,7 +541,16 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       popup?.close()
       // A tenant switch already discarded this request: nothing to report.
       if (signal.aborted || currentScopeRef.current !== access.key) return
-      throw failure
+      toast?.show({
+        tone: 'danger',
+        message: print
+          ? failure instanceof PrintWindowBlockedError
+            ? t('printBlocked')
+            : t('printRetry', { reason: normalizeApiProblem(failure).message })
+          : t('downloadRetry', {
+              reason: normalizeApiProblem(failure).message,
+            }),
+      })
     } finally {
       if (downloadFlightRef.current?.controller === controller) {
         downloadFlightRef.current = null
@@ -541,16 +561,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
 
   // No success toast: the browser's own download and print windows are the
   // confirmation, and a tenant switch mid-flight ends the run without a file.
-  const savePdf = useOperation(() => transfer(false), {
-    errorMessage: (failure) =>
-      t('downloadRetry', { reason: normalizeApiProblem(failure).message }),
-  })
-  const printPdf = useOperation(() => transfer(true), {
-    errorMessage: (failure) =>
-      failure instanceof PrintWindowBlockedError
-        ? t('printBlocked')
-        : t('printRetry', { reason: normalizeApiProblem(failure).message }),
-  })
+  const savePdf = useOperation(() => transfer(false))
+  const printPdf = useOperation(() => transfer(true))
   const { reset: resetSave } = savePdf
   const { reset: resetPrint } = printPdf
 
@@ -563,7 +575,6 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   const problems = rangeProblems(range, locale)
   const rangeIsValid = validRange(range)
   const transferBusy = savePdf.pending || printPdf.pending
-  const transferError = savePdf.error ?? printPdf.error
 
   return (
     <RecordShell
@@ -642,7 +653,6 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       )}
 
       {visibleError ? <Notice tone="danger">{visibleError}</Notice> : null}
-      {transferError ? <Notice tone="danger">{transferError}</Notice> : null}
 
       {isLoading ? (
         <SkeletonRows

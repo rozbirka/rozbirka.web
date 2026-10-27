@@ -5,7 +5,11 @@ import {
 } from 'axios'
 import { afterEach, expect, it } from 'vitest'
 import { apiClient } from './client'
-import { inventoryApi } from './inventory'
+import {
+  inventoryApi,
+  type BatchPlacePartsRequest,
+  type PartPlacementJob,
+} from './inventory'
 
 const originalAdapter = apiClient.defaults.adapter!
 
@@ -13,12 +17,12 @@ afterEach(() => {
   apiClient.defaults.adapter = originalAdapter
 })
 
-function capture() {
+function capture(data: unknown = []) {
   const requests: InternalAxiosRequestConfig[] = []
   apiClient.defaults.adapter = (config) => {
     requests.push(config)
     return Promise.resolve({
-      data: { data: [] },
+      data: { data },
       status: 200,
       statusText: 'OK',
       headers: new AxiosHeaders(),
@@ -27,6 +31,78 @@ function capture() {
   }
   return requests
 }
+
+const placement: BatchPlacePartsRequest = {
+  partIds: ['part-1', 'part-2'],
+  sourceZoneId: 'source-zone',
+  zoneId: 'target-zone',
+  sectionId: 'section-1',
+  shelfId: 'shelf-1',
+}
+const placementJob: PartPlacementJob = {
+  id: 'job-1',
+  placement,
+  status: 'queued',
+  total: 2,
+  processed: 0,
+  results: [],
+  partNames: { 'part-1': 'Door', 'part-2': 'Mirror' },
+}
+
+it('starts a placement job with the caller operation ID and cancellation signal', async () => {
+  const requests = capture(placementJob)
+  const controller = new AbortController()
+
+  expect(
+    await inventoryApi.startPlacementJob(placement, 'operation-1', {
+      signal: controller.signal,
+    }),
+  ).toEqual(placementJob)
+
+  expect(requests[0]?.method).toBe('post')
+  expect(requests[0]?.url).toBe('/parts/inventory-zones/jobs')
+  expect(JSON.parse(requests[0]?.data as string)).toEqual({
+    operationId: 'operation-1',
+    placement: {
+      partIds: ['part-1', 'part-2'],
+      sourceZoneId: 'source-zone',
+      zoneId: 'target-zone',
+      sectionId: 'section-1',
+      shelfId: 'shelf-1',
+    },
+  })
+  expect(requests[0]?.signal?.aborted).toBe(false)
+  controller.abort()
+  expect(requests[0]?.signal?.aborted).toBe(true)
+})
+
+it('reads an encoded placement job ID and scopes job recovery to its source zone', async () => {
+  const requests = capture(placementJob)
+  const controller = new AbortController()
+
+  expect(
+    await inventoryApi.getPlacementJob('job/1', {
+      signal: controller.signal,
+    }),
+  ).toEqual(placementJob)
+  const listRequests = capture([placementJob])
+  expect(
+    await inventoryApi.getPlacementJobs('source/zone', {
+      signal: controller.signal,
+    }),
+  ).toEqual([placementJob])
+
+  expect(requests[0]?.method).toBe('get')
+  expect(requests[0]?.url).toBe('/parts/inventory-zones/jobs/job%2F1')
+  expect(listRequests[0]?.method).toBe('get')
+  expect(listRequests[0]?.url).toBe('/parts/inventory-zones/jobs')
+  expect(listRequests[0]?.params).toEqual({ sourceZoneId: 'source/zone' })
+  expect(requests[0]?.signal?.aborted).toBe(false)
+  expect(listRequests[0]?.signal?.aborted).toBe(false)
+  controller.abort()
+  expect(requests[0]?.signal?.aborted).toBe(true)
+  expect(listRequests[0]?.signal?.aborted).toBe(true)
+})
 
 it('loads management inventory resources through tenant-scoped routes', async () => {
   const requests = capture()

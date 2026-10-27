@@ -217,7 +217,7 @@ export function WebhookPanel({
       await navigator.clipboard.writeText(receiveUrl)
       toast.show({ tone: 'ok', message: t('urlCopied') })
     } catch {
-      setError(t('copyFailed'))
+      toast.show({ tone: 'danger', message: t('copyFailed') })
     }
   }
 

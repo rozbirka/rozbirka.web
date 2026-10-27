@@ -666,6 +666,248 @@ it('surfaces a conflicting payment cancellation without leaking an unhandled rej
   }
 })
 
+it.each(['pastDue', 'blocked'] as const)(
+  'recovers an expired %s renewal by cancelling Mono before opening the same plan checkout',
+  async (state) => {
+    const overdue = {
+      ...cancellableSubscription,
+      state,
+      planCode: 'enterprise_monthly',
+      currentPeriodEnd: '2020-01-01T00:00:00Z',
+      nextChargeAt: '2020-01-01T00:00:00Z',
+    }
+    vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+    vi.mocked(billingApi.getSubscription)
+      .mockResolvedValueOnce(overdue)
+      .mockResolvedValueOnce({
+        ...overdue,
+        state: 'blocked',
+        canCancel: false,
+        canSubscribe: true,
+        nextChargeAt: null,
+      })
+    const cancelled = deferred<void>()
+    vi.mocked(billingApi.cancel).mockReturnValue(cancelled.promise)
+    vi.mocked(billingApi.subscribe).mockReturnValue(
+      new Promise(() => undefined),
+    )
+    const user = userEvent.setup()
+    renderScreen(<SubscriptionScreen />)
+
+    await user.click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+    await waitFor(() =>
+      expect(billingApi.cancel).toHaveBeenCalledWith(
+        {
+          recovery: {
+            planCode: 'enterprise_monthly',
+            currentPeriodEnd: '2020-01-01T00:00:00Z',
+          },
+        },
+        { signal: tenantRequestScope.signal },
+      ),
+    )
+    expect(billingApi.subscribe).not.toHaveBeenCalled()
+    cancelled.resolve()
+
+    await waitFor(() =>
+      expect(billingApi.subscribe).toHaveBeenCalledWith(
+        { planCode: 'enterprise_monthly' },
+        { signal: tenantRequestScope.signal },
+      ),
+    )
+  },
+)
+
+it('does not create a replacement checkout when Mono cancellation is unconfirmed', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription).mockResolvedValue(overdue)
+  const error = axiosFailure(409, 'private provider detail')
+  error.response!.data = {
+    error: {
+      code: 'billing.cancellation_unconfirmed',
+      message: 'private provider detail',
+    },
+  }
+  vi.mocked(billingApi.cancel).mockRejectedValue(error)
+  renderScreen(<SubscriptionScreen />)
+  await userEvent
+    .setup()
+    .click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'monobank ще не підтвердив скасування.',
+  )
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+  expect(
+    screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+  ).toBeEnabled()
+})
+
+it('retries a failed replacement checkout on the original plan without cancelling Mono twice', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    planCode: 'enterprise_monthly',
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription)
+    .mockResolvedValueOnce(overdue)
+    .mockResolvedValueOnce({
+      ...overdue,
+      state: 'blocked',
+      canCancel: false,
+      canSubscribe: true,
+      canReactivate: true,
+    })
+  vi.mocked(billingApi.cancel).mockResolvedValue()
+  vi.mocked(billingApi.subscribe).mockRejectedValue(
+    new AxiosError('offline', 'ERR_NETWORK'),
+  )
+  renderScreen(<SubscriptionScreen />)
+  const user = userEvent.setup()
+  await user.click(
+    screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+  )
+  await screen.findByRole('alert')
+  await user.click(screen.getByRole('button', { name: 'Оформити підписку' }))
+
+  await waitFor(() => expect(billingApi.subscribe).toHaveBeenCalledTimes(2))
+  expect(billingApi.cancel).toHaveBeenCalledOnce()
+  expect(billingApi.subscribe).toHaveBeenLastCalledWith(
+    { planCode: 'enterprise_monthly' },
+    { signal: tenantRequestScope.signal },
+  )
+})
+
+it('does not offer card replacement while the paid period is still active', () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'pastDue',
+      currentPeriodEnd: '2099-11-20T00:00:00Z',
+    }),
+  )
+  renderScreen(<SubscriptionScreen />)
+  expect(
+    screen.queryByRole('button', { name: 'Оплатити іншою карткою' }),
+  ).not.toBeInTheDocument()
+})
+
+it('does not create a replacement payment after leaving the tenant during cancellation', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription).mockResolvedValue(overdue)
+  const cancelled = deferred<void>()
+  vi.mocked(billingApi.cancel).mockReturnValue(cancelled.promise)
+  const view = renderScreen(<SubscriptionScreen />)
+  await userEvent
+    .setup()
+    .click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+  await waitFor(() => expect(billingApi.cancel).toHaveBeenCalledOnce())
+  tenantRequestScope.rotate()
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, subscription, 5))
+  view.rerender(inShell(<SubscriptionScreen />))
+  cancelled.resolve()
+  await Promise.resolve()
+
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+  expect(billingApi.getSubscription).toHaveBeenCalledOnce()
+})
+
+it('does not start another payment if the failed renewal has already succeeded', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription).mockResolvedValue({
+    ...overdue,
+    state: 'active',
+    currentPeriodEnd: '2099-11-20T00:00:00Z',
+  })
+  renderScreen(<SubscriptionScreen />)
+  await userEvent
+    .setup()
+    .click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+  await waitFor(() => expect(billingApi.getSubscription).toHaveBeenCalledOnce())
+  expect(billingApi.cancel).not.toHaveBeenCalled()
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+})
+
+it('shows paid access expiry instead of a future charge after cancellation', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'cancelled',
+      canCancel: false,
+      currentPeriodEnd: '2099-11-20T00:00:00Z',
+      nextChargeAt: null,
+    }),
+  )
+  renderScreen(<SubscriptionScreen />)
+
+  expect(await screen.findByText('Доступ до')).toBeInTheDocument()
+  expect(screen.getByText('Автопродовження вимкнено')).toBeInTheDocument()
+  expect(screen.queryByText('Наступне списання')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Скасувати підписку' }),
+  ).not.toBeInTheDocument()
+})
+
+it('keeps cancellation retryable when monobank has not confirmed stopping renewal', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, cancellableSubscription),
+  )
+  const error = axiosFailure(409, 'private provider detail')
+  error.response!.data = {
+    error: {
+      code: 'billing.cancellation_unconfirmed',
+      message: 'private provider detail',
+    },
+  }
+  vi.mocked(billingApi.cancel).mockRejectedValue(error)
+  const user = userEvent.setup()
+  renderScreen(<SubscriptionScreen />)
+  await user.click(screen.getByRole('button', { name: 'Скасувати підписку' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Так, скасувати підписку' }),
+  )
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'monobank ще не підтвердив скасування. Спробуйте ще раз, щоб перевірити стан підписки.',
+  )
+  expect(screen.getByRole('alert')).not.toHaveTextContent(
+    'private provider detail',
+  )
+  expect(
+    screen.getByRole('button', { name: 'Так, скасувати підписку' }),
+  ).toBeEnabled()
+  expect(
+    screen.queryByText(
+      'Підписку скасовано. Доступ діє до кінця сплаченого періоду.',
+    ),
+  ).not.toBeInTheDocument()
+})
+
 it('settles a rejected subscription cancellation with truthful feedback', async () => {
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(undefined, cancellableSubscription),

@@ -205,7 +205,8 @@ export function DeliveryOrderBody({
       await navigator.clipboard.writeText(shipment.number)
       toast?.show({ tone: 'ok', message: t('numberCopied') })
     } catch {
-      setError(t('copyFailed'))
+      if (toast) toast.show({ tone: 'danger', message: t('copyFailed') })
+      else setError(t('copyFailed'))
     }
   }
 

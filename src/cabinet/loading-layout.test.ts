@@ -37,6 +37,16 @@ describe('route-specific loading layouts', () => {
     expect(loadingLayout('orders', '/app/demo/orders/new').kind).toBe('form')
   })
 
+  it('keeps the new inventory session drawer over the sessions list while loading', () => {
+    expect(loadingLayout('inventory', '/app/demo/inventory').stats).toBe(4)
+    expect(
+      loadingLayout('inventory', '/app/demo/inventory/sessions/new'),
+    ).toEqual(loadingLayout('inventory', '/app/demo/inventory'))
+    expect(
+      loadingLayout('inventory', '/app/demo/inventory/sessions/session-1').kind,
+    ).toBe('record')
+  })
+
   it('selects the actual part and intake form compositions, including parts created from an intake', () => {
     expect(loadingLayout('parts', '/app/demo/parts/new')).toMatchObject({
       kind: 'form',
