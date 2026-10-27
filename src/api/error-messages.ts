@@ -68,6 +68,20 @@ export const errorMessages = defineMessages({
       'Запит до Нової пошти не був надісланий. Нічого не створено — спробуйте ще раз.',
     NOVA_POSHTA_OUTCOMEUNKNOWN:
       'Результат запиту невідомий. Оновіть статус перед повторною дією.',
+    NP_SETUP_EXPIRED: 'Перевірка ключа застаріла. Вставте ключ ще раз.',
+    NP_CONFIGURATION_CHANGED:
+      'Налаштування Нової пошти вже змінив інший користувач. Оновіть дані й перевірте зміни ще раз.',
+    NP_SETUP_INCOMPLETE:
+      'Підключення не завершено: оберіть відправника, контакт і точку відправлення.',
+    NP_CASH_REGISTER_UNAVAILABLE:
+      'Обрана каса недоступна для післяплати. Оберіть активну касу з гривнею.',
+    NP_HISTORICAL_SCOPE_EMPTY: 'У цьому кабінеті немає накладних без доступу.',
+    NP_HISTORICAL_SCOPE_UNVERIFIED:
+      'Нова пошта не підтвердила, що ключ відкриває накладні цього кабінету. Доступ не відновлено.',
+    NP_HISTORICAL_ACCESS_UNAVAILABLE:
+      'Нова пошта не відповіла. Ключ не перевірено — спробуйте ще раз за кілька хвилин.',
+    NP_SETUP_REQUIRED:
+      'Відправника, контакт і точку відправлення змінюють через перевірку з ключем Нової пошти.',
     SOURCE_HAS_PARTS:
       'Не можна видалити джерело, доки в ньому є невидалені запчастини.',
     PART_SOURCE_ARCHIVED:
@@ -252,6 +266,20 @@ export const errorMessages = defineMessages({
       'The request was not submitted to Nova Poshta. Nothing was created; try again.',
     NOVA_POSHTA_OUTCOMEUNKNOWN:
       'The request outcome is unknown. Refresh the status before retrying.',
+    NP_SETUP_EXPIRED: 'The key check has expired. Paste the key again.',
+    NP_CONFIGURATION_CHANGED:
+      'Someone else has already changed the Nova Poshta settings. Refresh the data and check the changes again.',
+    NP_SETUP_INCOMPLETE:
+      'Setup is not finished: choose a sender, a contact and a dispatch point.',
+    NP_CASH_REGISTER_UNAVAILABLE:
+      'The chosen till cannot take cash on delivery. Choose an active till holding hryvnia.',
+    NP_HISTORICAL_SCOPE_EMPTY: 'This account has no waybills without access.',
+    NP_HISTORICAL_SCOPE_UNVERIFIED:
+      'Nova Poshta did not confirm that the key opens this account’s waybills. Access was not restored.',
+    NP_HISTORICAL_ACCESS_UNAVAILABLE:
+      'Nova Poshta did not respond. The key was not checked — try again in a few minutes.',
+    NP_SETUP_REQUIRED:
+      'The sender, contact and dispatch point are changed through a check with the Nova Poshta key.',
     SOURCE_HAS_PARTS:
       'A source cannot be deleted while it contains active parts.',
     PART_SOURCE_ARCHIVED:
@@ -441,6 +469,21 @@ export const errorMessages = defineMessages({
       'Żądanie nie zostało wysłane do Nova Poshta. Nic nie utworzono; spróbuj ponownie.',
     NOVA_POSHTA_OUTCOMEUNKNOWN:
       'Wynik żądania jest nieznany. Odśwież status przed ponowną próbą.',
+    NP_SETUP_EXPIRED: 'Sprawdzenie klucza wygasło. Wklej klucz ponownie.',
+    NP_CONFIGURATION_CHANGED:
+      'Ustawienia Nowej Poczty zmienił już inny użytkownik. Odśwież dane i sprawdź zmiany ponownie.',
+    NP_SETUP_INCOMPLETE:
+      'Podłączenie nie jest zakończone: wybierz nadawcę, kontakt i punkt nadania.',
+    NP_CASH_REGISTER_UNAVAILABLE:
+      'Wybrana kasa nie przyjmie pobrania. Wybierz aktywną kasę z hrywną.',
+    NP_HISTORICAL_SCOPE_EMPTY:
+      'To konto nie ma listów przewozowych bez dostępu.',
+    NP_HISTORICAL_SCOPE_UNVERIFIED:
+      'Nowa Poczta nie potwierdziła, że klucz otwiera listy przewozowe tego konta. Dostępu nie przywrócono.',
+    NP_HISTORICAL_ACCESS_UNAVAILABLE:
+      'Nowa Poczta nie odpowiedziała. Klucz nie został sprawdzony — spróbuj ponownie za kilka minut.',
+    NP_SETUP_REQUIRED:
+      'Nadawcę, kontakt i punkt nadania zmienia się przez sprawdzenie z kluczem Nowej Poczty.',
     SOURCE_HAS_PARTS: 'Nie można usunąć źródła, które zawiera aktywne części.',
     PART_SOURCE_ARCHIVED:
       'Nie można dodawać części do zarchiwizowanego samochodu. Wybierz inne źródło.',

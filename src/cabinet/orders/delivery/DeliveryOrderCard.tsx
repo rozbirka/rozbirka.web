@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Check, Plus, Truck } from 'lucide-react'
-import { Button, Notice, StatusPill } from '@/components/app'
+import { Button, Notice, StatusPill, type StatusTone } from '@/components/app'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { uah } from './delivery-money'
@@ -119,16 +119,22 @@ export function DeliveryTabs({
 /** The carrier half: the waybill, the parcel, and what the money allows. */
 export function ShipmentCard({
   actions,
+  chip,
   delivery,
+  notice,
   shipment,
 }: {
   actions: ReactNode
+  /** Replaces the parcel pill, e.g. «Немає доступу» for a lost cabinet. */
+  chip?: { label: string; tone: StatusTone } | undefined
   delivery: NonNullable<DeliveryOrderState['money']>
+  /** A sentence above the actions about why they are what they are. */
+  notice?: ReactNode
   shipment: DeliveryOrderState['shipment']
 }) {
   const { locale } = useLocale()
   const t = useT(deliveryMessages)
-  const parcel = shipmentChip(delivery, shipment, locale)
+  const parcel = chip ?? shipmentChip(delivery, shipment, locale)
   const facts = shipmentFacts(delivery, shipment, locale)
 
   return (
@@ -154,8 +160,18 @@ export function ShipmentCard({
           </div>
         ))}
       </dl>
+      {notice === undefined || notice === null ? null : (
+        <div className="border-app-line border-t px-(--rz-card-p) pt-2.5">
+          {notice}
+        </div>
+      )}
       {actions === null ? null : (
-        <div className="rz-btn-row border-app-line border-t px-(--rz-card-p) py-2.5">
+        <div
+          className={cn(
+            'rz-btn-row border-app-line px-(--rz-card-p) py-2.5',
+            notice === undefined || notice === null ? 'border-t' : '',
+          )}
+        >
           {actions}
         </div>
       )}

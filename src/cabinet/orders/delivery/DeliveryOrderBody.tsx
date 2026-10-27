@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link as RouterLink } from 'react-router'
-import { Plus, Printer } from 'lucide-react'
+import { ExternalLink, KeyRound, Plus, Printer } from 'lucide-react'
 import { Button, Notice, useOptionalToast } from '@/components/app'
 import { cashApi, type CashRegister } from '@/api/cash'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
@@ -13,6 +13,12 @@ import {
   integrationErrorMessage,
   integrationStatusPresentation,
 } from '../../integrations/integration-labels'
+import { NpAccessRecoverySheet } from '../../integrations/NpAccessRecoverySheet'
+import { npRecoveryMessages } from '../../integrations/np-recovery-messages'
+import {
+  lostAccessConnection,
+  useNpConnections,
+} from '../../integrations/use-np-connections'
 import {
   OrderCustomerCard,
   OrderHistoryCard,
@@ -125,6 +131,7 @@ export function DeliveryOrderBody({
   const { locale, timeZone } = useLocale()
   const t = useT(deliveryMessages)
   const tc = useT(commonMessages)
+  const tr = useT(npRecoveryMessages)
   const format = useFormat()
   const when = (value: string) => format.dateTime(value) ?? value
   // The body is only mounted once the money record exists, so the load has
@@ -154,6 +161,20 @@ export function DeliveryOrderBody({
   }, [financeAllowed])
 
   const created = hasWaybill(shipment)
+
+  // A waybill of an earlier carrier cabinet whose key no longer works (3.2).
+  // Core lists cabinets only with the integrations right — the same right the
+  // integrations link needs — so without it the state cannot be told apart.
+  const canRecover = integrationsPath !== null
+  const npConnections = useNpConnections(
+    integrationId,
+    canRecover && created && shipment?.connectionId != null,
+  )
+  const lost = created
+    ? lostAccessConnection(npConnections.connections, shipment?.connectionId)
+    : null
+  const [recoverOpen, setRecoverOpen] = useState(false)
+  const recoverRef = useRef<HTMLButtonElement | null>(null)
 
   const runMoney = async (action: () => Promise<DeliveryOrder>) => {
     if (busy) return
@@ -326,8 +347,40 @@ export function DeliveryOrderBody({
               ) : null}
 
               <ShipmentCard
+                {...(lost === null
+                  ? {}
+                  : {
+                      chip: { label: tr('noAccess'), tone: 'danger' as const },
+                      notice: (
+                        <Notice tone="danger">
+                          {tr('statusStale', {
+                            number: shipment?.number ?? '',
+                          })}
+                        </Notice>
+                      ),
+                    })}
                 actions={
-                  integrationId === null ? null : created ? (
+                  integrationId === null ? null : lost !== null ? (
+                    <>
+                      <Button
+                        disabled={busy}
+                        onClick={() => setRecoverOpen(true)}
+                        ref={recoverRef}
+                        variant="primary"
+                      >
+                        <KeyRound aria-hidden />
+                        {tr('recover')}
+                      </Button>
+                      <Button
+                        disabled={busy}
+                        onClick={() => setDrawer({ kind: 'waybill' })}
+                        variant="quiet"
+                      >
+                        <ExternalLink aria-hidden />
+                        {tr('openWaybill')}
+                      </Button>
+                    </>
+                  ) : created ? (
                     <>
                       <Button
                         disabled={busy}
@@ -475,6 +528,37 @@ export function DeliveryOrderBody({
           shipment={shipment}
         />
       )}
+
+      {lost !== null && integrationId !== null ? (
+        <NpAccessRecoverySheet
+          canRecover={canRecover}
+          connection={lost}
+          integrationId={integrationId}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            recoverRef.current?.focus()
+          }}
+          onOpenChange={setRecoverOpen}
+          onRecovered={(_result, count) => {
+            toast?.show({ tone: 'ok', message: tr('recovered', { count }) })
+            npConnections.reload()
+            load.reload()
+          }}
+          open={recoverOpen}
+          waybills={
+            shipment?.number == null
+              ? []
+              : [
+                  {
+                    number: shipment.number,
+                    caption: `#${String(order.number)} · ${
+                      shipment.trackingStatus ?? shipment.state
+                    }`,
+                  },
+                ]
+          }
+        />
+      ) : null}
 
       {drawer?.kind === 'waybill' && shipment !== null && (
         <WaybillDataDrawer

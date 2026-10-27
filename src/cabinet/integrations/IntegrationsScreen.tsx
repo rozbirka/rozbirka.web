@@ -163,7 +163,14 @@ export function IntegrationsScreen() {
     try {
       const created = await integrationsApi.create(definitionId)
       if (!mountedRef.current) return
-      void navigate(cabinetPath(slug, 'integrations', created.id))
+      // Nova Poshta is set up in its own wizard; the record only holds it.
+      void navigate(
+        cabinetPath(
+          slug,
+          'integrations',
+          created.code === NOVA_POSHTA ? `${created.id}/connect` : created.id,
+        ),
+      )
     } catch (error) {
       if (mountedRef.current)
         setConnectError(
@@ -307,6 +314,7 @@ export function IntegrationsScreen() {
                   disabled={connecting !== null}
                   onClick={() => void connect(definition.id)}
                   size="sm"
+                  variant="primary"
                 >
                   {connecting === definition.id
                     ? t('connecting')

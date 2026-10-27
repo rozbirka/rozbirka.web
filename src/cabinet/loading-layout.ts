@@ -122,6 +122,7 @@ export function loadingLayout(
     }
   if (module === 'integrations' && segments.length > 0) {
     if (segments.includes('dispatch-points')) return base
+    if (segments.includes('connect')) return { ...base, kind: 'form', stats: 0 }
     if (segments.includes('webhook'))
       return { ...base, kind: 'dashboard', stats: 3 }
     return {

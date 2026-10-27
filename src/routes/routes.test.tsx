@@ -151,6 +151,8 @@ describe('production route boundary', () => {
     ['settings/billing/payments', 'PaymentsScreen'],
     ['settings/profile', 'ProfileScreen'],
     ['settings/business', 'BusinessSettingsScreen'],
+    ['settings/integrations/:integrationId', 'NovaPoshtaScreen'],
+    ['settings/integrations/:integrationId/connect', 'NovaPoshtaConnectScreen'],
     ['reports', 'ReportsScreen'],
     ['team', 'TeamScreen'],
   ])(

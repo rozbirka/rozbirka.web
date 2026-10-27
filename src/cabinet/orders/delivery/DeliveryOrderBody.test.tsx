@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
@@ -7,6 +8,7 @@ import type { OrderDetail } from '@/api/orders'
 import type { Shipment } from '@/api/shipping'
 import { LocaleProvider } from '@/i18n'
 import { ToastProvider } from '@/components/app'
+import { novaPoshtaSetupApi } from '@/api/nova-poshta-setup'
 import { DeliveryOrderBody } from './DeliveryOrderBody'
 import type {
   DeliveryOrderLoad,
@@ -48,6 +50,12 @@ vi.mock('@/api/shipping', () => ({
     attach: vi.fn(),
     cancel: vi.fn(),
     label: vi.fn(),
+  },
+}))
+vi.mock('@/api/nova-poshta-setup', () => ({
+  novaPoshtaSetupApi: {
+    connections: vi.fn().mockResolvedValue([]),
+    recover: vi.fn(),
   },
 }))
 const recordPayment = vi.hoisted(() => vi.fn())
@@ -517,4 +525,72 @@ it('reports a failed waybill-number copy in the toast outlet', async () => {
   const failure = await screen.findByText('Не вдалося скопіювати номер ТТН.')
   expect(failure.closest('.rz-toast')).toHaveAttribute('role', 'alert')
   expect(failure.closest('.rz-notice')).toBeNull()
+})
+
+it('says a waybill of a lost cabinet no longer updates and offers recovery', async () => {
+  vi.mocked(novaPoshtaSetupApi.connections).mockResolvedValue([
+    {
+      id: 'conn-old',
+      version: 'cv1',
+      isCurrent: false,
+      hasVerifiedAccess: false,
+      waybillCount: 14,
+      createdAt: '2026-08-01T10:00:00Z',
+    },
+  ])
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      shipment: shipment({
+        connectionId: 'conn-old',
+        number: '20 4500 1187 2209',
+      }),
+    }),
+  )
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  const card = screen.getByRole('region', { name: 'Нова пошта' })
+  expect(
+    await within(card).findByText(
+      'Статус ТТН 20 4500 1187 2209 не оновлюється: ключ попереднього кабінету більше не діє.',
+    ),
+  ).toBeVisible()
+  expect(within(card).getByText('Немає доступу')).toBeVisible()
+  expect(
+    within(card).queryByRole('button', { name: 'Оновити статус' }),
+  ).toBeNull()
+  expect(
+    within(card).getByRole('button', { name: 'Відкрити ТТН' }),
+  ).toBeVisible()
+
+  await user.click(
+    within(card).getByRole('button', { name: 'Відновити доступ' }),
+  )
+  expect(
+    await screen.findByRole('dialog', {
+      name: 'Відновити доступ до старих накладних',
+    }),
+  ).toBeVisible()
+  expect(screen.getByText('Накладні без доступу · 14')).toBeVisible()
+})
+
+it('leaves a waybill of a working cabinet as it is', async () => {
+  vi.mocked(novaPoshtaSetupApi.connections).mockResolvedValue([
+    {
+      id: 'conn-1',
+      version: 'cv1',
+      isCurrent: true,
+      hasVerifiedAccess: true,
+      waybillCount: 3,
+      createdAt: '2026-08-01T10:00:00Z',
+    },
+  ])
+  const user = userEvent.setup()
+  renderBody(load({ shipment: shipment({ connectionId: 'conn-1' }) }))
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(
+    await screen.findByRole('button', { name: 'Оновити статус' }),
+  ).toBeVisible()
+  expect(screen.queryByText('Немає доступу')).toBeNull()
 })
