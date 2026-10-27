@@ -1,3 +1,4 @@
+import { render } from '@testing-library/react'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { matchRoutes } from 'react-router'
@@ -180,3 +181,19 @@ it('keeps personal account controls outside tenant and entitlement providers', a
     'AccountSecurityScreen',
   ])
 })
+
+it.each(['light', 'dark'])(
+  'uses the saved %s theme while a route module loads',
+  (theme) => {
+    localStorage.setItem('rozbirka.theme', theme)
+    try {
+      const { container } = render(<>{cabinetRoute().hydrateFallbackElement}</>)
+      expect(document.body).toHaveAttribute('data-theme', theme)
+      expect(container.querySelector('[aria-busy="true"]')).toHaveClass(
+        'bg-app-canvas',
+      )
+    } finally {
+      localStorage.removeItem('rozbirka.theme')
+    }
+  },
+)

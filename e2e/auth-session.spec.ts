@@ -1,13 +1,13 @@
 import {
+  appOrigin,
+  upstreamOrigin,
   expect,
   test,
   type APIRequestContext,
   type Page,
   type Route,
-} from '@playwright/test'
+} from './fixtures'
 
-const upstreamOrigin = 'http://127.0.0.1:4174'
-const appOrigin = 'http://127.0.0.1:4173'
 const phone = '501112233'
 const otp = '123456'
 const fixtureRefreshSecret = 'refresh-1'
@@ -330,14 +330,14 @@ async function resetUpstream(
   request: APIRequestContext,
   options: { newUser?: boolean } = {},
 ) {
-  const response = await request.post(`${upstreamOrigin}/_test/reset`, {
+  const response = await request.post(`${upstreamOrigin()}/_test/reset`, {
     data: options,
   })
   expect(response.ok()).toBeTruthy()
 }
 
 async function upstreamStats(request: APIRequestContext) {
-  const response = await request.get(`${upstreamOrigin}/_test/stats`)
+  const response = await request.get(`${upstreamOrigin()}/_test/stats`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as {
     sendRequests: number
@@ -558,7 +558,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   const sendResponsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return (
-      url.origin === appOrigin &&
+      url.origin === appOrigin() &&
       url.pathname === '/session/otp/send' &&
       response.request().method() === 'POST'
     )
@@ -566,7 +566,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   const verifyResponsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return (
-      url.origin === appOrigin &&
+      url.origin === appOrigin() &&
       url.pathname === '/session/otp/verify' &&
       response.request().method() === 'POST'
     )
@@ -586,7 +586,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
 
   const verifyResponse = await verifyResponsePromise
   const verifyUrl = new URL(verifyResponse.url())
-  expect(verifyUrl.origin).toBe(appOrigin)
+  expect(verifyUrl.origin).toBe(appOrigin())
   expect(verifyUrl.pathname).toBe('/session/otp/verify')
   expect(verifyResponse.request().method()).toBe('POST')
   expect(verifyResponse.status()).toBe(200)
@@ -608,7 +608,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
     verifyRequests: 1,
   })
 
-  const cookies = await context.cookies(`${appOrigin}/session/refresh`)
+  const cookies = await context.cookies(`${appOrigin()}/session/refresh`)
   const refreshCookie = cookies.find(
     (cookie) => cookie.name === 'rozbirka_refresh',
   )
@@ -628,6 +628,22 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   expect(storageText).not.toMatch(
     /access.?token|refresh.?token|access-|refresh-/,
   )
+})
+
+test('accepts a full OTP keyboard replacement in any digit field @auth-smoke', async ({
+  page,
+}) => {
+  await installApiBoundary(page)
+  await page.goto('/login')
+  await page.getByLabel('Номер телефону').fill(phone)
+  await page.getByRole('button', { name: 'Отримати код' }).click()
+  await page.getByLabel('Цифра 1').fill(otp)
+  for (const [index, digit] of [...otp].entries())
+    await expect(page.getByLabel(`Цифра ${index + 1}`)).toHaveValue(digit)
+  await page.getByLabel('Цифра 3').fill(otp)
+  await expect(page.getByLabel('Цифра 6')).toBeFocused()
+  await page.getByRole('button', { name: 'Підтвердити' }).click()
+  await expect(page).toHaveURL(/\/app\/koval\/dashboard$/)
 })
 
 test('invalid OTP reaches the Ukrainian login error through the Worker without leaking upstream details @auth-smoke', async ({
@@ -737,7 +753,7 @@ test('logout expires the cookie and leaves the user as guest @auth-smoke', async
   expect(visitedPaths).toContain('/')
   expect(visitedPaths).not.toContain('/login')
   expect(
-    (await context.cookies(`${appOrigin}/session/logout`)).some(
+    (await context.cookies(`${appOrigin()}/session/logout`)).some(
       (cookie) => cookie.name === 'rozbirka_refresh',
     ),
   ).toBe(false)
@@ -795,17 +811,17 @@ test('scan deep link resumes after OTP without accepting an external return URL'
 
   await completeOtpLogin(page)
   await expect(page).toHaveURL('/app/koval/dashboard?scan=QR-123~part')
-  expect(new URL(page.url()).origin).toBe(appOrigin)
+  expect(new URL(page.url()).origin).toBe(appOrigin())
 })
 
 test('native auth relay keeps raw tokens out of browser cookies and blocks registration @native-auth-smoke', async ({
   request,
 }) => {
-  const send = await request.post(`${appOrigin}/auth/login/phone`, {
+  const send = await request.post(`${appOrigin()}/auth/login/phone`, {
     data: { phone: '+380501112233' },
   })
   expect(send.status()).toBe(200)
-  const verify = await request.post(`${appOrigin}/auth/login/verify`, {
+  const verify = await request.post(`${appOrigin()}/auth/login/verify`, {
     data: {
       phone: '+380501112233',
       code: otp,
@@ -818,7 +834,7 @@ test('native auth relay keeps raw tokens out of browser cookies and blocks regis
   expect(result).toMatchObject({
     data: { refreshToken: 'refresh-1', accessToken: 'access-1' },
   })
-  const denied = await request.post(`${appOrigin}/auth/registration/phone`, {
+  const denied = await request.post(`${appOrigin()}/auth/registration/phone`, {
     data: { phone: '+380501112233' },
   })
   expect(denied.status()).toBe(404)

@@ -140,12 +140,11 @@ it('connects a catalog service that is not in use yet', async () => {
   expect(integrationsApi.create).toHaveBeenCalledWith('definition-np')
 })
 
-it('keeps the exchange log disabled while the service stores no history', async () => {
+it('omits the unsupported exchange log action', async () => {
   renderScreen()
 
-  const control = await screen.findByRole('button', { name: 'Журнал обміну' })
-  expect(control).toBeDisabled()
-  expect(control).toHaveAccessibleDescription(/Журналу обміну немає/)
+  await screen.findByRole('region', { name: 'Підключені сервіси' })
+  expect(screen.queryByRole('button', { name: 'Журнал обміну' })).toBeNull()
 })
 
 const asCountry = (countryCode: 'UA' | 'GB' | 'PL') =>
@@ -189,7 +188,7 @@ it('speaks British English inside an en-GB locale', async () => {
   expect(
     within(available).getByRole('button', { name: 'Connect' }),
   ).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Exchange log' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Exchange log' })).toBeNull()
   expect(screen.queryByText(/Нова пошта доступна лише/)).toBeNull()
 })
 

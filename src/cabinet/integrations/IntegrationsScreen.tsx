@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
 import {
@@ -41,15 +41,6 @@ type LoadState =
       definitions: IntegrationDefinition[]
     }
   | { kind: 'error' }
-
-/** A control the design asks for and the API cannot back: shown, not faked. */
-function Dead({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <Button disabled title={title}>
-      {children}
-    </Button>
-  )
-}
 
 /** The breadcrumb trail of `.rz-crumbs`: parents, a chevron, the current page. */
 export function IntegrationCrumbs({
@@ -185,7 +176,6 @@ export function IntegrationsScreen() {
 
   return (
     <RedesignShell
-      actions={<Dead title={t('noExchangeLog')}>{t('exchangeLog')}</Dead>}
       crumb={
         <IntegrationCrumbs
           current={moduleLabel('integrations', locale)}

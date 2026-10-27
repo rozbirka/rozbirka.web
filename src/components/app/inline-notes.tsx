@@ -152,7 +152,7 @@ export function InlineNotes({
     <div className="grid min-w-0 gap-3">
       {editing && canEdit ? (
         <form
-          className="grid min-w-0 gap-3"
+          className="rz-form-page grid min-w-0 gap-3"
           aria-busy={disabled}
           onSubmit={(event) => void save(event)}
         >

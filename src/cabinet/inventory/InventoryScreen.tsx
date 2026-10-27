@@ -5,7 +5,6 @@ import {
   ArrowRight,
   ClipboardCheck,
   ClipboardList,
-  Pause,
   Plus,
 } from 'lucide-react'
 import {
@@ -1030,10 +1029,6 @@ function SessionView({ id }: { id: string }) {
                     </Link>
                   </Button>
                 )}
-                {/* Counting happens in the mobile app; the cabinet watches it. */}
-                <Button disabled title={t('scanUnavailable')} variant="primary">
-                  {t('scan')}
-                </Button>
                 <ActionMenu
                   actions={[
                     {
@@ -1042,14 +1037,6 @@ function SessionView({ id }: { id: string }) {
                       icon: <ClipboardList aria-hidden />,
                       onSelect: () =>
                         void navigate(`${base}/sessions/${id}/audit`),
-                    },
-                    {
-                      key: 'pause',
-                      label: t('pause'),
-                      icon: <Pause aria-hidden />,
-                      disabled: true,
-                      title: t('pauseUnavailable'),
-                      onSelect: () => undefined,
                     },
                     ...(canManage &&
                     session.status !== 'completed' &&
@@ -1801,9 +1788,6 @@ function ResultsView({ id }: { id: string }) {
                 <Button asChild>
                   <Link to={`${base}/sessions/${id}/audit`}>{t('audit')}</Link>
                 </Button>
-                <Button disabled title={t('exportUnavailable')}>
-                  {t('export')}
-                </Button>
               </>
             }
           >
@@ -2352,9 +2336,6 @@ function AuditView({ id }: { id: string }) {
                   onClick={() => setRaw((value) => !value)}
                 >
                   {raw ? t('hideRaw') : t('showRaw')}
-                </Button>
-                <Button disabled title={t('exportUnavailable')}>
-                  {t('export')}
                 </Button>
               </>
             }

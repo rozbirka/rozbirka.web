@@ -172,7 +172,7 @@ it('opens a photo full size and says which one of how many', async () => {
 
   const dialog = screen.getByRole('dialog', { name: 'Фото деталі' })
   expect(within(dialog).getByRole('img')).toHaveAttribute('src', '/one.jpg')
-  expect(within(dialog).getByText(/1 з 2/)).toBeVisible()
+  expect(within(dialog).getByText('1 / 2')).toBeVisible()
 })
 
 it('pages the viewer with on-screen controls, not only the keyboard', async () => {
@@ -185,19 +185,23 @@ it('pages the viewer with on-screen controls, not only the keyboard', async () =
     }),
   )
   const viewer = screen.getByRole('dialog', { name: 'Фото деталі' })
-  expect(within(viewer).getByText(/1 з 2/)).toBeVisible()
+  expect(within(viewer).getByText('1 / 2')).toBeVisible()
 
   // A viewer that only answers to arrow keys is unusable on a phone.
   await user.click(
     within(viewer).getByRole('button', { name: 'Наступне фото' }),
   )
-  expect(within(viewer).getByText(/2 з 2/)).toBeVisible()
+  expect(within(viewer).getByText('2 / 2')).toBeVisible()
 
-  // Past the last photo it wraps rather than dead-ending.
-  await user.click(
+  // The edges stop instead of wrapping, so the count never jumps back.
+  expect(
     within(viewer).getByRole('button', { name: 'Наступне фото' }),
-  )
-  expect(within(viewer).getByText(/1 з 2/)).toBeVisible()
+  ).toBeDisabled()
+  await user.keyboard('{Home}')
+  expect(within(viewer).getByText('1 / 2')).toBeVisible()
+  expect(
+    within(viewer).getByRole('button', { name: 'Попереднє фото' }),
+  ).toBeDisabled()
 })
 
 it('shows the full photo in the large frame and thumbnails in the strip', () => {
@@ -255,7 +259,7 @@ it('lets a thumbnail change the large frame before anything is opened', async ()
     }),
   )
   const viewer = screen.getByRole('dialog', { name: 'Фото деталі' })
-  expect(within(viewer).getByText(/2 з 2/)).toBeVisible()
+  expect(within(viewer).getByText('2 / 2')).toBeVisible()
 })
 
 it('says a gallery is empty in the caller\u2019s own words', () => {
@@ -714,7 +718,12 @@ it('returns focus to the gallery opener and explains unavailable full photos', a
   await user.click(opener)
   const dialog = screen.getByRole('dialog')
   fireEvent.error(within(dialog).getByRole('img', { name: 'Авто' }))
-  expect(within(dialog).getByText('Фото недоступне')).toBeVisible()
+  expect(within(dialog).getByRole('alert')).toHaveTextContent(
+    'Не вдалося завантажити фото',
+  )
+  // Retry starts the same file over rather than leaving the error up.
+  await user.click(within(dialog).getByRole('button', { name: 'Повторити' }))
+  expect(within(dialog).getByRole('img', { name: 'Авто' })).toBeInTheDocument()
   await user.keyboard('{Escape}')
   expect(opener).toHaveFocus()
 })

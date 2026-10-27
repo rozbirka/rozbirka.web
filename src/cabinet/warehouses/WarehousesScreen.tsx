@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   Archive,
   ArrowRight,
-  Download,
   LayoutGrid,
   Pencil,
   Plus,
@@ -73,6 +72,7 @@ import { BackAction, WarehousePageHead } from './warehouse-page'
 import { inventoryCodeFromName } from '../inventory/inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
 import { Resource } from '../inventory/InventoryResource'
+import { PlacementSkeleton } from '../inventory/PlacementSkeleton'
 import { WarehouseStatisticsError } from './WarehouseStatisticsError'
 import { LocationPartsList } from '../inventory/LocationPartsList'
 import { unassignedMessages } from './unassigned-messages'
@@ -210,8 +210,11 @@ function UnassignedPartsView({ id }: { id: string }) {
                               {
                                 key: 'place',
                                 label: t('placeSelected'),
-                                onRun: () =>
-                                  setBulkParts([...selectedParts.values()]),
+                                onRun: () => {
+                                  const parts = [...selectedParts.values()]
+                                  if (parts.length === 1) setPlacing(parts[0]!)
+                                  else setBulkParts(parts)
+                                },
                               },
                               ...(targetTenant
                                 ? [
@@ -237,11 +240,6 @@ function UnassignedPartsView({ id }: { id: string }) {
                           />
                         ) : null,
                       }
-                    : undefined
-                }
-                onPlace={
-                  canManage && warehouse.isActive
-                    ? (part) => setPlacing(part)
                     : undefined
                 }
               />
@@ -875,33 +873,23 @@ function WarehouseView({ id }: { id: string }) {
                     {t('edit')}
                   </Button>
                 ) : null}
-                <ActionMenu
-                  actions={[
-                    {
-                      key: 'export',
-                      label: t('exportStock'),
-                      icon: <Download aria-hidden />,
-                      disabled: true,
-                      title: t('exportUnavailable'),
-                      onSelect: () => undefined,
-                    },
-                    ...(canManage && !warehouse.isSystemDefault
-                      ? [
-                          {
-                            key: 'archive',
-                            label: t('archiveWarehouse'),
-                            icon: <Archive aria-hidden />,
-                            destructive: true as const,
-                            onSelect: () => {
-                              setOperationError(null)
-                              setArchivingWarehouse(true)
-                            },
-                          },
-                        ]
-                      : []),
-                  ]}
-                  label={t('moreActions')}
-                />
+                {canManage && !warehouse.isSystemDefault ? (
+                  <ActionMenu
+                    actions={[
+                      {
+                        key: 'archive',
+                        label: t('archiveWarehouse'),
+                        icon: <Archive aria-hidden />,
+                        destructive: true,
+                        onSelect: () => {
+                          setOperationError(null)
+                          setArchivingWarehouse(true)
+                        },
+                      },
+                    ]}
+                    label={t('moreActions')}
+                  />
+                ) : null}
               </>
             }
           >
@@ -2100,7 +2088,12 @@ function PartPlacementView({
     : '/'
 
   const content = (
-    <Resource retry={resource.reload} state={resource.state} framed={!drawer}>
+    <Resource
+      retry={resource.reload}
+      state={resource.state}
+      framed={!drawer}
+      loadingContent={drawer ? <PlacementSkeleton /> : undefined}
+    >
       {({
         warehouses,
         zones,
@@ -3000,7 +2993,7 @@ function PartPlacementView({
         </>
       }
     >
-      {content}
+      <div data-placement-drawer={partId}>{content}</div>
     </Sheet>
   )
 }

@@ -1334,7 +1334,7 @@ function IntakeForm({
 
           <form
             aria-busy={busy}
-            className="flex flex-wrap items-start gap-4"
+            className="rz-form-page flex flex-wrap items-start gap-4"
             id="intake-form"
             onSubmit={(event) => void save(event)}
           >

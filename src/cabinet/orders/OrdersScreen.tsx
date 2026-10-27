@@ -25,7 +25,6 @@ import {
   Undo2,
   ClipboardList,
   Plus,
-  Printer,
   SearchX,
   Trash2,
   X,
@@ -348,7 +347,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     if (value) next.set(name, value)
     else next.delete(name)
     next.set('page', '1')
-    setParams(next)
+    setParams(next, { flushSync: name === 'q' })
   }
   const goToPage = (nextPage: number) => {
     const next = new URLSearchParams(params)
@@ -1517,10 +1516,6 @@ function OrderDetailScreen({
     <RedesignShell
       actions={
         <>
-          <Button disabled title={t('printUnavailable')}>
-            <Printer aria-hidden />
-            {t('print')}
-          </Button>
           {orderEditable ? (
             <ActionMenu
               actions={[

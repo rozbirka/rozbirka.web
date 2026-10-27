@@ -3,6 +3,7 @@ import type { ComponentType } from 'react'
 import App from '@/App'
 import { LocaleOverride } from '@/i18n/LocaleProvider'
 import { RedirectIfAuth, RequireAuth } from '@/auth/guards'
+import { RouteLoadingFallback } from './route-loading-fallback'
 import type { CabinetModuleScreenProps } from '@/cabinet/ModuleBoundary'
 import {
   cabinetModules,
@@ -10,9 +11,7 @@ import {
   type CabinetModuleKey,
 } from '@/cabinet/module-registry'
 
-const hydrateFallbackElement = (
-  <div className="min-h-screen bg-background" aria-busy="true" />
-)
+const hydrateFallbackElement = <RouteLoadingFallback />
 
 const cabinetModuleRoute = (module: CabinetModuleKey): RouteObject => ({
   path: cabinetModules[module].routeSegment.slice(1),

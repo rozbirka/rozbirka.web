@@ -3345,7 +3345,7 @@ it('shows an archive conflict inside the confirmation and leaves the warehouse o
 it('searches warehouse codes and resets the current page without losing other parameters', async () => {
   const user = userEvent.setup()
   api.getWarehouses.mockResolvedValue(
-    Array.from({ length: 12 }, (_, index) => ({
+    Array.from({ length: 17 }, (_, index) => ({
       id: `wh-${index + 1}`,
       name: `Склад ${index + 1}`,
       code: `WH${index + 1}`,
@@ -3356,7 +3356,7 @@ it('searches warehouse codes and resets the current page without losing other pa
   )
   renderAt('/app/yard/warehouses?locationPage=2&keep=1')
   expect(
-    await screen.findByRole('link', { name: 'Відкрити склад Склад 11' }),
+    await screen.findByRole('link', { name: 'Відкрити склад Склад 16' }),
   ).toBeVisible()
   await user.type(
     screen.getByRole('searchbox', { name: 'Пошук складу' }),
@@ -3366,7 +3366,7 @@ it('searches warehouse codes and resets the current page without losing other pa
     screen.getByRole('link', { name: 'Відкрити склад Склад 2' }),
   ).toHaveAttribute('href', '/app/yard/warehouses/wh-2')
   expect(
-    screen.queryByRole('link', { name: 'Відкрити склад Склад 11' }),
+    screen.queryByRole('link', { name: 'Відкрити склад Склад 16' }),
   ).toBeNull()
   expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
   expect(screen.getByTestId('inventory-url')).not.toHaveTextContent(
@@ -3617,7 +3617,39 @@ function setupUnassignedQueue() {
   })
 }
 
-it('opens the warehouse unassigned queue with a scoped search and quick placement', async () => {
+async function openUnassignedPlacement(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Розмістити вибрані' }))
+}
+
+it('offers unassigned placement only after selecting parts, without per-row placement buttons', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const selection = await screen.findByRole('checkbox', {
+    name: 'Обрати: Крило',
+  })
+  expect(
+    screen.queryByRole('button', { name: /Розмістити/ }),
+  ).not.toBeInTheDocument()
+  await user.click(selection)
+  expect(
+    screen.getByRole('button', { name: 'Розмістити вибрані' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Розмістити Крило' }),
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Розмістити вибрані' }))
+  expect(
+    await screen.findByRole('dialog', { name: 'Розмістити запчастину' }),
+  ).toBeVisible()
+})
+
+it('opens the warehouse unassigned queue with a scoped search and selection', async () => {
   const user = userEvent.setup()
   setupUnassignedQueue()
   renderAt('/app/yard/warehouses/wh-1')
@@ -3626,7 +3658,7 @@ it('opens the warehouse unassigned queue with a scoped search and quick placemen
   await user.click(link)
   expect(await screen.findByRole('heading', { name: 'Без зони' })).toBeVisible()
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeVisible()
   expect(parts.search).toHaveBeenLastCalledWith(
     {
@@ -3668,9 +3700,7 @@ it('places an unassigned part without leaving the queue and preserves its search
   renderAt(
     '/app/yard/warehouses/wh-1/unassigned?unassignedSearch=OEM-123&keep=1',
   )
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog', {
     name: 'Розмістити запчастину',
   })
@@ -3690,7 +3720,7 @@ it('places an unassigned part without leaving the queue and preserves its search
   )
   await waitFor(() =>
     expect(
-      screen.queryByRole('button', { name: 'Розмістити Крило' }),
+      screen.queryByRole('checkbox', { name: 'Обрати: Крило' }),
     ).toBeNull(),
   )
   expect(
@@ -3707,9 +3737,7 @@ it('keeps the placement choice on save failure and allows retry from the queue',
   setupUnassignedQueue()
   api.replacePartZones.mockRejectedValueOnce(new Error('Offline'))
   renderAt('/app/yard/warehouses/wh-1/unassigned')
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   await chooseUnassignedZone(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
@@ -3718,7 +3746,7 @@ it('keeps the placement choice on save failure and allows retry from the queue',
     within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
   ).toBeDisabled()
   expect(
-    screen.getByRole('button', { name: 'Розмістити Крило', hidden: true }),
+    screen.getByRole('checkbox', { name: 'Обрати: Крило', hidden: true }),
   ).toBeInTheDocument()
   await user.click(
     within(dialog).getByRole('button', { name: 'Повторити для нерозміщених' }),
@@ -3738,11 +3766,11 @@ it('shows failed unassigned loading separately from an empty queue and retries',
   expect(screen.queryByText('Немає запчастин для розміщення.')).toBeNull()
   await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeVisible()
 })
 
-it('disables quick placement for parts locked by stocktake', async () => {
+it('disables selection for parts locked by stocktake', async () => {
   setupUnassignedQueue()
   parts.search.mockResolvedValue({
     items: [{ ...unassignedPart, isInventoryLocked: true }],
@@ -3753,11 +3781,11 @@ it('disables quick placement for parts locked by stocktake', async () => {
   })
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeDisabled()
   expect(
-    screen.getByText('Розміщення заблоковано під час інвентаризації.'),
-  ).toBeVisible()
+    screen.getByRole('checkbox', { name: 'Обрати: Крило' }),
+  ).toHaveAttribute('title', 'Розміщення заблоковано під час інвентаризації.')
 })
 
 it.each([
@@ -3804,7 +3832,7 @@ it('allows placing reserved units that are still physically in stock', async () 
   expect(
     await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeEnabled()
-  await user.click(screen.getByRole('button', { name: 'Розмістити Крило' }))
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   await chooseUnassignedZone(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
@@ -3876,9 +3904,7 @@ it('uses the same section and shelf placement for a single part', async () => {
   setupUnassignedQueue()
   setupPlacementHierarchy()
   renderAt('/app/yard/warehouses/wh-1/unassigned')
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog', {
     name: 'Розмістити запчастину',
   })
@@ -4098,9 +4124,7 @@ it('prefills the queue warehouse and preserves other physical zones when placing
     },
   ])
   renderAt('/app/yard/warehouses/wh-1/unassigned')
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   expect(within(dialog).getByText('Основний склад')).toBeVisible()
   const save = within(dialog).getByRole('button', {
@@ -4148,14 +4172,12 @@ it('returns to the last remaining queue page after placement and keeps the searc
   renderAt(
     '/app/yard/warehouses/wh-1/unassigned?unassignedSearch=Крило&unassignedPage=2&keep=1',
   )
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   await chooseUnassignedZone(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило 2' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило 2' }),
   ).toBeVisible()
   expect(screen.getByTestId('inventory-url')).toHaveTextContent(
     'unassignedPage=1',

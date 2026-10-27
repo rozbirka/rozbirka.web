@@ -1,13 +1,13 @@
 import AxeBuilder from '@axe-core/playwright'
 import {
+  upstreamOrigin,
   expect,
   test,
   type APIRequestContext,
   type Page,
   type Route,
-} from '@playwright/test'
+} from './fixtures'
 
-const upstreamOrigin = 'http://127.0.0.1:4174'
 const phone = '501112233'
 const otp = '123456'
 
@@ -433,7 +433,7 @@ async function installCabinetApiBoundary(
     if (isRecognizedDashboardPath(path)) {
       const authorization = request.headers().authorization
       const upstreamResponse = await fetch(
-        `${upstreamOrigin}${path}${requestUrl.search}`,
+        `${upstreamOrigin()}${path}${requestUrl.search}`,
         {
           method: request.method(),
           headers: {
@@ -894,7 +894,7 @@ async function installCabinetApiBoundary(
 }
 
 async function resetUpstream(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/reset`, {
+  const response = await request.post(`${upstreamOrigin()}/_test/reset`, {
     data: {},
   })
   expect(response.ok()).toBeTruthy()
@@ -903,7 +903,7 @@ async function resetUpstream(request: APIRequestContext) {
 async function upstreamStats(
   request: APIRequestContext,
 ): Promise<DashboardUpstreamStats> {
-  const response = await request.get(`${upstreamOrigin}/_test/stats`)
+  const response = await request.get(`${upstreamOrigin()}/_test/stats`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as DashboardUpstreamStats
 }
@@ -918,7 +918,7 @@ async function resetDashboardUpstream(
   } = {},
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/reset`,
+    `${upstreamOrigin()}/_test/dashboard/reset`,
     { data: options },
   )
   expect(response.ok()).toBeTruthy()
@@ -929,7 +929,7 @@ async function armDelayedDashboard(
   tenantId: string,
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/delay`,
+    `${upstreamOrigin()}/_test/dashboard/delay`,
     { data: { tenantId } },
   )
   expect(response.ok()).toBeTruthy()
@@ -937,18 +937,20 @@ async function armDelayedDashboard(
 
 async function releaseDelayedDashboard(request: APIRequestContext) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/release`,
+    `${upstreamOrigin()}/_test/dashboard/release`,
   )
   expect(response.ok()).toBeTruthy()
 }
 
 async function armDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/delay`)
+  const response = await request.post(`${upstreamOrigin()}/_test/logout/delay`)
   expect(response.ok()).toBeTruthy()
 }
 
 async function releaseDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/release`)
+  const response = await request.post(
+    `${upstreamOrigin()}/_test/logout/release`,
+  )
   expect(response.ok()).toBeTruthy()
 }
 
@@ -1735,6 +1737,87 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
   await expect(page.getByText('Крило')).toBeVisible()
 })
 
+test('directory searches retain spaces and rapid typing @search-spaces', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { businessOperations: true })
+  const pageOf = (items: unknown[]) => ({
+    items,
+    page: 1,
+    pageSize: 30,
+    total: items.length,
+    totalPages: 1,
+  })
+  await page.route('**/api/v1/customers*', (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path !== '/api/v1/customers' && path !== '/api/v1/customers/directory')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'customer-search',
+          name: 'Тестовий клієнт',
+          phone: null,
+          ordersCount: 1,
+          totalAmount: 100,
+          averageAmount: 100,
+          firstOrderAt: null,
+          lastOrderAt: null,
+          isActive: true,
+          createdAt: '2026-09-02T10:00:00Z',
+        },
+      ]),
+    )
+  })
+  await page.route('**/api/v1/orders*', (route) => {
+    if (new URL(route.request().url()).pathname !== '/api/v1/orders')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'order-search',
+          number: 1,
+          status: 'pending',
+          customerName: 'Тестовий клієнт',
+          totalAmount: 100,
+          currency: 'USD',
+          createdAt: '2026-09-02T10:00:00Z',
+          itemsCount: 1,
+          paymentAccountNames: [],
+          partNames: ['Тестова деталь'],
+        },
+      ]),
+    )
+  })
+  await loginFrom(page)
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const [route, label] of [
+      ['customers', 'Пошук клієнта'],
+      ['orders', 'Пошук замовлень'],
+    ]) {
+      await page.goto(`/app/koval/${route}`)
+      const search = page.getByRole('searchbox', { name: label, exact: true })
+      await search.pressSequentially('Тест ')
+      await expect(search).toHaveValue('Тест ')
+      await search.pressSequentially('пошук ')
+      await expect(search).toHaveValue('Тест пошук ')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.get('q'))
+        .toBe('Тест пошук ')
+      await search.fill('  Довга назва  ')
+      await expect(search).toHaveValue('  Довга назва  ')
+      await search.clear()
+      await expect(search).toHaveValue('')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.has('q'))
+        .toBe(false)
+    }
+  }
+})
+
 test('compact location browser searches and pages large shelf lists @location-browser', async ({
   page,
 }) => {
@@ -1913,7 +1996,10 @@ test('compact location browser searches and pages large shelf lists @location-br
     await expect(
       page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
     ).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук секції' }).fill('S7')
+    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
+    await sectionSearch.pressSequentially('Секція ')
+    await expect(sectionSearch).toHaveValue('Секція ')
+    await sectionSearch.fill('S7')
     await page.getByRole('link', { name: 'Секція 7, S7', exact: true }).click()
     await expect(page).toHaveURL(/warehouses\/sections\/section-6$/)
     const table = page.getByRole('table', { name: 'Полиці: Секція 7' })
@@ -1923,7 +2009,10 @@ test('compact location browser searches and pages large shelf lists @location-br
       .getByRole('button', { name: /Наступна/ })
       .click()
     await expect(page.getByText('S7-P16', { exact: true })).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('S7-P100')
+    const shelfSearch = page.getByRole('searchbox', { name: 'Пошук полиці' })
+    await shelfSearch.pressSequentially('Полиця ')
+    await expect(shelfSearch).toHaveValue('Полиця ')
+    await shelfSearch.fill('S7-P100')
     await page
       .getByRole('link', {
         name: 'Переглянути запчастини: Полиця 100',
@@ -3046,15 +3135,17 @@ for (const viewport of [
     const full = await dialog.locator('img').first().boundingBox()
     expect(full!.y).toBeGreaterThanOrEqual(0)
     expect(full!.y + full!.height).toBeLessThanOrEqual(viewport.height)
-    const strip = dialog.locator('ul')
+    const strip = dialog.getByRole('tablist', { name: 'Мініатюри' })
     const firstReachable = await strip.evaluate(
       (element) =>
         element.firstElementChild!.getBoundingClientRect().left >=
         element.getBoundingClientRect().left,
     )
     expect(firstReachable).toBe(true)
-    await dialog.getByRole('button', { name: 'Фото 10', exact: true }).click()
-    await expect(dialog.getByText('Фото недоступне')).toBeVisible()
+    await dialog.getByRole('tab', { name: /^Фото 10 з 10:/ }).click()
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Не вдалося завантажити фото',
+    )
     await page.keyboard.press('Escape')
     await expect(opener).toBeFocused()
     await page.goto('/app/koval/cars/car-1/edit')
@@ -3251,4 +3342,136 @@ test('placement drawer searches large section and shelf choices without moving t
     })
     await expect(page).toHaveURL(/\/parts\/part-picker$/)
   }
+})
+
+for (const width of [375, 1440]) {
+  test(`permission save errors remain visible at the drawer footer at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installCabinetApiBoundary(page)
+    await page.route(
+      '**/api/v1/team/users/user-2/permissions',
+      async (route) => {
+        if (route.request().method() !== 'PUT') return route.fallback()
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: null,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Cannot change own permissions.',
+              details: null,
+            },
+          }),
+        })
+      },
+    )
+    await loginFrom(page)
+    await page.goto('/app/koval/team')
+    await page
+      .getByRole('button', { name: 'Дії з учасником Іван Менеджер' })
+      .click()
+    await page.getByRole('menuitem', { name: 'Права' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Права: Іван Менеджер' })
+    await dialog.getByRole('checkbox').last().scrollIntoViewIfNeeded()
+    const save = dialog.getByRole('button', { name: 'Зберегти права' })
+    await save.click()
+    const alert = dialog.getByRole('alert')
+    await expect(alert).toHaveText(
+      'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
+    )
+    await expect(
+      dialog.locator('.rz-sheet__foot').getByRole('alert'),
+    ).toBeVisible()
+    const bounds = await alert.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds!.y).toBeGreaterThanOrEqual(0)
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900)
+    await expect(save).toBeEnabled()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('permission-error-footer.png'),
+    })
+  })
+}
+
+test('unassigned quantity and status columns stay compact at the right edge', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await installCabinetApiBoundary(page, { partsManage: true })
+  await page.route('**/api/v1/warehouses/warehouse-1', (route) =>
+    fulfillData(route, {
+      id: 'warehouse-1',
+      name: 'Основний склад',
+      code: 'main',
+      isActive: true,
+      isSystemDefault: true,
+      unassignedPartCount: 40,
+      zones: [
+        {
+          id: 'system-zone-1',
+          name: 'Без зони',
+          code: 'unassigned',
+          isActive: true,
+          isSystemUnassigned: true,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/v1/parts/search', (route) =>
+    fulfillData(route, {
+      items: Array.from({ length: 20 }, (_, index) => ({
+        id: `part-${index}`,
+        name: `Запчастина ${index + 1}`,
+        oemCode: `OEM-${index + 1}`,
+        externalCode: null,
+        quantity: index === 1 ? 7 : 1,
+        quantityAvailable: index === 10 ? 0 : 1,
+        quantityReserved: index === 10 ? 1 : 0,
+        unit: 'шт',
+        condition: 'used',
+        sourceType: 'manual',
+        status: index === 10 ? 'reserved' : 'available',
+        createdAt: '2026-10-26T08:00:00Z',
+        isInventoryLocked: false,
+        hasDiscrepancy: false,
+        thumbnailUrl: null,
+        car: null,
+      })),
+      page: 1,
+      pageSize: 20,
+      total: 40,
+      totalPages: 2,
+    }),
+  )
+  await loginFrom(page)
+  await page.goto('/app/koval/warehouses/warehouse-1/unassigned')
+  const table = page.locator('.location-parts--unassigned .rz-table')
+  await expect(
+    table.getByRole('link', { name: 'Запчастина 1', exact: true }),
+  ).toBeVisible()
+  const row = table.locator('tbody tr').first()
+  await expect(row.getByRole('button')).toHaveCount(0)
+  const cell = row.locator('td').last()
+  const badge = cell.locator('.rz-pill')
+  const cellBounds = await cell.boundingBox()
+  const badgeBounds = await badge.boundingBox()
+  expect(cellBounds).not.toBeNull()
+  expect(badgeBounds).not.toBeNull()
+  expect(cellBounds!.width).toBeLessThanOrEqual(160)
+  expect(
+    cellBounds!.x + cellBounds!.width - badgeBounds!.x - badgeBounds!.width,
+  ).toBeLessThanOrEqual(20)
+  await expect(table.getByRole('columnheader', { name: 'Статус' })).toHaveCSS(
+    'text-align',
+    'right',
+  )
+  await page.screenshot({ path: testInfo.outputPath('unassigned-columns.png') })
 })

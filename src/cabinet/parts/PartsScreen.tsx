@@ -4,7 +4,10 @@ import { PartSourceFilter } from './PartSourceFilter'
 import { PartLocationCard } from './PartLocationCard'
 import { PartNotesCard } from './PartNotesCard'
 import { PartPriceDrawer } from './PartPriceDrawer'
+import { PartPeekHeaderSkeleton, PartPeekSkeleton } from './PartPeekSkeleton'
 import { CabinetLoadingContent } from '../loading-screen'
+import { PartFormSkeleton } from '../form-skeletons'
+import { PlacementSkeleton } from '../inventory/PlacementSkeleton'
 import { FormPage } from '../form-page'
 import {
   lazy,
@@ -60,8 +63,8 @@ import {
   Sheet,
   PillGroup,
   QuantityStepper,
+  Skeleton,
   SkeletonRows,
-  SkeletonFields,
   SpecGrid,
   BulkBar,
   Button,
@@ -349,6 +352,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     page: number
     totalPages: number
   } | null>(null)
+  const [settledSearchKey, setSettledSearchKey] = useState<string | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
   const [filteredCarResult, setFilteredCarResult] = useState<{
     key: string
@@ -451,6 +455,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }),
     [filters],
   )
+  const searchKey = JSON.stringify(searchRequest)
   const selectionScope = JSON.stringify({
     ...searchRequest,
     page: undefined,
@@ -541,7 +546,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     if (partId || isNew) return
     const next = new URLSearchParams(searchParams)
     for (const name of [
-      'q',
       'condition',
       'origin',
       'make',
@@ -631,13 +635,25 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           setPageMeta({ page: page.page, totalPages: page.totalPages })
           setFacets(nextFacets)
           setError(null)
+          setSettledSearchKey(searchKey)
         })
         .catch((failure: unknown) => {
-          if (!controller.signal.aborted) setError(normalizeApiProblem(failure))
+          if (!controller.signal.aborted) {
+            setError(normalizeApiProblem(failure))
+            setSettledSearchKey(searchKey)
+          }
         })
     }
     return () => controller.abort()
-  }, [createDecision.kind, isEdit, isNew, partId, reloadToken, searchRequest])
+  }, [
+    createDecision.kind,
+    isEdit,
+    isNew,
+    partId,
+    reloadToken,
+    searchKey,
+    searchRequest,
+  ])
 
   if (isNew && createDecision.kind !== 'allowed')
     return <AccessDenied decision={createDecision} />
@@ -703,18 +719,22 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     next.set('page', String(page))
     setSearchParams(next)
   }
+  const resetFilters = () =>
+    setSearchParams(new URLSearchParams(), { flushSync: true })
   const updateFilter = (name: string, value: string, list = false) => {
     const next = new URLSearchParams(searchParams)
     next.delete(name)
+    // Keep unfinished search text intact; filters.q trims only the API query.
+    const nextValue = name === 'q' ? value : value.trim()
     if (list) {
       normalizedIds(value.split(',')).forEach((entry) =>
         next.append(name, entry),
       )
-    } else if (value.trim()) {
-      next.set(name, value.trim())
+    } else if (nextValue) {
+      next.set(name, nextValue)
     }
     next.delete('page')
-    setSearchParams(next)
+    setSearchParams(next, { flushSync: name === 'q' })
   }
   /** Which filters are on, so the reset button knows whether it has work. */
   const activeFilters: string[] = (
@@ -816,7 +836,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     )
     setSearchParams(next)
   }
-  const loading = pageMeta === null && error === null
+  // A settled response belongs only to its own filters. In particular, an
+  // empty filtered page must not become an empty yard while reset is pending.
+  const listError = settledSearchKey === searchKey ? error : null
+  const loading =
+    settledSearchKey !== searchKey || (pageMeta === null && listError === null)
   // Out of quota or on a lapsed subscription the button stays in its place,
   // switched off with the reason, so nobody wonders where it went.
   const createBlockedReason =
@@ -828,7 +852,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   // An empty yard with no filters has nothing to search or narrow yet.
   const emptyYard =
     !loading &&
-    error === null &&
+    listError === null &&
     items.length === 0 &&
     statusTotal === 0 &&
     activeFilters.length === 0
@@ -863,7 +887,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   const directory = (
     <RedesignShell
-      {...(peekId === null || loading || error
+      {...(peekId === null || loading || listError
         ? {}
         : {
             peek: (
@@ -972,7 +996,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           name="q"
           onChange={(event) => updateFilter('q', event.target.value)}
           placeholder={t('searchPlaceholder')}
-          value={filters.q ?? ''}
+          value={searchParams.get('q') ?? ''}
         />
         <div
           aria-label={t('filterStatus')}
@@ -1119,17 +1143,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         </FilterPopover>
 
         {activeFilters.length === 0 ? null : (
-          <Button
-            onClick={() => setSearchParams(new URLSearchParams())}
-            variant="quiet"
-          >
+          <Button onClick={resetFilters} variant="quiet">
             {t('resetFilters')}
           </Button>
         )}
       </div>
 
-      {error ? (
-        error.kind === 'network' || error.kind === 'timeout' ? (
+      {listError ? (
+        listError.kind === 'network' || listError.kind === 'timeout' ? (
           <StateScreen
             actions={
               <Button
@@ -1287,9 +1308,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               {...(activeFilters.length > 0
                 ? {
                     actions: (
-                      <Button
-                        onClick={() => setSearchParams(new URLSearchParams())}
-                      >
+                      <Button onClick={resetFilters}>
                         <X aria-hidden />
                         {t('resetFilters')}
                       </Button>
@@ -1676,7 +1695,7 @@ function PartDetailScreen({
                 if (!open) setPlacementOpen(false)
               }}
             >
-              <SkeletonRows rows={3} />
+              <PlacementSkeleton />
             </Sheet>
           }
         >
@@ -1735,14 +1754,6 @@ function PartDetailScreen({
                       ]
                     : []),
                   {
-                    key: 'add-to-order',
-                    label: t('addToOrder'),
-                    icon: <ShoppingBag aria-hidden />,
-                    disabled: true,
-                    title: t('addToOrderHint'),
-                    onSelect: () => undefined,
-                  },
-                  {
                     key: 'delete',
                     label: t('deletePart'),
                     icon: <Trash2 aria-hidden />,
@@ -1760,7 +1771,18 @@ function PartDetailScreen({
 
       <div className="rz-page max-w-[1240px]">
         <div className="grid min-w-0 gap-2">
-          {error ? null : <h1 className="rz-h-page text-balance">{name}</h1>}
+          {error ? null : detail === null ? (
+            <div aria-hidden className="grid gap-2">
+              <Skeleton className="h-5 w-64 max-w-full" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-5 w-24 rounded-full" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            </div>
+          ) : (
+            <h1 className="rz-h-page text-balance">{name}</h1>
+          )}
           {detail === null ? null : (
             <div className="rz-btn-row items-center">
               {detail.oemCode ? (
@@ -1858,6 +1880,7 @@ function PartDetailScreen({
                 <PhotoGrid
                   emptyLabel={t('galleryEmpty')}
                   label={t('galleryLabel', { name: detail.name })}
+                  title={detail.name}
                   photos={detail.photos.map((photo, index) => ({
                     id: photo.id,
                     url: photo.url,
@@ -1870,6 +1893,7 @@ function PartDetailScreen({
                     }),
                   }))}
                   variant="tiles"
+                  layout="strip"
                   coverLabel={t('coverPhoto')}
                 />
               </Card>
@@ -2984,6 +3008,7 @@ function PartPeek({
 
   return (
     <aside
+      aria-busy={state.kind === 'loading'}
       aria-label={tl('peekLabel', { name })}
       className="rz-peek"
       onKeyDown={(event) => {
@@ -3060,19 +3085,15 @@ function PartPeek({
                   {t('printSticker')}
                 </Link>
               </Button>
-              <Button disabled title={t('addToOrderHint')}>
-                <ShoppingBag aria-hidden />
-                {t('addToOrder')}
-              </Button>
             </div>
           </>
+        ) : state.kind === 'loading' ? (
+          <PartPeekHeaderSkeleton />
         ) : null}
       </div>
 
       {state.kind === 'loading' ? (
-        <div className="rz-peek__section">
-          <SkeletonRows columns={2} label={t('loading')} rows={4} />
-        </div>
+        <PartPeekSkeleton />
       ) : state.kind === 'error' ? (
         <div className="rz-peek__section">
           <Notice tone="danger">{tl('peekLoadFailed')}</Notice>
@@ -4445,7 +4466,10 @@ function PartEdit({
     <FormPage
       backTo={backTo}
       busy={pending || deleting}
-      description={detail?.name ?? undefined}
+      description={
+        detail?.name ??
+        (!error ? <Skeleton className="h-3 w-56 max-w-full" /> : undefined)
+      }
       context={t('sheetEyebrow')}
       actions={
         <div className="flex w-full items-center justify-end gap-2.5">
@@ -4794,10 +4818,12 @@ function PartEdit({
             </PanelFooter>
           </form>
         ) : !error ? (
-          <SkeletonFields
-            count={8}
-            label={translate(partDetailMessages, locale, 'loading')}
-          />
+          <div aria-busy="true">
+            <p className="sr-only" role="status">
+              {td('loading')}
+            </p>
+            <PartFormSkeleton edit footer={false} />
+          </div>
         ) : null}
       </div>
 

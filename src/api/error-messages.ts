@@ -19,6 +19,8 @@ export const errorMessages = defineMessages({
     CONCURRENT_MODIFICATION: 'Інша операція змінила ці дані. Спробуйте ще раз.',
     INSUFFICIENT_BALANCE: "Баланс каси стане від'ємним.",
     INVALID_TRANSACTION_TYPE: 'Виберіть надходження або витрату.',
+    CANNOT_CHANGE_OWN_PERMISSIONS:
+      'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
     CANNOT_MODIFY_SELF: 'Ви не можете змінювати власний обліковий запис.',
     CANNOT_DELETE_SELF: 'Ви не можете видалити власний обліковий запис.',
     INVALID_PASSWORD: 'Поточний пароль невірний.',
@@ -201,6 +203,8 @@ export const errorMessages = defineMessages({
       'Another operation modified this data. Please retry.',
     INSUFFICIENT_BALANCE: 'Cash register balance would become negative.',
     INVALID_TRANSACTION_TYPE: 'Choose an income or expense transaction.',
+    CANNOT_CHANGE_OWN_PERMISSIONS:
+      'You cannot change your own permissions. Contact the business owner.',
     CANNOT_MODIFY_SELF: 'You cannot modify your own account.',
     CANNOT_DELETE_SELF: 'You cannot delete your own account.',
     INVALID_PASSWORD: 'Current password is incorrect.',
@@ -387,6 +391,8 @@ export const errorMessages = defineMessages({
       'Inna operacja zmieniła te dane. Spróbuj ponownie.',
     INSUFFICIENT_BALANCE: 'Saldo kasy stałoby się ujemne.',
     INVALID_TRANSACTION_TYPE: 'Wybierz transakcję przychodu lub wydatku.',
+    CANNOT_CHANGE_OWN_PERMISSIONS:
+      'Nie możesz zmieniać własnych uprawnień. Skontaktuj się z właścicielem firmy.',
     CANNOT_MODIFY_SELF: 'Nie możesz zmieniać własnego konta.',
     CANNOT_DELETE_SELF: 'Nie możesz usunąć własnego konta.',
     INVALID_PASSWORD: 'Bieżące hasło jest nieprawidłowe.',

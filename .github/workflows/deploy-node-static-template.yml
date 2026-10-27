@@ -54,11 +54,23 @@ env:
 
 jobs:
   quality:
-    name: Quality ${{ inputs.project_name }}
+    name: Quality ${{ inputs.project_name }} (${{ matrix.gate }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    # The gates are independent, so each gets its own runner; the unit suite,
+    # the longest of them, is split into two vitest shards.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gate: static
+          - gate: unit 1/2
+            shard: 1/2
+          - gate: unit 2/2
+            shard: 2/2
+          - gate: contracts
 
     steps:
       - uses: actions/checkout@v4
@@ -74,28 +86,28 @@ jobs:
 
       - run: npm ci
 
-      - if: inputs.run_build
+      - if: inputs.run_build && matrix.gate == 'static'
+        name: Lint, typecheck, parity, and dependency gates
+        run: npm run check:static
+
+      - if: inputs.run_build && matrix.shard
+        name: Unit test gate (shard ${{ matrix.shard }})
+        run: npm run test:unit -- --shard=${{ matrix.shard }}
+
+      - if: inputs.run_build && matrix.gate == 'contracts'
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_CONTRACT_READER_SERVICE_ACCOUNT }}
 
-      - if: inputs.run_build
+      - if: inputs.run_build && matrix.gate == 'contracts'
         uses: google-github-actions/setup-gcloud@v2
 
-      - if: inputs.run_build
-        name: Lint, typecheck, parity, and dependency gates
-        run: npm run check:static
-
-      - if: inputs.run_build
-        name: Unit test gate
-        run: npm run test:unit
-
-      - if: inputs.run_build
+      - if: inputs.run_build && matrix.gate == 'contracts'
         name: Contract tooling and API adapter gate
         run: npm run test:contracts
 
-      - if: inputs.run_build
+      - if: inputs.run_build && matrix.gate == 'contracts'
         name: Immutable Core contract drift gate
         shell: bash
         run: |
@@ -107,7 +119,7 @@ jobs:
           core_path="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.core)' "$paths_json")"
           npm run contracts:check -- --core "$core_path"
 
-      - if: inputs.run_build
+      - if: inputs.run_build && matrix.gate == 'contracts'
         name: Auth and tenant integration gate
         run: npm run test:integration
 
@@ -115,11 +127,13 @@ jobs:
     if: ${{ !inputs.skip_e2e }}
     name: Browser E2E ${{ inputs.project_name }} (${{ matrix.project }})
     runs-on: ubuntu-latest
-    # Firefox/WebKit use bundled dependencies to avoid slow apt mirrors.
-    # Chromium keeps the host environment used by the visual baselines.
-    # Match the image version to @playwright/test in package-lock.json.
+    # Every project runs in the Playwright image: it ships the browsers and
+    # their system packages, so no job waits on apt mirrors (installing them on
+    # the bare runner took 0.5 to 15 minutes). The Linux visual baselines are
+    # captured in the same image by update-visual-baselines.yml. Match the image
+    # version to @playwright/test in package-lock.json.
     container:
-      image: ${{ matrix.browser != 'chromium' && 'mcr.microsoft.com/playwright:v1.61.1-noble' || '' }}
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
       options: --ipc=host
     defaults:
       run:
@@ -160,20 +174,6 @@ jobs:
 
       - run: npm ci
 
-      - if: inputs.run_build && matrix.browser == 'chromium'
-        name: Install Chromium on the visual baseline runner
-        run: |
-          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99-dpkg-lock-timeout >/dev/null
-          timeout 900 npx playwright install-deps chromium
-          for attempt in 1 2 3; do
-            if timeout 300 npx playwright install chromium; then
-              exit 0
-            fi
-            echo "Chromium download attempt ${attempt} failed or timed out; retrying"
-            sleep 10
-          done
-          exit 1
-
       - if: inputs.run_build
         name: Verify installed ${{ matrix.browser }}
         env:
@@ -181,9 +181,7 @@ jobs:
         run: |
           # GitHub mounts this directory with the runner's UID. Firefox requires
           # its owner to match the container user; keep the existing HOME path.
-          if [ "$BROWSER_ENGINE" != chromium ]; then
-            chown "$(id -u):$(id -g)" "$HOME"
-          fi
+          chown "$(id -u):$(id -g)" "$HOME"
           node <<'NODE'
           const fs = require('node:fs');
           const browser = require('@playwright/test')[process.env.BROWSER_ENGINE];

@@ -1158,7 +1158,7 @@ it('opens the gallery viewer and pages through the shots', async () => {
   expect(
     within(viewer).getByAltText('Передня частина — фото автомобіля CAR-001'),
   ).toHaveAttribute('src', 'https://cdn.example/front.jpg')
-  expect(viewer).toHaveTextContent('1 з 2')
+  expect(viewer).toHaveTextContent('1 / 2')
 
   await user.click(
     within(viewer).getByRole('button', { name: 'Наступне фото' }),
@@ -1166,9 +1166,11 @@ it('opens the gallery viewer and pages through the shots', async () => {
   expect(
     within(viewer).getByAltText('Задня чверть — фото автомобіля CAR-001'),
   ).toHaveAttribute('src', 'https://cdn.example/rear.jpg')
-  expect(viewer).toHaveTextContent('2 з 2')
+  expect(viewer).toHaveTextContent('2 / 2')
 
-  await user.click(within(viewer).getByRole('button', { name: 'Закрити фото' }))
+  await user.click(
+    within(viewer).getByRole('button', { name: 'Закрити перегляд' }),
+  )
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   )

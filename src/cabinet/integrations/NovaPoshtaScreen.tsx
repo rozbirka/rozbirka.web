@@ -558,7 +558,7 @@ export function NovaPoshtaScreen() {
       )}
 
       {tab === 'statuses' && (
-        <div className="grid gap-4">
+        <div className="rz-form-page grid gap-4">
           {/* The managed subscription first: whether the carrier is asked to
               send anything at all. The queue below is a separate question —
               what happened to the events that did arrive. */}
@@ -571,7 +571,7 @@ export function NovaPoshtaScreen() {
       )}
 
       {tab === 'settings' && (
-        <div className="grid max-w-[640px] gap-4">
+        <div className="rz-form-page grid max-w-[640px] gap-4">
           <DeliveryDepositPanel key={scopeKey} />
           <DeliveryPreferencesPanel integrationId={integration.id} />
           <Card title={t('connectionCard')}>
