@@ -335,7 +335,7 @@ export function PaymentHistorySkeleton({ label }: { label: string }) {
 }
 
 /** Two full plan cards followed by the limits/features comparison table. */
-export function PlansSkeleton({ tabs = false }: { tabs?: boolean }) {
+export function PlansSkeleton() {
   const t = useT(plansMessages)
   return (
     <div
@@ -343,100 +343,10 @@ export function PlansSkeleton({ tabs = false }: { tabs?: boolean }) {
       className="grid min-w-0 gap-4"
       data-screen-skeleton="plans"
     >
-      {tabs ? (
-        <div className="border-app-line flex gap-4 border-b pb-3">
-          {[0, 1, 2].map((index) => (
-            <Skeleton className="h-3 w-20" key={index} />
-          ))}
-        </div>
-      ) : null}
-      <Skeleton className="h-10 w-full" />
-      <div
-        className="grid min-w-0 items-start gap-4 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))]"
-        data-plan-cards
-      >
-        {[0, 1].map((index) => (
-          <SectionPanel
-            key={index}
-            title={<Skeleton className="w-20" />}
-            {...(index === 1
-              ? {
-                  aside: <Skeleton className="h-5 w-28 rounded-full" />,
-                  footer: <Skeleton className="h-2 w-44" />,
-                }
-              : {})}
-          >
-            <div className="grid gap-2">
-              <div className="flex items-baseline gap-2">
-                <Skeleton className="h-6 w-20" />
-                <Skeleton className="h-2 w-16" />
-              </div>
-              <Skeleton className="h-2 w-28" />
-            </div>
-            <dl className="rz-facts px-0 py-0">
-              {[0, 1, 2, 3, 4, 5].map((row) => (
-                <div key={row}>
-                  <dt>
-                    <Skeleton className="h-2 w-24 max-w-full" />
-                  </dt>
-                  <dd>
-                    <Skeleton className="ml-auto h-3 w-8" />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <ul className="border-app-line m-0 grid list-none gap-1.5 border-t p-0 pt-3">
-              {[0, 1, 2, 3, 4].map((row) => (
-                <li className="flex items-center gap-2" key={row}>
-                  <Skeleton className="size-3.5 shrink-0" />
-                  <Skeleton className={row % 2 ? 'w-3/5' : 'w-4/5'} />
-                </li>
-              ))}
-            </ul>
-          </SectionPanel>
-        ))}
-      </div>
-      <BillingCard title={t('whatsIncluded')} bodyClassName="p-0">
-        <div className="rz-table-scroll">
-          <table className="rz-table">
-            <caption>{t('comparison')}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t('feature')}</th>
-                <th scope="col">
-                  <Skeleton className="ml-auto h-2 w-16" />
-                </th>
-                <th scope="col">
-                  <Skeleton className="ml-auto h-2 w-20" />
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((row) => (
-                <tr key={row}>
-                  <th scope="row">
-                    <Skeleton
-                      className={
-                        row % 2 ? 'w-32 max-w-full' : 'w-44 max-w-full'
-                      }
-                    />
-                  </th>
-                  {[0, 1].map((column) => (
-                    <td key={column}>
-                      <Skeleton
-                        className={
-                          row < 5 ? 'ml-auto h-3 w-6' : 'ml-auto size-3.5'
-                        }
-                      />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <BillingCard title={t('title')} bodyClassName="p-0">
+        <Rows header count={3} columns={['2fr', '1fr', '1fr', '1fr']} />
       </BillingCard>
-      <Skeleton className="h-2 w-4/5" />
+      <Skeleton className="h-10 w-full" />
     </div>
   )
 }
@@ -449,42 +359,19 @@ export function SubscriptionSkeleton() {
       data-screen-skeleton="billing"
     >
       <Skeleton className="h-5 w-20 rounded-full" />
-      <div className="border-app-line flex gap-4 border-b pb-3">
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="h-4 w-16" />
-      </div>
-      <Skeleton className="h-10 w-full" />
-      <Metrics count={3} />
       <RecordColumns
+        compactAside
         main={
           <>
+            <Metrics count={3} />
             <Panel>
               <Facts count={5} />
-            </Panel>
-            <Panel action>
-              <Rows header count={4} columns={['2fr', '4fr', '1fr', '1fr']} />
-              <Skeleton className="h-2 w-4/5" />
             </Panel>
           </>
         }
         aside={
           <Panel>
-            <div className="flex justify-between gap-4">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-4 w-16" />
-            </div>
-            <div className="grid gap-4 py-3">
-              {[0, 1, 2, 3, 4].map((index) => (
-                <div className="flex items-center gap-2" key={index}>
-                  <Skeleton className="size-3 rounded-full" />
-                  <Skeleton className="w-3/4" />
-                </div>
-              ))}
-            </div>
-            <Skeleton className="h-2 w-full" />
-            <Skeleton className="h-2 w-4/5" />
-            <Actions />
+            <Facts count={3} />
           </Panel>
         }
       />

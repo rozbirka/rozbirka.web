@@ -110,3 +110,16 @@ ConfirmDialog при відкритті ставить focus на «Скасув
 Редагування запчастини має одну колонку секцій, як створення. Залишки, QR-код і друк стікера показані компактним рядком над полями; джерело без вкладеної картки, видалення — окремою другорядною дією в кінці форми.
 
 Короткі підтвердження копіювання та збереження імені профілю використовують спільний `ToastProvider` унизу екрана. Помилки копіювання показуються тим самим toast із небезпечним тоном; валідація, помилки збереження та постійні попередження залишаються біля свого контексту.
+
+### Billing archive layout (working branch)
+
+`codex/subscription-design-audit` adapts the user-supplied audit (7), module 41.
+`SubscriptionPanel` reuses `BillingShell`, `BillingCard`, `RecordColumns`, `KpiStrip`
+and `DataTable`: metrics live in the main column; access facts live in a compact
+aside. Expired access shows recent payments and preserved usage counts. A failed
+renewal explanation requires a current recurring failure from payment history;
+blocked access alone is insufficient. Plans use a catalogue table. Payments keep
+provider guidance and guarded pending-payment actions. Header links and the
+expired-access card replace the former tabs; cancellation remains available
+whenever the provider and API permit it. The archive's sample values and
+read-only-after-expiry wording are not business rules.
