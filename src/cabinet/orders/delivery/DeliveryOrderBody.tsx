@@ -3,7 +3,13 @@ import { Link as RouterLink } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Button, Notice, useOptionalToast } from '@/components/app'
 import { cashApi, type CashRegister } from '@/api/cash'
-import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
+import {
+  deliveryApi,
+  type DeliveryOrder,
+  type DeliveryRefundSource,
+  type LateCarrierPayment,
+} from '@/api/delivery'
+import { integrationsApi } from '@/api/integrations'
 import { shippingApi, type Shipment, type ShipmentDraft } from '@/api/shipping'
 import { normalizeApiProblem } from '@/api/errors'
 import type { OrderDetail } from '@/api/orders'
@@ -27,7 +33,6 @@ import {
 import { orderEventTitle } from '../order-labels'
 import { DeliveryDrawer } from './DeliveryDrawer'
 import {
-  DeliveryDueCard,
   DeliveryLifecycle,
   DeliveryPaymentsCard,
   DeliverySteps,
@@ -38,23 +43,41 @@ import {
   DeliveryShipmentBlock,
   type CancelledWaybill,
 } from './DeliveryShipmentBlock'
+import { DeliveryFlowCard, type CancelFlow } from './DeliveryFlowCard'
+import { DeliveryPaymentBlock, type CodTill } from './DeliveryPaymentBlock'
 import { DeliveryStepDrawer, type DeliveryStep } from './DeliveryStepDrawer'
 import { ExternalWaybillSheet } from './ExternalWaybillSheet'
+import { LatePaymentSheet } from './LatePaymentSheet'
 import { PaymentDrawer } from './PaymentDrawer'
+import { RefundSheet } from './RefundSheet'
+import { ReturnAcceptSheet } from './ReturnAcceptSheet'
+import { OrderCancelDialog, StartReturnDialog } from './ReturnDialogs'
 import { WaybillCreateSheet } from './WaybillCreateSheet'
 import { WaybillCancelDialog, WaybillRecreateDialog } from './WaybillDialogs'
 import { WaybillLabelDrawer, WaybillReadinessDrawer } from './WaybillDrawers'
 import { WaybillEditSheet, type RecreateReason } from './WaybillEditSheet'
 import { WaybillReconcileSheet } from './WaybillReconcileSheet'
+import { uah } from './delivery-money'
+import {
+  orderActions,
+  orderClosing,
+  paymentState,
+  unitCount,
+} from './delivery-flow'
 import { lifecycle } from './delivery-view'
+import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 import type { DeliveryOrderLoad } from './use-delivery-order'
 import { waybillMessages } from './waybill-messages'
-import { liveWaybillStage, unresolvedStage, waybillStage } from './waybill-view'
+import { liveWaybillStage, waybillStage } from './waybill-view'
 
 type Drawer =
-  | { kind: 'pay'; mode: 'record' | 'link' }
+  /** `cod`: the carrier's post-payment, once the parcel was received (9.8). */
+  | { kind: 'pay'; mode: 'record' | 'link'; cod: boolean }
+  | { kind: 'accept' }
+  | { kind: 'refund' }
+  | { kind: 'late'; mode: 'record' | 'link' }
   /** The delivery form; `then` says whether the readiness check follows. */
   | { kind: 'form'; then: 'close' | 'check'; prefill: ShipmentDraft | null }
   | { kind: 'readiness' }
@@ -69,7 +92,14 @@ type WaybillDialog =
   | { kind: 'cancel' }
   | { kind: 'recreate'; draft: ShipmentDraft; reason: RecreateReason }
 
-type PaymentOperation = 'delivery-payment' | 'delivery-link'
+/** A header action of the order (module 46, 10.1 and 10.13). */
+export type DeliveryIntent = 'startReturn' | 'cancelOrder'
+
+type PaymentOperation =
+  | 'delivery-payment'
+  | 'delivery-link'
+  | 'delivery-refund'
+  | 'delivery-late'
 
 const ambiguousMutationFailure = (problem: unknown) => {
   const kind = normalizeApiProblem(problem).kind
@@ -108,6 +138,11 @@ const usePaymentIdempotencyKeys = () => {
  * the sheets that create, edit, cancel, reconcile and attach a waybill. Its
  * stage is read once (`waybillStage`) and every button follows from it.
  *
+ * The money half is §9: the «Оплата» block beside the parcel, with its own
+ * pill — «Отримано» there is never «Оплачено» here. A return or cancellation
+ * (§10) draws its steps in the «Повернення» / «Скасування» card on top; the
+ * header asks for them through `intent`.
+ *
  * Outside Ukraine there is no Nova Poshta: an existing delivery order stays
  * readable, but nothing that books, prints or tracks a waybill is offered.
  */
@@ -118,10 +153,13 @@ export function DeliveryOrderBody({
   customerSearchAllowed = false,
   delivery,
   financeAllowed,
+  financePath = null,
   integrationsPath,
+  intent = null,
   load,
   mutationsAllowed,
   novaPoshtaAvailable = true,
+  onIntentHandled,
   order,
   partsPath,
   waybillsPath = null,
@@ -134,12 +172,18 @@ export function DeliveryOrderBody({
   customerSearchAllowed?: boolean
   delivery: DeliveryOrder
   financeAllowed: boolean
+  /** «Фінанси», where an ambiguous carrier payout is reconciled (9.6). */
+  financePath?: string | null
   integrationsPath: string | null
+  /** A header action waiting to open its dialog. */
+  intent?: DeliveryIntent | null
   load: DeliveryOrderLoad
   /** «Керування замовленнями»: create, edit, cancel and attach waybills. */
   mutationsAllowed: boolean
   /** False for a business outside Ukraine. */
   novaPoshtaAvailable?: boolean
+  /** Called once the dialog asked for by `intent` has closed. */
+  onIntentHandled?: () => void
   order: OrderDetail
   partsPath: string | null
   /** «Накладні НП»; «Дані ТТН» and «Відкрити ТТН» open the waybill card there. */
@@ -152,6 +196,7 @@ export function DeliveryOrderBody({
   const tw = useT(waybillMessages)
   const tc = useT(commonMessages)
   const tr = useT(npRecoveryMessages)
+  const tf = useT(deliveryFlowMessages)
   const format = useFormat()
   const when = (value: string) => format.dateTime(value) ?? value
   // The body is only mounted once the money record exists, so the load has
@@ -174,6 +219,11 @@ export function DeliveryOrderBody({
   const [nextDraft, setNextDraft] = useState<ShipmentDraft | null>(null)
   const [attachedAt, setAttachedAt] = useState<string | null>(null)
   const [waiting, setWaiting] = useState(false)
+  const [flowDialog, setFlowDialog] = useState<DeliveryIntent | null>(null)
+  const [flowPending, setFlowPending] = useState(false)
+  const [flowError, setFlowError] = useState<string | null>(null)
+  const [cancelFlow, setCancelFlow] = useState<CancelFlow | null>(null)
+  const [codTill, setCodTill] = useState<CodTill | { id: string }>(undefined)
   const paymentKeys = usePaymentIdempotencyKeys()
   // Focus goes back to the control that opened a sheet, or to the waybill
   // number once one was created (module 46, section 11).
@@ -219,6 +269,40 @@ export function DeliveryOrderBody({
     integrationsPath === null || integrationId === null
       ? integrationsPath
       : `${integrationsPath}/${integrationId}`
+
+  // The till the carrier's post-payment goes to (9.2, 9.4–9.5). Core shows
+  // the integration's settings only with the integrations right; without it
+  // the notices speak without naming a till.
+  useEffect(() => {
+    if (!canRecover || !financeAllowed || integrationId === null) return
+    const controller = new AbortController()
+    void integrationsApi
+      .preferences(integrationId, { signal: controller.signal })
+      .then(
+        (preferences) => {
+          if (controller.signal.aborted) return
+          if (preferences.codCashRegisterId === null) setCodTill(null)
+          else setCodTill({ id: preferences.codCashRegisterId })
+        },
+        () => undefined,
+      )
+    return () => controller.abort()
+  }, [canRecover, financeAllowed, integrationId])
+  const codTillView: CodTill =
+    codTill === undefined || codTill === null
+      ? codTill
+      : 'id' in codTill
+        ? (() => {
+            const till = tills.find((item) => item.id === codTill.id)
+            return till === undefined
+              ? undefined
+              : { name: till.name, active: till.isActive }
+          })()
+        : codTill
+
+  const closing = orderClosing(delivery)
+  const headerActions = orderActions(delivery, mutationsAllowed)
+  const payState = paymentState(delivery, shipment)
 
   const open = (next: Drawer) => {
     openerRef.current =
@@ -341,6 +425,129 @@ export function DeliveryOrderBody({
     }
   }
 
+  // Only the order card's own button opens a dialog here; a header button
+  // asks through `intent`, and Radix gives focus back to it on close.
+  const flowOpenerRef = useRef<HTMLElement | null>(null)
+  const openFlowDialog = (kind: DeliveryIntent) => {
+    flowOpenerRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    setFlowError(null)
+    setFlowDialog(kind)
+  }
+  const activeFlowDialog = flowDialog ?? intent
+  const closeFlowDialog = () => {
+    setFlowDialog(null)
+    setFlowError(null)
+    if (intent !== null) onIntentHandled?.()
+  }
+  const restoreFlowFocus = (event: Event) => {
+    const opener = flowOpenerRef.current
+    flowOpenerRef.current = null
+    if (opener?.isConnected !== true) return
+    event.preventDefault()
+    opener.focus()
+  }
+
+  const runFlow = async (action: () => Promise<void>) => {
+    if (flowPending) return
+    setFlowPending(true)
+    setFlowError(null)
+    try {
+      await action()
+      closeFlowDialog()
+    } catch (problem) {
+      setFlowError(deliveryProblemMessage(problem, locale))
+    } finally {
+      setFlowPending(false)
+    }
+  }
+
+  const startReturn = () =>
+    runFlow(async () => {
+      load.setMoney(await deliveryApi.startReturn(order.id))
+    })
+
+  /**
+   * Cancels an order that has not left (10.13). Core cancels the waybill with
+   * Nova Poshta first; an answer that never came leaves that cancel unknown,
+   * and the card then asks for the result check (10.14) instead of a retry.
+   */
+  const cancelOrder = () =>
+    runFlow(async () => {
+      const number = shipment?.number ?? cancelFlow?.waybill ?? null
+      try {
+        const next = await deliveryApi.cancel(order.id)
+        load.setMoney(next)
+        if (shipment !== null && shipment.number !== null)
+          setCancelled({
+            shipment: { ...shipment, state: 'Cancelled' },
+            at: new Date().toISOString(),
+            recreate: false,
+          })
+        load.setShipment(null)
+        setCancelFlow(
+          next.workflowState === 'Cancelled'
+            ? null
+            : { waybill: number, waybillState: 'done' },
+        )
+        if (next.workflowState === 'Cancelled')
+          toast?.show({ tone: 'ok', message: tf('cancelledToast') })
+      } catch (problem) {
+        const latest =
+          integrationId === null || number === null
+            ? null
+            : await shippingApi.get(integrationId, order.id).catch(() => null)
+        if (
+          latest !== null &&
+          (latest.state === 'CancelUnknown' || latest.state === 'Cancelling')
+        ) {
+          load.setShipment(latest)
+          setCancelFlow({ waybill: number, waybillState: 'unknown' })
+          return
+        }
+        throw problem
+      }
+    })
+
+  const acceptReturn = async (condition: {
+    damaged: boolean
+    notes: string
+  }) => {
+    const next = await deliveryApi.acceptReturn(order.id, condition)
+    load.setMoney(next)
+    setDrawer(null)
+    if (next.workflowState === 'Cancelled')
+      toast?.show({ tone: 'ok', message: tf('cancelledToast') })
+  }
+
+  const confirmRefund = async (source: DeliveryRefundSource) => {
+    await runPayment('delivery-refund', source, (idempotencyKey) =>
+      deliveryApi.confirmFullRefund(order.id, source, { idempotencyKey }),
+    )
+    setDrawer(null)
+    setCancelFlow(null)
+  }
+
+  const recordLate = async (
+    payment: LateCarrierPayment & DeliveryRefundSource,
+  ) => {
+    await runPayment('delivery-late', payment, (idempotencyKey) =>
+      deliveryApi.recordLateCarrierPayment(order.id, payment, {
+        idempotencyKey,
+      }),
+    )
+    setDrawer(null)
+    toast?.show({ tone: 'ok', message: tf('lateToast') })
+    // Core moved the waybill's payout state; read it back.
+    if (integrationId !== null)
+      void shippingApi
+        .get(integrationId, order.id)
+        .then(load.setShipment)
+        .catch(() => undefined)
+  }
+
   const blockActions = {
     start: () => open({ kind: 'form', then: 'close', prefill: null }),
     edit: () => open({ kind: 'form', then: 'close', prefill: null }),
@@ -375,31 +582,47 @@ export function DeliveryOrderBody({
         then: 'close',
         prefill: cancelled?.shipment.draft ?? null,
       }),
-    payDeposit: () => open({ kind: 'pay', mode: 'record' }),
+    payDeposit: () => open({ kind: 'pay', mode: 'record', cod: false }),
     recover: () => setRecoverOpen(true),
-  }
-
-  const primary = (kind: string) => {
-    if (kind === 'pay') open({ kind: 'pay', mode: 'record' })
-    if (kind === 'create') {
-      if (stage === 'none') blockActions.start()
-      else if (stage === 'draftStale') blockActions.recheck()
-      else if (unresolvedStage(stage)) blockActions.reconcile()
-      else blockActions.check()
-    }
-    if (kind === 'dispatch') open({ kind: 'step', step: 'dispatch' })
-    if (kind === 'receive') open({ kind: 'step', step: 'receive' })
-    if (kind === 'return') open({ kind: 'step', step: 'return' })
+    dispatch: () => open({ kind: 'step', step: 'dispatch' }),
+    receive: () => open({ kind: 'step', step: 'receive' }),
   }
 
   const tillName = (accountId: string) =>
     tills.find((till) => till.id === accountId)?.name ?? null
+
+  /** «Внести оплату»: the post-payment once the parcel was received. */
+  const payDrawer = (mode: 'record' | 'link'): Drawer => ({
+    kind: 'pay',
+    mode,
+    cod: delivery.receivedAt !== null && shipment?.number != null,
+  })
+
+  const paymentToast = (amountUah: number) => {
+    const amount = uah(amountUah, locale)
+    // `load.setMoney` has not re-rendered yet: read the answer Core gave.
+    const completed =
+      delivery.outstandingUah - amountUah <= 0 && delivery.receivedAt !== null
+    toast?.show({
+      tone: 'ok',
+      message: completed
+        ? tf('savedCompletedToast', { amount })
+        : tf('savedToast', { amount }),
+    })
+  }
 
   return (
     <>
       <DeliveryLifecycle
         steps={lifecycle(delivery, shipment, locale, timeZone)}
       />
+
+      {headerActions.sentNotice ? (
+        <Notice block tone="info">
+          <p className="rz-strong m-0 font-semibold">{tf('sentTitle')}</p>
+          <p className="m-0 mt-1">{tf('sentNote')}</p>
+        </Notice>
+      ) : null}
 
       <DeliveryTabs
         delivery={delivery}
@@ -424,6 +647,25 @@ export function DeliveryOrderBody({
 
       <div className="flex flex-wrap items-start gap-4">
         <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+          <DeliveryFlowCard
+            actions={{
+              accept: () => open({ kind: 'accept' }),
+              refund: () => open({ kind: 'refund' }),
+              reconcile: blockActions.reconcile,
+              cancelOrder: () => openFlowDialog('cancelOrder'),
+            }}
+            busy={busy || flowPending}
+            cancelFlow={cancelFlow}
+            cancelledAt={order.cancelledAt ?? null}
+            canManage={mutationsAllowed}
+            canPay={financeAllowed}
+            delivery={delivery}
+            shipment={shipment}
+            units={unitCount(order.items)}
+            unresolvedCancel={
+              stage === 'cancelUnknown' || stage === 'cancelling'
+            }
+          />
           {tab === 'sales' ? (
             <>
               <OrderItemsCard
@@ -440,17 +682,19 @@ export function DeliveryOrderBody({
               />
               <DeliveryPaymentsCard
                 actions={
-                  !financeAllowed || delivery.outstandingUah <= 0 ? null : (
+                  !financeAllowed ||
+                  closing ||
+                  delivery.outstandingUah <= 0 ? null : (
                     <>
                       <Button
                         disabled={busy}
-                        onClick={() => open({ kind: 'pay', mode: 'link' })}
+                        onClick={() => open(payDrawer('link'))}
                       >
                         {t('linkTransaction')}
                       </Button>
                       <Button
                         disabled={busy}
-                        onClick={() => open({ kind: 'pay', mode: 'record' })}
+                        onClick={() => open(payDrawer('record'))}
                       >
                         <Plus aria-hidden />
                         {t('recordPayment')}
@@ -500,8 +744,9 @@ export function DeliveryOrderBody({
               <DeliveryShipmentBlock
                 actions={blockActions}
                 attachedAt={attachedAt}
+                awaitingCod={payState === 'awaitingCod'}
                 busy={busy}
-                canManage={mutationsAllowed}
+                canManage={mutationsAllowed && !closing && cancelFlow === null}
                 canPay={financeAllowed}
                 cancelled={cancelled}
                 carrierReady={novaPoshtaAvailable && integrationId !== null}
@@ -526,12 +771,19 @@ export function DeliveryOrderBody({
         </div>
 
         <aside className="grid max-w-full min-w-0 flex-[1_1_280px] gap-4 lg:sticky lg:top-(--rz-topbar-h) lg:max-w-95">
-          <DeliveryDueCard
+          <DeliveryPaymentBlock
+            actions={{
+              record: () => open(payDrawer('record')),
+              refund: () => open({ kind: 'refund' }),
+              late: (mode) => open({ kind: 'late', mode }),
+            }}
             busy={busy}
+            canPay={financeAllowed}
+            codTill={codTillView}
             delivery={delivery}
-            novaPoshtaAvailable={novaPoshtaAvailable}
-            onPrimary={primary}
+            financePath={financePath}
             shipment={shipment}
+            tillName={tillName}
           />
           <OrderCustomerCard
             accountingCurrency={accountingCurrency}
@@ -550,22 +802,86 @@ export function DeliveryOrderBody({
 
       {drawer?.kind === 'pay' && (
         <PaymentDrawer
+          codWaybill={drawer.cod ? (shipment?.number ?? '—') : null}
           delivery={delivery}
           mode={drawer.mode}
           onClose={() => setDrawer(null)}
+          onCloseAutoFocus={restoreFocus}
           onLink={(input) =>
             runPayment('delivery-link', input, (idempotencyKey) =>
               deliveryApi.linkPayment(order.id, input, { idempotencyKey }),
             )
           }
-          onRecord={(input) =>
-            runPayment('delivery-payment', input, (idempotencyKey) =>
+          onRecord={async (input) => {
+            await runPayment('delivery-payment', input, (idempotencyKey) =>
               deliveryApi.recordPayment(order.id, input, { idempotencyKey }),
             )
-          }
+            paymentToast(input.amountUah)
+          }}
           orderNumber={order.number}
         />
       )}
+
+      {drawer?.kind === 'accept' && (
+        <ReturnAcceptSheet
+          items={order.items}
+          onAccept={acceptReturn}
+          onClose={() => setDrawer(null)}
+          onCloseAutoFocus={restoreFocus}
+          orderNumber={order.number}
+          returnWaybill={shipment?.relatedNumbers[0] ?? null}
+        />
+      )}
+
+      {drawer?.kind === 'refund' && (
+        <RefundSheet
+          delivery={delivery}
+          onClose={() => setDrawer(null)}
+          onCloseAutoFocus={restoreFocus}
+          onConfirm={confirmRefund}
+          orderId={order.id}
+          orderNumber={order.number}
+        />
+      )}
+
+      {drawer?.kind === 'late' && shipment !== null && (
+        <LatePaymentSheet
+          mode={drawer.mode}
+          onClose={() => setDrawer(null)}
+          onCloseAutoFocus={restoreFocus}
+          onConfirm={recordLate}
+          orderNumber={order.number}
+          shipment={shipment}
+        />
+      )}
+
+      <StartReturnDialog
+        error={flowError}
+        onCloseAutoFocus={restoreFlowFocus}
+        onConfirm={() => void startReturn()}
+        onOpenChange={(next) => {
+          if (!next) closeFlowDialog()
+        }}
+        open={activeFlowDialog === 'startReturn'}
+        orderNumber={order.number}
+        pending={flowPending}
+      />
+
+      <OrderCancelDialog
+        error={flowError}
+        onCloseAutoFocus={restoreFlowFocus}
+        onConfirm={() => void cancelOrder()}
+        onOpenChange={(next) => {
+          if (!next) closeFlowDialog()
+        }}
+        open={activeFlowDialog === 'cancelOrder'}
+        orderNumber={order.number}
+        paidUah={delivery.appliedUah}
+        pending={flowPending}
+        waybill={
+          shipment !== null && liveWaybillStage(stage) ? shipment.number : null
+        }
+      />
 
       {drawer?.kind === 'form' && integrationId !== null && (
         <DeliveryDrawer
@@ -811,9 +1127,7 @@ export function DeliveryOrderBody({
             runMoney(() =>
               drawer.step === 'dispatch'
                 ? deliveryApi.dispatch(order.id)
-                : drawer.step === 'receive'
-                  ? deliveryApi.receive(order.id)
-                  : deliveryApi.acceptReturn(order.id),
+                : deliveryApi.receive(order.id),
             )
           }
           step={drawer.step}

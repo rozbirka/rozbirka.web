@@ -22,6 +22,7 @@ vi.mock('@/api/integrations', () => ({
   integrationsApi: {
     settlements: vi.fn(),
     divisions: vi.fn().mockResolvedValue({ items: [], page: 1, lastPage: 1 }),
+    preferences: vi.fn().mockResolvedValue({ codCashRegisterId: 'till-1' }),
   },
 }))
 vi.mock('@/api/nova-poshta-setup', () => ({

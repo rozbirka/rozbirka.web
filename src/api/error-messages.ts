@@ -112,6 +112,8 @@ export const errorMessages = defineMessages({
     DELIVERY_DEPOSIT_REQUIRED: 'Спершу внесіть депозит за доставку.',
     DELIVERY_OPERATION_IN_PROGRESS:
       'Інша дія вже змінює це замовлення. Зачекайте й спробуйте ще раз.',
+    REFUND_TRANSACTION_ALREADY_ALLOCATED:
+      'Операцію вже прив’язано до іншого замовлення.',
     SOURCE_HAS_PARTS:
       'Не можна видалити джерело, доки в ньому є невидалені запчастини.',
     PART_SOURCE_ARCHIVED:
@@ -341,6 +343,8 @@ export const errorMessages = defineMessages({
     DELIVERY_DEPOSIT_REQUIRED: 'Pay the delivery deposit first.',
     DELIVERY_OPERATION_IN_PROGRESS:
       'Another action is already changing this order. Wait and try again.',
+    REFUND_TRANSACTION_ALREADY_ALLOCATED:
+      'This transaction is already linked to another order.',
     SOURCE_HAS_PARTS:
       'A source cannot be deleted while it contains active parts.',
     PART_SOURCE_ARCHIVED:
@@ -575,6 +579,8 @@ export const errorMessages = defineMessages({
     DELIVERY_DEPOSIT_REQUIRED: 'Najpierw wpłać depozyt za dostawę.',
     DELIVERY_OPERATION_IN_PROGRESS:
       'Inna operacja już zmienia to zamówienie. Poczekaj i spróbuj ponownie.',
+    REFUND_TRANSACTION_ALREADY_ALLOCATED:
+      'Ta operacja jest już powiązana z innym zamówieniem.',
     SOURCE_HAS_PARTS: 'Nie można usunąć źródła, które zawiera aktywne części.',
     PART_SOURCE_ARCHIVED:
       'Nie można dodawać części do zarchiwizowanego samochodu. Wybierz inne źródło.',

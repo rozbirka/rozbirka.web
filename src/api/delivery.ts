@@ -217,18 +217,43 @@ export const deliveryApi = {
     )
   },
   /**
-   * Puts the goods back on the shelf and marks the order refunded. Core takes
-   * the intact flag only as true — a damaged or partial return is a manual
-   * matter and restores no stock.
+   * Puts the goods back on the shelf. Core takes only a full return: every
+   * unit came back. A damaged one is still accepted, but only with a note
+   * that says what is wrong; a partial return is a manual matter and
+   * restores no stock.
    */
-  async acceptReturn(orderId: string): Promise<DeliveryOrder> {
+  async acceptReturn(
+    orderId: string,
+    condition: { damaged: boolean; notes?: string } = { damaged: false },
+  ): Promise<DeliveryOrder> {
+    const notes = condition.notes?.trim() ?? ''
     return normalizeDeliveryOrder(
       (
         await apiClient.post<DeliveryOrder>(
           `${endpoint(orderId)}/return-received`,
-          { allItemsReceivedUndamaged: true },
+          condition.damaged
+            ? {
+                allItemsReceived: true,
+                allItemsReceivedUndamaged: false,
+                notes,
+              }
+            : {
+                allItemsReceivedUndamaged: true,
+                ...(notes === '' ? {} : { notes }),
+              },
         )
       ).data,
+    )
+  },
+  /**
+   * Cancels an order that has not left. Core cancels the waybill with Nova
+   * Poshta first; payments still held keep the order waiting for the full
+   * refund, and with nothing to give back it is cancelled at once. A sent
+   * order is refused: it can only come back as a return.
+   */
+  async cancel(orderId: string): Promise<DeliveryOrder> {
+    return normalizeDeliveryOrder(
+      (await apiClient.post<DeliveryOrder>(`${endpoint(orderId)}/cancel`)).data,
     )
   },
   /**

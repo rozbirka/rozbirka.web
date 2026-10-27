@@ -38,6 +38,7 @@ vi.mock('@/api/integrations', () => ({
     dispatchPoints: vi.fn(),
     settlements: vi.fn(),
     divisions: vi.fn(),
+    preferences: vi.fn().mockResolvedValue({ codCashRegisterId: 'till-1' }),
   },
 }))
 vi.mock('@/api/shipping', () => ({
@@ -276,14 +277,24 @@ it('sums an order from its parts and keeps the hryvnia figure out of it', () => 
   expect(items).not.toHaveTextContent('UAH')
 })
 
-it('offers only the step the order is waiting for', () => {
+it('offers the next step in the block that needs it (module 46 §9)', async () => {
+  const user = userEvent.setup()
   renderBody(load({ shipment: shipment() }))
 
+  // Paid in full: the money block has nothing left to ask for.
+  const payment = screen.getByRole('region', { name: 'Оплата' })
+  expect(within(payment).getByText('Оплачено')).toBeVisible()
+  expect(within(payment).queryByRole('button')).toBeNull()
+  expect(payment).toHaveTextContent(
+    'Оплату отримано. Замовлення завершиться, коли посилку отримають.',
+  )
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  const carrier = screen.getByRole('region', { name: 'Доставка · Нова пошта' })
   expect(
-    screen.getByRole('button', { name: 'Передати перевізнику' }),
+    within(carrier).getByRole('button', { name: 'Передати перевізнику' }),
   ).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Створити ТТН' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Внести оплату' })).toBeNull()
 })
 
 it('offers payment without pretending it is required before a waybill', () => {
@@ -291,11 +302,11 @@ it('offers payment without pretending it is required before a waybill', () => {
     load({ money: delivery({ outstandingUah: 1200, appliedUah: 3400 }) }),
   )
 
-  const due = screen.getByRole('region', { name: 'До сплати' })
+  const payment = screen.getByRole('region', { name: 'Оплата' })
+  expect(within(payment).getByText('Оплачено частково')).toBeVisible()
   expect(
-    within(due).getByRole('button', { name: 'Внести оплату' }),
+    within(payment).getByRole('button', { name: 'Внести оплату' }),
   ).toBeVisible()
-  expect(due).toHaveTextContent(/післяплат/i)
 })
 
 it('reuses a delivery payment key after an ambiguous failure and rotates it after success', async () => {
@@ -312,17 +323,19 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
   )
 
   await user.click(
-    within(screen.getByRole('region', { name: 'До сплати' })).getByRole(
-      'button',
-      { name: 'Внести оплату' },
-    ),
+    within(screen.getByRole('region', { name: 'Оплата' })).getByRole('button', {
+      name: 'Внести оплату',
+    }),
   )
   await user.click(
     await screen.findByRole('button', { name: 'Зберегти платіж' }),
   )
-  expect(await screen.findAllByText('Немає з’єднання з мережею.')).toHaveLength(
-    1,
-  )
+  // 9.9: what was typed stays, and the sheet says so at the top.
+  expect(
+    await screen.findAllByText(
+      'Не вдалося зберегти оплату. Дані збережено — спробуйте ще раз.',
+    ),
+  ).toHaveLength(1)
 
   await user.click(screen.getByRole('button', { name: 'Зберегти платіж' }))
   expect(recordPayment).toHaveBeenNthCalledWith(
@@ -344,10 +357,9 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
   expect(randomUUID).toHaveBeenCalledOnce()
 
   await user.click(
-    within(screen.getByRole('region', { name: 'До сплати' })).getByRole(
-      'button',
-      { name: 'Внести оплату' },
-    ),
+    within(screen.getByRole('region', { name: 'Оплата' })).getByRole('button', {
+      name: 'Внести оплату',
+    }),
   )
   await user.click(
     await screen.findByRole('button', { name: 'Зберегти платіж' }),
@@ -460,14 +472,15 @@ it('speaks British English on both halves of the card', async () => {
 
   expect(screen.getByRole('list', { name: 'Delivery stages' })).toBeVisible()
   expect(screen.getByRole('region', { name: 'Items' })).toBeVisible()
-  const due = screen.getByRole('region', { name: 'To pay' })
-  expect(within(due).getByText('Paid in full')).toBeVisible()
-  expect(
-    within(due).getByRole('button', { name: 'Hand to carrier' }),
-  ).toBeVisible()
+  const payment = screen.getByRole('region', { name: 'Payment' })
+  // The pill and the «Paid» fact both say it.
+  expect(within(payment).getAllByText('Paid')).toHaveLength(2)
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
   const carrier = screen.getByRole('region', { name: 'Delivery · Nova Poshta' })
+  expect(
+    within(carrier).getByRole('button', { name: 'Hand to carrier' }),
+  ).toBeVisible()
   expect(within(carrier).getByText('Waybill created')).toBeVisible()
   expect(within(carrier).getByText('1 piece · 42 kg')).toBeVisible()
   expect(
@@ -503,19 +516,12 @@ it('keeps a delivery order readable but offers no Nova Poshta outside Ukraine', 
     </LocaleProvider>,
   )
 
-  const due = screen.getByRole('region', { name: 'To pay' })
+  const payment = screen.getByRole('region', { name: 'Payment' })
   // Money stays Core's: the balance can still be paid.
   expect(
-    within(due).getByRole('button', { name: 'Record payment' }),
+    within(payment).getByRole('button', { name: 'Record payment' }),
   ).toBeVisible()
-  expect(
-    within(due).queryByRole('button', { name: 'Create waybill' }),
-  ).toBeNull()
-  expect(
-    within(due).getByText(
-      'Nova Poshta delivery is only available for businesses in Ukraine.',
-    ),
-  ).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Create waybill' })).toBeNull()
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
   expect(

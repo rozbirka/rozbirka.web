@@ -1,5 +1,5 @@
 import { useState, type ReactNode, type Ref } from 'react'
-import { Check, Plus, Truck } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { Button, StatusPill, type StatusTone } from '@/components/app'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -9,11 +9,8 @@ import { waybillMessages } from './waybill-messages'
 import {
   lifecycle,
   paymentKindLabel,
-  paymentStanding,
-  primaryAction,
   shipmentChip,
   type LifecycleStep,
-  type PrimaryAction,
 } from './delivery-view'
 import type { DeliveryOrderState } from './use-delivery-order'
 
@@ -273,94 +270,6 @@ export function DeliveryPaymentsCard({
           ))}
         </ul>
       )}
-    </section>
-  )
-}
-
-/** What is owed and the single move the order is waiting for. */
-export function DeliveryDueCard({
-  busy,
-  delivery,
-  novaPoshtaAvailable = true,
-  onPrimary,
-  shipment,
-}: {
-  busy: boolean
-  delivery: NonNullable<DeliveryOrderState['money']>
-  onPrimary: (
-    kind: NonNullable<ReturnType<typeof primaryAction>['kind']>,
-  ) => void
-  shipment: DeliveryOrderState['shipment']
-  /**
-   * False outside Ukraine: there is no carrier to book with, so the waybill
-   * is not offered as the next move.
-   */
-  novaPoshtaAvailable?: boolean
-}) {
-  const { locale } = useLocale()
-  const t = useT(deliveryMessages)
-  const proposed = primaryAction(delivery, shipment, locale)
-  const action: PrimaryAction =
-    !novaPoshtaAvailable && proposed.kind === 'create'
-      ? { kind: null, label: '', hint: t('countryUnavailable') }
-      : proposed
-  const paidPercent =
-    delivery.agreedTotalUah <= 0
-      ? 0
-      : Math.min(
-          100,
-          Math.round((delivery.appliedUah / delivery.agreedTotalUah) * 100),
-        )
-  const standing = paymentStanding(delivery, locale)
-
-  return (
-    <section aria-label={t('due')} className="rz-card">
-      <div className="rz-card__head py-2">
-        <h2 className="rz-h-card">{t('due')}</h2>
-        <StatusPill tone={standing.tone === 'dim' ? 'neutral' : standing.tone}>
-          {standing.label}
-        </StatusPill>
-      </div>
-      <div className="rz-card__body grid gap-3">
-        <p className="rz-display m-0">{uah(delivery.outstandingUah, locale)}</p>
-        <span aria-hidden className="rz-meter">
-          <span style={{ width: `${String(paidPercent)}%` }} />
-        </span>
-      </div>
-      <dl className="rz-facts border-app-line border-t">
-        <div>
-          <dt>{t('agreed')}</dt>
-          <dd className="rz-mono">{uah(delivery.agreedTotalUah, locale)}</dd>
-        </div>
-        <div>
-          <dt>{t('paid')}</dt>
-          <dd className="rz-mono">{uah(delivery.appliedUah, locale)}</dd>
-        </div>
-      </dl>
-      <div className="rz-card__foot grid justify-stretch gap-2">
-        {action.kind === null ? null : (
-          <Button
-            disabled={busy}
-            onClick={() => onPrimary(action.kind!)}
-            size="wide"
-            variant="primary"
-          >
-            {action.kind === 'create' ? <Truck aria-hidden /> : null}
-            {action.kind === 'pay' ? <Plus aria-hidden /> : null}
-            {action.label}
-          </Button>
-        )}
-        {/* Taking money is no longer the step the order waits for, but a yard
-            still takes a deposit over the counter, so the way to record one has
-            to stay in reach — just not as the thing being asked for. */}
-        {delivery.outstandingUah > 0 && action.kind !== 'pay' ? (
-          <Button disabled={busy} onClick={() => onPrimary('pay')} size="wide">
-            <Plus aria-hidden />
-            {t('recordPayment')}
-          </Button>
-        ) : null}
-        <p className="rz-caption m-0 text-center text-pretty">{action.hint}</p>
-      </div>
     </section>
   )
 }

@@ -23,6 +23,7 @@ import {
   ChevronRight,
   RefreshCw,
   Undo2,
+  Ban,
   ClipboardList,
   Plus,
   SearchX,
@@ -86,7 +87,12 @@ import {
   OrderTimeline,
 } from './OrderDetailCards'
 import { DeliveryConfigureCard } from './delivery/DeliveryConfigureCard'
-import { DeliveryOrderBody } from './delivery/DeliveryOrderBody'
+import {
+  DeliveryOrderBody,
+  type DeliveryIntent,
+} from './delivery/DeliveryOrderBody'
+import { orderActions } from './delivery/delivery-flow'
+import { deliveryFlowMessages } from './delivery/flow-messages'
 import { orderChip } from './delivery/delivery-view'
 import {
   INTEGRATION_COUNTRY_UNAVAILABLE,
@@ -1136,6 +1142,11 @@ function OrderDetailScreen({
     null,
   )
   const [customerOpen, setCustomerOpen] = useState(false)
+  // A header action of a delivery order; the body opens its dialog (§10).
+  const [deliveryIntent, setDeliveryIntent] = useState<DeliveryIntent | null>(
+    null,
+  )
+  const tf = useT(deliveryFlowMessages)
   const historyTitleId = useId()
   const guard = useFirstPriceGuard()
   const currency = guard.currency
@@ -1326,6 +1337,14 @@ function OrderDetailScreen({
       ? `${moduleBase}/settings/integrations`
       : null
   const waybillsPath = `${moduleBase}${cabinetModules.waybills.routeSegment}`
+  const financePath =
+    cabinet.snapshot?.permissions.has('finance.view') === true
+      ? `${moduleBase}${cabinetModules.cash.routeSegment}`
+      : null
+  const deliveryActions =
+    deliveryMoney === null
+      ? null
+      : orderActions(deliveryMoney, mutationsAllowed)
   const summary = orderMoney(order)
   /**
    * Sale prices are accounting prices: the first-price check applies. Runs
@@ -1518,6 +1537,43 @@ function OrderDetailScreen({
     <RedesignShell
       actions={
         <>
+          {deliveryActions === null ? null : (
+            <>
+              {deliveryActions.startReturn === 'menu' ? (
+                <ActionMenu
+                  actions={[
+                    {
+                      key: 'start-return',
+                      label: tf('startReturn'),
+                      icon: <Undo2 aria-hidden />,
+                      onSelect: () => setDeliveryIntent('startReturn'),
+                    },
+                  ]}
+                  label={t('moreActions')}
+                />
+              ) : null}
+              {deliveryActions.cancel === null ? null : (
+                <Button
+                  disabled={deliveryActions.cancel === 'disabled'}
+                  onClick={() => setDeliveryIntent('cancelOrder')}
+                  title={
+                    deliveryActions.cancel === 'disabled'
+                      ? tf('sentReason')
+                      : undefined
+                  }
+                >
+                  <Ban aria-hidden />
+                  {t('cancelOrder')}
+                </Button>
+              )}
+              {deliveryActions.startReturn === 'button' ? (
+                <Button onClick={() => setDeliveryIntent('startReturn')}>
+                  <Undo2 aria-hidden />
+                  {tf('startReturn')}
+                </Button>
+              ) : null}
+            </>
+          )}
           {orderEditable ? (
             <ActionMenu
               actions={[
@@ -1602,10 +1658,13 @@ function OrderDetailScreen({
             customerPath={customerPath}
             delivery={deliveryMoney}
             financeAllowed={financeAllowed}
+            financePath={financePath}
             integrationsPath={integrationsPath}
+            intent={deliveryIntent}
             load={deliveryLoad}
             mutationsAllowed={mutationsAllowed}
             novaPoshtaAvailable={novaPoshta.available}
+            onIntentHandled={() => setDeliveryIntent(null)}
             order={order}
             partsPath={partsPath}
             waybillsPath={waybillsPath}

@@ -11,6 +11,8 @@ import {
   type MessageParams,
 } from '@/i18n'
 import { deliveryStage, uah } from './delivery-money'
+import { orderChipKey } from './delivery-flow'
+import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
 
 const tr = (
@@ -125,7 +127,10 @@ export function lifecycle(
   }))
 }
 
-/** The order's own state, said the way the yard says it. */
+/**
+ * The order's own pill, in module 46's words: «Відкрите», «Завершене»,
+ * «Повернення» or «Скасоване», from Core's workflow state.
+ */
 export function orderChip(
   delivery: DeliveryOrder,
   locale: Locale,
@@ -133,13 +138,11 @@ export function orderChip(
   label: string
   tone: StatusTone
 } {
-  if (delivery.returnedAt !== null)
-    return { label: tr(locale, 'chipReturned'), tone: 'info' }
-  if (delivery.receivedAt !== null)
-    return { label: tr(locale, 'chipConfirmed'), tone: 'ok' }
-  return delivery.outstandingUah === 0
-    ? { label: tr(locale, 'chipPendingPaid'), tone: 'info' }
-    : { label: tr(locale, 'chipPendingDue'), tone: 'warn' }
+  const chip = orderChipKey(delivery)
+  return {
+    label: translate(deliveryFlowMessages, locale, chip.key),
+    tone: chip.tone,
+  }
 }
 
 /** Where the parcel is, as the carrier record shows it. */
@@ -180,60 +183,6 @@ export function paymentStanding(
   return delivery.appliedUah > 0
     ? { label: tr(locale, 'standingPartial'), tone: 'warn' }
     : { label: tr(locale, 'standingNone'), tone: 'dim' }
-}
-
-export interface PrimaryAction {
-  kind: 'pay' | 'create' | 'dispatch' | 'receive' | 'return' | null
-  label: string
-  hint: string
-}
-
-/**
- * The one move the order is waiting for. Only ever one: the lifecycle is
- * strictly ordered in Core, and offering a later step early is offering a
- * refusal.
- */
-export function primaryAction(
-  delivery: DeliveryOrder,
-  shipment: Shipment | null,
-  locale: Locale,
-): PrimaryAction {
-  if (delivery.returnedAt !== null)
-    return {
-      kind: null,
-      label: '',
-      hint: tr(locale, 'returnedHint'),
-    }
-  // Money no longer gates the parcel: whatever is still owed travels as the
-  // post-payment, so the waybill is the next move even on an unpaid order.
-  if (!hasWaybill(shipment))
-    return {
-      kind: 'create',
-      label: tr(locale, 'actionCreate'),
-      hint:
-        delivery.outstandingUah > 0
-          ? tr(locale, 'createHintCod', {
-              amount: uah(delivery.outstandingUah, locale),
-            })
-          : tr(locale, 'createHintPaid'),
-    }
-  if (delivery.dispatchedAt === null)
-    return {
-      kind: 'dispatch',
-      label: tr(locale, 'actionDispatch'),
-      hint: tr(locale, 'dispatchHint'),
-    }
-  if (delivery.receivedAt === null)
-    return {
-      kind: 'receive',
-      label: tr(locale, 'shipReceived'),
-      hint: tr(locale, 'receiveHint'),
-    }
-  return {
-    kind: 'return',
-    label: tr(locale, 'actionReturn'),
-    hint: tr(locale, 'returnHint'),
-  }
 }
 
 export interface ReadinessCheck {

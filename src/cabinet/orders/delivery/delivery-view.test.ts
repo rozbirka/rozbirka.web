@@ -5,7 +5,6 @@ import {
   lifecycle,
   orderChip,
   paymentStanding,
-  primaryAction,
   readiness,
   readinessBlocks,
   readinessNextStep,
@@ -126,43 +125,33 @@ it('does not call an order paid while anything is still owed', () => {
 })
 
 it('names the order and the parcel separately', () => {
+  // Module 46: the order's pill follows Core's workflow state.
   expect(orderChip(delivery({ outstandingUah: 1200 }), 'uk').label).toBe(
-    'Очікує · є залишок',
+    'Відкрите',
   )
-  expect(orderChip(delivery(), 'uk').label).toBe('Очікує · оплачене')
-  expect(orderChip(delivery({ receivedAt: 'x' }), 'uk').label).toBe(
-    'Підтверджене',
+  expect(orderChip(delivery({ workflowState: 'Completed' }), 'uk')).toEqual({
+    label: 'Завершене',
+    tone: 'ok',
+  })
+  expect(
+    orderChip(
+      delivery({ workflowState: 'AwaitingGoods', dispatchedAt: 'x' }),
+      'uk',
+    ).label,
+  ).toBe('Повернення')
+  // Cancelling an order that never left is not a return (10.13).
+  expect(
+    orderChip(delivery({ workflowState: 'AwaitingRefund' }), 'uk').label,
+  ).toBe('Відкрите')
+  expect(orderChip(delivery({ workflowState: 'Cancelled' }), 'uk').label).toBe(
+    'Скасоване',
   )
-  expect(orderChip(delivery({ returnedAt: 'x' }), 'uk').label).toBe('Повернене')
 
   expect(shipmentChip(delivery(), null, 'uk').label).toBe('ТТН не створена')
   expect(shipmentChip(delivery(), shipment(), 'uk').label).toBe('ТТН створена')
   expect(
     shipmentChip(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').label,
   ).toBe('Передано перевізнику')
-})
-
-it('offers exactly the step the order is waiting for', () => {
-  // An unpaid order is not waiting for money: the balance rides along as the
-  // post-payment, so the waybill is still the next move.
-  expect(
-    primaryAction(delivery({ outstandingUah: 1200 }), null, 'uk').kind,
-  ).toBe('create')
-  expect(primaryAction(delivery(), null, 'uk').kind).toBe('create')
-  expect(primaryAction(delivery(), shipment(), 'uk').kind).toBe('dispatch')
-  expect(
-    primaryAction(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').kind,
-  ).toBe('receive')
-  expect(
-    primaryAction(
-      delivery({ dispatchedAt: 'x', receivedAt: 'y' }),
-      shipment(),
-      'uk',
-    ).kind,
-  ).toBe('return')
-  expect(
-    primaryAction(delivery({ returnedAt: 'z' }), shipment(), 'uk').kind,
-  ).toBeNull()
 })
 
 it('does not treat an outstanding balance as an obstacle to a waybill', () => {

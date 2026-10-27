@@ -8,6 +8,7 @@ import {
   FilePlus,
   FileText,
   KeyRound,
+  PackageCheck,
   Link2,
   Pencil,
   Plus,
@@ -25,6 +26,7 @@ import { useFormat, useLocale, useT } from '@/i18n'
 import { npRecoveryMessages } from '../../integrations/np-recovery-messages'
 import { ShipmentCard, type ShipmentFactRow } from './DeliveryOrderCard'
 import { uah } from './delivery-money'
+import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
 import { TitledNotice } from './WaybillCreateSheet'
 import { waybillMessages } from './waybill-messages'
@@ -61,6 +63,9 @@ export interface ShipmentBlockActions {
   changeDelivery: () => void
   payDeposit: () => void
   recover: () => void
+  /** The two steps Core also takes by hand: handed over, then received. */
+  dispatch: () => void
+  receive: () => void
 }
 
 /**
@@ -72,6 +77,7 @@ export interface ShipmentBlockActions {
 export function DeliveryShipmentBlock({
   actions,
   attachedAt,
+  awaitingCod = false,
   busy,
   canManage,
   canPay,
@@ -90,6 +96,8 @@ export function DeliveryShipmentBlock({
   actions: ShipmentBlockActions
   /** When the waybill was attached from the carrier's cabinet here (6.12). */
   attachedAt: string | null
+  /** Received, the post-payment not yet in (9.2): the pill says both. */
+  awaitingCod?: boolean
   busy: boolean
   canManage: boolean
   canPay: boolean
@@ -114,6 +122,7 @@ export function DeliveryShipmentBlock({
   const t = useT(waybillMessages)
   const tm = useT(deliveryMessages)
   const tr = useT(npRecoveryMessages)
+  const tf = useT(deliveryFlowMessages)
   const when = (value: string | null) =>
     value === null ? '' : (format.dateTime(value) ?? value)
   const manage = canManage && carrierReady
@@ -506,7 +515,9 @@ export function DeliveryShipmentBlock({
 
   const pill: { label: string; tone: StatusTone } =
     stage === 'received'
-      ? { label: tm('shipReceived'), tone: 'ok' }
+      ? awaitingCod
+        ? { label: tf('deliveredAwaitingCod'), tone: 'warn' }
+        : { label: tm('shipReceived'), tone: 'ok' }
       : stage === 'sent'
         ? { label: t('pillSent'), tone: 'info' }
         : attachedAt !== null
@@ -543,6 +554,18 @@ export function DeliveryShipmentBlock({
               <Copy aria-hidden />
               {tm('copyNumber')}
             </Button>
+            {manage && stage === 'created' && delivery.dispatchedAt === null ? (
+              <Button disabled={busy} onClick={actions.dispatch}>
+                <Truck aria-hidden />
+                {tm('actionDispatch')}
+              </Button>
+            ) : null}
+            {manage && stage === 'sent' && delivery.receivedAt === null ? (
+              <Button disabled={busy} onClick={actions.receive}>
+                <PackageCheck aria-hidden />
+                {tm('shipReceived')}
+              </Button>
+            ) : null}
             {manage && stage === 'created' ? (
               <>
                 <Button disabled={busy} onClick={actions.editWaybill}>
