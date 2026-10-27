@@ -9,6 +9,7 @@ export const deliveryMessages = defineMessages({
   uk: {
     countryUnavailable:
       'Доставка Новою поштою доступна лише для бізнесів в Україні.',
+    noRight: 'Немає права на цю дію. Зверніться до власника.',
 
     // Lifecycle
     stepPaid: 'Оплачено',
@@ -189,6 +190,8 @@ export const deliveryMessages = defineMessages({
   'en-GB': {
     countryUnavailable:
       'Nova Poshta delivery is only available for businesses in Ukraine.',
+    noRight:
+      'You no longer have permission for this action. Contact the owner.',
 
     stepPaid: 'Paid',
     stepWaybill: 'Waybill',
@@ -356,6 +359,8 @@ export const deliveryMessages = defineMessages({
   pl: {
     countryUnavailable:
       'Dostawa Nova Poshta jest dostępna tylko dla firm na Ukrainie.',
+    noRight:
+      'Nie masz uprawnień do tej operacji. Skontaktuj się z właścicielem.',
 
     stepPaid: 'Opłacone',
     stepWaybill: 'List przewozowy',
