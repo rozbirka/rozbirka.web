@@ -30,6 +30,7 @@ import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
 import { useDashboardData } from './use-dashboard-data'
 import { getDashboardBillingPath } from './dashboard-billing-access'
+import { SubscriptionStateScreen } from '../screens/module-unavailable'
 import {
   useCashRegisters,
   usePartsSummary,
@@ -57,6 +58,19 @@ const DAY_NAME: Intl.DateTimeFormatOptions = {
 }
 
 export function DashboardScreen() {
+  const { snapshot } = useCabinet()
+  const state = snapshot?.entitlement?.state ?? snapshot?.subscription?.state
+  if (state === 'blocked' || state === 'none')
+    return (
+      <SubscriptionStateScreen
+        definition={cabinetModules.dashboard}
+        state={state}
+      />
+    )
+  return <DashboardContent />
+}
+
+function DashboardContent() {
   const { targetTenant, snapshot } = useCabinet()
   const accounting = useAccountingCurrency()
   const [searchParams, setSearchParams] = useSearchParams()

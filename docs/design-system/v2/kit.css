@@ -294,7 +294,7 @@
 .rz-sheet { position: fixed; top: 0; right: 0; bottom: 0; z-index: var(--rz-z-dialog); width: min(560px, 100vw); display: grid; grid-template-rows: auto 1fr auto; border-left: 1px solid var(--rz-border-strong); background: var(--rz-sheet-body); box-shadow: var(--rz-shadow-dialog); }
 .rz-sheet__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--rz-border); background: var(--rz-sheet-band); }
 .rz-sheet__head { display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--rz-border); background: var(--rz-sheet-band); }
-:is(.rz-sheet, .rz-dialog, .rz-confirm) :is(.rz-input, .rz-select, .rz-textarea, .rz-input-group, .rz-search) { background: var(--rz-sheet-field); }
+:is(.rz-sheet, .rz-dialog, .rz-confirm, .rz-form-page) :is(.rz-input, .rz-select, .rz-textarea, .rz-input-group, .rz-search) { background: var(--rz-sheet-field); }
 @media (max-width: 639px) { .rz-sheet { top: auto; left: 0; width: 100%; max-height: 92dvh; border-left: 0; border-top: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-lg) var(--rz-r-lg) 0 0; } }
 .rz-menu { min-width: 220px; display: grid; gap: 1px; padding: 4px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-md); background: var(--rz-overlay); box-shadow: var(--rz-shadow-popover); }
 .rz-menu__item { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px; border: 0; border-radius: var(--rz-r-sm); background: transparent; color: var(--rz-text); text-align: left; cursor: pointer; }
