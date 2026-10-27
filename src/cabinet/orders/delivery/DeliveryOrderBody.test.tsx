@@ -94,6 +94,9 @@ const delivery = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
       refundedAt: null,
     },
   ],
+  workflowState: 'Open',
+  refundDueUah: 0,
+  refundAllocations: [],
   ...over,
 })
 
@@ -130,6 +133,12 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   trackingStatus: null,
   lastTrackedAt: null,
   relatedNumbers: [],
+  connectionId: null,
+  version: 'v1',
+  dispatchedAt: null,
+  receivedAt: null,
+  paymentState: null,
+  syncProblem: null,
   events: [],
   ...over,
 })
