@@ -70,9 +70,10 @@ export function SubscriptionScreen() {
   const generation = cabinet.snapshot?.generation
   const latestSnapshotRef = useRef(cabinet.snapshot)
   const cancelStageRef = useRef<'cancel' | 'refresh'>('cancel')
+  const checkoutStageRef = useRef<'checkout' | 'cancel' | 'refresh'>('checkout')
   const [refreshedSubscription, setRefreshedSubscription] = useState<{
     generation: number
-    value: SubscriptionDto
+    value: NonNullable<typeof snapshotSubscription>
   } | null>(null)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [history, setHistory] = useState<PaymentDto[] | null>(null)
@@ -103,13 +104,68 @@ export function SubscriptionScreen() {
 
   const checkout = useOperation<MutationOutcome>(
     async () => {
+      checkoutStageRef.current = 'checkout'
       const scope = requireLatestMutation()
-      if (!canStartWebCheckout(latestSnapshotRef.current?.subscription)) {
+      let current = subscription
+      if (
+        !canStartWebCheckout(latestSnapshotRef.current?.subscription) ||
+        !canStartWebCheckout(current) ||
+        hasUnexpiredCancelledMonoPeriod(current)
+      ) {
         throw new BillingManagementUnavailableError()
       }
       let checkoutUrl: string
       try {
-        ;({ checkoutUrl } = await billingApi.subscribe(undefined, {
+        if (canRecoverWithAnotherCard(current)) {
+          const planCode = current?.planCode
+          current = await billingApi.getSubscription({ signal: scope.signal })
+          if (!isCurrentScope(scope, latestSnapshotRef.current)) return 'stale'
+          setRefreshedSubscription({
+            generation: scope.generation,
+            value: current,
+          })
+          if (!isExpiredMonoPeriod(current) || current.planCode !== planCode) {
+            throw new BillingRecoveryChangedError()
+          }
+          if (current.canCancel) {
+            checkoutStageRef.current = 'cancel'
+            await billingApi.cancel(
+              {
+                recovery: {
+                  planCode: current.planCode!,
+                  currentPeriodEnd: current.currentPeriodEnd!,
+                },
+              },
+              { signal: scope.signal },
+            )
+            if (!isCurrentScope(scope, latestSnapshotRef.current))
+              return 'stale'
+            checkoutStageRef.current = 'refresh'
+            current = await billingApi.getSubscription({ signal: scope.signal })
+            if (!isCurrentScope(scope, latestSnapshotRef.current))
+              return 'stale'
+            setRefreshedSubscription({
+              generation: scope.generation,
+              value: current,
+            })
+          }
+          if (
+            !isExpiredMonoPeriod(current) ||
+            current.planCode !== planCode ||
+            current.canCancel ||
+            !current.canSubscribe
+          ) {
+            throw new BillingRecoveryChangedError()
+          }
+          checkoutStageRef.current = 'checkout'
+        }
+        const request =
+          hasMonoManagement(current) &&
+          current?.planCode &&
+          current.planCode !== 'trial'
+            ? { planCode: current.planCode }
+            : undefined
+        ;({ checkoutUrl } = await billingApi.subscribe(request, {
           signal: scope.signal,
         }))
       } catch (error) {
@@ -122,8 +178,23 @@ export function SubscriptionScreen() {
     },
     // No success toast: a checkout leaves the app for the Mono pay page.
     {
-      errorMessage: (error) =>
-        subscriptionFailureMessage('checkout', error, locale),
+      errorMessage: (error) => {
+        if (error instanceof BillingRecoveryChangedError) {
+          return translate(billingMessages, locale, 'subscriptionChanged')
+        }
+        if (checkoutStageRef.current === 'refresh') {
+          return translate(
+            subscriptionMessages,
+            locale,
+            'cancelledButRefreshFailed',
+          )
+        }
+        return subscriptionFailureMessage(
+          checkoutStageRef.current === 'cancel' ? 'cancel' : 'checkout',
+          error,
+          locale,
+        )
+      },
     },
   )
 
@@ -273,13 +344,18 @@ function SubscriptionPanel({
   const canReactivate =
     subscription.canReactivate && subscription.state !== 'blocked'
   const isMono = management.kind === 'mono'
+  const canRecover = canRecoverWithAnotherCard(subscription)
   const canCheckout =
     canStartWebCheckout(subscription) &&
-    (subscription.canSubscribe ||
+    !hasUnexpiredCancelledMonoPeriod(subscription) &&
+    (canRecover ||
+      subscription.canSubscribe ||
       canReactivate ||
       (subscription.canReactivate && !isMono))
-  const nextChargeAt =
-    subscription.nextChargeAt ?? subscription.currentPeriodEnd
+  const renewalStopped = subscription.state === 'cancelled'
+  const nextChargeAt = renewalStopped
+    ? null
+    : (subscription.nextChargeAt ?? subscription.currentPeriodEnd)
   const daysLeft =
     subscription.state === 'trial'
       ? subscription.trialDaysRemaining
@@ -339,7 +415,7 @@ function SubscriptionPanel({
         {canCheckout && (
           <BillingMutationGate decision={manageDecision}>
             <Button aria-busy={busy} disabled={busy} onClick={onSubscribe}>
-              {t('payNow')}
+              {canRecover ? t('payWithAnotherCard') : t('payNow')}
             </Button>
           </BillingMutationGate>
         )}
@@ -372,11 +448,13 @@ function SubscriptionPanel({
                 onClick={onSubscribe}
                 variant="primary"
               >
-                {accessEnded
-                  ? t('subscribe')
-                  : canReactivate
-                    ? t('reactivate')
-                    : t('renew')}
+                {canRecover
+                  ? t('payWithAnotherCard')
+                  : accessEnded
+                    ? t('subscribe')
+                    : canReactivate
+                      ? t('reactivate')
+                      : t('renew')}
               </Button>
             </BillingMutationGate>
           )}
@@ -418,18 +496,33 @@ function SubscriptionPanel({
         <Kpi label={t('currentPlan')} meta={null} value={planLabel} />
         <Kpi
           label={
-            subscription.state === 'trial' ? t('kpiTrialDays') : t('nextCharge')
+            renewalStopped
+              ? t('accessUntil')
+              : subscription.state === 'trial'
+                ? t('kpiTrialDays')
+                : t('nextCharge')
           }
           meta={
-            daysLeft === null
-              ? t('kpiNoChargeDate')
-              : daysLeft >= 0
-                ? t('daysToCharge', { days: daysText(daysLeft, locale) })
-                : t('overdueBy', { days: daysText(-daysLeft, locale) })
+            renewalStopped
+              ? t('renewalStopped')
+              : daysLeft === null
+                ? t('kpiNoChargeDate')
+                : daysLeft >= 0
+                  ? t('daysToCharge', { days: daysText(daysLeft, locale) })
+                  : t('overdueBy', { days: daysText(-daysLeft, locale) })
           }
           tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
           value={
-            subscription.state === 'trial' ? (
+            renewalStopped ? (
+              subscription.currentPeriodEnd === null ? (
+                '—'
+              ) : (
+                <DateValue
+                  value={subscription.currentPeriodEnd}
+                  withTime={false}
+                />
+              )
+            ) : subscription.state === 'trial' ? (
               daysLeft == null ? (
                 '—'
               ) : (
@@ -705,6 +798,45 @@ function hasMonoManagement(subscription: unknown) {
   )
 }
 
+class BillingRecoveryChangedError extends Error {}
+
+type RecoverySubscription = Pick<
+  SubscriptionDto,
+  'state' | 'planCode' | 'currentPeriodEnd' | 'canCancel'
+>
+
+function isExpiredMonoPeriod(
+  subscription: RecoverySubscription | null | undefined,
+) {
+  return (
+    !!subscription &&
+    hasMonoManagement(subscription) &&
+    !!subscription.planCode &&
+    subscription.planCode !== 'trial' &&
+    Date.parse(subscription.currentPeriodEnd ?? '') <= Date.now()
+  )
+}
+
+function canRecoverWithAnotherCard(
+  subscription: RecoverySubscription | null | undefined,
+) {
+  return (
+    isExpiredMonoPeriod(subscription) &&
+    subscription?.canCancel === true &&
+    (subscription.state === 'pastDue' || subscription.state === 'blocked')
+  )
+}
+
+function hasUnexpiredCancelledMonoPeriod(
+  subscription: RecoverySubscription | null | undefined,
+) {
+  return (
+    subscription?.state === 'cancelled' &&
+    hasMonoManagement(subscription) &&
+    Date.parse(subscription.currentPeriodEnd ?? '') > Date.now()
+  )
+}
+
 function subscriptionFailureMessage(
   mutation: SubscriptionMutation,
   error: unknown,
@@ -717,6 +849,12 @@ function subscriptionFailureMessage(
     return translate(billingMessages, locale, 'actionUnavailable')
   }
   const problem = normalizeApiProblem(error)
+  if (
+    mutation === 'cancel' &&
+    problem.code?.toLowerCase() === 'billing.cancellation_unconfirmed'
+  ) {
+    return translate(subscriptionMessages, locale, 'cancelUnconfirmed')
+  }
   if (problem.kind === 'forbidden') {
     return translate(billingMessages, locale, 'noRightToChange')
   }

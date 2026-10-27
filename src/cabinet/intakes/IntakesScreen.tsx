@@ -53,6 +53,7 @@ import {
   type StatusTone,
   TextArea,
   TextInput,
+  useOptionalToast,
 } from '@/components/app'
 import {
   intakesApi,
@@ -1584,15 +1585,6 @@ function ChecksList({
   )
 }
 
-/** A part added in this sitting, kept only for the session's own recap. */
-interface AddedPart {
-  id: string
-  name: string
-  quantity: number
-  unit: string
-  zone: string | null
-}
-
 function PartForm({
   canUploadMedia,
   intakeId,
@@ -1601,6 +1593,7 @@ function PartForm({
   intakeId: string
 }) {
   const navigate = useNavigate()
+  const toast = useOptionalToast()
   const cabinet = useCabinet()
   const t = useT(intakesMessages)
   const tf = useT(intakeFormMessages)
@@ -1636,9 +1629,9 @@ function PartForm({
     canPlace,
     cabinet.targetTenant?.id,
   )
-  const [added, setAdded] = useState<AddedPart[]>([])
   const [compatRows, setCompatRows] = useState<CompatibilityRow[]>([])
   const nextCompatibilityKey = useRef(0)
+  const lifetime = useRef<AbortController | null>(null)
   const pendingCreatedId = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
@@ -1649,6 +1642,7 @@ function PartForm({
 
   useEffect(() => {
     const controller = new AbortController()
+    lifetime.current = controller
     void intakesApi.get(intakeId, { signal: controller.signal }).then(
       (next) => {
         if (!controller.signal.aborted) setIntake(next)
@@ -1685,6 +1679,7 @@ function PartForm({
   ) => {
     event?.preventDefault()
     if (busy) return
+    const lifetimeSignal = lifetime.current?.signal
     lastAnother.current = andAnother
     if (!named) {
       setFieldErrors({
@@ -1705,6 +1700,7 @@ function PartForm({
       return
     }
     setFieldErrors({})
+    setProblem(null)
     const request: AddIntakePartRequest = {
       name: values.name.trim(),
       partType: values.partType.trim() || null,
@@ -1784,21 +1780,16 @@ function PartForm({
           return
         }
       }
+      if (lifetimeSignal?.aborted || intakeScope.signal.aborted) return
       pendingCreatedId.current = null
       if (!andAnother) {
         void navigate(`${base}/${intakeId}`)
         return
       }
-      setAdded((current) => [
-        {
-          id: createdId,
-          name: request.name,
-          quantity: values.quantity,
-          unit: values.unit || PIECES,
-          zone: zone?.code ?? null,
-        },
-        ...current,
-      ])
+      toast?.show({
+        tone: 'ok',
+        message: t('historyAdded', { name: request.name }),
+      })
       setValues((current) => ({
         ...current,
         name: '',
@@ -2105,35 +2096,6 @@ function PartForm({
             </div>
           </div>
         </SectionPanel>
-
-        {added.length > 0 ? (
-          <SectionPanel
-            aside={added.length}
-            title={tf('justAdded')}
-            variant="panel"
-          >
-            <ul className="divide-app-line border-app-line m-0 grid list-none divide-y rounded-panel border p-0">
-              {added.map((item) => (
-                <li className="flex items-center gap-3 px-3 py-2" key={item.id}>
-                  <span className="min-w-0 flex-1">
-                    <span className="rz-strong block truncate">
-                      {item.name}
-                    </span>
-                    <span className="rz-caption rz-mono block">
-                      {item.zone ?? tf('noCellLower')}
-                    </span>
-                  </span>
-                  <span className="rz-mono rz-muted whitespace-nowrap">
-                    {t('quantityWithUnit', {
-                      count: item.quantity,
-                      unit: unitLabel(t, item.unit),
-                    })}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </SectionPanel>
-        ) : null}
       </form>
     </FormPage>
   )

@@ -41,6 +41,10 @@ export type InventoryAuditEvent =
 export type InventoryScan = components['schemas']['InventoryScanDto']
 export type InventoryAdjustment =
   components['schemas']['InventoryAdjustmentDto']
+export type PartPlacementJob = components['schemas']['PartPlacementJobDto']
+export type BatchPlacePartsRequest =
+  components['schemas']['BatchPlacePartsRequest']
+export type BatchPlacePartResult = components['schemas']['BatchPlacePartResult']
 export type PartInventoryZone =
   components['schemas']['PartInventoryZoneDto'] & {
     shelfId?: string | null
@@ -358,6 +362,41 @@ export const inventoryApi = {
         },
         config(options),
       )
+    ).data
+  },
+  async startPlacementJob(
+    placement: BatchPlacePartsRequest,
+    operationId: string,
+    options: RequestOptions = {},
+  ): Promise<PartPlacementJob> {
+    return (
+      await apiClient.post<PartPlacementJob>(
+        '/parts/inventory-zones/jobs',
+        { operationId, placement },
+        config(options),
+      )
+    ).data
+  },
+  async getPlacementJob(
+    jobId: string,
+    options: RequestOptions = {},
+  ): Promise<PartPlacementJob> {
+    return (
+      await apiClient.get<PartPlacementJob>(
+        `/parts/inventory-zones/jobs/${id(jobId)}`,
+        config(options),
+      )
+    ).data
+  },
+  async getPlacementJobs(
+    sourceZoneId: string,
+    options: RequestOptions = {},
+  ): Promise<PartPlacementJob[]> {
+    return (
+      await apiClient.get<PartPlacementJob[]>('/parts/inventory-zones/jobs', {
+        ...config(options),
+        params: { sourceZoneId },
+      })
     ).data
   },
   async getSessions(options: RequestOptions = {}): Promise<InventorySession[]> {

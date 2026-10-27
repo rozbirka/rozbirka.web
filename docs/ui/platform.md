@@ -14,7 +14,7 @@
 
 Field/input context зв’язує label, hint та error. Radix у FormDialog/Sheet/ConfirmDialog відповідає за dialog primitives; перевіряти focus entry/return і keyboard actions у конкретній композиції. Закриття під час pending залежить від компонента і caller.
 
-Глобальний `:focus-visible` та reduced-motion rules живуть у index.css. Зберігати видимий focus; іконковій дії потрібне ім’я. У [SiteHeader](../../src/components/site/header.tsx) є Escape і повернення focus до menu trigger; це не доказ повного focus trap для будь-якого menu.
+Глобальний `:focus-visible` та reduced-motion rules живуть у index.css. Зберігати видимий focus на кнопках, посиланнях, полях та інших інтерактивних контролах; іконковій дії потрібне ім’я. Заголовки й неінтерактивні контейнери з `tabindex="-1"` отримують програмний focus для оголошення контексту, без обводки чи тіні, зокрема після Shift. Спільне правило — у [kit.css](../design-system/v2/kit.css); `src/styles/rz-kit.css` генерується через `npm run ds:sync`. У [SiteHeader](../../src/components/site/header.tsx) є Escape і повернення focus до menu trigger; це не доказ повного focus trap для будь-якого menu.
 
 ## Навігація, сесія та SSR
 

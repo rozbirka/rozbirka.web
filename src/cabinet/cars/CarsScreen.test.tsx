@@ -1,13 +1,14 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { Link, MemoryRouter, Route, Routes } from 'react-router'
+import { Link, MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { carsApi } from '@/api/cars'
 import { mediaApi } from '@/api/media'
 import type { PlanUsageDto } from '@/api/types'
 import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
+import { tenantRequestScope } from '../tenant-request-scope'
 import { CarsScreen, MediaPicker } from './CarsScreen'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are invoked only through their owning singleton. */
@@ -483,7 +484,10 @@ it('edits an expense with PUT, retains the form while pending, and refetches det
 
 it('renders car identity, gallery, and VIN copy', async () => {
   const user = userEvent.setup()
-  const writeText = vi.fn().mockResolvedValue(undefined)
+  const writeText = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('clipboard denied'))
+    .mockResolvedValue(undefined)
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
     value: { writeText },
@@ -524,6 +528,12 @@ it('renders car identity, gallery, and VIN copy', async () => {
     screen.queryByRole('region', { name: 'Запчастини авто' }),
   ).not.toBeInTheDocument()
   expect(carsApi.listParts).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'Копіювати VIN' }))
+  const failure = await screen.findByText('Не вдалося скопіювати VIN.')
+  const failureToast = failure.closest<HTMLElement>('.rz-toast')!
+  expect(failureToast).toHaveAttribute('role', 'alert')
+  expect(failure.closest('.rz-notice')).toBeNull()
+  await user.click(within(failureToast).getByRole('button'))
   await user.click(screen.getByRole('button', { name: 'Копіювати VIN' }))
   expect(writeText).toHaveBeenCalledWith('WBAXX11010A123456')
   expect(await screen.findByRole('status')).toHaveTextContent(
@@ -758,6 +768,7 @@ it('retries only remaining initial expenses after partial failure without recrea
       kind: 'conflict',
       message: 'Витрата вже існує.',
     })
+    .mockRejectedValueOnce({ kind: 'conflict', message: 'Still unavailable' })
     .mockResolvedValueOnce({
       id: 'expense-2',
       name: 'Мито',
@@ -765,11 +776,13 @@ it('retries only remaining initial expenses after partial failure without recrea
       createdAt: '2026-08-28T12:01:00Z',
     })
   render(
-    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+        <Routes>
+          <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
@@ -803,20 +816,118 @@ it('retries only remaining initial expenses after partial failure without recrea
   expect(
     screen.getByRole('link', { name: 'Відкрити автомобіль' }),
   ).toHaveAttribute('href', '/app/demo/cars/car-1')
+  const confirmation = screen.getByText(
+    'Автомобіль створено. Решту витрат можна додати на його сторінці.',
+  )
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  await user.click(screen.getByRole('button', { name: 'Закрити сповіщення' }))
+  expect(
+    screen.queryByText(
+      'Автомобіль створено. Решту витрат можна додати на його сторінці.',
+    ),
+  ).toBeNull()
+  expect(
+    screen.getByRole('link', { name: 'Відкрити автомобіль' }),
+  ).toBeVisible()
 
   await user.click(
     screen.getAllByRole('button', { name: 'Створити автомобіль' })[0]!,
   )
   await waitFor(() => expect(carsApi.createExpense).toHaveBeenCalledTimes(3))
   expect(carsApi.create).toHaveBeenCalledTimes(1)
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole('button', { name: 'Створити автомобіль' })[0],
+    ).toBeEnabled(),
+  )
+  expect(document.querySelector('.rz-toast')).toBeNull()
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Автомобіль створено, але не всі витрати збережено:',
+  )
+  await user.click(
+    screen.getAllByRole('button', { name: 'Створити автомобіль' })[0]!,
+  )
+  await waitFor(() => expect(carsApi.createExpense).toHaveBeenCalledTimes(4))
+  expect(carsApi.create).toHaveBeenCalledOnce()
   expect(carsApi.createExpense).toHaveBeenNthCalledWith(
-    3,
+    4,
     'car-1',
     { name: 'Мито', amount: 250 },
     expect.objectContaining({
       signal: expect.any(AbortSignal) as AbortSignal,
     }),
   )
+})
+
+it.each(['navigation', 'tenant-change'] as const)(
+  'does not announce car creation after %s while an initial expense is pending',
+  async (leave) => {
+    const user = userEvent.setup()
+    vi.mocked(carsApi.create).mockResolvedValue(detail)
+    let failExpense!: (reason: unknown) => void
+    const response = new Promise<never>((_resolve, reject) => {
+      failExpense = reject
+    })
+    vi.mocked(carsApi.createExpense).mockReturnValue(response)
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+          <Link to="/left">Leave form</Link>
+          <Routes>
+            <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+            <Route path="/left" element={<p>Left form</p>} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    )
+    await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
+    await chooseBmwX5(user)
+    await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
+    await user.type(
+      screen.getByRole('textbox', { name: 'Ціна придбання' }),
+      '12000',
+    )
+    await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
+    await user.type(screen.getByLabelText('Назва витрати 1'), 'Доставка')
+    await user.type(screen.getByLabelText('Сума витрати 1'), '500')
+    await user.click(
+      screen.getAllByRole('button', { name: 'Створити автомобіль' })[0]!,
+    )
+    await waitFor(() => expect(carsApi.createExpense).toHaveBeenCalledOnce())
+    if (leave === 'navigation')
+      await user.click(screen.getByRole('link', { name: 'Leave form' }))
+    else tenantRequestScope.rotate()
+    await act(async () => {
+      failExpense({ kind: 'conflict' })
+      await response.catch(() => undefined)
+    })
+    expect(document.querySelector('.rz-toast')).toBeNull()
+  },
+)
+
+it('keeps an existing-car expense failure inline without a creation confirmation', async () => {
+  const user = userEvent.setup()
+  vi.mocked(carsApi.createExpense).mockRejectedValue({ kind: 'conflict' })
+  render(
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+        <Routes>
+          <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Додати витрату' }),
+  )
+  const form = within(await screen.findByRole('dialog'))
+  await user.type(form.getByLabelText('Назва витрати'), 'Доставка')
+  await user.type(form.getByLabelText('Сума витрати'), '500')
+  await user.click(form.getByRole('button', { name: 'Додати витрату' }))
+  expect(await form.findByRole('alert')).toHaveClass('rz-notice--danger')
+  expect(form.getByLabelText('Назва витрати')).toHaveValue('Доставка')
+  expect(document.querySelector('.rz-toast')).toBeNull()
+  expect(carsApi.create).not.toHaveBeenCalled()
 })
 
 it('validates every initial expense before creating the car', async () => {
@@ -1047,6 +1158,111 @@ it('writes a changed search to the URL before requesting the server list', async
       expect.anything(),
     ),
   )
+})
+
+it('searches an internal car code while typing and clears it without submitting', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars?page=2&status=active']}>
+      <Routes>
+        <Route path="/app/:tenant/cars" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const input = await screen.findByLabelText('Пошук автомобілів')
+  await user.type(input, 'Model Y 2023 Blue 7369 ')
+  expect(input).toHaveValue('Model Y 2023 Blue 7369 ')
+  await waitFor(() =>
+    expect(carsApi.list).toHaveBeenLastCalledWith(
+      {
+        search: 'Model Y 2023 Blue 7369',
+        status: 'active',
+        page: 1,
+        pageSize: 20,
+      },
+      expect.anything(),
+    ),
+  )
+  await user.clear(input)
+  await waitFor(() =>
+    expect(carsApi.list).toHaveBeenLastCalledWith(
+      { search: undefined, status: 'active', page: 1, pageSize: 20 },
+      expect.anything(),
+    ),
+  )
+})
+
+it('ignores an older car-code search that resolves after the latest search', async () => {
+  const user = userEvent.setup()
+  const { container } = render(
+    <MemoryRouter initialEntries={['/app/demo/cars']}>
+      <Routes>
+        <Route path="/app/:tenant/cars" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await screen.findByRole('table', { name: 'Список автомобілів' })
+  const input = screen.getByLabelText('Пошук автомобілів')
+  type Result = Awaited<ReturnType<typeof carsApi.list>>
+  let resolveOld!: (value: Result) => void
+  let resolveNew!: (value: Result) => void
+  const oldRequest = new Promise<Result>((resolve) => {
+    resolveOld = resolve
+  })
+  const newRequest = new Promise<Result>((resolve) => {
+    resolveNew = resolve
+  })
+  vi.mocked(carsApi.list)
+    .mockReturnValueOnce(oldRequest)
+    .mockReturnValueOnce(newRequest)
+  await user.type(input, '73')
+  await act(async () => {
+    resolveNew({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 })
+    await newRequest
+  })
+  expect(container.querySelector('[data-loading-layout]')).toBeNull()
+  await act(async () => {
+    resolveOld({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 0 })
+    await oldRequest
+  })
+  expect(container.querySelector('[data-loading-layout]')).toBeNull()
+  expect(input).toHaveValue('73')
+})
+
+it('returns to the previous screen with one Back after typing a full internal car code', async () => {
+  const user = userEvent.setup()
+  function Back() {
+    const navigate = useNavigate()
+    return <button onClick={() => void navigate(-1)}>Previous screen</button>
+  }
+  render(
+    <MemoryRouter
+      initialEntries={['/app/demo/dashboard', '/app/demo/cars']}
+      initialIndex={1}
+    >
+      <Routes>
+        <Route
+          path="/app/:tenant/dashboard"
+          element={<p>Dashboard destination</p>}
+        />
+        <Route
+          path="/app/:tenant/cars"
+          element={
+            <>
+              <CarsScreen />
+              <Back />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await user.type(
+    await screen.findByLabelText('Пошук автомобілів'),
+    'Model Y 2023 Blue 7369',
+  )
+  await user.click(screen.getByRole('button', { name: 'Previous screen' }))
+  expect(screen.getByText('Dashboard destination')).toBeVisible()
 })
 
 it('reads a paid-off car as profit rather than a negative remainder', async () => {

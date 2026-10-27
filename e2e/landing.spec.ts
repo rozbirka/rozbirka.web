@@ -49,6 +49,13 @@ test('landing interactions work without serious accessibility violations', async
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
+  await expect(page.locator('#root')).toHaveAttribute(
+    'data-app-hydrated',
+    'true',
+  )
+  await expect(
+    page.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
+  ).toBeDisabled()
   await expect(
     page.getByRole('heading', {
       name: 'Усе для щоденної роботи авторозбірки',
@@ -62,6 +69,9 @@ test('landing interactions work without serious accessibility violations', async
   ).toEqual([])
 
   await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await expect(
+    page.getByRole('button', { name: 'Зупинити автопрокрутку' }),
+  ).toBeEnabled()
   await page.getByRole('button', { name: 'Наступна' }).click()
   await page.getByRole('button', { name: 'Зупинити автопрокрутку' }).click()
   await expect(

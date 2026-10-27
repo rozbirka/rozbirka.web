@@ -386,10 +386,21 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   const [peekId, setPeekId] = useState<string | null>(null)
   const navigateList = useNavigate()
+  const toast = useOptionalToast()
+  const originNoticeShown = useRef(false)
   const removedOrigin =
     searchParams.get('origin')?.toLowerCase() === 'free' ||
     (location.state as { removedOrigin?: boolean } | null)?.removedOrigin ===
       true
+  useEffect(() => {
+    if (!removedOrigin || isNew || partId) {
+      originNoticeShown.current = false
+      return
+    }
+    if (originNoticeShown.current) return
+    originNoticeShown.current = true
+    toast?.show({ tone: 'info', message: t('removedOrigin') })
+  }, [removedOrigin, isNew, partId, t, toast])
   const links = {
     cars: allowedToView(cabinetModules.cars, cabinet),
     intakes: allowedToView(cabinetModules.intakes, cabinet),
@@ -955,7 +966,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         )}
       </div>
 
-      {removedOrigin ? <Notice tone="info">{t('removedOrigin')}</Notice> : null}
       {createDecision.kind === 'quota-exhausted' ? (
         <Notice tone="warn">{t('accessQuota')}</Notice>
       ) : null}
@@ -1534,9 +1544,8 @@ function PartDetailScreen({
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [copied, setCopied] = useState<{ ok: boolean; text: string } | null>(
-    null,
-  )
+  const toast = useOptionalToast()
+  const [copyError, setCopyError] = useState<string | null>(null)
   const remove = async () => {
     if (deleting) return
     setDeleting(true)
@@ -1656,13 +1665,15 @@ function PartDetailScreen({
         }))),
   ]
   const copyCode = async (code: string) => {
+    setCopyError(null)
     try {
       if (!navigator.clipboard?.writeText)
         throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(code)
-      setCopied({ ok: true, text: t('copied') })
+      toast?.show({ tone: 'ok', message: t('copied') })
     } catch {
-      setCopied({ ok: false, text: t('copyFailed') })
+      if (toast) toast.show({ tone: 'danger', message: t('copyFailed') })
+      else setCopyError(t('copyFailed'))
     }
   }
 
@@ -1843,9 +1854,7 @@ function PartDetailScreen({
         {deleteError !== null && !confirmingDelete ? (
           <Notice tone="danger">{deleteError}</Notice>
         ) : null}
-        {copied === null ? null : (
-          <Notice tone={copied.ok ? 'ok' : 'danger'}>{copied.text}</Notice>
-        )}
+        {copyError === null ? null : <Notice tone="danger">{copyError}</Notice>}
 
         {error ? (
           <ErrorState
@@ -4494,7 +4503,7 @@ function PartEdit({
       title={t('editTitle')}
     >
       <div className="grid gap-5">
-        {status ? <Notice tone="ok">{status}</Notice> : null}
+        {status ? <Notice tone="info">{status}</Notice> : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
 
         {values ? (

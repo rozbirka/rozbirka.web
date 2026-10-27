@@ -6,6 +6,7 @@ import type { DeliveryOrder } from '@/api/delivery'
 import type { OrderDetail } from '@/api/orders'
 import type { Shipment } from '@/api/shipping'
 import { LocaleProvider } from '@/i18n'
+import { ToastProvider } from '@/components/app'
 import { DeliveryOrderBody } from './DeliveryOrderBody'
 import type {
   DeliveryOrderLoad,
@@ -213,6 +214,7 @@ const renderBody = (value: DeliveryOrderLoad) =>
         partsPath="/app/koval/parts"
       />
     </MemoryRouter>,
+    { wrapper: ToastProvider },
   )
 
 beforeEach(() => {
@@ -492,4 +494,18 @@ it('keeps a delivery order readable but offers no Nova Poshta outside Ukraine', 
   expect(screen.queryByRole('button', { name: 'Refresh status' })).toBeNull()
   // Not the “not connected” warning a Ukrainian business would get.
   expect(screen.queryByText('Nova Poshta is not connected.')).toBeNull()
+})
+
+it('reports a failed waybill-number copy in the toast outlet', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(
+    new Error('clipboard denied'),
+  )
+  renderBody(load({ shipment: shipment() }))
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  await user.click(screen.getByRole('button', { name: 'Копіювати номер' }))
+
+  const failure = await screen.findByText('Не вдалося скопіювати номер ТТН.')
+  expect(failure.closest('.rz-toast')).toHaveAttribute('role', 'alert')
+  expect(failure.closest('.rz-notice')).toBeNull()
 })

@@ -17,6 +17,10 @@
 .rz a.rz-btn, .rz a.rz-card, .rz a.rz-nav-item { text-decoration: none; }
 .rz-app > .sc-host:first-child { flex: 0 0 var(--rz-sidebar-w); }
 .rz :focus-visible { outline: none; box-shadow: var(--rz-focus); }
+/* Programmatic landmarks announce context; only interactive controls need a ring. */
+.rz :is(h1, h2, h3, h4, h5, h6, [role="dialog"], [role="alertdialog"], [role="region"])[tabindex="-1"]:focus-visible,
+.rz :is(div, section, main, article, aside, header, footer, nav)[tabindex="-1"]:not([role], [contenteditable]):focus-visible { outline: none; box-shadow: none; }
+
 .rz-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .rz-mono { font-family: var(--rz-font-mono); font-variant-numeric: tabular-nums; }
 .rz-num { font-family: var(--rz-font-mono); font-variant-numeric: tabular-nums; text-align: right; }

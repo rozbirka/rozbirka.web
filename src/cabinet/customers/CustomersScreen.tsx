@@ -589,7 +589,8 @@ function CustomerDetailScreen({
       await navigator.clipboard.writeText(phone)
       toast?.show({ tone: 'ok', message: t('phoneCopied') })
     } catch {
-      setError('copyFailed')
+      if (toast) toast.show({ tone: 'danger', message: t('copyFailed') })
+      else setError('copyFailed')
     }
   }
   const remove = async () => {
