@@ -3193,107 +3193,107 @@ test.describe('placement picker viewport regression', () => {
     }
   })
 
-  test('placement drawer searches large section and shelf choices without moving the page @placement-picker', async ({
-    page,
-  }) => {
-    await installCabinetApiBoundary(page, { partsManage: true })
-    const sectionData = Array.from({ length: 100 }, (_, index) => ({
-      id: `section-${index + 1}`,
-      zoneId: 'zone-1',
-      zoneName: 'Зона А',
-      warehouseId: 'warehouse-1',
-      warehouseName: 'Основний склад',
-      name: `Секція ${index + 1}`,
-      code: `S${index + 1}`,
-      isActive: true,
-      qrCode: `section:${index}`,
-    }))
-    const shelfData = Array.from({ length: 100 }, (_, index) => ({
-      id: `shelf-${index + 1}`,
-      sectionId: 'section-100',
-      sectionName: 'Секція 100',
-      zoneId: 'zone-1',
-      zoneName: 'Зона А',
-      warehouseId: 'warehouse-1',
-      warehouseName: 'Основний склад',
-      name: `Полиця ${index + 1}`,
-      code: `P${index + 1}`,
-      isActive: true,
-      qrCode: `shelf:${index}`,
-    }))
-    let saved: Record<string, unknown> | null = null
-    await page.route('**/api/v1/**', async (route) => {
-      const request = route.request()
-      const path = new URL(request.url()).pathname
-      if (path === '/api/v1/parts/part-picker')
-        return fulfillData(route, {
-          id: 'part-picker',
-          name: 'Тестова фара',
-          qrCode: 'part:picker',
-          unit: 'шт',
-          quantityTotal: 1,
-          quantityAvailable: 1,
-          quantityReserved: 0,
-          quantitySold: 0,
-          status: 'available',
-          condition: 'good',
-          photos: [],
-          source: 'batch',
-          car: null,
-          intake: null,
-          desiredSalePrice: null,
-          createdAt: '2026-10-16T10:00:00Z',
-          createdBy: { name: 'Тест' },
-        })
-      if (path === '/api/v1/parts/part-picker/history')
-        return fulfillData(route, { events: [] })
-      if (path === '/api/v1/parts/part-picker/inventory-zones') {
-        if (request.method() === 'PUT')
-          saved = request.postDataJSON() as Record<string, unknown>
-        return fulfillData(route, [
-          {
-            zoneId: 'zone-1',
-            zoneName: 'Зона А',
-            warehouseId: 'warehouse-1',
-            warehouseName: 'Основний склад',
-            zoneCode: 'A',
-            zoneQrCode: 'zone:1',
-            isSystemUnassigned: false,
-          },
-        ])
-      }
-      if (path === '/api/v1/inventory/zones')
-        return fulfillData(route, [
-          {
-            id: 'zone-1',
-            name: 'Зона А',
-            code: 'A',
-            warehouseId: 'warehouse-1',
-            warehouseName: 'Основний склад',
-            qrCode: 'zone:1',
-            isActive: true,
-            isSystemUnassigned: false,
-          },
-        ])
-      if (path === '/api/v1/inventory/sections')
-        return fulfillData(route, sectionData)
-      if (path === '/api/v1/inventory/shelves')
-        return fulfillData(route, shelfData)
-      if (path === '/api/v1/parts/facets')
-        return fulfillData(route, {
-          zones: [],
-          warehouses: [],
-          origins: [],
-          makes: [],
-          models: [],
-          statuses: [],
-          conditions: [],
-        })
-      await route.fallback()
-    })
-    const scenarioStarted = Date.now()
-    await loginFrom(page)
-    for (const width of [1440, 390, 320]) {
+  for (const width of [1440, 390, 320]) {
+    test(`placement drawer searches large section and shelf choices without moving the page at ${width}px @placement-picker`, async ({
+      page,
+    }) => {
+      await installCabinetApiBoundary(page, { partsManage: true })
+      const sectionData = Array.from({ length: 100 }, (_, index) => ({
+        id: `section-${index + 1}`,
+        zoneId: 'zone-1',
+        zoneName: 'Зона А',
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Основний склад',
+        name: `Секція ${index + 1}`,
+        code: `S${index + 1}`,
+        isActive: true,
+        qrCode: `section:${index}`,
+      }))
+      const shelfData = Array.from({ length: 100 }, (_, index) => ({
+        id: `shelf-${index + 1}`,
+        sectionId: 'section-100',
+        sectionName: 'Секція 100',
+        zoneId: 'zone-1',
+        zoneName: 'Зона А',
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Основний склад',
+        name: `Полиця ${index + 1}`,
+        code: `P${index + 1}`,
+        isActive: true,
+        qrCode: `shelf:${index}`,
+      }))
+      let saved: Record<string, unknown> | null = null
+      await page.route('**/api/v1/**', async (route) => {
+        const request = route.request()
+        const path = new URL(request.url()).pathname
+        if (path === '/api/v1/parts/part-picker')
+          return fulfillData(route, {
+            id: 'part-picker',
+            name: 'Тестова фара',
+            qrCode: 'part:picker',
+            unit: 'шт',
+            quantityTotal: 1,
+            quantityAvailable: 1,
+            quantityReserved: 0,
+            quantitySold: 0,
+            status: 'available',
+            condition: 'good',
+            photos: [],
+            source: 'batch',
+            car: null,
+            intake: null,
+            desiredSalePrice: null,
+            createdAt: '2026-10-16T10:00:00Z',
+            createdBy: { name: 'Тест' },
+          })
+        if (path === '/api/v1/parts/part-picker/history')
+          return fulfillData(route, { events: [] })
+        if (path === '/api/v1/parts/part-picker/inventory-zones') {
+          if (request.method() === 'PUT')
+            saved = request.postDataJSON() as Record<string, unknown>
+          return fulfillData(route, [
+            {
+              zoneId: 'zone-1',
+              zoneName: 'Зона А',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              zoneCode: 'A',
+              zoneQrCode: 'zone:1',
+              isSystemUnassigned: false,
+            },
+          ])
+        }
+        if (path === '/api/v1/inventory/zones')
+          return fulfillData(route, [
+            {
+              id: 'zone-1',
+              name: 'Зона А',
+              code: 'A',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              qrCode: 'zone:1',
+              isActive: true,
+              isSystemUnassigned: false,
+            },
+          ])
+        if (path === '/api/v1/inventory/sections')
+          return fulfillData(route, sectionData)
+        if (path === '/api/v1/inventory/shelves')
+          return fulfillData(route, shelfData)
+        if (path === '/api/v1/parts/facets')
+          return fulfillData(route, {
+            zones: [],
+            warehouses: [],
+            origins: [],
+            makes: [],
+            models: [],
+            statuses: [],
+            conditions: [],
+          })
+        await route.fallback()
+      })
+      const scenarioStarted = Date.now()
+      await loginFrom(page)
       await test.step(`placement choices at ${width}px`, async () => {
         console.info(
           `[placement-picker] ${width}px start ${Date.now() - scenarioStarted}ms`,
@@ -3379,8 +3379,8 @@ test.describe('placement picker viewport regression', () => {
           `[placement-picker] ${width}px complete ${Date.now() - scenarioStarted}ms`,
         )
       })
-    }
-  })
+    })
+  }
 })
 
 for (const width of [375, 1440]) {
