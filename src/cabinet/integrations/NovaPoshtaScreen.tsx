@@ -129,7 +129,7 @@ export function NovaPoshtaScreen() {
 
   const state: LoadState =
     loaded?.key === scopeKey ? loaded.state : { kind: 'loading' }
-  const tab: Tab = location.pathname.endsWith('/dispatch-points')
+  const routeTab: Tab = location.pathname.endsWith('/dispatch-points')
     ? 'points'
     : location.pathname.endsWith('/webhook')
       ? 'statuses'
@@ -137,6 +137,9 @@ export function NovaPoshtaScreen() {
         ? 'settings'
         : 'overview'
   const configuredNow = state.kind === 'ready' && state.integration.configured
+  // Tabs exist only once Nova Poshta is connected (1.22): before that the
+  // page is the call to connect, whatever tab the address names.
+  const tab: Tab = configuredNow ? routeTab : 'overview'
   const delivery = useNpDeliverySettings(
     integrationId,
     !countryBlocked &&
@@ -209,7 +212,7 @@ export function NovaPoshtaScreen() {
   // Tab counters, read once for the header: a badge must not wait for its own
   // tab to be opened. Each panel reports its number back after a change.
   useEffect(() => {
-    if (integrationId === '' || countryBlocked) return
+    if (integrationId === '' || countryBlocked || !configuredNow) return
     const controller = new AbortController()
     void integrationsApi
       .dispatchPoints(integrationId, { signal: controller.signal })
@@ -228,7 +231,7 @@ export function NovaPoshtaScreen() {
         () => undefined,
       )
     return () => controller.abort()
-  }, [countryBlocked, integrationId, scopeKey])
+  }, [configuredNow, countryBlocked, integrationId, scopeKey])
 
   if (tenant === null) {
     return (
@@ -424,28 +427,30 @@ export function NovaPoshtaScreen() {
           </StatusPill>
         </div>
       </div>
-      <nav aria-label={t('sectionsNav')} className="rz-tabs">
-        {tabs.map((item) => (
-          <Link
-            aria-current={tab === item.id ? 'page' : undefined}
-            key={item.id}
-            to={tabPath(item.id)}
-          >
-            {item.label}
-            {item.badge !== undefined && (
-              <span
-                className={
-                  item.danger === true
-                    ? 'rz-count rz-count--danger'
-                    : 'rz-count'
-                }
-              >
-                {item.badge}
-              </span>
-            )}
-          </Link>
-        ))}
-      </nav>
+      {configured && (
+        <nav aria-label={t('sectionsNav')} className="rz-tabs">
+          {tabs.map((item) => (
+            <Link
+              aria-current={tab === item.id ? 'page' : undefined}
+              key={item.id}
+              to={tabPath(item.id)}
+            >
+              {item.label}
+              {item.badge !== undefined && (
+                <span
+                  className={
+                    item.danger === true
+                      ? 'rz-count rz-count--danger'
+                      : 'rz-count'
+                  }
+                >
+                  {item.badge}
+                </span>
+              )}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       {error !== null && <Notice tone="danger">{error}</Notice>}
 

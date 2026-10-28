@@ -201,25 +201,35 @@ it('never shows a stored key and sends only its replacement', async () => {
   expect(await screen.findByText('••••••••••••••••')).toBeVisible()
 })
 
-it('cannot be switched on before a key is stored', async () => {
-  vi.mocked(integrationsApi.getById).mockResolvedValue({
-    ...integration,
-    status: 'draft',
-    configured: false,
-    verifiedAt: null,
-  })
+it.each(['', '/dispatch-points', '/webhook', '/settings'])(
+  'offers only the connection before Nova Poshta is connected (%s)',
+  async (suffix) => {
+    vi.mocked(integrationsApi.getById).mockResolvedValue({
+      ...integration,
+      status: 'draft',
+      configured: false,
+      verifiedAt: null,
+    })
 
-  renderScreen('/settings')
+    renderScreen(suffix)
 
-  const toggle = await screen.findByRole('button', {
-    name: 'Увімкнути інтеграцію',
-  })
-  expect(toggle).toBeDisabled()
-  expect(
-    screen.getByRole('button', { name: 'Перевірити підключення' }),
-  ).toBeDisabled()
-  expect(screen.getByText('ключ не збережено')).toBeVisible()
-})
+    expect(await screen.findByText(/Нову пошту ще не підключено/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Підключити' })).toHaveAttribute(
+      'href',
+      '/app/koval/settings/integrations/integration-1/connect',
+    )
+    expect(
+      screen.queryByRole('navigation', { name: 'Розділи інтеграції' }),
+    ).toBeNull()
+    expect(screen.queryByText('ключ не збережено')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Увімкнути інтеграцію' }),
+    ).toBeNull()
+    expect(integrationsApi.trackingSubscription).not.toHaveBeenCalled()
+    expect(integrationsApi.webhookStatus).not.toHaveBeenCalled()
+    expect(integrationsApi.dispatchPoints).not.toHaveBeenCalled()
+  },
+)
 
 it('names the step a failed verification stopped at', async () => {
   vi.mocked(integrationsApi.getById).mockResolvedValue({
