@@ -239,7 +239,7 @@ export function PlansScreen() {
 
       <BillingCard
         title={t('title')}
-        bodyClassName="p-0 sm:[&_.rz-table_td]:px-6 sm:[&_.rz-table_td]:py-5 sm:[&_.rz-table_th]:px-6 sm:[&_.rz-table_thead_th]:py-3 sm:[&_.rz-table_tbody_th]:py-5 sm:[&_.rz-table_td:last-child]:w-40"
+        bodyClassName="p-0 sm:[&_.rz-table_td]:px-5 sm:[&_.rz-table_td]:py-3 sm:[&_.rz-table_th]:px-5 sm:[&_.rz-table_thead_th]:py-2.5 sm:[&_.rz-table_tbody_th]:py-3 sm:[&_.rz-table_td:last-child]:w-40"
       >
         <DataTable
           caption={t('title')}
