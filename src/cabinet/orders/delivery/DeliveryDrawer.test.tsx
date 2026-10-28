@@ -8,6 +8,7 @@ import { shippingApi, type Shipment } from '@/api/shipping'
 import { LocaleProvider } from '@/i18n'
 import { DeliveryDrawer } from './DeliveryDrawer'
 import { customersApi } from '@/api/customers'
+import { deliveryApi } from '@/api/delivery'
 
 vi.mock('@/api/customers', () => ({ customersApi: { search: vi.fn() } }))
 
@@ -15,12 +16,9 @@ vi.mock('@/api/integrations', () => ({
   integrationsApi: { settlements: vi.fn(), divisions: vi.fn() },
 }))
 vi.mock('@/api/shipping', () => ({
-  shippingApi: {
-    saveDraft: vi.fn(),
-    estimate: vi.fn(),
-    create: vi.fn(),
-  },
+  shippingApi: { saveDraft: vi.fn() },
 }))
+vi.mock('@/api/delivery', () => ({ deliveryApi: { configure: vi.fn() } }))
 
 const point = {
   id: 'point-1',
@@ -45,12 +43,13 @@ const draft = {
     phone: '+380503381172',
     warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
     settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
+    warehouseName: 'Відділення №8: вул. Наукова, 45',
+    settlementName: 'Львів',
     companyName: null,
     companyTin: null,
   },
   parcels: [{ lengthCm: 40, widthCm: 30, heightCm: 22, weightKg: 4.2 }],
   declaredValueUah: 4280,
-  returnEstimateUah: 180,
   payerType: 'Recipient' as const,
   description: 'Автозапчастини',
   dispatchPointId: 'point-1',
@@ -78,6 +77,12 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   trackingStatus: null,
   lastTrackedAt: null,
   relatedNumbers: [],
+  connectionId: null,
+  version: 'v1',
+  dispatchedAt: null,
+  receivedAt: null,
+  paymentState: null,
+  syncProblem: null,
   events: [],
   ...over,
 })
@@ -113,7 +118,7 @@ beforeEach(() => {
   })
 })
 
-const money = (): DeliveryOrder => ({
+const money = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
   orderId: 'order-1',
   agreedTotalUah: 4280,
   appliedUah: 4280,
@@ -131,31 +136,148 @@ const money = (): DeliveryOrder => ({
   returnedAt: null,
   awaitingCodReconciliation: false,
   payments: [],
+  workflowState: 'Open',
+  refundDueUah: 0,
+  refundAllocations: [],
+  ...over,
 })
 
 const renderDrawer = (
   current: Shipment | null,
-  customerSearchAllowed = false,
+  {
+    customerSearchAllowed = false,
+    delivery = money(),
+    onSaved = vi.fn(),
+    onMoneyChanged = vi.fn(),
+    customerPhone = '+380503381172',
+  }: {
+    customerSearchAllowed?: boolean
+    delivery?: DeliveryOrder
+    onSaved?: (shipment: Shipment) => void
+    onMoneyChanged?: (delivery: DeliveryOrder) => void
+    customerPhone?: string | null
+  } = {},
 ) =>
   render(
-    <DeliveryDrawer
-      customerSearchAllowed={customerSearchAllowed}
-      customerName="Ірина Олійник"
-      customerPhone="+380503381172"
-      declaredValue={4280}
-      delivery={money()}
-      paid={null}
-      dispatchPoints={[point]}
-      integrationId="integration-1"
-      onChanged={vi.fn()}
-      onClose={vi.fn()}
-      onMoneyChanged={vi.fn()}
-      orderId="order-1"
-      shipment={current}
-    />,
+    <LocaleProvider locale="uk" syncDocumentLang={false}>
+      <DeliveryDrawer
+        customerName="Ірина Олійник"
+        customerPhone={customerPhone}
+        customerSearchAllowed={customerSearchAllowed}
+        delivery={delivery}
+        dispatchPoints={[point]}
+        integrationId="integration-1"
+        onClose={vi.fn()}
+        onMoneyChanged={onMoneyChanged}
+        onSaved={onSaved}
+        orderId="order-1"
+        orderNumber={361}
+        shipment={current}
+      />
+    </LocaleProvider>,
   )
 
-it('fills recipient name and phone from customer search and allows manual edits before saving', async () => {
+it('opens with the saved draft filled in and saves only a draft (4.2)', async () => {
+  const user = userEvent.setup()
+  const onSaved = vi.fn()
+  vi.mocked(shippingApi.saveDraft).mockResolvedValue(shipment())
+  renderDrawer(shipment(), { onSaved })
+
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Оформлення доставки',
+  })
+  expect(sheet).toHaveTextContent(
+    'Замовлення #361 · Нова пошта. Дані замовлення підставлено — перевірте їх.',
+  )
+  expect(screen.getByLabelText(/Ім’я та прізвище/)).toHaveValue('Ірина Олійник')
+  expect(screen.getByLabelText(/Габарити/)).toHaveValue('40×30×22')
+  expect(screen.getByLabelText(/Вага/)).toHaveValue('4,2')
+  await waitFor(() =>
+    expect(screen.getByLabelText(/Відділення/)).toHaveValue(
+      draft.recipient.warehouseRef,
+    ),
+  )
+  expect(sheet).toHaveTextContent('Відправник: Олена Коваль')
+  expect(sheet).toHaveTextContent(
+    'Післяплата в накладній має дорівнювати залишку.',
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Створити ТТН' }),
+  ).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  await waitFor(() => expect(onSaved).toHaveBeenCalled())
+  expect(shippingApi.saveDraft).toHaveBeenCalledWith(
+    'integration-1',
+    'order-1',
+    expect.objectContaining({
+      recipient: expect.objectContaining({
+        name: 'Ірина Олійник',
+        phone: '+380503381172',
+        warehouseRef: draft.recipient.warehouseRef,
+      }) as unknown,
+      parcels: [{ lengthCm: 40, widthCm: 30, heightCm: 22, weightKg: 4.2 }],
+      declaredValueUah: 4280,
+      dispatchPointId: 'point-1',
+    }),
+  )
+})
+
+it('names the missing details, marks the fields and keeps what was typed (4.3)', async () => {
+  const user = userEvent.setup()
+  renderDrawer(null, { customerPhone: '+380 67 214 55' })
+  await screen.findByRole('dialog', { name: 'Оформлення доставки' })
+
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+
+  expect(
+    screen.getByText(
+      'Бракує даних: телефон отримувача, населений пункт, відділення отримання, вага посилки, габарити посилки. Введене збережено.',
+    ),
+  ).toBeVisible()
+  const phone = screen.getByLabelText(/Телефон/)
+  expect(phone).toHaveValue('+380 67 214 55')
+  expect(phone).toHaveAccessibleDescription(
+    'Телефон у форматі +380 XX XXX XX XX',
+  )
+  await waitFor(() => expect(phone).toHaveFocus())
+  expect(shippingApi.saveDraft).not.toHaveBeenCalled()
+})
+
+it('asks what the goods cost when Core has no agreed total yet', async () => {
+  const user = userEvent.setup()
+  const configured = money({
+    agreedTotalUah: 9600,
+    outstandingUah: 9600,
+    appliedUah: 0,
+  })
+  vi.mocked(deliveryApi.configure).mockResolvedValue(configured)
+  vi.mocked(shippingApi.saveDraft).mockResolvedValue(shipment())
+  const onMoneyChanged = vi.fn()
+  renderDrawer(shipment(), {
+    delivery: money({ agreedTotalUah: 0, appliedUah: 0, outstandingUah: 0 }),
+    onMoneyChanged,
+  })
+  await screen.findByRole('dialog', { name: 'Оформлення доставки' })
+  await waitFor(() =>
+    expect(screen.getByLabelText(/Відділення/)).toHaveValue(
+      draft.recipient.warehouseRef,
+    ),
+  )
+
+  await user.type(screen.getByLabelText(/Погоджено за доставку/), '9600')
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+
+  await waitFor(() => expect(onMoneyChanged).toHaveBeenCalledWith(configured))
+  expect(deliveryApi.configure).toHaveBeenCalledWith('order-1', 9600)
+  expect(shippingApi.saveDraft).toHaveBeenCalledWith(
+    'integration-1',
+    'order-1',
+    expect.objectContaining({ declaredValueUah: 9600 }),
+  )
+})
+
+it('fills the recipient from customer search', async () => {
   vi.mocked(customersApi.search).mockResolvedValue([
     {
       id: 'customer-2',
@@ -164,175 +286,17 @@ it('fills recipient name and phone from customer search and allows manual edits 
       ordersCount: 2,
     },
   ])
-  vi.mocked(shippingApi.saveDraft).mockResolvedValue(shipment())
   const user = userEvent.setup()
-  renderDrawer(shipment(), true)
-  const name = screen.getByLabelText('Ім’я отримувача')
+  renderDrawer(null, { customerSearchAllowed: true })
+  await screen.findByRole('dialog', { name: 'Оформлення доставки' })
+
+  const name = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(name)
   await user.type(name, 'Оле')
   await user.click(
     await screen.findByRole('option', { name: 'Обрати клієнта Олена Коваль' }),
   )
+
   expect(name).toHaveValue('Олена Коваль')
   expect(screen.getByLabelText('Телефон')).toHaveValue('+380671234567')
-  expect(
-    screen.queryByRole('dialog', { name: 'Результати пошуку клієнтів' }),
-  ).not.toBeInTheDocument()
-  expect(shippingApi.saveDraft).not.toHaveBeenCalled()
-  await user.clear(name)
-  await user.type(name, 'Інший отримувач')
-  const phone = screen.getByLabelText('Телефон')
-  await user.clear(phone)
-  await user.type(phone, '+380501234567')
-  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
-  await waitFor(() => expect(shippingApi.saveDraft).toHaveBeenCalledTimes(1))
-  expect(
-    vi.mocked(shippingApi.saveDraft).mock.calls[0]?.[2].recipient,
-  ).toMatchObject({
-    name: 'Інший отримувач',
-    phone: '+380501234567',
-  })
-})
-
-it('clears a previous phone when the selected customer has none', async () => {
-  vi.mocked(customersApi.search).mockResolvedValue([
-    {
-      id: 'customer-2',
-      name: 'Клієнт без телефону',
-      phone: null,
-      ordersCount: 0,
-    },
-  ])
-  const user = userEvent.setup()
-  renderDrawer(shipment(), true)
-  await user.clear(screen.getByLabelText('Ім’я отримувача'))
-  await user.type(screen.getByLabelText('Ім’я отримувача'), 'Клієнт')
-  await user.click(
-    await screen.findByRole('option', {
-      name: 'Обрати клієнта Клієнт без телефону',
-    }),
-  )
-  expect(screen.getByLabelText('Телефон')).toHaveValue('')
-  expect(
-    screen.getByRole('button', { name: 'Зберегти чернетку' }),
-  ).toBeDisabled()
-})
-
-it('keeps manual recipient entry without requesting customers when customer lookup is not allowed', async () => {
-  const user = userEvent.setup()
-  renderDrawer(shipment())
-  await user.clear(screen.getByLabelText('Ім’я отримувача'))
-  await user.type(screen.getByLabelText('Ім’я отримувача'), 'Новий отримувач')
-  expect(screen.getByLabelText('Ім’я отримувача')).toHaveValue(
-    'Новий отримувач',
-  )
-  expect(customersApi.search).not.toHaveBeenCalled()
-})
-
-it('will not create a waybill before the carrier has quoted the form', async () => {
-  renderDrawer(shipment())
-
-  const create = await screen.findByRole('button', { name: 'Створити ТТН' })
-  expect(create).toBeDisabled()
-  expect(create).toHaveAccessibleDescription(/лише за свіжим розрахунком/)
-  expect(
-    screen.getByRole('button', { name: 'Розрахувати доставку' }),
-  ).toBeEnabled()
-})
-
-it('saves an edited form before asking the carrier for a price', async () => {
-  vi.mocked(shippingApi.saveDraft).mockResolvedValue(shipment())
-  vi.mocked(shippingApi.estimate).mockResolvedValue(
-    shipment({ quoteUah: 180, quoteAt: new Date().toISOString() }),
-  )
-  const user = userEvent.setup()
-
-  renderDrawer(shipment())
-
-  const declared = await screen.findByLabelText(/Оголошена вартість/)
-  await user.clear(declared)
-  await user.type(declared, '4400')
-  await user.click(screen.getByRole('button', { name: 'Розрахувати доставку' }))
-
-  expect(shippingApi.saveDraft).toHaveBeenCalledWith(
-    'integration-1',
-    'order-1',
-    expect.objectContaining({ declaredValueUah: 4400, payerType: 'Recipient' }),
-  )
-  expect(shippingApi.estimate).toHaveBeenCalledWith('integration-1', 'order-1')
-})
-
-it('does not re-save a form nobody touched', async () => {
-  vi.mocked(shippingApi.estimate).mockResolvedValue(
-    shipment({ quoteUah: 180, quoteAt: new Date().toISOString() }),
-  )
-  const user = userEvent.setup()
-
-  renderDrawer(shipment())
-
-  await user.click(
-    await screen.findByRole('button', { name: 'Розрахувати доставку' }),
-  )
-
-  expect(shippingApi.saveDraft).not.toHaveBeenCalled()
-  expect(shippingApi.estimate).toHaveBeenCalledWith('integration-1', 'order-1')
-})
-
-it('shows the prepayment as both legs the carrier priced', async () => {
-  renderDrawer(shipment({ quoteUah: 180, quoteAt: new Date().toISOString() }))
-
-  expect(await screen.findByText('Розрахунок отримано')).toBeVisible()
-  expect(screen.getByText('Необхідна передоплата')).toBeVisible()
-  expect(screen.getByText(/^360\sUAH$/)).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Створити ТТН' })).toBeEnabled()
-})
-
-it('stops offering a waybill on a quote that is a day old', async () => {
-  renderDrawer(
-    shipment({
-      quoteUah: 180,
-      quoteAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
-    }),
-  )
-
-  expect(await screen.findByText('Розрахунок застарів')).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Створити ТТН' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Перерахувати' })).toBeEnabled()
-})
-
-it('books in British English with a phone example from the business country', async () => {
-  render(
-    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
-      <DeliveryDrawer
-        countryCode="GB"
-        customerName="Ірина Олійник"
-        customerPhone={null}
-        declaredValue={4280}
-        delivery={money()}
-        paid={null}
-        dispatchPoints={[point]}
-        integrationId="integration-1"
-        onChanged={vi.fn()}
-        onClose={vi.fn()}
-        onMoneyChanged={vi.fn()}
-        orderId="order-1"
-        shipment={null}
-      />
-    </LocaleProvider>,
-  )
-
-  expect(
-    await screen.findByRole('dialog', { name: 'Book shipment' }),
-  ).toBeVisible()
-  expect(screen.getByLabelText(/^Phone/)).toHaveAttribute(
-    'placeholder',
-    '+44 7700 900123',
-  )
-  expect(screen.getByText('Delivery cost')).toBeVisible()
-  expect(
-    screen.getByRole('button', { name: 'Get delivery quote' }),
-  ).toBeDisabled()
-  expect(screen.getByLabelText(/Description of contents/)).toHaveValue(
-    'Car parts',
-  )
 })

@@ -31,7 +31,7 @@ export interface ConfirmDialogProps {
   /** Failure from the last attempt: shown here, where the retry button is. */
   error?: string | null
   /** Runs when the dialog closes, for callers that restore focus themselves. */
-  onCloseAutoFocus?: (event: Event) => void
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
 }
 
 /**

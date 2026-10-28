@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi, type Integration } from '@/api/integrations'
 import type { Tenant } from '@/api/types'
@@ -128,7 +128,20 @@ it('connects a catalog service that is not in use yet', async () => {
   vi.mocked(integrationsApi.create).mockResolvedValue(novaPoshta)
   const user = userEvent.setup()
 
-  renderScreen()
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/integrations']}>
+      <Routes>
+        <Route
+          element={<IntegrationsScreen />}
+          path="/app/:slug/settings/integrations"
+        />
+        <Route
+          element={<p>wizard</p>}
+          path="/app/:slug/settings/integrations/:integrationId/connect"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
 
   const available = await screen.findByRole('region', {
     name: 'Доступні до підключення',
@@ -138,6 +151,8 @@ it('connects a catalog service that is not in use yet', async () => {
   )
 
   expect(integrationsApi.create).toHaveBeenCalledWith('definition-np')
+  // Nova Poshta continues in its connection wizard.
+  expect(await screen.findByText('wizard')).toBeVisible()
 })
 
 it('omits the unsupported exchange log action', async () => {

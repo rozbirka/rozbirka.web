@@ -29,6 +29,9 @@ const delivery = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
   returnedAt: null,
   awaitingCodReconciliation: false,
   payments: [],
+  workflowState: 'Open',
+  refundDueUah: 0,
+  refundAllocations: [],
   ...over,
 })
 

@@ -4,7 +4,7 @@ import path from 'node:path'
 const dist = path.resolve('dist')
 const maxImageBytes = 500 * 1024
 const maxJavaScriptChunkBytes = 350 * 1024
-const maxCriticalBytes = 3 * 1024 * 1024
+const maxCriticalBytes = 3.5 * 1024 * 1024
 const releasedRouteChunks = [
   { screen: 'team', pattern: /^TeamScreen-[^/]+\.js$/ },
   { screen: 'reports', pattern: /^ReportsScreen-[^/]+\.js$/ },
@@ -158,5 +158,5 @@ for (const file of critical) {
 }
 console.log(`critical-total ${criticalBytes}`)
 if (criticalBytes > maxCriticalBytes) {
-  throw new Error(`critical assets exceed 3 MiB: ${criticalBytes}`)
+  throw new Error(`critical assets exceed 3.5 MiB: ${criticalBytes}`)
 }

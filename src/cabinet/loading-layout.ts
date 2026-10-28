@@ -35,6 +35,7 @@ const layouts: Record<CabinetModuleKey, LoadingLayout> = {
   parts: { ...list(['4fr', '1fr', '1fr', '1fr', '1fr'], 8), thumbnails: true },
   customers: list(['3fr', '2fr', '1fr', '1fr']),
   orders: list(['2fr', '3fr', '1fr', '1fr', '1fr'], 8),
+  waybills: list(['2fr', '1fr', '3fr', '2fr', '1fr', '1fr', '1fr'], 8),
   team: list(['3fr', '1fr', '1fr', '1fr']),
   cash: { ...list(['3fr', '1fr', '1fr', '1fr']), stats: 3 },
   intakes: list(['3fr', '1fr', '1fr', '1fr']),
@@ -122,6 +123,7 @@ export function loadingLayout(
     }
   if (module === 'integrations' && segments.length > 0) {
     if (segments.includes('dispatch-points')) return base
+    if (segments.includes('connect')) return { ...base, kind: 'form', stats: 0 }
     if (segments.includes('webhook'))
       return { ...base, kind: 'dashboard', stats: 3 }
     return {
@@ -147,6 +149,7 @@ export function loadingLayout(
       'parts',
       'customers',
       'orders',
+      'waybills',
       'intakes',
       'cash',
       'inventory',

@@ -105,6 +105,10 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
     const { OrdersScreen } = await import('@/cabinet/orders/OrdersScreen')
     return OrdersScreen
   }),
+  waybills: cabinetScreenRoute('waybills', async () => {
+    const { WaybillsScreen } = await import('@/cabinet/waybills/WaybillsScreen')
+    return WaybillsScreen
+  }),
   cash: cabinetScreenRoute('cash', async () => {
     const { CashScreen } = await import('@/cabinet/cash/CashScreen')
     return CashScreen
@@ -242,6 +246,16 @@ const commerceDetailRoutes: RouteObject[] = [
     },
     'settings/integrations/:integrationId',
   ),
+  // The connection wizard is a page of its own, outside the carrier's tabs.
+  cabinetScreenRoute(
+    'integrations',
+    async () => {
+      const { NovaPoshtaConnectScreen } =
+        await import('@/cabinet/integrations/NovaPoshtaConnectScreen')
+      return NovaPoshtaConnectScreen
+    },
+    'settings/integrations/:integrationId/connect',
+  ),
   // Every tab of the carrier screen is its own route, so a link into the
   // diagnostics opens the diagnostics rather than the overview.
   ...[
@@ -284,6 +298,15 @@ const commerceDetailRoutes: RouteObject[] = [
         },
         path,
       ),
+  ),
+  cabinetScreenRoute(
+    'waybills',
+    async () => {
+      const { WaybillsScreen } =
+        await import('@/cabinet/waybills/WaybillsScreen')
+      return WaybillsScreen
+    },
+    'sales/waybills/:shipmentId',
   ),
   ...['cash/new', 'cash/:registerId', 'cash/:registerId/edit'].map((path) =>
     cabinetScreenRoute(

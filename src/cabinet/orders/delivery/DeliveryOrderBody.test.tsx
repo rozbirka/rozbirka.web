@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
@@ -7,6 +8,7 @@ import type { OrderDetail } from '@/api/orders'
 import type { Shipment } from '@/api/shipping'
 import { LocaleProvider } from '@/i18n'
 import { ToastProvider } from '@/components/app'
+import { novaPoshtaSetupApi } from '@/api/nova-poshta-setup'
 import { DeliveryOrderBody } from './DeliveryOrderBody'
 import type {
   DeliveryOrderLoad,
@@ -36,6 +38,7 @@ vi.mock('@/api/integrations', () => ({
     dispatchPoints: vi.fn(),
     settlements: vi.fn(),
     divisions: vi.fn(),
+    preferences: vi.fn().mockResolvedValue({ codCashRegisterId: 'till-1' }),
   },
 }))
 vi.mock('@/api/shipping', () => ({
@@ -48,6 +51,12 @@ vi.mock('@/api/shipping', () => ({
     attach: vi.fn(),
     cancel: vi.fn(),
     label: vi.fn(),
+  },
+}))
+vi.mock('@/api/nova-poshta-setup', () => ({
+  novaPoshtaSetupApi: {
+    connections: vi.fn().mockResolvedValue([]),
+    recover: vi.fn(),
   },
 }))
 const recordPayment = vi.hoisted(() => vi.fn())
@@ -94,6 +103,9 @@ const delivery = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
       refundedAt: null,
     },
   ],
+  workflowState: 'Open',
+  refundDueUah: 0,
+  refundAllocations: [],
   ...over,
 })
 
@@ -130,6 +142,12 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   trackingStatus: null,
   lastTrackedAt: null,
   relatedNumbers: [],
+  connectionId: null,
+  version: 'v1',
+  dispatchedAt: null,
+  receivedAt: null,
+  paymentState: null,
+  syncProblem: null,
   events: [],
   ...over,
 })
@@ -164,6 +182,9 @@ const order: OrderDetail = {
   createdAt: '2026-09-21T11:04:00Z',
   createdByName: 'Дмитро',
 }
+
+const draftShipment = (over: Partial<Shipment> = {}): Shipment =>
+  shipment({ state: 'Draft', number: null, quoteAt: null, ...over })
 
 /** An active dispatch point, so the settings half of readiness passes. */
 const point = () => ({
@@ -212,6 +233,7 @@ const renderBody = (value: DeliveryOrderLoad) =>
         mutationsAllowed
         order={order}
         partsPath="/app/koval/parts"
+        waybillsPath="/app/koval/sales/waybills"
       />
     </MemoryRouter>,
     { wrapper: ToastProvider },
@@ -229,7 +251,9 @@ it('opens on what was sold and keeps the parcel behind its own tab', async () =>
   expect(screen.queryByRole('region', { name: 'Нова пошта' })).toBeNull()
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  expect(screen.getByRole('region', { name: 'Нова пошта' })).toBeVisible()
+  expect(
+    screen.getByRole('region', { name: 'Доставка · Нова пошта' }),
+  ).toBeVisible()
   expect(screen.queryByRole('region', { name: 'Позиції' })).toBeNull()
 })
 
@@ -253,14 +277,24 @@ it('sums an order from its parts and keeps the hryvnia figure out of it', () => 
   expect(items).not.toHaveTextContent('UAH')
 })
 
-it('offers only the step the order is waiting for', () => {
+it('offers the next step in the block that needs it (module 46 §9)', async () => {
+  const user = userEvent.setup()
   renderBody(load({ shipment: shipment() }))
 
+  // Paid in full: the money block has nothing left to ask for.
+  const payment = screen.getByRole('region', { name: 'Оплата' })
+  expect(within(payment).getByText('Оплачено')).toBeVisible()
+  expect(within(payment).queryByRole('button')).toBeNull()
+  expect(payment).toHaveTextContent(
+    'Оплату отримано. Замовлення завершиться, коли посилку отримають.',
+  )
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  const carrier = screen.getByRole('region', { name: 'Доставка · Нова пошта' })
   expect(
-    screen.getByRole('button', { name: 'Передати перевізнику' }),
+    within(carrier).getByRole('button', { name: 'Передати перевізнику' }),
   ).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Створити ТТН' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Внести оплату' })).toBeNull()
 })
 
 it('offers payment without pretending it is required before a waybill', () => {
@@ -268,11 +302,11 @@ it('offers payment without pretending it is required before a waybill', () => {
     load({ money: delivery({ outstandingUah: 1200, appliedUah: 3400 }) }),
   )
 
-  const due = screen.getByRole('region', { name: 'До сплати' })
+  const payment = screen.getByRole('region', { name: 'Оплата' })
+  expect(within(payment).getByText('Оплачено частково')).toBeVisible()
   expect(
-    within(due).getByRole('button', { name: 'Внести оплату' }),
+    within(payment).getByRole('button', { name: 'Внести оплату' }),
   ).toBeVisible()
-  expect(due).toHaveTextContent(/післяплат/i)
 })
 
 it('reuses a delivery payment key after an ambiguous failure and rotates it after success', async () => {
@@ -289,17 +323,19 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
   )
 
   await user.click(
-    within(screen.getByRole('region', { name: 'До сплати' })).getByRole(
-      'button',
-      { name: 'Внести оплату' },
-    ),
+    within(screen.getByRole('region', { name: 'Оплата' })).getByRole('button', {
+      name: 'Внести оплату',
+    }),
   )
   await user.click(
     await screen.findByRole('button', { name: 'Зберегти платіж' }),
   )
-  expect(await screen.findAllByText('Немає з’єднання з мережею.')).toHaveLength(
-    1,
-  )
+  // 9.9: what was typed stays, and the sheet says so at the top.
+  expect(
+    await screen.findAllByText(
+      'Не вдалося зберегти оплату. Дані збережено — спробуйте ще раз.',
+    ),
+  ).toHaveLength(1)
 
   await user.click(screen.getByRole('button', { name: 'Зберегти платіж' }))
   expect(recordPayment).toHaveBeenNthCalledWith(
@@ -321,10 +357,9 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
   expect(randomUUID).toHaveBeenCalledOnce()
 
   await user.click(
-    within(screen.getByRole('region', { name: 'До сплати' })).getByRole(
-      'button',
-      { name: 'Внести оплату' },
-    ),
+    within(screen.getByRole('region', { name: 'Оплата' })).getByRole('button', {
+      name: 'Внести оплату',
+    }),
   )
   await user.click(
     await screen.findByRole('button', { name: 'Зберегти платіж' }),
@@ -371,16 +406,20 @@ it('lets an unpaid, uncalculated order reach the booking drawer', async () => {
     load({
       money: delivery({ outstandingUah: 1200, requiredDepositUah: 0 }),
       points: [point()],
+      shipment: draftShipment(),
     }),
   )
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  await user.click(screen.getByRole('button', { name: 'Оформити доставку' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
 
   const drawer = await screen.findByRole('dialog', {
     name: 'Перевірка перед створенням ТТН',
   })
-  expect(drawer).toHaveTextContent('Наступний крок — розрахувати доставку')
+  expect(drawer).toHaveTextContent('Перешкод не знайдено')
+  expect(drawer).toHaveTextContent('зробимо на наступному кроці')
   expect(
     within(drawer).getByRole('button', { name: 'Продовжити оформлення' }),
   ).toBeEnabled()
@@ -389,10 +428,18 @@ it('lets an unpaid, uncalculated order reach the booking drawer', async () => {
 it('stops only at what the booking drawer cannot fix', async () => {
   const user = userEvent.setup()
   // No active dispatch point: that one lives in settings, not on the next step.
-  renderBody(load({ money: delivery({ outstandingUah: 1200 }), points: [] }))
+  renderBody(
+    load({
+      money: delivery({ outstandingUah: 1200 }),
+      points: [],
+      shipment: draftShipment(),
+    }),
+  )
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  await user.click(screen.getByRole('button', { name: 'Оформити доставку' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
 
   const drawer = await screen.findByRole('dialog', {
     name: 'Перевірка перед створенням ТТН',
@@ -417,6 +464,7 @@ it('speaks British English on both halves of the card', async () => {
           mutationsAllowed
           order={order}
           partsPath="/app/koval/parts"
+          waybillsPath="/app/koval/sales/waybills"
         />
       </MemoryRouter>
     </LocaleProvider>,
@@ -424,18 +472,19 @@ it('speaks British English on both halves of the card', async () => {
 
   expect(screen.getByRole('list', { name: 'Delivery stages' })).toBeVisible()
   expect(screen.getByRole('region', { name: 'Items' })).toBeVisible()
-  const due = screen.getByRole('region', { name: 'To pay' })
-  expect(within(due).getByText('Paid in full')).toBeVisible()
-  expect(
-    within(due).getByRole('button', { name: 'Hand to carrier' }),
-  ).toBeVisible()
+  const payment = screen.getByRole('region', { name: 'Payment' })
+  // The pill and the «Paid» fact both say it.
+  expect(within(payment).getAllByText('Paid')).toHaveLength(2)
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
-  const carrier = screen.getByRole('region', { name: 'Nova Poshta' })
+  const carrier = screen.getByRole('region', { name: 'Delivery · Nova Poshta' })
+  expect(
+    within(carrier).getByRole('button', { name: 'Hand to carrier' }),
+  ).toBeVisible()
   expect(within(carrier).getByText('Waybill created')).toBeVisible()
   expect(within(carrier).getByText('1 piece · 42 kg')).toBeVisible()
   expect(
-    within(carrier).getByRole('button', { name: 'Waybill details' }),
+    within(carrier).getByRole('link', { name: 'Waybill details' }),
   ).toBeVisible()
   expect(
     screen.queryByText(/[А-Яа-яІіЇїЄєҐґ]{4,}/u, { selector: 'button' }),
@@ -467,19 +516,12 @@ it('keeps a delivery order readable but offers no Nova Poshta outside Ukraine', 
     </LocaleProvider>,
   )
 
-  const due = screen.getByRole('region', { name: 'To pay' })
+  const payment = screen.getByRole('region', { name: 'Payment' })
   // Money stays Core's: the balance can still be paid.
   expect(
-    within(due).getByRole('button', { name: 'Record payment' }),
+    within(payment).getByRole('button', { name: 'Record payment' }),
   ).toBeVisible()
-  expect(
-    within(due).queryByRole('button', { name: 'Create waybill' }),
-  ).toBeNull()
-  expect(
-    within(due).getByText(
-      'Nova Poshta delivery is only available for businesses in Ukraine.',
-    ),
-  ).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Create waybill' })).toBeNull()
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
   expect(
@@ -508,4 +550,77 @@ it('reports a failed waybill-number copy in the toast outlet', async () => {
   const failure = await screen.findByText('Не вдалося скопіювати номер ТТН.')
   expect(failure.closest('.rz-toast')).toHaveAttribute('role', 'alert')
   expect(failure.closest('.rz-notice')).toBeNull()
+})
+
+it('says a waybill of a lost cabinet no longer updates and offers recovery', async () => {
+  vi.mocked(novaPoshtaSetupApi.connections).mockResolvedValue([
+    {
+      id: 'conn-old',
+      version: 'cv1',
+      isCurrent: false,
+      hasVerifiedAccess: false,
+      waybillCount: 14,
+      createdAt: '2026-08-01T10:00:00Z',
+    },
+  ])
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      shipment: shipment({
+        connectionId: 'conn-old',
+        number: '20 4500 1187 2209',
+      }),
+    }),
+  )
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  const card = screen.getByRole('region', { name: 'Доставка · Нова пошта' })
+  expect(
+    await within(card).findByText(
+      'Статус ТТН 20 4500 1187 2209 не оновлюється: ключ попереднього кабінету більше не діє.',
+    ),
+  ).toBeVisible()
+  expect(within(card).getByText('Немає доступу')).toBeVisible()
+  expect(
+    within(card).queryByRole('button', { name: 'Оновити статус' }),
+  ).toBeNull()
+  expect(
+    within(card).getByRole('link', { name: 'Відкрити ТТН' }),
+  ).toHaveAttribute('href', '/app/koval/sales/waybills/ship-1')
+
+  await user.click(
+    within(card).getByRole('button', { name: 'Відновити доступ' }),
+  )
+  expect(
+    await screen.findByRole('dialog', {
+      name: 'Відновити доступ до старих накладних',
+    }),
+  ).toBeVisible()
+  expect(screen.getByText('Накладні без доступу · 14')).toBeVisible()
+})
+
+it('leaves a waybill of a working cabinet as it is', async () => {
+  vi.mocked(novaPoshtaSetupApi.connections).mockResolvedValue([
+    {
+      id: 'conn-1',
+      version: 'cv1',
+      isCurrent: true,
+      hasVerifiedAccess: true,
+      waybillCount: 3,
+      createdAt: '2026-08-01T10:00:00Z',
+    },
+  ])
+  const user = userEvent.setup()
+  renderBody(load({ shipment: shipment({ connectionId: 'conn-1' }) }))
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(
+    await screen.findByRole('button', { name: 'Оновити статус' }),
+  ).toBeVisible()
+  expect(screen.queryByText('Немає доступу')).toBeNull()
+  // «Дані ТТН» opens the waybill card (module 46 §8), not a sheet.
+  expect(screen.getByRole('link', { name: 'Дані ТТН' })).toHaveAttribute(
+    'href',
+    '/app/koval/sales/waybills/ship-1',
+  )
 })

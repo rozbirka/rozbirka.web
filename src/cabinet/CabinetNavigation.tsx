@@ -25,6 +25,7 @@ import {
   type CabinetNavigationGroup,
 } from './module-registry'
 import { moduleLabel, navigationGroupLabel } from './module-messages'
+import { useHiddenModules } from './nova-poshta-presence'
 import { evaluateModuleAccess } from './policy'
 import { shellMessages } from './shell-messages'
 import { TenantSwitcher } from './TenantSwitcher'
@@ -84,12 +85,14 @@ export function CabinetNavigation({
   onLogout,
 }: CabinetNavigationProps) {
   const { locale } = useLocale()
+  const hidden = useHiddenModules(tenant, snapshot)
   const entries = useMemo(
     () =>
       Object.values(cabinetModules).flatMap((definition): NavigationEntry[] => {
         const navigation = definition.navigation
         if (
           navigation === undefined ||
+          hidden.has(definition.key) ||
           evaluateModuleAccess(
             { ...definition, navigation },
             { status: 'ready', snapshot, error: null },
@@ -112,7 +115,7 @@ export function CabinetNavigation({
           },
         ]
       }),
-    [locale, snapshot, tenant.slug],
+    [hidden, locale, snapshot, tenant.slug],
   )
 
   return (

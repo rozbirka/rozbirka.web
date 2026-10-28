@@ -142,6 +142,8 @@ describe('production route boundary', () => {
     ['orders/new', 'OrdersScreen'],
     ['orders/:orderId', 'OrdersScreen'],
     ['orders/:orderId/items/new', 'OrdersScreen'],
+    ['sales/waybills', 'WaybillsScreen'],
+    ['sales/waybills/:shipmentId', 'WaybillsScreen'],
     ['cash', 'CashScreen'],
     ['cash/new', 'CashScreen'],
     ['cash/:registerId', 'CashScreen'],
@@ -151,6 +153,8 @@ describe('production route boundary', () => {
     ['settings/billing/payments', 'PaymentsScreen'],
     ['settings/profile', 'ProfileScreen'],
     ['settings/business', 'BusinessSettingsScreen'],
+    ['settings/integrations/:integrationId', 'NovaPoshtaScreen'],
+    ['settings/integrations/:integrationId/connect', 'NovaPoshtaConnectScreen'],
     ['reports', 'ReportsScreen'],
     ['team', 'TeamScreen'],
   ])(

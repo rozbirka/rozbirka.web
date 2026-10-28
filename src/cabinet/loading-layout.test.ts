@@ -113,6 +113,9 @@ describe('route-specific loading layouts', () => {
     expect(loadingLayout('integrations', `${base}/np-1/settings`).kind).toBe(
       'form',
     )
+    expect(loadingLayout('integrations', `${base}/np-1/connect`).kind).toBe(
+      'form',
+    )
   })
 })
 
