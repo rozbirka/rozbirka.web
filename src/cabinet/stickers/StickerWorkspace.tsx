@@ -57,13 +57,13 @@ export function StickerWorkspace({
         className={cn('grid min-w-0 gap-3', className)}
       >
         {back}
-        {navigation}
         {showHeader ? (
           <div className="grid gap-1">
             <h1 className="rz-h-page">{title}</h1>
             <p className="rz-muted m-0 max-w-[72ch]">{subtitle}</p>
           </div>
         ) : null}
+        {navigation}
         {workspace}
       </section>
     )
@@ -90,7 +90,6 @@ export function StickerWorkspace({
       </header>
       <div className="rz-page">
         {back}
-        {navigation}
         {showHeader ? (
           <div className="grid gap-1">
             <div className="rz-page-head">
@@ -99,6 +98,7 @@ export function StickerWorkspace({
             <p className="rz-muted m-0 max-w-[72ch]">{subtitle}</p>
           </div>
         ) : null}
+        {navigation}
         {workspace}
       </div>
     </section>
