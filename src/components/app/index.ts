@@ -45,6 +45,7 @@ export {
   type ToastTone,
 } from './toast-context'
 export { ActiveFilters, Toolbar, type ActiveFilter } from './toolbar'
+export { FilterOption, FilterPopover } from './filter-popover'
 export {
   FileField,
   PhotoFileField,
@@ -55,7 +56,14 @@ export {
 export { formatFileSize } from './format'
 export { CodeChip } from './code-chip'
 export { FormDialog, Sheet, type FormDialogProps } from './form-dialog'
-export { Gallery, PhotoGrid, RecordCard, Thumbnail, type Photo } from './photo'
+export {
+  Gallery,
+  PhotoGrid,
+  PhotoStripSkeleton,
+  RecordCard,
+  Thumbnail,
+  type Photo,
+} from './photo'
 export { Segmented, type SegmentedOption } from './segmented'
 export { SpecGrid, SpecNote, type Spec } from './spec-grid'
 export {

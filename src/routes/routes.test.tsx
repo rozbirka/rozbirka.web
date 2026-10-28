@@ -1,3 +1,4 @@
+import { render } from '@testing-library/react'
 import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { matchRoutes } from 'react-router'
@@ -141,6 +142,8 @@ describe('production route boundary', () => {
     ['orders/new', 'OrdersScreen'],
     ['orders/:orderId', 'OrdersScreen'],
     ['orders/:orderId/items/new', 'OrdersScreen'],
+    ['sales/waybills', 'WaybillsScreen'],
+    ['sales/waybills/:shipmentId', 'WaybillsScreen'],
     ['cash', 'CashScreen'],
     ['cash/new', 'CashScreen'],
     ['cash/:registerId', 'CashScreen'],
@@ -150,6 +153,8 @@ describe('production route boundary', () => {
     ['settings/billing/payments', 'PaymentsScreen'],
     ['settings/profile', 'ProfileScreen'],
     ['settings/business', 'BusinessSettingsScreen'],
+    ['settings/integrations/:integrationId', 'NovaPoshtaScreen'],
+    ['settings/integrations/:integrationId/connect', 'NovaPoshtaConnectScreen'],
     ['reports', 'ReportsScreen'],
     ['team', 'TeamScreen'],
   ])(
@@ -188,3 +193,19 @@ it('selects the sticker mode before enforcing module access', async () => {
   const loaded = await loadRoute(route)
   expect(elementTypeNames(loaded.element)).toEqual(['StickersModuleBoundary'])
 })
+
+it.each(['light', 'dark'])(
+  'uses the saved %s theme while a route module loads',
+  (theme) => {
+    localStorage.setItem('rozbirka.theme', theme)
+    try {
+      const { container } = render(<>{cabinetRoute().hydrateFallbackElement}</>)
+      expect(document.body).toHaveAttribute('data-theme', theme)
+      expect(container.querySelector('[aria-busy="true"]')).toHaveClass(
+        'bg-app-canvas',
+      )
+    } finally {
+      localStorage.removeItem('rozbirka.theme')
+    }
+  },
+)

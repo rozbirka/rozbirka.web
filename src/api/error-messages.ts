@@ -19,6 +19,8 @@ export const errorMessages = defineMessages({
     CONCURRENT_MODIFICATION: 'Інша операція змінила ці дані. Спробуйте ще раз.',
     INSUFFICIENT_BALANCE: "Баланс каси стане від'ємним.",
     INVALID_TRANSACTION_TYPE: 'Виберіть надходження або витрату.',
+    CANNOT_CHANGE_OWN_PERMISSIONS:
+      'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
     CANNOT_MODIFY_SELF: 'Ви не можете змінювати власний обліковий запис.',
     CANNOT_DELETE_SELF: 'Ви не можете видалити власний обліковий запис.',
     INVALID_PASSWORD: 'Поточний пароль невірний.',
@@ -66,6 +68,52 @@ export const errorMessages = defineMessages({
       'Запит до Нової пошти не був надісланий. Нічого не створено — спробуйте ще раз.',
     NOVA_POSHTA_OUTCOMEUNKNOWN:
       'Результат запиту невідомий. Оновіть статус перед повторною дією.',
+    NP_SETUP_EXPIRED: 'Перевірка ключа застаріла. Вставте ключ ще раз.',
+    NP_CONFIGURATION_CHANGED:
+      'Налаштування Нової пошти вже змінив інший користувач. Оновіть дані й перевірте зміни ще раз.',
+    NP_SETUP_INCOMPLETE:
+      'Підключення не завершено: оберіть відправника, контакт і точку відправлення.',
+    NP_CASH_REGISTER_UNAVAILABLE:
+      'Обрана каса недоступна для післяплати. Оберіть активну касу з гривнею.',
+    NP_HISTORICAL_SCOPE_EMPTY: 'У цьому кабінеті немає накладних без доступу.',
+    NP_HISTORICAL_SCOPE_UNVERIFIED:
+      'Нова пошта не підтвердила, що ключ відкриває накладні цього кабінету. Доступ не відновлено.',
+    NP_HISTORICAL_ACCESS_UNAVAILABLE:
+      'Нова пошта не відповіла. Ключ не перевірено — спробуйте ще раз за кілька хвилин.',
+    NP_SETUP_REQUIRED:
+      'Відправника, контакт і точку відправлення змінюють через перевірку з ключем Нової пошти.',
+    SHIPMENT_PREVIEW_STALE: 'Стан накладної змінився. Перевірте її ще раз.',
+    SHIPMENT_NOT_EDITABLE:
+      'Посилку вже передано перевізнику. Отримувача, адресу й післяплату змінюйте в кабінеті або застосунку Нової пошти.',
+    SHIPMENT_RECREATE_REQUIRED:
+      'Нова пошта не змінює ці дані в чинній накладній — потрібна нова ТТН.',
+    SHIPMENT_OPERATION_IN_PROGRESS:
+      'Нова пошта ще виконує попередню дію з накладною. Перевірте результат за хвилину.',
+    SHIPMENT_CANDIDATE_REQUIRED:
+      'Знайдіть накладну в кабінеті Нової пошти й введіть її номер для звірки.',
+    SHIPMENT_NOT_RECONCILABLE:
+      'Немає дії з невідомим результатом для перевірки.',
+    SHIPMENT_OUTCOME_UNKNOWN:
+      'Результат попередньої дії з накладною ще не підтверджено. Спершу перевірте результат.',
+    SHIPMENT_NOT_ATTACHABLE: 'Стан замовлення не дозволяє прив’язати накладну.',
+    SHIPMENT_ALREADY_LINKED:
+      'Ця ТТН уже прив’язана до іншого замовлення. Одна накладна — одне замовлення.',
+    SHIPMENT_IDENTITY_UNVERIFIED:
+      'Нова пошта не підтвердила, що отримувач, відправник і післяплата накладної збігаються із замовленням.',
+    SHIPMENT_NOT_CANCELLABLE:
+      'Цю накладну вже не можна скасувати: посилку передано перевізнику.',
+    SHIPMENT_QUOTE_EXPIRED:
+      'Розрахунок доставки застарів. Перерахуйте доставку перед створенням ТТН.',
+    SHIPMENT_QUOTE_CONTEXT_CHANGED:
+      'Дані доставки або налаштування змінилися під час розрахунку. Перевірте й розрахуйте доставку ще раз.',
+    SHIPMENT_SENDER_REVALIDATION_REQUIRED:
+      'Відправника в налаштуваннях Нової пошти змінено. Перевірте відправника в чернетці й розрахуйте доставку заново.',
+    SHIPMENT_NUMBER_INVALID: 'Вкажіть номер накладної цифрами.',
+    DELIVERY_DEPOSIT_REQUIRED: 'Спершу внесіть депозит за доставку.',
+    DELIVERY_OPERATION_IN_PROGRESS:
+      'Інша дія вже змінює це замовлення. Зачекайте й спробуйте ще раз.',
+    REFUND_TRANSACTION_ALREADY_ALLOCATED:
+      'Операцію вже прив’язано до іншого замовлення.',
     SOURCE_HAS_PARTS:
       'Не можна видалити джерело, доки в ньому є невидалені запчастини.',
     PART_SOURCE_ARCHIVED:
@@ -201,6 +249,8 @@ export const errorMessages = defineMessages({
       'Another operation modified this data. Please retry.',
     INSUFFICIENT_BALANCE: 'Cash register balance would become negative.',
     INVALID_TRANSACTION_TYPE: 'Choose an income or expense transaction.',
+    CANNOT_CHANGE_OWN_PERMISSIONS:
+      'You cannot change your own permissions. Contact the business owner.',
     CANNOT_MODIFY_SELF: 'You cannot modify your own account.',
     CANNOT_DELETE_SELF: 'You cannot delete your own account.',
     INVALID_PASSWORD: 'Current password is incorrect.',
@@ -248,6 +298,53 @@ export const errorMessages = defineMessages({
       'The request was not submitted to Nova Poshta. Nothing was created; try again.',
     NOVA_POSHTA_OUTCOMEUNKNOWN:
       'The request outcome is unknown. Refresh the status before retrying.',
+    NP_SETUP_EXPIRED: 'The key check has expired. Paste the key again.',
+    NP_CONFIGURATION_CHANGED:
+      'Someone else has already changed the Nova Poshta settings. Refresh the data and check the changes again.',
+    NP_SETUP_INCOMPLETE:
+      'Setup is not finished: choose a sender, a contact and a dispatch point.',
+    NP_CASH_REGISTER_UNAVAILABLE:
+      'The chosen till cannot take cash on delivery. Choose an active till holding hryvnia.',
+    NP_HISTORICAL_SCOPE_EMPTY: 'This account has no waybills without access.',
+    NP_HISTORICAL_SCOPE_UNVERIFIED:
+      'Nova Poshta did not confirm that the key opens this account’s waybills. Access was not restored.',
+    NP_HISTORICAL_ACCESS_UNAVAILABLE:
+      'Nova Poshta did not respond. The key was not checked — try again in a few minutes.',
+    NP_SETUP_REQUIRED:
+      'The sender, contact and dispatch point are changed through a check with the Nova Poshta key.',
+    SHIPMENT_PREVIEW_STALE: 'The waybill state changed. Check it again.',
+    SHIPMENT_NOT_EDITABLE:
+      'The parcel has already been handed to the carrier. Change the recipient, address and cash on delivery in the Nova Poshta account or app.',
+    SHIPMENT_RECREATE_REQUIRED:
+      'Nova Poshta does not change these details on an existing waybill — a new waybill is needed.',
+    SHIPMENT_OPERATION_IN_PROGRESS:
+      'Nova Poshta is still processing the previous waybill action. Check the result in a minute.',
+    SHIPMENT_CANDIDATE_REQUIRED:
+      'Find the waybill in the Nova Poshta account and enter its number to check it.',
+    SHIPMENT_NOT_RECONCILABLE:
+      'There is no action with an unknown result to check.',
+    SHIPMENT_OUTCOME_UNKNOWN:
+      'The result of the previous waybill action is not confirmed yet. Check the result first.',
+    SHIPMENT_NOT_ATTACHABLE:
+      'The order’s state does not allow attaching a waybill.',
+    SHIPMENT_ALREADY_LINKED:
+      'This waybill is already attached to another order. One waybill — one order.',
+    SHIPMENT_IDENTITY_UNVERIFIED:
+      'Nova Poshta did not confirm that the waybill’s recipient, sender and cash on delivery match the order.',
+    SHIPMENT_NOT_CANCELLABLE:
+      'This waybill can no longer be cancelled: the parcel has been handed to the carrier.',
+    SHIPMENT_QUOTE_EXPIRED:
+      'The delivery quote is out of date. Recalculate delivery before creating the waybill.',
+    SHIPMENT_QUOTE_CONTEXT_CHANGED:
+      'The delivery details or settings changed during the calculation. Check and calculate delivery again.',
+    SHIPMENT_SENDER_REVALIDATION_REQUIRED:
+      'The sender in the Nova Poshta settings has changed. Check the sender in the draft and recalculate delivery.',
+    SHIPMENT_NUMBER_INVALID: 'Enter the waybill number in digits.',
+    DELIVERY_DEPOSIT_REQUIRED: 'Pay the delivery deposit first.',
+    DELIVERY_OPERATION_IN_PROGRESS:
+      'Another action is already changing this order. Wait and try again.',
+    REFUND_TRANSACTION_ALREADY_ALLOCATED:
+      'This transaction is already linked to another order.',
     SOURCE_HAS_PARTS:
       'A source cannot be deleted while it contains active parts.',
     PART_SOURCE_ARCHIVED:
@@ -387,6 +484,8 @@ export const errorMessages = defineMessages({
       'Inna operacja zmieniła te dane. Spróbuj ponownie.',
     INSUFFICIENT_BALANCE: 'Saldo kasy stałoby się ujemne.',
     INVALID_TRANSACTION_TYPE: 'Wybierz transakcję przychodu lub wydatku.',
+    CANNOT_CHANGE_OWN_PERMISSIONS:
+      'Nie możesz zmieniać własnych uprawnień. Skontaktuj się z właścicielem firmy.',
     CANNOT_MODIFY_SELF: 'Nie możesz zmieniać własnego konta.',
     CANNOT_DELETE_SELF: 'Nie możesz usunąć własnego konta.',
     INVALID_PASSWORD: 'Bieżące hasło jest nieprawidłowe.',
@@ -435,6 +534,53 @@ export const errorMessages = defineMessages({
       'Żądanie nie zostało wysłane do Nova Poshta. Nic nie utworzono; spróbuj ponownie.',
     NOVA_POSHTA_OUTCOMEUNKNOWN:
       'Wynik żądania jest nieznany. Odśwież status przed ponowną próbą.',
+    NP_SETUP_EXPIRED: 'Sprawdzenie klucza wygasło. Wklej klucz ponownie.',
+    NP_CONFIGURATION_CHANGED:
+      'Ustawienia Nowej Poczty zmienił już inny użytkownik. Odśwież dane i sprawdź zmiany ponownie.',
+    NP_SETUP_INCOMPLETE:
+      'Podłączenie nie jest zakończone: wybierz nadawcę, kontakt i punkt nadania.',
+    NP_CASH_REGISTER_UNAVAILABLE:
+      'Wybrana kasa nie przyjmie pobrania. Wybierz aktywną kasę z hrywną.',
+    NP_HISTORICAL_SCOPE_EMPTY:
+      'To konto nie ma listów przewozowych bez dostępu.',
+    NP_HISTORICAL_SCOPE_UNVERIFIED:
+      'Nowa Poczta nie potwierdziła, że klucz otwiera listy przewozowe tego konta. Dostępu nie przywrócono.',
+    NP_HISTORICAL_ACCESS_UNAVAILABLE:
+      'Nowa Poczta nie odpowiedziała. Klucz nie został sprawdzony — spróbuj ponownie za kilka minut.',
+    NP_SETUP_REQUIRED:
+      'Nadawcę, kontakt i punkt nadania zmienia się przez sprawdzenie z kluczem Nowej Poczty.',
+    SHIPMENT_PREVIEW_STALE: 'Stan listu się zmienił. Sprawdź go ponownie.',
+    SHIPMENT_NOT_EDITABLE:
+      'Paczka została już przekazana przewoźnikowi. Odbiorcę, adres i pobranie zmień na koncie lub w aplikacji Nowej Poczty.',
+    SHIPMENT_RECREATE_REQUIRED:
+      'Nowa Poczta nie zmienia tych danych w istniejącym liście — potrzebny jest nowy list.',
+    SHIPMENT_OPERATION_IN_PROGRESS:
+      'Nowa Poczta wciąż wykonuje poprzednią operację na liście. Sprawdź wynik za minutę.',
+    SHIPMENT_CANDIDATE_REQUIRED:
+      'Znajdź list na koncie Nowej Poczty i wpisz jego numer, aby go sprawdzić.',
+    SHIPMENT_NOT_RECONCILABLE:
+      'Brak operacji o nieznanym wyniku do sprawdzenia.',
+    SHIPMENT_OUTCOME_UNKNOWN:
+      'Wynik poprzedniej operacji na liście nie został jeszcze potwierdzony. Najpierw sprawdź wynik.',
+    SHIPMENT_NOT_ATTACHABLE: 'Stan zamówienia nie pozwala powiązać listu.',
+    SHIPMENT_ALREADY_LINKED:
+      'Ten list jest już powiązany z innym zamówieniem. Jeden list — jedno zamówienie.',
+    SHIPMENT_IDENTITY_UNVERIFIED:
+      'Nowa Poczta nie potwierdziła, że odbiorca, nadawca i pobranie listu zgadzają się z zamówieniem.',
+    SHIPMENT_NOT_CANCELLABLE:
+      'Tego listu nie można już anulować: paczkę przekazano przewoźnikowi.',
+    SHIPMENT_QUOTE_EXPIRED:
+      'Wycena dostawy jest nieaktualna. Przelicz dostawę przed utworzeniem listu.',
+    SHIPMENT_QUOTE_CONTEXT_CHANGED:
+      'Dane dostawy lub ustawienia zmieniły się podczas wyceny. Sprawdź i przelicz dostawę ponownie.',
+    SHIPMENT_SENDER_REVALIDATION_REQUIRED:
+      'Nadawca w ustawieniach Nowej Poczty się zmienił. Sprawdź nadawcę w szkicu i przelicz dostawę od nowa.',
+    SHIPMENT_NUMBER_INVALID: 'Podaj numer listu cyframi.',
+    DELIVERY_DEPOSIT_REQUIRED: 'Najpierw wpłać depozyt za dostawę.',
+    DELIVERY_OPERATION_IN_PROGRESS:
+      'Inna operacja już zmienia to zamówienie. Poczekaj i spróbuj ponownie.',
+    REFUND_TRANSACTION_ALREADY_ALLOCATED:
+      'Ta operacja jest już powiązana z innym zamówieniem.',
     SOURCE_HAS_PARTS: 'Nie można usunąć źródła, które zawiera aktywne części.',
     PART_SOURCE_ARCHIVED:
       'Nie można dodawać części do zarchiwizowanego samochodu. Wybierz inne źródło.',

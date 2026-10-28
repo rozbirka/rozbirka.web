@@ -67,6 +67,11 @@ it('uses the lifecycle endpoints Core names, and returns only an intact return',
   await deliveryApi.dispatch('order-1')
   await deliveryApi.receive('order-1')
   await deliveryApi.acceptReturn('order-1')
+  await deliveryApi.acceptReturn('order-1', {
+    damaged: true,
+    notes: ' Подряпина на фарі ',
+  })
+  await deliveryApi.cancel('order-1')
 
   expect(post).toHaveBeenNthCalledWith(1, '/orders/order-1/delivery/dispatch')
   expect(post).toHaveBeenNthCalledWith(2, '/orders/order-1/delivery/received')
@@ -75,6 +80,17 @@ it('uses the lifecycle endpoints Core names, and returns only an intact return',
     '/orders/order-1/delivery/return-received',
     { allItemsReceivedUndamaged: true },
   )
+  // A damaged return is still a full one, and Core wants it described.
+  expect(post).toHaveBeenNthCalledWith(
+    4,
+    '/orders/order-1/delivery/return-received',
+    {
+      allItemsReceived: true,
+      allItemsReceivedUndamaged: false,
+      notes: 'Подряпина на фарі',
+    },
+  )
+  expect(post).toHaveBeenNthCalledWith(5, '/orders/order-1/delivery/cancel')
 })
 
 it('restores the nulls Core omits when it serialises', async () => {

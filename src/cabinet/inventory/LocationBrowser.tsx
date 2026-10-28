@@ -94,7 +94,12 @@ export function LocationSearch({
               next.delete('locationPage')
               return next
             },
-            { replace: true, preventScrollReset: true, state: navigationState },
+            {
+              replace: true,
+              preventScrollReset: true,
+              state: navigationState,
+              flushSync: true,
+            },
           )
         }
       />

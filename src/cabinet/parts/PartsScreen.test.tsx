@@ -1,7 +1,9 @@
+import { StrictMode } from 'react'
 import type { UpdatePartRequest } from '@/api/parts'
 import { FeatureFlagsProvider } from '../FeatureFlags'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { flushSync } from 'react-dom'
 import {
   createMemoryRouter,
   MemoryRouter,
@@ -1653,7 +1655,7 @@ it('confirms deletion, prevents duplicates, and reports a server conflict', asyn
       </Routes>
     </MemoryRouter>,
   )
-  await screen.findByRole('heading', { name: 'Деталь' })
+  await screen.findByRole('button', { name: 'Інші дії з деталлю' })
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name: 'Інші дії з деталлю' }))
   await user.click(
@@ -1804,6 +1806,64 @@ it('applies the parts quota only to create, not edit or delete', async () => {
       }),
     ),
   )
+})
+
+it('reports failed and successful part-code copies in the toast outlet', async () => {
+  const user = userEvent.setup()
+  const writeText = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('clipboard denied'))
+    .mockResolvedValue(undefined)
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Фара',
+    source: 'free',
+    status: 'available',
+    qrCode: 'PART-001',
+    condition: 'good',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    notes: null,
+    photos: [],
+    desiredSalePrice: null,
+    effectiveSalePrice: null,
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  render(
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/:partId"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Копіювати код' }))
+
+  const failure = await screen.findByText('Не вдалося скопіювати код.')
+  const failureToast = failure.closest<HTMLElement>('.rz-toast')!
+  expect(failureToast).toHaveAttribute('role', 'alert')
+  expect(failure.closest('.rz-notice')).toBeNull()
+  await user.click(within(failureToast).getByRole('button'))
+  expect(screen.queryByText('Код скопійовано.')).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Копіювати код' }))
+
+  expect(writeText).toHaveBeenCalledWith('PART-001')
+  expect(screen.queryByText('Не вдалося скопіювати код.')).toBeNull()
+  const confirmation = await screen.findByText('Код скопійовано.')
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(confirmation.closest('.rz-notice')).toBeNull()
 })
 
 it('renders the immutable detail and history contract with permission-aware links', async () => {
@@ -2482,6 +2542,63 @@ function renderDirectory() {
   )
 }
 
+it('preserves spaces while typing a multi-word parts search and trims only the API query', async () => {
+  const user = userEvent.setup()
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts',
+        element: (
+          <>
+            <PartsScreen definition={partsDefinition as never} />
+            <LocationProbe />
+          </>
+        ),
+      },
+    ],
+    { initialEntries: ['/app/yard/parts'] },
+  )
+  render(
+    <RouterProvider
+      flushSync={(callback) => {
+        flushSync(callback)
+        return undefined
+      }}
+      router={router}
+    />,
+  )
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  const search = screen.getByLabelText('Пошук деталей')
+
+  await user.type(search, 'Фара ')
+  expect(search).toHaveValue('Фара ')
+  await user.type(search, 'ліва ')
+  expect(search).toHaveValue('Фара ліва ')
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({ query: 'Фара ліва' }),
+      expect.anything(),
+    ),
+  )
+  const params = new URLSearchParams(
+    screen.getByLabelText('Поточний маршрут').textContent ?? '',
+  )
+  expect(params.get('q')).toBe('Фара ліва ')
+
+  await user.clear(search)
+  expect(search).toHaveValue('')
+  await vi.waitFor(() =>
+    expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('query'),
+  )
+})
+
 it('tells the operator that the parts search accepts a VIN', async () => {
   renderDirectory()
 
@@ -2580,6 +2697,51 @@ it('clears the working set from the bulk bar and gives the toolbar back', async 
     screen.queryByRole('region', { name: 'Дії над обраними' }),
   ).not.toBeInTheDocument()
   expect(screen.getByRole('search')).toBeVisible()
+})
+
+it('keeps the list and known part name while the side card loads, then replaces its skeleton', async () => {
+  const user = userEvent.setup()
+  let resolvePart!: (value: unknown) => void
+  const pendingPart = new Promise((resolve) => {
+    resolvePart = resolve
+  })
+  partMocks.get.mockReturnValue(pendingPart)
+  renderDirectory()
+
+  const row = (await screen.findByRole('link', { name: 'Фара ліва' })).closest(
+    'tr',
+  )!
+  await user.click(within(row).getByRole('cell', { name: /2/ }))
+  const peek = await screen.findByRole('complementary', {
+    name: 'Деталь: Фара ліва',
+  })
+  expect(peek).toHaveAttribute('aria-busy', 'true')
+  expect(within(peek).getByRole('heading', { name: 'Фара ліва' })).toBeVisible()
+  expect(within(peek).getByRole('status')).toHaveTextContent(
+    'Завантажуємо деталь',
+  )
+  expect(screen.getByRole('link', { name: 'Бампер передній' })).toBeVisible()
+  expect(within(peek).queryByRole('link', { name: 'Друк стікера' })).toBeNull()
+
+  await act(async () => {
+    resolvePart({
+      id: 'part-1',
+      name: 'Фара ліва',
+      status: 'available',
+      condition: 'good',
+      quantityAvailable: 2,
+      quantityReserved: 0,
+      quantitySoldTotal: 0,
+      effectiveSalePrice: 1800,
+      unit: 'pcs',
+      photos: [],
+    })
+    await pendingPart
+  })
+  expect(peek).toHaveAttribute('aria-busy', 'false')
+  expect(within(peek).queryByRole('status')).toBeNull()
+  expect(within(peek).getByRole('link', { name: 'Друк стікера' })).toBeVisible()
+  expect(within(peek).getByText('Наявність')).toBeVisible()
 })
 
 it('opens a part beside the list on row click and walks the page from there', async () => {
@@ -3177,7 +3339,7 @@ it('keeps the donor row by replacing compatibility after creating a car part', a
   )
 })
 
-it('says the part cannot be ordered from its own page yet, instead of pretending', async () => {
+it('omits the unsupported order action from the part menu', async () => {
   partMocks.get.mockResolvedValue({
     id: 'part-1',
     name: 'Bumper',
@@ -3209,18 +3371,16 @@ it('says the part cannot be ordered from its own page yet, instead of pretending
     </MemoryRouter>,
   )
 
-  // The action lives in the record's menu, switched off with its reason.
+  // The record menu contains only supported actions.
   await userEvent
     .setup()
     .click(await screen.findByRole('button', { name: 'Інші дії з деталлю' }))
-  const order = await screen.findByRole('menuitem', {
-    name: 'Додати в замовлення',
-  })
-  expect(order).toHaveAttribute('aria-disabled', 'true')
-  expect(order).toHaveAttribute(
-    'title',
-    expect.stringContaining('ще не підключене'),
-  )
+  expect(
+    screen.queryByRole('menuitem', { name: 'Додати в замовлення' }),
+  ).toBeNull()
+  expect(
+    screen.getByRole('menuitem', { name: 'Видалити деталь' }),
+  ).toBeVisible()
 })
 
 it('offers the price only as a warning while the part has none', async () => {
@@ -3598,21 +3758,31 @@ it('resets a saved free source filter visibly without sending it to search', asy
     totalPages: 0,
   })
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts?origin=free']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/parts"
-          element={<PartsScreen definition={partsDefinition as never} />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <StrictMode>
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/app/yard/parts?origin=free']}>
+          <Routes>
+            <Route
+              path="/app/:tenant/parts"
+              element={<PartsScreen definition={partsDefinition as never} />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
+    </StrictMode>,
   )
   expect(
-    await screen.findByText(/Фільтр «Вільні запчастини» скинуто/),
+    (
+      await screen.findByText(/Фільтр «Вільні запчастини» скинуто/, {
+        selector: '.rz-toast__msg',
+      })
+    ).closest('[role="status"]'),
   ).toBeVisible()
   expect(
     screen.queryByRole('button', { name: /^Вільна/ }),
   ).not.toBeInTheDocument()
+  expect(document.querySelectorAll('.rz-toast')).toHaveLength(1)
+  expect(document.querySelector('.rz-notice--info')).toBeNull()
   for (const call of partMocks.search.mock.calls)
     expect(call[0]).not.toHaveProperty('originTypes')
 })
@@ -4294,14 +4464,16 @@ function openPartWithNotes(notes: string | null = 'Стара нотатка') {
     },
   )
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/parts/:partId"
-          element={<PartsScreen definition={partsDefinition as never} />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/:partId"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
   return part
 }
@@ -4465,7 +4637,10 @@ it('accepts a lost note save only when the readback matches it', async () => {
   await user.type(input, 'Збережена нотатка')
   partMocks.get.mockResolvedValue({ ...part, notes: 'Збережена нотатка' })
   await user.click(within(region).getByRole('button', { name: 'Зберегти' }))
-  expect(await within(region).findByText('Збережено')).toBeVisible()
+  expect(
+    await screen.findByText('Збережено', { selector: '.rz-toast__msg' }),
+  ).toBeVisible()
+  expect(within(region).queryByText('Збережено')).toBeNull()
   expect(within(region).queryByRole('textbox')).toBeNull()
   expect(region).toHaveTextContent('Збережена нотатка')
 })
@@ -4799,5 +4974,156 @@ it.each(['reserved', 'sold'])(
         ? 'Запчастина у резерві. Редагування та зміна ціни недоступні.'
         : 'Запчастину вже продано. Редагування та зміна ціни недоступні.',
     )
+  },
+)
+
+it.each([0, 1])(
+  'shows the parts skeleton while clearing filters from an empty result (reset button %s)',
+  async (buttonIndex) => {
+    partMocks.search.mockReset().mockResolvedValue({
+      items: [],
+      page: 1,
+      pageSize: 30,
+      total: 0,
+      totalPages: 0,
+    })
+    partMocks.facets.mockReset().mockResolvedValue({
+      statuses: [],
+      warehouses: [],
+      zones: [],
+      conditions: [],
+      equipmentTypes: [],
+      makes: [],
+      models: [],
+      generations: [],
+      origins: [],
+      qualityFlags: [],
+      inventoryLocks: [],
+      discrepancies: [],
+    })
+    const { container } = render(
+      <MemoryRouter
+        initialEntries={['/app/yard/parts?warehouse=wh-1&zone=zone-1']}
+      >
+        <Routes>
+          <Route
+            path="/app/:tenant/parts"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Нічого не знайдено')
+    const nextPage = {
+      items: pickableRows,
+      page: 1,
+      pageSize: 30,
+      total: 2,
+      totalPages: 1,
+    }
+    let resolveSearch!: (value: typeof nextPage) => void
+    let resolveFacets!: (value: unknown) => void
+    const searchReady = new Promise<typeof nextPage>((resolve) => {
+      resolveSearch = resolve
+    })
+    const facetsReady = new Promise<unknown>((resolve) => {
+      resolveFacets = resolve
+    })
+    partMocks.search.mockReturnValueOnce(searchReady)
+    partMocks.facets.mockReturnValueOnce(facetsReady)
+    await userEvent
+      .setup()
+      .click(
+        screen.getAllByRole('button', { name: 'Скинути фільтри' })[
+          buttonIndex
+        ]!,
+      )
+    expect(
+      container.querySelector('[data-loading-layout="parts:list"]'),
+    ).toBeVisible()
+    expect(screen.queryByText('Тут поки порожньо')).toBeNull()
+    expect(screen.queryByText('Нічого не знайдено')).toBeNull()
+    await act(async () => {
+      resolveSearch(nextPage)
+      await searchReady
+    })
+    expect(
+      container.querySelector('[data-loading-layout="parts:list"]'),
+    ).toBeVisible()
+    await act(async () => {
+      resolveFacets({
+        statuses: [{ id: 'available', name: 'available', count: 2 }],
+        warehouses: [],
+        zones: [],
+        conditions: [],
+        equipmentTypes: [],
+        makes: [],
+        models: [],
+        generations: [],
+        origins: [],
+        qualityFlags: [],
+        inventoryLocks: [],
+        discrepancies: [],
+      })
+      await facetsReady
+    })
+    expect(await screen.findByRole('link', { name: 'Фара ліва' })).toBeVisible()
+    expect(
+      container.querySelector('[data-loading-layout="parts:list"]'),
+    ).toBeNull()
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      { page: 1, pageSize: 30 },
+      expect.anything(),
+    )
+  },
+)
+
+it.each([
+  ['sold', 0, 0, false],
+  ['available', 0, 0, false],
+  ['reserved', 0, 2, true],
+  ['available', 2, 0, true],
+] as const)(
+  'gates part-card movement by physical stock: %s, available=%s reserved=%s',
+  async (status, available, reserved, enabled) => {
+    const user = userEvent.setup()
+    cabinetMock.snapshot.permissions.add('inventory.view')
+    partMocks.get.mockResolvedValue({
+      id: 'part-1',
+      name: 'Фара ліва',
+      condition: 'good',
+      source: 'free',
+      status,
+      quantityTotal: available + reserved,
+      quantityAvailable: available,
+      quantityReserved: reserved,
+      quantitySoldTotal: status === 'sold' ? 1 : 0,
+      effectiveSalePrice: 100,
+      desiredSalePrice: 100,
+      photos: [],
+      reservations: [],
+      soldOrders: [],
+      unit: 'шт',
+      createdAt: '2026-10-23T10:00:00Z',
+    })
+    renderInLocale('uk', '/app/yard/parts/part-1', '/app/:tenant/parts/:partId')
+    const card = await screen.findByRole('region', { name: 'Місце на складі' })
+    const action = within(card).getByRole('button', { name: 'Перемістити' })
+    if (enabled) expect(action).toBeEnabled()
+    else {
+      expect(action).toBeDisabled()
+      expect(action).toHaveAttribute(
+        'title',
+        'Немає залишку на складі. Розміщення недоступне.',
+      )
+      fireEvent.click(action)
+      expect(
+        screen.queryByRole('dialog', { name: 'Розміщення на складі' }),
+      ).toBeNull()
+    }
+    await user.click(screen.getByRole('button', { name: 'Інші дії з деталлю' }))
+    const move = screen.getByRole('menuitem', { name: 'Перемістити' })
+    if (enabled) expect(move).not.toHaveAttribute('aria-disabled', 'true')
+    else expect(move).toHaveAttribute('aria-disabled', 'true')
   },
 )

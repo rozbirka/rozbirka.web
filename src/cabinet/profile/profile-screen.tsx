@@ -1,6 +1,13 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { ChevronDown, LogOut } from 'lucide-react'
-import { Button, Card, Field, Notice, TextInput } from '@/components/app'
+import {
+  Button,
+  Card,
+  Field,
+  Notice,
+  TextInput,
+  useOptionalToast,
+} from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
 import { AccountDeletion } from '@/components/account/account-deletion'
 import { useT } from '@/i18n/hooks'
@@ -14,7 +21,7 @@ import { LanguageCard } from './language-card'
 import { RegionSummary } from '../business/region-settings'
 import { profileMessages } from './profile-messages'
 
-type SaveState = 'idle' | 'pending' | 'success' | 'error'
+type SaveState = 'idle' | 'pending' | 'error'
 
 const FORM_ID = 'profile-form'
 
@@ -37,6 +44,7 @@ export function ProfileScreen() {
   const auth = useAuth()
   const cabinet = useCabinet()
   const t = useT(profileMessages)
+  const toast = useOptionalToast()
   const personalId = useId()
   const currentName = auth.user?.displayName ?? ''
   const [name, setName] = useState(currentName)
@@ -93,7 +101,8 @@ export function ProfileScreen() {
       }
       setName(normalizedName)
       setSavedName(normalizedName)
-      setSaveState('success')
+      setSaveState('idle')
+      toast?.show({ tone: 'ok', message: t('nameSaved') })
     } catch {
       if (
         !mountedRef.current ||
@@ -116,7 +125,6 @@ export function ProfileScreen() {
     <RecordShell crumb={t('crumb')}>
       <RecordHead title={t('title')} />
 
-      {saveState === 'success' && <Notice tone="ok">{t('nameSaved')}</Notice>}
       {saveState === 'error' && <Notice tone="danger">{t('nameError')}</Notice>}
 
       <RecordColumns
@@ -177,7 +185,7 @@ export function ProfileScreen() {
               </div>
 
               <form
-                className="rz-form-grid"
+                className="rz-form-page rz-form-grid"
                 id={FORM_ID}
                 onSubmit={(event) => void handleSubmit(event)}
               >

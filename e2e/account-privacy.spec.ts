@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from './fixtures'
 
 async function confirmAccountDeletion(page: Page) {
   const confirm = page.getByRole('button', { name: 'Так, видалити акаунт' })

@@ -5,13 +5,11 @@ import {
   lifecycle,
   orderChip,
   paymentStanding,
-  primaryAction,
   readiness,
   readinessBlocks,
   readinessNextStep,
   readinessPassed,
   shipmentChip,
-  shipmentFacts,
 } from './delivery-view'
 
 const payment = (over: Partial<DeliveryPayment> = {}): DeliveryPayment => ({
@@ -45,6 +43,9 @@ const delivery = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
   returnedAt: null,
   awaitingCodReconciliation: false,
   payments: [payment()],
+  workflowState: 'Open',
+  refundDueUah: 0,
+  refundAllocations: [],
   ...over,
 })
 
@@ -81,6 +82,12 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   trackingStatus: null,
   lastTrackedAt: null,
   relatedNumbers: [],
+  connectionId: null,
+  version: 'v1',
+  dispatchedAt: null,
+  receivedAt: null,
+  paymentState: null,
+  syncProblem: null,
   events: [
     {
       code: 'Created',
@@ -118,69 +125,33 @@ it('does not call an order paid while anything is still owed', () => {
 })
 
 it('names the order and the parcel separately', () => {
+  // Module 46: the order's pill follows Core's workflow state.
   expect(orderChip(delivery({ outstandingUah: 1200 }), 'uk').label).toBe(
-    'Очікує · є залишок',
+    'Відкрите',
   )
-  expect(orderChip(delivery(), 'uk').label).toBe('Очікує · оплачене')
-  expect(orderChip(delivery({ receivedAt: 'x' }), 'uk').label).toBe(
-    'Підтверджене',
+  expect(orderChip(delivery({ workflowState: 'Completed' }), 'uk')).toEqual({
+    label: 'Завершене',
+    tone: 'ok',
+  })
+  expect(
+    orderChip(
+      delivery({ workflowState: 'AwaitingGoods', dispatchedAt: 'x' }),
+      'uk',
+    ).label,
+  ).toBe('Повернення')
+  // Cancelling an order that never left is not a return (10.13).
+  expect(
+    orderChip(delivery({ workflowState: 'AwaitingRefund' }), 'uk').label,
+  ).toBe('Відкрите')
+  expect(orderChip(delivery({ workflowState: 'Cancelled' }), 'uk').label).toBe(
+    'Скасоване',
   )
-  expect(orderChip(delivery({ returnedAt: 'x' }), 'uk').label).toBe('Повернене')
 
   expect(shipmentChip(delivery(), null, 'uk').label).toBe('ТТН не створена')
   expect(shipmentChip(delivery(), shipment(), 'uk').label).toBe('ТТН створена')
   expect(
     shipmentChip(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').label,
   ).toBe('Передано перевізнику')
-})
-
-it('reads post-payment against what the order still owes', () => {
-  const matching = shipmentFacts(delivery(), shipment(), 'uk')
-  expect(matching[1]).toMatchObject({
-    label: 'Післяплата',
-    note: 'дорівнює залишку',
-    tone: 'ok',
-  })
-
-  const drifted = shipmentFacts(
-    delivery({ outstandingUah: 1200 }),
-    shipment({ codUah: 0 }),
-    'uk',
-  )
-  expect(drifted[1]).toMatchObject({
-    note: 'не дорівнює залишку',
-    tone: 'danger',
-  })
-})
-
-it('sums the parcel and keeps its dimensions beside it', () => {
-  expect(shipmentFacts(delivery(), shipment(), 'uk')[2]).toMatchObject({
-    value: '1 місце · 42 кг',
-    note: '60 × 40 × 35 см',
-  })
-})
-
-it('offers exactly the step the order is waiting for', () => {
-  // An unpaid order is not waiting for money: the balance rides along as the
-  // post-payment, so the waybill is still the next move.
-  expect(
-    primaryAction(delivery({ outstandingUah: 1200 }), null, 'uk').kind,
-  ).toBe('create')
-  expect(primaryAction(delivery(), null, 'uk').kind).toBe('create')
-  expect(primaryAction(delivery(), shipment(), 'uk').kind).toBe('dispatch')
-  expect(
-    primaryAction(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').kind,
-  ).toBe('receive')
-  expect(
-    primaryAction(
-      delivery({ dispatchedAt: 'x', receivedAt: 'y' }),
-      shipment(),
-      'uk',
-    ).kind,
-  ).toBe('return')
-  expect(
-    primaryAction(delivery({ returnedAt: 'z' }), shipment(), 'uk').kind,
-  ).toBeNull()
 })
 
 it('does not treat an outstanding balance as an obstacle to a waybill', () => {

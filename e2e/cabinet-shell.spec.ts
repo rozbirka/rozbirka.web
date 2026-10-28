@@ -1,13 +1,13 @@
 import AxeBuilder from '@axe-core/playwright'
 import {
+  upstreamOrigin,
   expect,
   test,
   type APIRequestContext,
   type Page,
   type Route,
-} from '@playwright/test'
+} from './fixtures'
 
-const upstreamOrigin = 'http://127.0.0.1:4174'
 const phone = '501112233'
 const otp = '123456'
 
@@ -433,7 +433,7 @@ async function installCabinetApiBoundary(
     if (isRecognizedDashboardPath(path)) {
       const authorization = request.headers().authorization
       const upstreamResponse = await fetch(
-        `${upstreamOrigin}${path}${requestUrl.search}`,
+        `${upstreamOrigin()}${path}${requestUrl.search}`,
         {
           method: request.method(),
           headers: {
@@ -894,7 +894,7 @@ async function installCabinetApiBoundary(
 }
 
 async function resetUpstream(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/reset`, {
+  const response = await request.post(`${upstreamOrigin()}/_test/reset`, {
     data: {},
   })
   expect(response.ok()).toBeTruthy()
@@ -903,7 +903,7 @@ async function resetUpstream(request: APIRequestContext) {
 async function upstreamStats(
   request: APIRequestContext,
 ): Promise<DashboardUpstreamStats> {
-  const response = await request.get(`${upstreamOrigin}/_test/stats`)
+  const response = await request.get(`${upstreamOrigin()}/_test/stats`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as DashboardUpstreamStats
 }
@@ -918,7 +918,7 @@ async function resetDashboardUpstream(
   } = {},
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/reset`,
+    `${upstreamOrigin()}/_test/dashboard/reset`,
     { data: options },
   )
   expect(response.ok()).toBeTruthy()
@@ -929,7 +929,7 @@ async function armDelayedDashboard(
   tenantId: string,
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/delay`,
+    `${upstreamOrigin()}/_test/dashboard/delay`,
     { data: { tenantId } },
   )
   expect(response.ok()).toBeTruthy()
@@ -937,18 +937,20 @@ async function armDelayedDashboard(
 
 async function releaseDelayedDashboard(request: APIRequestContext) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/release`,
+    `${upstreamOrigin()}/_test/dashboard/release`,
   )
   expect(response.ok()).toBeTruthy()
 }
 
 async function armDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/delay`)
+  const response = await request.post(`${upstreamOrigin()}/_test/logout/delay`)
   expect(response.ok()).toBeTruthy()
 }
 
 async function releaseDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/release`)
+  const response = await request.post(
+    `${upstreamOrigin()}/_test/logout/release`,
+  )
   expect(response.ok()).toBeTruthy()
 }
 
@@ -1110,9 +1112,7 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
     await expect(
       page.getByRole('heading', { name: 'Підписка', level: 1 }),
     ).toBeVisible()
-    await expect(
-      page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
-    ).toBeVisible()
+    await expect(page.getByText('Koval Pro', { exact: true })).toBeVisible()
     return
   }
   if (path === '/app/koval/settings/billing/plans') {
@@ -1120,7 +1120,9 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
       page.getByRole('heading', { name: 'Тарифи', level: 1 }),
     ).toBeVisible()
     await expect(
-      page.getByRole('heading', { name: 'Lite', level: 2 }),
+      page
+        .getByRole('table', { name: 'Тарифи', exact: true })
+        .getByRole('rowheader', { name: /^Lite/ }),
     ).toBeVisible()
     return
   }
@@ -1129,7 +1131,7 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
       page.getByRole('heading', { name: 'Платежі', level: 1 }),
     ).toBeVisible()
     await expect(
-      page.getByRole('heading', { name: 'Спосіб оплати', level: 2 }),
+      page.getByRole('heading', { name: 'Історія платежів', level: 2 }),
     ).toBeVisible()
     await expect(page.getByText('Платежів ще не було.')).toBeVisible()
     return
@@ -1291,7 +1293,9 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
-  const fixture = await installCabinetApiBoundary(page)
+  const fixture = await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/dashboard')
@@ -1365,9 +1369,7 @@ test('loads tenant-specific subscription data from tenant-scoped requests @cabin
   const fixture = await installCabinetApiBoundary(page, { sobolBilling: true })
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Підписка')
-  await expect(
-    page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
-  ).toBeVisible()
+  await expect(page.getByText('Koval Pro', { exact: true })).toBeVisible()
 
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/settings/billing/overview')
@@ -1391,7 +1393,9 @@ test('loads tenant-specific subscription data from tenant-scoped requests @cabin
 test('falls back to the target dashboard when its policy denies the current module @cabinet-smoke', async ({
   page,
 }) => {
-  await installCabinetApiBoundary(page)
+  await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Підписка')
   await expect(page).toHaveURL('/app/koval/settings/billing/overview')
@@ -1402,6 +1406,35 @@ test('falls back to the target dashboard when its policy denies the current modu
   await expect(
     page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Соболя' }),
   ).toBeVisible()
+})
+
+test('blocked tenant dashboard shows renewal without requesting business data @cabinet-smoke', async ({
+  page,
+}) => {
+  const fixture = await installCabinetApiBoundary(page)
+  await loginFrom(page)
+  await selectVisibleTenant(page, 'tenant-2')
+
+  await expect(page).toHaveURL('/app/sobol/dashboard')
+  await expect(
+    page.getByRole('combobox', { name: 'Перемкнути розбірку' }),
+  ).toHaveValue('tenant-2')
+  await expect(
+    page.getByRole('heading', { name: 'Доступ призупинено', level: 1 }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(
+      'Керування підпискою недоступне для ваших прав. Зверніться до власника розбірки або підтримки.',
+    ),
+  ).toBeVisible()
+  expect(
+    fixture.requests.filter(
+      ({ path, tenantId }) =>
+        tenantId === 'tenant-2' &&
+        (path === '/api/v1/dashboard' ||
+          path === '/api/v1/dashboard/analytics'),
+    ),
+  ).toHaveLength(0)
 })
 
 test('boots an active Manager entitlement without requesting detailed billing @cabinet-smoke', async ({
@@ -1564,7 +1597,11 @@ test('clears stale dashboard totals while the next tenant summary is pending', a
   page,
   request,
 }) => {
-  const fixture = await installCabinetApiBoundary(page)
+  // Both tenants need active access: a blocked subscription correctly skips
+  // business-data requests and renders the renewal entry instead.
+  const fixture = await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await expect(dashboardGreeting(page)).toContainText('Олена')
   await armDelayedDashboard(request, 'tenant-2')
@@ -1733,6 +1770,87 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
     page.getByRole('heading', { name: 'Результати сесії' }),
   ).toBeVisible()
   await expect(page.getByText('Крило')).toBeVisible()
+})
+
+test('directory searches retain spaces and rapid typing @search-spaces', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { businessOperations: true })
+  const pageOf = (items: unknown[]) => ({
+    items,
+    page: 1,
+    pageSize: 30,
+    total: items.length,
+    totalPages: 1,
+  })
+  await page.route('**/api/v1/customers*', (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path !== '/api/v1/customers' && path !== '/api/v1/customers/directory')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'customer-search',
+          name: 'Тестовий клієнт',
+          phone: null,
+          ordersCount: 1,
+          totalAmount: 100,
+          averageAmount: 100,
+          firstOrderAt: null,
+          lastOrderAt: null,
+          isActive: true,
+          createdAt: '2026-09-02T10:00:00Z',
+        },
+      ]),
+    )
+  })
+  await page.route('**/api/v1/orders*', (route) => {
+    if (new URL(route.request().url()).pathname !== '/api/v1/orders')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'order-search',
+          number: 1,
+          status: 'pending',
+          customerName: 'Тестовий клієнт',
+          totalAmount: 100,
+          currency: 'USD',
+          createdAt: '2026-09-02T10:00:00Z',
+          itemsCount: 1,
+          paymentAccountNames: [],
+          partNames: ['Тестова деталь'],
+        },
+      ]),
+    )
+  })
+  await loginFrom(page)
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const [route, label] of [
+      ['customers', 'Пошук клієнта'],
+      ['orders', 'Пошук замовлень'],
+    ]) {
+      await page.goto(`/app/koval/${route}`)
+      const search = page.getByRole('searchbox', { name: label, exact: true })
+      await search.pressSequentially('Тест ')
+      await expect(search).toHaveValue('Тест ')
+      await search.pressSequentially('пошук ')
+      await expect(search).toHaveValue('Тест пошук ')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.get('q'))
+        .toBe('Тест пошук ')
+      await search.fill('  Довга назва  ')
+      await expect(search).toHaveValue('  Довга назва  ')
+      await search.clear()
+      await expect(search).toHaveValue('')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.has('q'))
+        .toBe(false)
+    }
+  }
 })
 
 test('compact location browser searches and pages large shelf lists @location-browser', async ({
@@ -1913,7 +2031,10 @@ test('compact location browser searches and pages large shelf lists @location-br
     await expect(
       page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
     ).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук секції' }).fill('S7')
+    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
+    await sectionSearch.pressSequentially('Секція ')
+    await expect(sectionSearch).toHaveValue('Секція ')
+    await sectionSearch.fill('S7')
     await page.getByRole('link', { name: 'Секція 7, S7', exact: true }).click()
     await expect(page).toHaveURL(/warehouses\/sections\/section-6$/)
     const table = page.getByRole('table', { name: 'Полиці: Секція 7' })
@@ -1923,7 +2044,10 @@ test('compact location browser searches and pages large shelf lists @location-br
       .getByRole('button', { name: /Наступна/ })
       .click()
     await expect(page.getByText('S7-P16', { exact: true })).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('S7-P100')
+    const shelfSearch = page.getByRole('searchbox', { name: 'Пошук полиці' })
+    await shelfSearch.pressSequentially('Полиця ')
+    await expect(shelfSearch).toHaveValue('Полиця ')
+    await shelfSearch.fill('S7-P100')
     await page
       .getByRole('link', {
         name: 'Переглянути запчастини: Полиця 100',
@@ -3046,15 +3170,17 @@ for (const viewport of [
     const full = await dialog.locator('img').first().boundingBox()
     expect(full!.y).toBeGreaterThanOrEqual(0)
     expect(full!.y + full!.height).toBeLessThanOrEqual(viewport.height)
-    const strip = dialog.locator('ul')
+    const strip = dialog.getByRole('tablist', { name: 'Мініатюри' })
     const firstReachable = await strip.evaluate(
       (element) =>
         element.firstElementChild!.getBoundingClientRect().left >=
         element.getBoundingClientRect().left,
     )
     expect(firstReachable).toBe(true)
-    await dialog.getByRole('button', { name: 'Фото 10', exact: true }).click()
-    await expect(dialog.getByText('Фото недоступне')).toBeVisible()
+    await dialog.getByRole('tab', { name: /^Фото 10 з 10:/ }).click()
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Не вдалося завантажити фото',
+    )
     await page.keyboard.press('Escape')
     await expect(opener).toBeFocused()
     await page.goto('/app/koval/cars/car-1/edit')
@@ -3085,172 +3211,343 @@ for (const viewport of [
   })
 }
 
-test('placement drawer searches large section and shelf choices without moving the page @placement-picker', async ({
-  page,
-}) => {
-  await installCabinetApiBoundary(page, { partsManage: true })
-  const sectionData = Array.from({ length: 100 }, (_, index) => ({
-    id: `section-${index + 1}`,
-    zoneId: 'zone-1',
-    zoneName: 'Зона А',
-    warehouseId: 'warehouse-1',
-    warehouseName: 'Основний склад',
-    name: `Секція ${index + 1}`,
-    code: `S${index + 1}`,
-    isActive: true,
-    qrCode: `section:${index}`,
-  }))
-  const shelfData = Array.from({ length: 100 }, (_, index) => ({
-    id: `shelf-${index + 1}`,
-    sectionId: 'section-100',
-    sectionName: 'Секція 100',
-    zoneId: 'zone-1',
-    zoneName: 'Зона А',
-    warehouseId: 'warehouse-1',
-    warehouseName: 'Основний склад',
-    name: `Полиця ${index + 1}`,
-    code: `P${index + 1}`,
-    isActive: true,
-    qrCode: `shelf:${index}`,
-  }))
-  let saved: Record<string, unknown> | null = null
-  await page.route('**/api/v1/**', async (route) => {
-    const request = route.request()
-    const path = new URL(request.url()).pathname
-    if (path === '/api/v1/parts/part-picker')
-      return fulfillData(route, {
-        id: 'part-picker',
-        name: 'Тестова фара',
-        qrCode: 'part:picker',
-        unit: 'шт',
-        quantityTotal: 1,
-        quantityAvailable: 1,
-        quantityReserved: 0,
-        quantitySold: 0,
-        status: 'available',
-        condition: 'good',
-        photos: [],
-        source: 'batch',
-        car: null,
-        intake: null,
-        desiredSalePrice: null,
-        createdAt: '2026-10-16T10:00:00Z',
-        createdBy: { name: 'Тест' },
+test.describe('placement picker viewport regression', () => {
+  test.beforeEach(async ({ context }, testInfo) => {
+    if (testInfo.project.name === 'ios')
+      await context.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true,
       })
-    if (path === '/api/v1/parts/part-picker/history')
-      return fulfillData(route, { events: [] })
-    if (path === '/api/v1/parts/part-picker/inventory-zones') {
-      if (request.method() === 'PUT')
-        saved = request.postDataJSON() as Record<string, unknown>
-      return fulfillData(route, [
-        {
-          zoneId: 'zone-1',
-          zoneName: 'Зона А',
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Основний склад',
-          zoneCode: 'A',
-          zoneQrCode: 'zone:1',
-          isSystemUnassigned: false,
-        },
-      ])
-    }
-    if (path === '/api/v1/inventory/zones')
-      return fulfillData(route, [
-        {
-          id: 'zone-1',
-          name: 'Зона А',
-          code: 'A',
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Основний склад',
-          qrCode: 'zone:1',
-          isActive: true,
-          isSystemUnassigned: false,
-        },
-      ])
-    if (path === '/api/v1/inventory/sections')
-      return fulfillData(route, sectionData)
-    if (path === '/api/v1/inventory/shelves')
-      return fulfillData(route, shelfData)
-    if (path === '/api/v1/parts/facets')
-      return fulfillData(route, {
-        zones: [],
-        warehouses: [],
-        origins: [],
-        makes: [],
-        models: [],
-        statuses: [],
-        conditions: [],
-      })
-    await route.fallback()
   })
-  await loginFrom(page)
+  test.afterEach(async ({ context }, testInfo) => {
+    if (testInfo.project.name === 'ios') {
+      const path = testInfo.outputPath('placement-trace.zip')
+      await context.tracing.stop({ path })
+      await testInfo.attach('trace', { path, contentType: 'application/zip' })
+    }
+  })
+
   for (const width of [1440, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 })
-    await page.goto('/app/koval/parts/part-picker')
-    await page.getByRole('button', { name: 'Перемістити', exact: true }).click()
-    const drawer = page.getByRole('dialog', { name: 'Розміщення на складі' })
-    const sectionTrigger = drawer.getByRole('searchbox', {
-      name: 'Пошук секції',
-    })
-    await expect(sectionTrigger).toBeVisible()
-    const pageScroll = await page.evaluate(() => scrollY)
-    await expect(page.getByRole('option')).toHaveCount(0)
-    await sectionTrigger.click()
-    const initialList = page.locator('[data-search-picker-scroll]')
-    const initialMetrics = await initialList.evaluate((el) => ({
-      height: el.clientHeight,
-      scrollHeight: el.scrollHeight,
-    }))
-    expect(initialMetrics.height).toBeLessThanOrEqual(460)
-    expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.height)
-    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
-    await sectionSearch.fill('s100')
-    await expect(page.getByRole('option')).toHaveCount(2)
-    await page.getByRole('option', { name: /Секція 100/ }).click()
-    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
-    await expect(page.getByRole('option')).toHaveCount(2)
-    const popup = page.getByRole('listbox')
-    const bounds = await popup.boundingBox()
-    expect(bounds).not.toBeNull()
-    expect(bounds!.width).toBeLessThanOrEqual(width)
-    expect(bounds!.height).toBeLessThanOrEqual(460)
-    await page.keyboard.press('Escape')
-    await expect(drawer).toBeVisible()
-    await expect(page.getByRole('listbox')).toHaveCount(0)
-    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
-    await page.keyboard.press('Enter')
-    await expect(
-      drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
-    ).toHaveValue('Полиця 100')
-    const overflow = await page.evaluate(() => ({
-      width: innerWidth,
-      scroll: document.documentElement.scrollWidth,
-      nodes: [...document.querySelectorAll('body *')]
-        .filter((el) => {
-          const r = el.getBoundingClientRect()
-          return r.width > 0 && r.right > innerWidth + 1
+    test(`placement drawer searches large section and shelf choices without moving the page at ${width}px @placement-picker`, async ({
+      page,
+    }) => {
+      await installCabinetApiBoundary(page, { partsManage: true })
+      const sectionData = Array.from({ length: 100 }, (_, index) => ({
+        id: `section-${index + 1}`,
+        zoneId: 'zone-1',
+        zoneName: 'Зона А',
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Основний склад',
+        name: `Секція ${index + 1}`,
+        code: `S${index + 1}`,
+        isActive: true,
+        qrCode: `section:${index}`,
+      }))
+      const shelfData = Array.from({ length: 100 }, (_, index) => ({
+        id: `shelf-${index + 1}`,
+        sectionId: 'section-100',
+        sectionName: 'Секція 100',
+        zoneId: 'zone-1',
+        zoneName: 'Зона А',
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Основний склад',
+        name: `Полиця ${index + 1}`,
+        code: `P${index + 1}`,
+        isActive: true,
+        qrCode: `shelf:${index}`,
+      }))
+      let saved: Record<string, unknown> | null = null
+      await page.route('**/api/v1/**', async (route) => {
+        const request = route.request()
+        const path = new URL(request.url()).pathname
+        if (path === '/api/v1/parts/part-picker')
+          return fulfillData(route, {
+            id: 'part-picker',
+            name: 'Тестова фара',
+            qrCode: 'part:picker',
+            unit: 'шт',
+            quantityTotal: 1,
+            quantityAvailable: 1,
+            quantityReserved: 0,
+            quantitySold: 0,
+            status: 'available',
+            condition: 'good',
+            photos: [],
+            source: 'batch',
+            car: null,
+            intake: null,
+            desiredSalePrice: null,
+            createdAt: '2026-10-16T10:00:00Z',
+            createdBy: { name: 'Тест' },
+          })
+        if (path === '/api/v1/parts/part-picker/history')
+          return fulfillData(route, { events: [] })
+        if (path === '/api/v1/parts/part-picker/inventory-zones') {
+          if (request.method() === 'PUT')
+            saved = request.postDataJSON() as Record<string, unknown>
+          return fulfillData(route, [
+            {
+              zoneId: 'zone-1',
+              zoneName: 'Зона А',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              zoneCode: 'A',
+              zoneQrCode: 'zone:1',
+              isSystemUnassigned: false,
+            },
+          ])
+        }
+        if (path === '/api/v1/inventory/zones')
+          return fulfillData(route, [
+            {
+              id: 'zone-1',
+              name: 'Зона А',
+              code: 'A',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              qrCode: 'zone:1',
+              isActive: true,
+              isSystemUnassigned: false,
+            },
+          ])
+        if (path === '/api/v1/inventory/sections')
+          return fulfillData(route, sectionData)
+        if (path === '/api/v1/inventory/shelves')
+          return fulfillData(route, shelfData)
+        if (path === '/api/v1/parts/facets')
+          return fulfillData(route, {
+            zones: [],
+            warehouses: [],
+            origins: [],
+            makes: [],
+            models: [],
+            statuses: [],
+            conditions: [],
+          })
+        await route.fallback()
+      })
+      const scenarioStarted = Date.now()
+      await loginFrom(page)
+      await test.step(`placement choices at ${width}px`, async () => {
+        console.info(
+          `[placement-picker] ${width}px start ${Date.now() - scenarioStarted}ms`,
+        )
+        await page.setViewportSize({ width, height: 900 })
+        await page.goto('/app/koval/parts/part-picker')
+        await page
+          .getByRole('button', { name: 'Перемістити', exact: true })
+          .click()
+        const drawer = page.getByRole('dialog', {
+          name: 'Розміщення на складі',
         })
-        .slice(-12)
-        .map((el) => ({
-          tag: el.tagName,
-          class: el.className,
-          right: el.getBoundingClientRect().right,
-          text: el.textContent?.slice(0, 60),
-        })),
-    }))
-    expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(width)
-    expect(await page.evaluate(() => scrollY)).toBe(pageScroll)
-    await drawer.getByRole('button', { name: 'Зберегти розміщення' }).click()
-    await expect(drawer).toHaveCount(0)
-    expect(saved).toEqual({
-      zoneIds: ['zone-1'],
-      sectionId: 'section-100',
-      shelfId: 'shelf-100',
+        const sectionTrigger = drawer.getByRole('searchbox', {
+          name: 'Пошук секції',
+        })
+        await expect(sectionTrigger).toBeVisible()
+        const pageScroll = await page.evaluate(() => scrollY)
+        await expect(page.getByRole('option')).toHaveCount(0)
+        await sectionTrigger.click()
+        const initialList = page.locator('[data-search-picker-scroll]')
+        const initialMetrics = await initialList.evaluate((el) => ({
+          height: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+        }))
+        expect(initialMetrics.height).toBeLessThanOrEqual(460)
+        expect(initialMetrics.scrollHeight).toBeGreaterThan(
+          initialMetrics.height,
+        )
+        const sectionSearch = page.getByRole('searchbox', {
+          name: 'Пошук секції',
+        })
+        await sectionSearch.fill('s100')
+        await expect(page.getByRole('option')).toHaveCount(2)
+        await page.getByRole('option', { name: /Секція 100/ }).click()
+        await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+        await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+        await expect(page.getByRole('option')).toHaveCount(2)
+        const popup = page.getByRole('listbox')
+        const bounds = await popup.boundingBox()
+        expect(bounds).not.toBeNull()
+        expect(bounds!.width).toBeLessThanOrEqual(width)
+        expect(bounds!.height).toBeLessThanOrEqual(460)
+        await page.keyboard.press('Escape')
+        await expect(drawer).toBeVisible()
+        await expect(page.getByRole('listbox')).toHaveCount(0)
+        await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+        await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+        await page.keyboard.press('Enter')
+        await expect(
+          drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
+        ).toHaveValue('Полиця 100')
+        const overflow = await page.evaluate(() => ({
+          width: innerWidth,
+          scroll: document.documentElement.scrollWidth,
+          nodes: [...document.querySelectorAll('body *')]
+            .filter((el) => {
+              const r = el.getBoundingClientRect()
+              return r.width > 0 && r.right > innerWidth + 1
+            })
+            .slice(-12)
+            .map((el) => ({
+              tag: el.tagName,
+              class: el.className,
+              right: el.getBoundingClientRect().right,
+              text: el.textContent?.slice(0, 60),
+            })),
+        }))
+        expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(
+          width,
+        )
+        expect(await page.evaluate(() => scrollY)).toBe(pageScroll)
+        await drawer
+          .getByRole('button', { name: 'Зберегти розміщення' })
+          .click()
+        await expect(drawer).toHaveCount(0)
+        expect(saved).toEqual({
+          zoneIds: ['zone-1'],
+          sectionId: 'section-100',
+          shelfId: 'shelf-100',
+        })
+        await expect(page).toHaveURL(/\/parts\/part-picker$/)
+        console.info(
+          `[placement-picker] ${width}px complete ${Date.now() - scenarioStarted}ms`,
+        )
+      })
     })
-    await expect(page).toHaveURL(/\/parts\/part-picker$/)
   }
+})
+
+for (const width of [375, 1440]) {
+  test(`permission save errors remain visible at the drawer footer at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installCabinetApiBoundary(page)
+    await page.route(
+      '**/api/v1/team/users/user-2/permissions',
+      async (route) => {
+        if (route.request().method() !== 'PUT') return route.fallback()
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: null,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Cannot change own permissions.',
+              details: null,
+            },
+          }),
+        })
+      },
+    )
+    await loginFrom(page)
+    await page.goto('/app/koval/team')
+    await page
+      .getByRole('button', { name: 'Дії з учасником Іван Менеджер' })
+      .click()
+    await page.getByRole('menuitem', { name: 'Права' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Права: Іван Менеджер' })
+    await dialog.getByRole('checkbox').last().scrollIntoViewIfNeeded()
+    const save = dialog.getByRole('button', { name: 'Зберегти права' })
+    await save.click()
+    const alert = dialog.getByRole('alert')
+    await expect(alert).toHaveText(
+      'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
+    )
+    await expect(
+      dialog.locator('.rz-sheet__foot').getByRole('alert'),
+    ).toBeVisible()
+    const bounds = await alert.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds!.y).toBeGreaterThanOrEqual(0)
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900)
+    await expect(save).toBeEnabled()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('permission-error-footer.png'),
+    })
+  })
+}
+
+test('unassigned quantity and status columns stay compact at the right edge', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await installCabinetApiBoundary(page, { partsManage: true })
+  await page.route('**/api/v1/warehouses/warehouse-1', (route) =>
+    fulfillData(route, {
+      id: 'warehouse-1',
+      name: 'Основний склад',
+      code: 'main',
+      isActive: true,
+      isSystemDefault: true,
+      unassignedPartCount: 40,
+      zones: [
+        {
+          id: 'system-zone-1',
+          name: 'Без зони',
+          code: 'unassigned',
+          isActive: true,
+          isSystemUnassigned: true,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/v1/parts/search', (route) =>
+    fulfillData(route, {
+      items: Array.from({ length: 20 }, (_, index) => ({
+        id: `part-${index}`,
+        name: `Запчастина ${index + 1}`,
+        oemCode: `OEM-${index + 1}`,
+        externalCode: null,
+        quantity: index === 1 ? 7 : 1,
+        quantityAvailable: index === 10 ? 0 : 1,
+        quantityReserved: index === 10 ? 1 : 0,
+        unit: 'шт',
+        condition: 'used',
+        sourceType: 'manual',
+        status: index === 10 ? 'reserved' : 'available',
+        createdAt: '2026-10-26T08:00:00Z',
+        isInventoryLocked: false,
+        hasDiscrepancy: false,
+        thumbnailUrl: null,
+        car: null,
+      })),
+      page: 1,
+      pageSize: 20,
+      total: 40,
+      totalPages: 2,
+    }),
+  )
+  await loginFrom(page)
+  await page.goto('/app/koval/warehouses/warehouse-1/unassigned')
+  const table = page.locator('.location-parts--unassigned .rz-table')
+  await expect(
+    table.getByRole('link', { name: 'Запчастина 1', exact: true }),
+  ).toBeVisible()
+  const row = table.locator('tbody tr').first()
+  await expect(row.getByRole('button')).toHaveCount(0)
+  const cell = row.locator('td').last()
+  const badge = cell.locator('.rz-pill')
+  const cellBounds = await cell.boundingBox()
+  const badgeBounds = await badge.boundingBox()
+  expect(cellBounds).not.toBeNull()
+  expect(badgeBounds).not.toBeNull()
+  expect(cellBounds!.width).toBeLessThanOrEqual(160)
+  expect(
+    cellBounds!.x + cellBounds!.width - badgeBounds!.x - badgeBounds!.width,
+  ).toBeLessThanOrEqual(20)
+  await expect(table.getByRole('columnheader', { name: 'Статус' })).toHaveCSS(
+    'text-align',
+    'right',
+  )
+  await page.screenshot({ path: testInfo.outputPath('unassigned-columns.png') })
 })
 
 /** Storage-sticker acceptance uses intercepted Core records and a fake popup.

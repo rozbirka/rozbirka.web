@@ -7,7 +7,13 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { LocaleProvider, type Locale } from '@/i18n'
@@ -15,7 +21,8 @@ import type {
   InventoryScan,
   InventorySection,
   InventoryZone,
-  PartInventoryZone,
+  BatchPlacePartsRequest,
+  PartPlacementJob,
   Warehouse,
   WarehouseDetail,
 } from '@/api/inventory'
@@ -39,6 +46,9 @@ const api = vi.hoisted(() => ({
   getScans: vi.fn(),
   getPartZones: vi.fn(),
   replacePartZones: vi.fn(),
+  startPlacementJob: vi.fn(),
+  getPlacementJob: vi.fn(),
+  getPlacementJobs: vi.fn(),
   getShelves: vi.fn().mockResolvedValue([]),
   getSections: vi.fn().mockResolvedValue([]),
   getSection: vi.fn(),
@@ -154,6 +164,13 @@ const session = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  permissions.value = new Set([
+    'inventory.view',
+    'inventory.manage',
+    'inventory.adjust',
+    'inventory.zones.manage',
+    'parts.view',
+  ])
   permissions.value.delete('team.view')
   team.listMembers.mockResolvedValue([
     {
@@ -278,6 +295,23 @@ beforeEach(() => {
     },
   ])
   api.replacePartZones.mockResolvedValue([])
+  api.getPlacementJobs.mockReset().mockResolvedValue([])
+  placementJobResponses.clear()
+  api.getPlacementJob
+    .mockReset()
+    .mockImplementation((id: string) =>
+      Promise.resolve(placementJobResponses.get(id) ?? placementJob({ id })),
+    )
+  api.startPlacementJob
+    .mockReset()
+    .mockImplementation((placement: BatchPlacePartsRequest) => {
+      const job = placementJob({
+        id: `placement-job-${placementJobResponses.size + 1}`,
+        placement,
+      })
+      placementJobResponses.set(job.id, job)
+      return Promise.resolve(job)
+    })
   api.updateWarehouse.mockResolvedValue(undefined)
   api.archiveWarehouse.mockResolvedValue(undefined)
   api.createZone.mockResolvedValue(undefined)
@@ -531,14 +565,212 @@ it('asks for a reason before cancelling a session', async () => {
   )
 })
 
+it('opens a directly linked new session in a drawer over the inventory list', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/new?warehouseId=wh-1')
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Нова сесія інвентаризації',
+  })
+  expect(drawer).toHaveClass('rz-sheet')
+  await waitFor(() =>
+    expect(
+      screen.getByRole('heading', { level: 1, hidden: true }),
+    ).toHaveTextContent('Інвентаризація'),
+  )
+  await user.click(within(drawer).getByRole('button', { name: 'Закрити' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+    '/app/yard/inventory',
+  )
+  expect(screen.getByRole('link', { name: 'Нова сесія' })).toHaveFocus()
+})
+
+it.each(['pending', 'error', 'no manage permission'] as const)(
+  'restores focus to the inventory overview when the new-session trigger is absent: %s',
+  async (state) => {
+    const user = userEvent.setup()
+    if (state === 'pending')
+      api.getSessions.mockReturnValueOnce(new Promise(() => undefined))
+    if (state === 'error')
+      api.getSessions.mockRejectedValueOnce(new Error('Offline'))
+    if (state === 'no manage permission')
+      permissions.value.delete('inventory.manage')
+    try {
+      renderAt('/app/yard/inventory/sessions/new')
+      const drawer = await screen.findByRole('dialog', {
+        name: 'Нова сесія інвентаризації',
+      })
+      await within(drawer).findByRole('checkbox', { name: /Стелаж A1/ })
+      await user.click(within(drawer).getByRole('button', { name: 'Закрити' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(screen.queryByRole('link', { name: 'Нова сесія' })).toBeNull()
+      expect(
+        screen.getByRole('region', { name: 'Інвентаризація' }),
+      ).toHaveFocus()
+      expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+        '/app/yard/inventory',
+      )
+      expect(api.getSessions).toHaveBeenCalledTimes(1)
+    } finally {
+      permissions.value.add('inventory.manage')
+    }
+  },
+)
+
+it('preserves inventory filters and restores the entry action after dismissing the drawer', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory')
+  const search = await screen.findByRole('searchbox', { name: 'Пошук сесії' })
+  await user.type(search, 'INV-001')
+  const trigger = screen.getByRole('link', { name: 'Нова сесія' })
+  await user.click(trigger)
+  await screen.findByRole('dialog', { name: 'Нова сесія інвентаризації' })
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.getByRole('searchbox', { name: 'Пошук сесії' })).toHaveValue(
+    'INV-001',
+  )
+  expect(trigger).toHaveFocus()
+  expect(api.getSessions).toHaveBeenCalledTimes(1)
+})
+
+it('matches the new-session loading structure to check type, zone selection and scope', async () => {
+  api.getWarehouses.mockReturnValueOnce(new Promise(() => undefined))
+  renderAt('/app/yard/inventory/sessions/new')
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Нова сесія інвентаризації',
+  })
+  const loading = within(drawer).getByRole('status', {
+    name: 'Завантажуємо дані…',
+  })
+
+  expect(loading).toHaveAttribute('aria-busy', 'true')
+  expect(within(loading).getByText('Тип перевірки')).toBeInTheDocument()
+  expect(within(loading).getByText('Склад і зони')).toBeInTheDocument()
+  expect(within(loading).getByText('Обсяг сесії')).toBeInTheDocument()
+  expect(within(loading).queryByRole('checkbox')).not.toBeInTheDocument()
+  expect(
+    within(drawer).getByRole('button', { name: 'Розпочати сесію' }),
+  ).toBeDisabled()
+})
+
+it('keeps new-session loading and retry inside the drawer', async () => {
+  const user = userEvent.setup()
+  api.getWarehouses.mockRejectedValueOnce(new Error('Offline'))
+  renderAt('/app/yard/inventory/sessions/new')
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Нова сесія інвентаризації',
+  })
+  expect(
+    within(drawer).getByRole('button', { name: 'Зберегти чернетку' }),
+  ).toBeDisabled()
+  await user.click(
+    await within(drawer).findByRole('button', { name: 'Повторити' }),
+  )
+  expect(
+    await within(drawer).findByRole('checkbox', { name: /Стелаж A1/ }),
+  ).toBeEnabled()
+  expect(drawer).toBeVisible()
+})
+
+it('blocks drawer dismissal and duplicate creation while saving and retains zones on failure', async () => {
+  const user = userEvent.setup()
+  let rejectCreate: (error: Error) => void = () => undefined
+  api.createSession.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectCreate = reject
+      }),
+  )
+  renderAt('/app/yard/inventory/sessions/new')
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Нова сесія інвентаризації',
+  })
+  const zone = await within(drawer).findByRole('checkbox', {
+    name: /Стелаж A1/,
+  })
+  await user.click(zone)
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Зберегти чернетку' }),
+  )
+  expect(zone).toBeDisabled()
+  expect(
+    within(drawer).getByRole('button', { name: 'Зберігаємо…' }),
+  ).toBeDisabled()
+  await user.keyboard('{Escape}')
+  await user.click(within(drawer).getByRole('button', { name: 'Закрити' }))
+  expect(drawer).toBeVisible()
+  expect(api.createSession).toHaveBeenCalledTimes(1)
+  await act(async () => {
+    rejectCreate(new Error('Offline'))
+    await Promise.resolve()
+  })
+  expect(within(drawer).getByRole('alert')).toBeVisible()
+  expect(zone).toBeChecked()
+  expect(zone).toBeEnabled()
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Зберегти чернетку' }),
+  )
+  await screen.findByRole('heading', { name: 'INV-001' })
+  expect(api.createSession).toHaveBeenCalledTimes(2)
+  expect(api.startSession).not.toHaveBeenCalled()
+})
+
+function InventoryHistoryControls() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <button
+        data-testid="inventory-history-back"
+        onClick={() => void navigate(-1)}
+      >
+        Back
+      </button>
+      <button
+        data-testid="inventory-history-forward"
+        onClick={() => void navigate(1)}
+      >
+        Forward
+      </button>
+    </>
+  )
+}
+
+it('uses browser Back and Forward to close and reopen the drawer over the same filtered list', async () => {
+  const user = userEvent.setup()
+  render(
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/yard/inventory']}>
+        <StockRoutes />
+        <LocationProbe />
+        <InventoryHistoryControls />
+      </MemoryRouter>
+    </ToastProvider>,
+  )
+  const search = await screen.findByRole('searchbox', { name: 'Пошук сесії' })
+  await user.type(search, 'INV-001')
+  await user.click(screen.getByRole('link', { name: 'Нова сесія' }))
+  await screen.findByRole('dialog', { name: 'Нова сесія інвентаризації' })
+  fireEvent.click(screen.getByTestId('inventory-history-back'))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(search).toHaveValue('INV-001')
+  fireEvent.click(screen.getByTestId('inventory-history-forward'))
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Нова сесія інвентаризації',
+  })
+  await user.click(within(drawer).getByRole('button', { name: 'Скасувати' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(search).toHaveValue('INV-001')
+  expect(api.getSessions).toHaveBeenCalledTimes(1)
+})
+
 it('builds a session from zones and can start it at once', async () => {
   const user = userEvent.setup()
   api.createSession.mockResolvedValue({ ...session, id: 'session-9' })
   renderAt('/app/yard/inventory/sessions/new')
 
   await screen.findByRole('heading', { name: 'Нова сесія інвентаризації' })
-  const scope = screen.getByRole('region', { name: 'Обсяг сесії' })
-  const start = within(scope).getByRole('button', { name: 'Розпочати сесію' })
+  const start = screen.getByRole('button', { name: 'Розпочати сесію' })
   // Nothing is picked yet, so the action cannot run.
   expect(start).toBeDisabled()
 
@@ -578,6 +810,18 @@ it('picks every zone of the warehouse for a full check', async () => {
   ).not.toBeInTheDocument()
 })
 
+it('selects the full stocktake with the native radio keyboard controls', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/new')
+  const byZone = await screen.findByRole('radio', { name: /По зонах/ })
+  await user.click(byZone)
+  await user.keyboard('{ArrowLeft}')
+  expect(screen.getByRole('radio', { name: /Повна/ })).toBeChecked()
+  expect(screen.getByRole('checkbox', { name: /Стелаж A1/ })).toBeChecked()
+  expect(screen.getByRole('checkbox', { name: /Стелаж A1/ })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Розпочати сесію' })).toBeEnabled()
+})
+
 it('retries a failed start from the existing draft without creating another session', async () => {
   const user = userEvent.setup()
   const draft = {
@@ -591,12 +835,7 @@ it('retries a failed start from the existing draft without creating another sess
   api.getSession.mockResolvedValue(draft)
   renderAt('/app/yard/inventory/sessions/new')
   await user.click(await screen.findByRole('checkbox', { name: /Стелаж A1/ }))
-  await user.click(
-    within(screen.getByRole('region', { name: 'Обсяг сесії' })).getByRole(
-      'button',
-      { name: 'Розпочати сесію' },
-    ),
-  )
+  await user.click(screen.getByRole('button', { name: 'Розпочати сесію' }))
   expect(await screen.findByRole('heading', { name: 'INV-009' })).toBeVisible()
   expect(screen.getByRole('alert')).toHaveTextContent(/INV-009/)
   expect(api.createSession).toHaveBeenCalledTimes(1)
@@ -3266,7 +3505,7 @@ it('shows an archive conflict inside the confirmation and leaves the warehouse o
 it('searches warehouse codes and resets the current page without losing other parameters', async () => {
   const user = userEvent.setup()
   api.getWarehouses.mockResolvedValue(
-    Array.from({ length: 12 }, (_, index) => ({
+    Array.from({ length: 17 }, (_, index) => ({
       id: `wh-${index + 1}`,
       name: `Склад ${index + 1}`,
       code: `WH${index + 1}`,
@@ -3277,7 +3516,7 @@ it('searches warehouse codes and resets the current page without losing other pa
   )
   renderAt('/app/yard/warehouses?locationPage=2&keep=1')
   expect(
-    await screen.findByRole('link', { name: 'Відкрити склад Склад 11' }),
+    await screen.findByRole('link', { name: 'Відкрити склад Склад 16' }),
   ).toBeVisible()
   await user.type(
     screen.getByRole('searchbox', { name: 'Пошук складу' }),
@@ -3287,7 +3526,7 @@ it('searches warehouse codes and resets the current page without losing other pa
     screen.getByRole('link', { name: 'Відкрити склад Склад 2' }),
   ).toHaveAttribute('href', '/app/yard/warehouses/wh-2')
   expect(
-    screen.queryByRole('link', { name: 'Відкрити склад Склад 11' }),
+    screen.queryByRole('link', { name: 'Відкрити склад Склад 16' }),
   ).toBeNull()
   expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
   expect(screen.getByTestId('inventory-url')).not.toHaveTextContent(
@@ -3414,11 +3653,10 @@ it('respects an explicitly selected warehouse when creating a stocktake', async 
   renderAt('/app/yard/inventory/sessions/new?warehouseId=wh-2')
   expect(
     await screen.findByRole('radio', { name: 'Другий склад' }),
-  ).toHaveAttribute('aria-checked', 'true')
-  expect(screen.getByRole('radio', { name: 'Основний склад' })).toHaveAttribute(
-    'aria-checked',
-    'false',
-  )
+  ).toBeChecked()
+  expect(
+    screen.getByRole('radio', { name: 'Основний склад' }),
+  ).not.toBeChecked()
 })
 
 it('shows an empty warehouse list with its creation action', async () => {
@@ -3538,7 +3776,39 @@ function setupUnassignedQueue() {
   })
 }
 
-it('opens the warehouse unassigned queue with a scoped search and quick placement', async () => {
+async function openUnassignedPlacement(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Розмістити вибрані' }))
+}
+
+it('offers unassigned placement only after selecting parts, without per-row placement buttons', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const selection = await screen.findByRole('checkbox', {
+    name: 'Обрати: Крило',
+  })
+  expect(
+    screen.queryByRole('button', { name: /Розмістити/ }),
+  ).not.toBeInTheDocument()
+  await user.click(selection)
+  expect(
+    screen.getByRole('button', { name: 'Розмістити вибрані' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Розмістити Крило' }),
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Розмістити вибрані' }))
+  expect(
+    await screen.findByRole('dialog', { name: 'Розмістити запчастину' }),
+  ).toBeVisible()
+})
+
+it('opens the warehouse unassigned queue with a scoped search and selection', async () => {
   const user = userEvent.setup()
   setupUnassignedQueue()
   renderAt('/app/yard/warehouses/wh-1')
@@ -3547,7 +3817,7 @@ it('opens the warehouse unassigned queue with a scoped search and quick placemen
   await user.click(link)
   expect(await screen.findByRole('heading', { name: 'Без зони' })).toBeVisible()
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeVisible()
   expect(parts.search).toHaveBeenLastCalledWith(
     {
@@ -3589,9 +3859,7 @@ it('places an unassigned part without leaving the queue and preserves its search
   renderAt(
     '/app/yard/warehouses/wh-1/unassigned?unassignedSearch=OEM-123&keep=1',
   )
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog', {
     name: 'Розмістити запчастину',
   })
@@ -3611,7 +3879,7 @@ it('places an unassigned part without leaving the queue and preserves its search
   )
   await waitFor(() =>
     expect(
-      screen.queryByRole('button', { name: 'Розмістити Крило' }),
+      screen.queryByRole('checkbox', { name: 'Обрати: Крило' }),
     ).toBeNull(),
   )
   expect(
@@ -3628,9 +3896,7 @@ it('keeps the placement choice on save failure and allows retry from the queue',
   setupUnassignedQueue()
   api.replacePartZones.mockRejectedValueOnce(new Error('Offline'))
   renderAt('/app/yard/warehouses/wh-1/unassigned')
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   await chooseUnassignedZone(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
@@ -3639,7 +3905,7 @@ it('keeps the placement choice on save failure and allows retry from the queue',
     within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
   ).toBeDisabled()
   expect(
-    screen.getByRole('button', { name: 'Розмістити Крило', hidden: true }),
+    screen.getByRole('checkbox', { name: 'Обрати: Крило', hidden: true }),
   ).toBeInTheDocument()
   await user.click(
     within(dialog).getByRole('button', { name: 'Повторити для нерозміщених' }),
@@ -3659,11 +3925,11 @@ it('shows failed unassigned loading separately from an empty queue and retries',
   expect(screen.queryByText('Немає запчастин для розміщення.')).toBeNull()
   await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeVisible()
 })
 
-it('disables quick placement for parts locked by stocktake', async () => {
+it('disables selection for parts locked by stocktake', async () => {
   setupUnassignedQueue()
   parts.search.mockResolvedValue({
     items: [{ ...unassignedPart, isInventoryLocked: true }],
@@ -3674,11 +3940,11 @@ it('disables quick placement for parts locked by stocktake', async () => {
   })
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeDisabled()
   expect(
-    screen.getByText('Розміщення заблоковано під час інвентаризації.'),
-  ).toBeVisible()
+    screen.getByRole('checkbox', { name: 'Обрати: Крило' }),
+  ).toHaveAttribute('title', 'Розміщення заблоковано під час інвентаризації.')
 })
 
 it.each([
@@ -3725,7 +3991,7 @@ it('allows placing reserved units that are still physically in stock', async () 
   expect(
     await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
   ).toBeEnabled()
-  await user.click(screen.getByRole('button', { name: 'Розмістити Крило' }))
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   await chooseUnassignedZone(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
@@ -3744,14 +4010,21 @@ it('bulk places parts in a selected section and shelf and shows their stock deta
   )
   await choosePlacementShelf(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  await waitFor(() => expect(api.replacePartZones).toHaveBeenCalledTimes(2))
-  expect(api.replacePartZones).toHaveBeenCalledWith(
-    'part-1',
-    ['zone-1'],
-    expect.any(Object),
-    'shelf-1',
-    'section-1',
+  await waitFor(() => expect(api.startPlacementJob).toHaveBeenCalledOnce())
+  expect(api.startPlacementJob).toHaveBeenCalledWith(
+    {
+      partIds: ['part-1', 'part-2'],
+      sourceZoneId: 'system-zone-1',
+      zoneId: 'zone-1',
+      shelfId: 'shelf-1',
+      sectionId: 'section-1',
+    },
+    expect.any(String),
+    { signal: expect.any(AbortSignal) as AbortSignal },
   )
+  expect(api.getPartZones).not.toHaveBeenCalled()
+  expect(parts.get).not.toHaveBeenCalled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
 })
 
 function setupPlacementHierarchy() {
@@ -3797,9 +4070,7 @@ it('uses the same section and shelf placement for a single part', async () => {
   setupUnassignedQueue()
   setupPlacementHierarchy()
   renderAt('/app/yard/warehouses/wh-1/unassigned')
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog', {
     name: 'Розмістити запчастину',
   })
@@ -3808,6 +4079,12 @@ it('uses the same section and shelf placement for a single part', async () => {
   await choosePlacementShelf(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  const confirmation = await screen.findByText('Розміщення «Крило» збережено.')
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(document.querySelectorAll('.rz-toast')).toHaveLength(1)
+  expect(screen.queryByText('Розміщено: 1 із 1')).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Закрити сповіщення' }))
+  expect(screen.queryByText('Розміщення «Крило» збережено.')).toBeNull()
   expect(api.replacePartZones).toHaveBeenCalledWith(
     'part-1',
     ['zone-1'],
@@ -3817,33 +4094,32 @@ it('uses the same section and shelf placement for a single part', async () => {
   )
 })
 
-it('rechecks stock before writing and skips a part sold after selection', async () => {
+it('shows the server no-stock result without per-part stock or placement reads', async () => {
   const user = userEvent.setup()
   setupBulkUnassignedQueue()
-  parts.get.mockImplementation((id: string) =>
-    Promise.resolve({
-      id,
-      name: id === 'part-1' ? 'Крило' : 'Фара',
-      unit: 'шт',
-      quantityTotal: id === 'part-1' ? 2 : 0,
-      status: id === 'part-1' ? 'available' : 'sold',
+  mockStartPlacementJob(
+    placementJob({
+      results: [
+        { partId: 'part-1', status: 'placed' },
+        { partId: 'part-2', status: 'skipped', reason: 'noStock' },
+      ],
     }),
   )
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  expect(
-    await within(dialog).findByText(
-      'Фара: Немає залишку на складі. Розміщення недоступне.',
+  await waitFor(() =>
+    expect(within(dialog).getByText('Фара').closest('li')).toHaveTextContent(
+      'Немає залишку на складі. Розміщення недоступне.',
     ),
-  ).toBeVisible()
-  expect(within(dialog).getByText('0 шт на складі')).toBeVisible()
-  expect(within(dialog).getByText('Продано')).toBeVisible()
+  )
   expect(within(dialog).getByRole('status')).toHaveTextContent(
     'Розміщено: 1 із 2',
   )
-  expect(api.replacePartZones).toHaveBeenCalledTimes(1)
-  expect(api.replacePartZones.mock.calls[0]?.[0]).toBe('part-1')
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
+  expect(api.getPartZones).not.toHaveBeenCalled()
+  expect(parts.get).not.toHaveBeenCalled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
 })
 
 it('clears section and shelf when changing the selected zone', async () => {
@@ -3870,14 +4146,12 @@ it('clears section and shelf when changing the selected zone', async () => {
   ).toBeVisible()
   expect(within(dialog).queryByRole('button', { name: /полиця/i })).toBeNull()
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  await waitFor(() => expect(api.replacePartZones).toHaveBeenCalledTimes(2))
-  expect(api.replacePartZones).toHaveBeenCalledWith(
-    'part-1',
-    ['zone-2'],
-    expect.any(Object),
-    undefined,
-    undefined,
-  )
+  await waitFor(() => expect(api.startPlacementJob).toHaveBeenCalledOnce())
+  expect(api.startPlacementJob.mock.calls[0]?.[0]).toEqual({
+    partIds: ['part-1', 'part-2'],
+    sourceZoneId: 'system-zone-1',
+    zoneId: 'zone-2',
+  })
 })
 
 it('keeps the selected parent and retries failed section and shelf loading', async () => {
@@ -3917,34 +4191,35 @@ it('keeps the selected parent and retries failed section and shelf loading', asy
   )
   await user.click(await screen.findByRole('option', { name: /Полиця 1/ }))
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  await waitFor(() => expect(api.replacePartZones).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(api.startPlacementJob).toHaveBeenCalledOnce())
 })
 
-it('does not erase an existing deep location in another zone', async () => {
+it('shows the server conflict result for an existing deep location in another zone', async () => {
   const user = userEvent.setup()
   setupBulkUnassignedQueue()
   setupPlacementHierarchy()
-  const current = await (api.getPartZones('part-1') as Promise<
-    PartInventoryZone[]
-  >)
-  api.getPartZones.mockResolvedValue([
-    ...current,
-    {
-      ...current[0],
-      zoneId: 'zone-other',
-      isSystemUnassigned: false,
-      sectionId: 'section-other',
-      shelfId: 'shelf-other',
-    },
-  ])
+  mockStartPlacementJob(
+    placementJob({
+      results: [
+        { partId: 'part-1', status: 'skipped', reason: 'conflictingLocation' },
+        { partId: 'part-2', status: 'skipped', reason: 'conflictingLocation' },
+      ],
+    }),
+  )
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   await choosePlacementShelf(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  expect(await within(dialog).findAllByRole('alert')).toHaveLength(2)
-  expect(within(dialog).getAllByRole('alert')[0]).toHaveTextContent(
+  await waitFor(() =>
+    expect(within(dialog).getByText('Крило').closest('li')).toHaveTextContent(
+      'в іншій зоні',
+    ),
+  )
+  expect(within(dialog).getByText('Фара').closest('li')).toHaveTextContent(
     'в іншій зоні',
   )
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
+  expect(api.getPartZones).not.toHaveBeenCalled()
   expect(api.replacePartZones).not.toHaveBeenCalled()
 })
 
@@ -4019,9 +4294,7 @@ it('prefills the queue warehouse and preserves other physical zones when placing
     },
   ])
   renderAt('/app/yard/warehouses/wh-1/unassigned')
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   expect(within(dialog).getByText('Основний склад')).toBeVisible()
   const save = within(dialog).getByRole('button', {
@@ -4069,14 +4342,12 @@ it('returns to the last remaining queue page after placement and keeps the searc
   renderAt(
     '/app/yard/warehouses/wh-1/unassigned?unassignedSearch=Крило&unassignedPage=2&keep=1',
   )
-  await user.click(
-    await screen.findByRole('button', { name: 'Розмістити Крило' }),
-  )
+  await openUnassignedPlacement(user)
   const dialog = await screen.findByRole('dialog')
   await chooseUnassignedZone(user, dialog)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
   expect(
-    await screen.findByRole('button', { name: 'Розмістити Крило 2' }),
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило 2' }),
   ).toBeVisible()
   expect(screen.getByTestId('inventory-url')).toHaveTextContent(
     'unassignedPage=1',
@@ -4122,6 +4393,34 @@ it('does not load unassigned parts without parts viewing permission', async () =
     permissions.value.add('parts.view')
   }
 })
+
+const placementJobResponses = new Map<string, PartPlacementJob>()
+
+function mockStartPlacementJob(job: PartPlacementJob) {
+  placementJobResponses.set(job.id, job)
+  api.startPlacementJob.mockResolvedValueOnce(job)
+}
+
+function placementJob(
+  overrides: Partial<PartPlacementJob> = {},
+): PartPlacementJob {
+  const placement = overrides.placement ?? {
+    partIds: ['part-1', 'part-2'],
+    sourceZoneId: 'system-zone-1',
+    zoneId: 'zone-1',
+  }
+  return {
+    id: 'placement-job-1',
+    status: 'completed',
+    total: placement.partIds.length,
+    processed: placement.partIds.length,
+    placement,
+    results: placement.partIds.map((partId) => ({ partId, status: 'placed' })),
+    partNames: { 'part-1': 'Крило', 'part-2': 'Фара' },
+    errorCode: null,
+    ...overrides,
+  }
+}
 
 function setupBulkUnassignedQueue() {
   setupUnassignedQueue()
@@ -4198,13 +4497,15 @@ it('selects unassigned parts from row background after the first checkbox and ex
   expect(second).not.toBeChecked()
 })
 
-it('bulk places selected unassigned parts and excludes inventory-locked rows', async () => {
+it('bulk submits one job for selected unassigned parts and excludes inventory-locked rows', async () => {
   const user = userEvent.setup()
   const { placed } = setupBulkUnassignedQueue()
-  api.replacePartZones.mockImplementation((partId: string) => {
-    placed.add(partId)
-    return Promise.resolve([])
-  })
+  api.startPlacementJob.mockImplementation(
+    (placement: BatchPlacePartsRequest) => {
+      placement.partIds.forEach((partId) => placed.add(partId))
+      return Promise.resolve(placementJob({ placement }))
+    },
+  )
   renderAt('/app/yard/warehouses/wh-1/unassigned?unassignedSearch=OEM&keep=1')
   expect(
     await screen.findByRole('checkbox', { name: 'Обрати: Бампер' }),
@@ -4215,12 +4516,19 @@ it('bulk places selected unassigned parts and excludes inventory-locked rows', a
   expect(await within(dialog).findByRole('status')).toHaveTextContent(
     'Розміщено: 2 із 2',
   )
-  expect(
-    api.replacePartZones.mock.calls.map((call: unknown[]) => call.slice(0, 2)),
-  ).toEqual([
-    ['part-1', ['zone-1']],
-    ['part-2', ['zone-1']],
-  ])
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
+  expect(api.startPlacementJob).toHaveBeenCalledWith(
+    {
+      partIds: ['part-1', 'part-2'],
+      sourceZoneId: 'system-zone-1',
+      zoneId: 'zone-1',
+    },
+    expect.any(String),
+    { signal: expect.any(AbortSignal) as AbortSignal },
+  )
+  expect(api.getPartZones).not.toHaveBeenCalled()
+  expect(parts.get).not.toHaveBeenCalled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
   await user.click(within(dialog).getByRole('button', { name: 'Закрити' }))
   expect(screen.queryByRole('checkbox', { name: 'Обрати: Крило' })).toBeNull()
   expect(
@@ -4235,25 +4543,44 @@ it('bulk places selected unassigned parts and excludes inventory-locked rows', a
   expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
 })
 
-it('bulk retries only failed parts and preserves the selected zone after a partial failure', async () => {
+it('bulk retries only failed and unprocessed parts with a new operation key and the same placement', async () => {
   const user = userEvent.setup()
-  const { placed } = setupBulkUnassignedQueue()
-  let failedOnce = false
-  api.replacePartZones.mockImplementation((partId: string) => {
-    if (partId === 'part-2' && !failedOnce) {
-      failedOnce = true
-      return Promise.reject(new Error('Offline'))
-    }
-    placed.add(partId)
-    return Promise.resolve([])
+  setupBulkUnassignedQueue()
+  const untouched = { ...unassignedPart, id: 'part-3', name: 'Двері' }
+  parts.search.mockResolvedValue({
+    items: [
+      unassignedPart,
+      { ...unassignedPart, id: 'part-2', name: 'Фара' },
+      untouched,
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 3,
+    totalPages: 1,
   })
+  mockStartPlacementJob(
+    placementJob({
+      status: 'failed',
+      placement: {
+        partIds: ['part-1', 'part-2', 'part-3'],
+        sourceZoneId: 'system-zone-1',
+        zoneId: 'zone-1',
+      },
+      total: 3,
+      processed: 2,
+      results: [
+        { partId: 'part-1', status: 'placed' },
+        { partId: 'part-2', status: 'failed', reason: 'locked' },
+      ],
+      partNames: { 'part-1': 'Крило', 'part-2': 'Фара', 'part-3': 'Двері' },
+    }),
+  )
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Фара')
-  expect(within(dialog).getByRole('status')).toHaveTextContent(
-    'Розміщено: 1 із 2',
-  )
+  expect(
+    await within(dialog).findByRole('status', { name: 'Розміщення зупинено' }),
+  ).toHaveTextContent('Розміщено: 1 із 3')
   expect(
     within(dialog).getByRole('searchbox', { name: 'Пошук зони' }),
   ).toBeDisabled()
@@ -4262,59 +4589,43 @@ it('bulk retries only failed parts and preserves the selected zone after a parti
   )
   await waitFor(() =>
     expect(within(dialog).getByRole('status')).toHaveTextContent(
-      'Розміщено: 2 із 2',
+      'Розміщено: 3 із 3',
     ),
   )
-  expect(
-    api.replacePartZones.mock.calls.map((call: unknown[]) => call[0]),
-  ).toEqual(['part-1', 'part-2', 'part-2'])
+  expect(api.startPlacementJob).toHaveBeenCalledTimes(2)
+  const [first, retry] = api.startPlacementJob.mock.calls
+  expect(retry?.[0]).toEqual({
+    partIds: ['part-2', 'part-3'],
+    sourceZoneId: 'system-zone-1',
+    zoneId: 'zone-1',
+  })
+  expect(retry?.[1]).not.toBe(first?.[1])
   expect(within(dialog).queryByRole('alert')).toBeNull()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
 })
 
-it('bulk preserves physical placements and skips parts already moved out of the source queue', async () => {
+it('bulk shows server skipped outcomes and does not retry already moved parts', async () => {
   const user = userEvent.setup()
   setupBulkUnassignedQueue()
-  const systemPlacement = await (api.getPartZones('part-1') as Promise<
-    PartInventoryZone[]
-  >)
-  api.getPartZones.mockImplementation((partId: string) =>
-    Promise.resolve(
-      partId === 'part-1'
-        ? [
-            ...systemPlacement,
-            {
-              ...systemPlacement[0],
-              zoneId: 'zone-other',
-              zoneName: 'Інша зона',
-              isSystemUnassigned: false,
-              shelfId: 'shelf-other',
-              sectionId: 'section-other',
-            },
-          ]
-        : [
-            {
-              ...systemPlacement[0],
-              zoneId: 'zone-moved',
-              zoneName: 'Уже розміщено',
-              isSystemUnassigned: false,
-            },
-          ],
-    ),
+  mockStartPlacementJob(
+    placementJob({
+      results: [
+        { partId: 'part-1', status: 'placed' },
+        { partId: 'part-2', status: 'skipped', reason: 'moved' },
+      ],
+    }),
   )
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  expect(
-    await within(dialog).findByText(/Фара.*вже не в «Без зони»/),
-  ).toBeVisible()
-  expect(api.replacePartZones).toHaveBeenCalledTimes(1)
-  expect(api.replacePartZones).toHaveBeenCalledWith(
-    'part-1',
-    ['zone-other', 'zone-1'],
-    expect.any(Object),
-    'shelf-other',
-    'section-other',
+  await waitFor(() =>
+    expect(within(dialog).getByText('Фара').closest('li')).toHaveTextContent(
+      'Деталь уже переміщено. Її розміщення не змінено.',
+    ),
   )
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
+  expect(api.getPartZones).not.toHaveBeenCalled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
   expect(within(dialog).getByRole('status')).toHaveTextContent(
     'Розміщено: 1 із 2',
   )
@@ -4325,18 +4636,38 @@ it('bulk preserves physical placements and skips parts already moved out of the 
   ).toBeNull()
 })
 
-it('bulk does not write a part when reading its current placement fails', async () => {
+it('bulk retries failed job status reads without creating another job', async () => {
   const user = userEvent.setup()
   setupBulkUnassignedQueue()
-  api.getPartZones.mockRejectedValue(new Error('Offline'))
+  mockStartPlacementJob(
+    placementJob({ status: 'queued', processed: 0, results: [] }),
+  )
+  api.getPlacementJob
+    .mockResolvedValueOnce(
+      placementJob({ status: 'running', processed: 0, results: [] }),
+    )
+    .mockRejectedValueOnce(new Error('Offline'))
+    .mockResolvedValue(placementJob())
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  expect(await within(dialog).findAllByRole('alert')).toHaveLength(2)
+  expect(
+    await within(dialog).findByRole('alert', {}, { timeout: 4000 }),
+  ).toBeVisible()
+  expect(api.getPlacementJob).toHaveBeenCalledWith('placement-job-1', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Спробувати ще раз' }),
+  )
+  await waitFor(() =>
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Розміщено: 2 із 2',
+    ),
+  )
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
+  expect(api.getPlacementJob).toHaveBeenCalledTimes(3)
   expect(api.replacePartZones).not.toHaveBeenCalled()
-  await user.click(within(dialog).getByRole('button', { name: 'Закрити' }))
-  expect(screen.getByRole('checkbox', { name: 'Обрати: Крило' })).toBeChecked()
-  expect(screen.getByRole('checkbox', { name: 'Обрати: Фара' })).toBeChecked()
 })
 
 it('bulk keeps selection across pages and search and can clear it', async () => {
@@ -4396,97 +4727,91 @@ it('bulk keeps selection across pages and search and can clear it', async () => 
   ).not.toBeChecked()
 })
 
-it('bulk confirms a lost save response by reading placement before retrying', async () => {
+it('bulk reuses the same operation key and placement after a lost start response', async () => {
   const user = userEvent.setup()
-  const { placed } = setupBulkUnassignedQueue()
-  const original = await (api.getPartZones('part-1') as Promise<
-    PartInventoryZone[]
-  >)
-  api.getPartZones.mockImplementation((id: string) =>
-    Promise.resolve(
-      placed.has(id)
-        ? [{ ...original[0], zoneId: 'zone-1', isSystemUnassigned: false }]
-        : original,
-    ),
-  )
-  api.replacePartZones.mockImplementation((id: string) => {
-    placed.add(id)
-    return id === 'part-1'
-      ? Promise.reject(new Error('Response lost'))
-      : Promise.resolve([])
-  })
+  setupBulkUnassignedQueue()
+  api.startPlacementJob.mockRejectedValueOnce(new Error('Response lost'))
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Крило')
-  await user.click(
-    within(dialog).getByRole('button', { name: 'Повторити для нерозміщених' }),
-  )
+  expect(await within(dialog).findByRole('alert')).toBeVisible()
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
   await waitFor(() =>
     expect(within(dialog).getByRole('status')).toHaveTextContent(
       'Розміщено: 2 із 2',
     ),
   )
-  expect(api.replacePartZones).toHaveBeenCalledTimes(2)
+  expect(api.startPlacementJob).toHaveBeenCalledTimes(2)
+  const [first, retry] = api.startPlacementJob.mock.calls
+  expect(retry?.[0]).toEqual(first?.[0])
+  expect(first?.[1]).toEqual(expect.any(String))
+  expect(retry?.[1]).toBe(first?.[1])
+  expect(api.getPartZones).not.toHaveBeenCalled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
 })
 
-it('bulk prevents duplicate submission and closing while a write is pending', async () => {
+it('bulk prevents duplicate starts and closing until the start response arrives', async () => {
   const user = userEvent.setup()
   setupBulkUnassignedQueue()
-  let finish!: () => void
-  const saved = new Promise<never[]>((resolve) => {
-    finish = () => resolve([])
+  let finish!: (job: PartPlacementJob) => void
+  const started = new Promise<PartPlacementJob>((resolve) => {
+    finish = resolve
   })
-  api.replacePartZones.mockImplementationOnce(() => saved)
+  api.startPlacementJob.mockImplementationOnce(() => started)
   renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   const submit = within(dialog).getByRole('button', { name: 'Розмістити' })
   await user.dblClick(submit)
-  await waitFor(() => expect(api.replacePartZones).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(api.startPlacementJob).toHaveBeenCalledOnce())
   expect(submit).toBeDisabled()
-  expect(
-    within(dialog).getByRole('button', { name: 'Скасувати' }),
-  ).toBeDisabled()
+  expect(within(dialog).getByRole('button', { name: 'Готово' })).toBeDisabled()
   await user.click(within(dialog).getByRole('button', { name: 'Закрити' }))
   expect(dialog).toBeVisible()
   await user.keyboard('{Escape}')
   expect(dialog).toBeVisible()
-  await act(async () => {
-    finish()
-    await saved
-  })
-  await waitFor(() =>
-    expect(within(dialog).getByRole('status')).toHaveTextContent(
-      'Розміщено: 2 із 2',
-    ),
+  api.getPlacementJob.mockResolvedValue(
+    placementJob({ status: 'running', processed: 0, results: [] }),
   )
+  await act(async () => {
+    finish(placementJob({ status: 'running', processed: 0, results: [] }))
+    await started
+  })
+  await user.click(within(dialog).getByRole('button', { name: 'Закрити' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
 })
 
-it('bulk stops after unmounting without writing remaining parts', async () => {
+it('bulk aborts the pending start request after unmounting', async () => {
   const user = userEvent.setup()
   setupBulkUnassignedQueue()
-  let finish!: () => void
-  const saved = new Promise<never[]>((resolve) => {
-    finish = () => resolve([])
+  let finish!: (job: PartPlacementJob) => void
+  const started = new Promise<PartPlacementJob>((resolve) => {
+    finish = resolve
   })
   let signal: AbortSignal | undefined
-  api.replacePartZones.mockImplementationOnce(
-    (_id: string, _ids: string[], options: { signal?: AbortSignal }) => {
+  api.startPlacementJob.mockImplementationOnce(
+    (
+      _placement: BatchPlacePartsRequest,
+      _operationId: string,
+      options: { signal?: AbortSignal },
+    ) => {
       signal = options.signal
-      return saved
+      return started
     },
   )
   const view = renderAt('/app/yard/warehouses/wh-1/unassigned')
   const dialog = await openBulkUnassignedPlacement(user)
   await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
-  await waitFor(() => expect(api.replacePartZones).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(api.startPlacementJob).toHaveBeenCalledOnce())
   view.unmount()
   expect(signal?.aborted).toBe(true)
   await act(async () => {
-    finish()
-    await saved
+    finish(placementJob({ status: 'running', processed: 0, results: [] }))
+    await started
   })
-  expect(api.replacePartZones).toHaveBeenCalledTimes(1)
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
+  expect(api.getPlacementJob).not.toHaveBeenCalled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
 })
 
 it('bulk hides selected part details when parts viewing permission is revoked', async () => {
@@ -4503,6 +4828,7 @@ it('bulk hides selected part details when parts viewing permission is revoked', 
       </MemoryRouter>,
     )
     expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.startPlacementJob).not.toHaveBeenCalled()
     expect(api.replacePartZones).not.toHaveBeenCalled()
   } finally {
     permissions.value.add('parts.view')
@@ -4753,15 +5079,161 @@ it.each(['no permission', 'unavailable'] as const)(
     const user = userEvent.setup()
     renderAt('/app/yard/inventory/sessions/new')
     const zone = await screen.findByRole('checkbox', { name: /Стелаж A1/ })
-    expect(screen.queryByText('18 позицій')).not.toBeInTheDocument()
-    expect(screen.queryByText('—')).not.toBeInTheDocument()
+    const drawer = screen.getByRole('dialog', {
+      name: 'Нова сесія інвентаризації',
+    })
+    expect(within(drawer).queryByText('18 позицій')).not.toBeInTheDocument()
+    expect(within(drawer).queryByText('—')).not.toBeInTheDocument()
     if (state === 'no permission') expect(parts.facets).not.toHaveBeenCalled()
     await user.click(zone)
     expect(
-      within(screen.getByRole('region', { name: 'Обсяг сесії' })).getByRole(
-        'button',
-        { name: 'Розпочати сесію' },
-      ),
+      screen.getByRole('button', { name: 'Розпочати сесію' }),
     ).toBeEnabled()
   },
 )
+
+it('submits eighty selected parts as one worker job without per-part requests', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  const batch = Array.from({ length: 80 }, (_, i) => ({
+    ...unassignedPart,
+    id: `batch-${i}`,
+    name: `Деталь ${i}`,
+  }))
+  parts.search.mockResolvedValue({
+    items: batch,
+    page: 1,
+    pageSize: 100,
+    total: 80,
+    totalPages: 1,
+  })
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  await waitFor(() => expect(api.startPlacementJob).toHaveBeenCalledOnce())
+  expect(api.startPlacementJob.mock.calls[0]?.[0]).toEqual({
+    partIds: batch.map((part) => part.id),
+    sourceZoneId: 'system-zone-1',
+    zoneId: 'zone-1',
+  })
+  expect(api.getPartZones).not.toHaveBeenCalled()
+  expect(parts.get).not.toHaveBeenCalled()
+  expect(api.replacePartZones).not.toHaveBeenCalled()
+  expect(await within(dialog).findByRole('status')).toHaveTextContent(
+    'Розміщено: 80 із 80',
+  )
+})
+
+it('notifies once when a minimized placement finishes without showing a jobs list', async () => {
+  const user = userEvent.setup()
+  setupBulkUnassignedQueue()
+  let active: PartPlacementJob | null = null
+  api.getPlacementJobs.mockImplementation(() =>
+    Promise.resolve(active ? [active] : []),
+  )
+  api.startPlacementJob.mockImplementation(
+    (placement: PartPlacementJob['placement']) => {
+      active = placementJob({
+        status: 'queued',
+        processed: 0,
+        results: [],
+        placement,
+      })
+      placementJobResponses.set(active.id, active)
+      return Promise.resolve(active)
+    },
+  )
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  await within(dialog).findByText('Розміщення в черзі')
+  await user.click(within(dialog).getByRole('button', { name: 'Згорнути' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  active = placementJob()
+  const toast = (
+    await screen.findByText(
+      'Розміщення завершено',
+      { selector: '.rz-toast__msg' },
+      { timeout: 4000 },
+    )
+  ).closest<HTMLElement>('[role="status"]')!
+  expect(toast).toHaveTextContent('Розміщення завершено')
+  expect(
+    screen.queryByRole('region', { name: 'Останні розміщення' }),
+  ).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: /Переглянути розміщення/ }),
+  ).toBeNull()
+  await user.click(
+    within(toast).getByRole('button', { name: 'Закрити сповіщення' }),
+  )
+  expect(screen.queryByText('Розміщення завершено')).toBeNull()
+  expect(api.startPlacementJob).toHaveBeenCalledOnce()
+})
+
+it.each(['forbidden', 'session-expired', 'not-found'])(
+  'purges placement job details when the server returns %s',
+  async (kind) => {
+    const user = userEvent.setup()
+    setupBulkUnassignedQueue()
+    mockStartPlacementJob(
+      placementJob({ status: 'queued', processed: 0, results: [] }),
+    )
+    api.getPlacementJob.mockRejectedValue({ kind, message: 'Unavailable' })
+    renderAt('/app/yard/warehouses/wh-1/unassigned')
+    const dialog = await openBulkUnassignedPlacement(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Операція розміщення недоступна',
+    )
+    expect(within(dialog).queryByText('Крило')).toBeNull()
+    expect(within(dialog).queryByText('Фара')).toBeNull()
+    expect(within(dialog).queryByText('Розміщення в черзі')).toBeNull()
+    expect(
+      within(dialog).queryByRole('button', { name: 'Розмістити' }),
+    ).toBeNull()
+  },
+)
+
+it('does not replay historical placement notifications or show a jobs list', async () => {
+  setupUnassignedQueue()
+  api.getPlacementJobs.mockResolvedValue([placementJob()])
+  const view = renderAt('/app/yard/warehouses/wh-1/unassigned')
+  await screen.findByRole('checkbox', { name: 'Обрати: Крило' })
+  await waitFor(() => expect(api.getPlacementJobs).toHaveBeenCalledOnce())
+  expect(screen.queryByText('Розміщення завершено')).toBeNull()
+  expect(
+    screen.queryByRole('region', { name: 'Останні розміщення' }),
+  ).toBeNull()
+  view.unmount()
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  await screen.findByRole('checkbox', { name: 'Обрати: Крило' })
+  expect(screen.queryByText('Розміщення завершено')).toBeNull()
+})
+
+it('notifies once when placement completes while the drawer is open', async () => {
+  const user = userEvent.setup()
+  setupBulkUnassignedQueue()
+  api.getPlacementJobs.mockResolvedValue([
+    placementJob({ status: 'running', processed: 0, results: [] }),
+  ])
+  mockStartPlacementJob(placementJob())
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  const toast = await screen.findByText('Розміщення завершено', {
+    selector: '.rz-toast__msg',
+  })
+  expect(toast.closest('[role="status"]')).toBeVisible()
+  expect(document.querySelectorAll('.rz-toast')).toHaveLength(1)
+  await user.click(within(dialog).getByRole('button', { name: 'Готово' }))
+  await waitFor(() =>
+    expect(api.getPlacementJobs.mock.calls.length).toBeGreaterThanOrEqual(2),
+  )
+  api.getPlacementJobs.mockResolvedValue([placementJob()])
+  fireEvent(window, new Event('online'))
+  await waitFor(() =>
+    expect(api.getPlacementJobs.mock.calls.length).toBeGreaterThanOrEqual(3),
+  )
+  expect(document.querySelectorAll('.rz-toast')).toHaveLength(1)
+})

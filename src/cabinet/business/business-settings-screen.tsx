@@ -56,9 +56,8 @@ function Step({
   return (
     <section className="rz-card min-w-0">
       <header className="rz-card__head py-2.5">
-        <div className="flex min-w-0 items-baseline gap-2">
-          {/* The design's numbered group: a mono number in brand text. */}
-          <span aria-hidden className="rz-mono text-caption text-brand-text">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span aria-hidden className="rz-code rz-code--sm">
             {number}
           </span>
           <h2 className="rz-h-card">{title}</h2>
@@ -278,7 +277,7 @@ export function BusinessSettingsScreen() {
           <>
             <Step number="01" title={t('details')}>
               <form
-                className="rz-form-grid"
+                className="rz-form-page rz-form-grid"
                 id={FORM_ID}
                 onSubmit={(event) => void save(event)}
               >

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
+import { ToastProvider } from '@/components/app'
 import type { Locale } from '@/i18n/locales'
 import { localePreference } from '@/i18n/locale-preference'
 import { LocaleProvider, useLocale } from '@/i18n/LocaleProvider'
@@ -39,7 +40,9 @@ function LocaleProbe() {
 function renderCard(profileLanguage: string | null = null) {
   return render(
     <LocaleProvider profileLanguage={profileLanguage}>
-      <LanguageCard />
+      <ToastProvider>
+        <LanguageCard />
+      </ToastProvider>
       <LocaleProbe />
     </LocaleProvider>,
   )
@@ -91,6 +94,9 @@ it('saves the chosen language to the profile and mirrors it on the device', asyn
   expect(updateLanguage).toHaveBeenCalledWith('pl')
   await waitFor(() => expect(localePreference.get()).toBe('pl'))
   expect(screen.getByTestId('locale')).toHaveTextContent('pl')
+  const confirmation = await screen.findByText('Interface language changed')
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(confirmation.closest('.rz-notice')).toBeNull()
 })
 
 it('keeps the choice on this device when an older Core has no language endpoint', async () => {
@@ -102,9 +108,9 @@ it('keeps the choice on this device when an older Core has no language endpoint'
   await user.click(screen.getByRole('radio', { name: /Українська/ }))
   await user.click(screen.getByRole('button', { name: 'Save language' }))
 
-  expect(
-    await screen.findByText(/Мову збережено на цьому пристрої/),
-  ).toBeVisible()
+  const confirmation = await screen.findByText(/Language saved on this device/)
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(confirmation.closest('.rz-notice')).toBeNull()
   expect(localePreference.get()).toBe('uk')
 })
 
@@ -136,4 +142,7 @@ it('falls back to device storage when the auth provider cannot save', async () =
   await user.click(screen.getByRole('radio', { name: /Polski/ }))
   await user.click(screen.getByRole('button', { name: 'Save language' }))
   expect(localePreference.get()).toBe('pl')
+  const confirmation = await screen.findByText(/Language saved on this device/)
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(confirmation.closest('.rz-notice')).toBeNull()
 })

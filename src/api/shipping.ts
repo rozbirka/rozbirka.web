@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type { RequestOptions } from './contracts'
+import { normalizeDeliveryOrder, type DeliveryOrder } from './delivery'
 
 /**
  * Nova Poshta delivery for one order. Everything here hangs off an
@@ -70,7 +71,14 @@ export interface Shipment {
   id: string
   integrationId: string
   dispatchPointId: string
+  /**
+   * The carrier cabinet this waybill was created in. Null for waybills older
+   * than connection tracking; they belong to the current cabinet.
+   */
+  connectionId: string | null
   orderId: string
+  /** Optimistic version for edits, previews and reconciliation. */
+  version: string
   state: string
   number: string | null
   sender: ShippingContact
@@ -84,6 +92,73 @@ export interface Shipment {
   lastTrackedAt: string | null
   relatedNumbers: string[]
   events: ShipmentEvent[]
+  dispatchedAt: string | null
+  receivedAt: string | null
+  /**
+   * How the carrier's post-payment was booked (`Reconciled`,
+   * `NeedsReconciliation`, `CashRegisterRequired`, …). Null without the
+   * finance permission, so a missing value is not "nothing to book".
+   */
+  paymentState: string | null
+  /** Why the last refresh did not land; the last known status still stands. */
+  syncProblem: string | null
+}
+
+/** One row of the waybill list: the order it serves and its three signals. */
+export interface ShipmentListItem {
+  id: string
+  version: string
+  orderId: string
+  orderNumber: number
+  state: string
+  number: string | null
+  recipient: ShippingContact
+  /** The carrier's own tracking code — what «Доставка» filters by. */
+  deliveryCode: string | null
+  createdAt: string
+  receivedAt: string | null
+  paymentState: string | null
+  codUah: number | null
+  syncProblem: string | null
+  lastSuccessAt: string | null
+}
+
+export interface ShipmentListQuery {
+  search?: string
+  deliveryCode?: string
+  hasCod?: boolean
+  hasProblem?: boolean
+  from?: string
+  to?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface ShipmentPage {
+  items: ShipmentListItem[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
+/**
+ * What the carrier holds under a waybill number typed in by hand, before it
+ * is tied to the order. Confirming sends the fingerprint back, so a waybill
+ * that changed in between is refused rather than attached as seen.
+ */
+export interface ExternalShipmentPreview {
+  number: string
+  fingerprint: string
+  shipmentVersion: string
+  providerStatus: string
+  sender: ShippingContact
+  recipient: ShippingContact
+  codAmountUah: number | null
+  /** Attaching moves the order to «sent». */
+  recordsDispatch: boolean
+  /** Attaching moves the order to «received» — but never marks it paid. */
+  recordsReceipt: boolean
 }
 
 /** Core omits empty collections; a shipment without events must still render. */
@@ -95,6 +170,11 @@ export interface Shipment {
  */
 const withCollections = (shipment: Shipment): Shipment => ({
   ...shipment,
+  connectionId: shipment.connectionId ?? null,
+  dispatchedAt: shipment.dispatchedAt ?? null,
+  receivedAt: shipment.receivedAt ?? null,
+  paymentState: shipment.paymentState ?? null,
+  syncProblem: shipment.syncProblem ?? null,
   number: shipment.number ?? null,
   quoteUah: shipment.quoteUah ?? null,
   codUah: shipment.codUah ?? null,
@@ -109,6 +189,20 @@ const withCollections = (shipment: Shipment): Shipment => ({
   })),
   draft: { ...shipment.draft, parcels: shipment.draft?.parcels ?? [] },
 })
+
+const withListNulls = (item: ShipmentListItem): ShipmentListItem => ({
+  ...item,
+  number: item.number ?? null,
+  deliveryCode: item.deliveryCode ?? null,
+  receivedAt: item.receivedAt ?? null,
+  paymentState: item.paymentState ?? null,
+  codUah: item.codUah ?? null,
+  syncProblem: item.syncProblem ?? null,
+  lastSuccessAt: item.lastSuccessAt ?? null,
+})
+
+const shipments = (integrationId: string) =>
+  `/integrations/${encodeURIComponent(integrationId)}/shipping/shipments`
 
 const orders = (integrationId: string, orderId: string) =>
   `/integrations/${encodeURIComponent(integrationId)}/shipping/orders/${encodeURIComponent(orderId)}`
@@ -209,5 +303,115 @@ export const shippingApi = {
   },
   async cancel(integrationId: string, orderId: string): Promise<void> {
     await apiClient.delete(orders(integrationId, orderId))
+  },
+  /**
+   * Edits a created waybill before it is handed over. The carrier must accept
+   * the change; one it can only take as a new waybill is refused with
+   * `shipment_recreate_required`.
+   */
+  async update(
+    integrationId: string,
+    orderId: string,
+    version: string,
+    draft: ShipmentDraft,
+  ): Promise<Shipment> {
+    return withCollections(
+      (
+        await apiClient.put<Shipment>(orders(integrationId, orderId), {
+          version,
+          draft,
+        })
+      ).data,
+    )
+  },
+  /**
+   * Settles an unknown result. Without a number Core searches the carrier
+   * itself; with one it checks that exact candidate.
+   */
+  async reconcile(
+    integrationId: string,
+    orderId: string,
+    number: string | null = null,
+  ): Promise<Shipment> {
+    return withCollections(
+      (
+        await apiClient.post<Shipment>(
+          `${orders(integrationId, orderId)}/reconcile`,
+          number === null ? {} : { number },
+        )
+      ).data,
+    )
+  },
+  async previewExternal(
+    integrationId: string,
+    orderId: string,
+    number: string,
+  ): Promise<ExternalShipmentPreview> {
+    const data = (
+      await apiClient.post<ExternalShipmentPreview>(
+        `${orders(integrationId, orderId)}/external/preview`,
+        { number },
+      )
+    ).data
+    return { ...data, codAmountUah: data.codAmountUah ?? null }
+  },
+  /** Answers with the order's delivery summary, which attaching may advance. */
+  async confirmExternal(
+    integrationId: string,
+    orderId: string,
+    preview: Pick<
+      ExternalShipmentPreview,
+      'number' | 'fingerprint' | 'shipmentVersion'
+    >,
+  ): Promise<DeliveryOrder> {
+    return normalizeDeliveryOrder(
+      (
+        await apiClient.post<DeliveryOrder>(
+          `${orders(integrationId, orderId)}/external/confirm`,
+          {
+            number: preview.number,
+            fingerprint: preview.fingerprint,
+            shipmentVersion: preview.shipmentVersion,
+          },
+        )
+      ).data,
+    )
+  },
+  /** Only waybills created or attached in Rozbirka, drafts included. */
+  async list(
+    integrationId: string,
+    query: ShipmentListQuery = {},
+    options: RequestOptions = {},
+  ): Promise<ShipmentPage> {
+    const params: Record<string, string | number | boolean> = {}
+    if (query.search) params['Search'] = query.search
+    if (query.deliveryCode) params['DeliveryCode'] = query.deliveryCode
+    if (query.hasCod !== undefined) params['HasCod'] = query.hasCod
+    if (query.hasProblem !== undefined) params['HasProblem'] = query.hasProblem
+    if (query.from) params['From'] = query.from
+    if (query.to) params['To'] = query.to
+    if (query.page) params['Page'] = query.page
+    if (query.pageSize) params['PageSize'] = query.pageSize
+    const data = (
+      await apiClient.get<ShipmentPage>(shipments(integrationId), {
+        params,
+        ...requestConfig(options),
+      })
+    ).data
+    return { ...data, items: (data.items ?? []).map(withListNulls) }
+  },
+  async byId(
+    integrationId: string,
+    shipmentId: string,
+    options: RequestOptions = {},
+  ): Promise<Shipment> {
+    return withCollections(
+      (
+        await apiClient.get<Shipment>(
+          `${shipments(integrationId)}/${encodeURIComponent(shipmentId)}`,
+          requestConfig(options),
+        )
+      ).data,
+    )
   },
 }

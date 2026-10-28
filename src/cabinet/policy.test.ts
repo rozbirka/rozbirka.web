@@ -449,6 +449,7 @@ describe('cabinetModules', () => {
       '/orders',
       '/parts',
       '/reports',
+      '/sales/waybills',
       '/settings/billing/overview',
       '/settings/billing/payments',
       '/settings/billing/plans',

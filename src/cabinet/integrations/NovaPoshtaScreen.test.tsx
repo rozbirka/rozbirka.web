@@ -13,6 +13,8 @@ import { useTenantSettings } from '@/auth/useTenantSettings'
 import { LocaleProvider } from '@/i18n'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { ToastProvider } from '@/components/app'
+import { cashApi } from '@/api/cash'
+import { novaPoshtaSetupApi } from '@/api/nova-poshta-setup'
 import { NovaPoshtaScreen } from './NovaPoshtaScreen'
 
 vi.mock('@/api/business', () => ({ businessApi: { update: vi.fn() } }))
@@ -61,6 +63,17 @@ vi.mock('@/api/integrations', () => ({
     deactivate: vi.fn(),
     diagnose: vi.fn(),
   },
+}))
+vi.mock('@/api/nova-poshta-setup', () => ({
+  novaPoshtaSetupApi: {
+    begin: vi.fn(),
+    configure: vi.fn(),
+    complete: vi.fn(),
+    cancel: vi.fn(() => Promise.resolve()),
+  },
+}))
+vi.mock('@/api/cash', () => ({
+  cashApi: { list: vi.fn(() => Promise.resolve([])) },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 vi.mock('@/auth/useTenantSettings', () => ({ useTenantSettings: vi.fn() }))
@@ -209,6 +222,11 @@ it('cannot be switched on before a key is stored', async () => {
 })
 
 it('names the step a failed verification stopped at', async () => {
+  vi.mocked(integrationsApi.getById).mockResolvedValue({
+    ...integration,
+    status: 'error',
+    lastErrorCode: 'integration_account_unverified',
+  })
   vi.mocked(integrationsApi.verify).mockResolvedValue({
     ...integration,
     status: 'error',
@@ -304,10 +322,6 @@ it('turns a live integration off with the consequence spelled out', async () => 
   expect(
     await screen.findByRole('button', { name: 'Увімкнути інтеграцію' }),
   ).toBeVisible()
-  // The header switch reports the same state as the status pill.
-  expect(
-    screen.getByRole('switch', { name: 'Інтеграція увімкнена' }),
-  ).toHaveAttribute('aria-checked', 'false')
 })
 
 it('opens the tab the link points at and counts what each one holds', async () => {
@@ -381,8 +395,12 @@ it('shows the overview in British English', async () => {
   expect(
     within(tabs).getByRole('link', { name: /^Dispatch points/ }),
   ).toBeVisible()
-  expect(screen.getByText('Connected')).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Check again' })).toBeVisible()
+  expect(screen.getByText('On')).toBeVisible()
+  // A working connection offers the change of settings, not a re-check.
+  expect(screen.getByRole('link', { name: 'Change settings' })).toHaveAttribute(
+    'href',
+    '/app/koval/settings/integrations/integration-1/settings',
+  )
   expect(screen.getByRole('link', { name: 'Integrations' })).toHaveAttribute(
     'href',
     '/app/koval/settings/integrations',
@@ -574,4 +592,272 @@ it('ignores a deposit response after leaving the integration settings', async ()
     await Promise.resolve()
   })
   expect(currentCabinet.switchTenant).not.toHaveBeenCalled()
+})
+
+const configuredDelivery = () => {
+  vi.mocked(integrationsApi.preferences).mockResolvedValue({
+    codCashRegisterId: 'till-1',
+    senderCounterpartyRef: 'snd-1',
+    senderContactRef: 'ct-1',
+  })
+  vi.mocked(integrationsApi.senders).mockResolvedValue([
+    {
+      ref: 'snd-1',
+      name: 'ФОП Коваль Олег Петрович',
+      tin: '3104512877',
+      isOrganization: false,
+    },
+    {
+      ref: 'snd-2',
+      name: 'ТОВ «Розбірка Плюс»',
+      tin: '44871203',
+      isOrganization: true,
+    },
+  ])
+  vi.mocked(integrationsApi.senderContacts).mockImplementation((_id, ref) =>
+    Promise.resolve(
+      ref === 'snd-1'
+        ? [{ ref: 'ct-1', name: 'Олег Коваль', phone: '+380 67 214 77 30' }]
+        : [{ ref: 'ct-2', name: 'Ірина Мельник', phone: '+380 50 118 42 70' }],
+    ),
+  )
+  vi.mocked(integrationsApi.dispatchPoints).mockResolvedValue([
+    {
+      id: 'point-1',
+      name: 'Основна',
+      senderName: 'Олег Коваль',
+      phone: '+380672147730',
+      settlementRef: 'kyiv',
+      warehouseRef: 'div-12',
+      counterpartyRef: 'snd-1',
+      contactRef: 'ct-1',
+      warehouseName: 'Відділення №12 (до 30 кг): вул. Богатирська, 6',
+      settlementName: 'Київ',
+      companyTin: null,
+      companyName: null,
+      isActive: true,
+      isDefault: true,
+    },
+  ])
+  vi.mocked(cashApi.list).mockResolvedValue([
+    {
+      id: 'till-1',
+      name: 'Основна каса',
+      type: 'cash',
+      isActive: true,
+      balances: { UAH: 0 },
+    },
+    {
+      id: 'till-2',
+      name: 'Каса магазину',
+      type: 'cash',
+      isActive: true,
+      balances: { UAH: 0 },
+    },
+  ])
+}
+
+it('names what new waybills are dispatched with, never the key', async () => {
+  configuredDelivery()
+  renderScreen()
+
+  const shipping = await screen.findByRole('region', { name: 'Відправлення' })
+  expect(
+    await within(shipping).findByText('ФОП Коваль Олег Петрович'),
+  ).toBeVisible()
+  expect(await within(shipping).findByText('Олег Коваль')).toBeVisible()
+  expect(
+    within(shipping).getByText(
+      'Київ · Відділення №12 (до 30 кг): вул. Богатирська, 6',
+    ),
+  ).toBeVisible()
+  expect(within(shipping).getByText('Основна каса')).toBeVisible()
+  expect(screen.getByText('••••••••••••••••')).toBeVisible()
+  const rights = screen.getByRole('region', { name: 'Ваші права' })
+  expect(within(rights).getByText('Налаштування інтеграцій')).toBeVisible()
+  expect(within(rights).getAllByText('є')).toHaveLength(1)
+})
+
+it('explains who may change the settings instead of offering them', async () => {
+  configuredDelivery()
+  vi.mocked(useCabinet).mockReturnValue({
+    ...cabinet(),
+    snapshot: {
+      ...cabinet().snapshot,
+      permissions: new Set(['orders.manage']),
+    },
+  })
+  renderScreen()
+
+  expect(
+    await screen.findByText(
+      'Змінювати налаштування може власник або користувач із правом «Налаштування інтеграцій».',
+    ),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('link', { name: 'Змінити налаштування' }),
+  ).toBeNull()
+})
+
+it('changes only the till in place and marks the dispatch card updated', async () => {
+  configuredDelivery()
+  vi.mocked(integrationsApi.savePreferences).mockResolvedValue({
+    codCashRegisterId: 'till-2',
+    senderCounterpartyRef: 'snd-1',
+    senderContactRef: 'ct-1',
+  })
+  const user = userEvent.setup()
+  renderScreen('/settings')
+
+  const till = await screen.findByLabelText('Каса для післяплати')
+  await screen.findByRole('option', { name: 'Каса магазину' })
+  await user.selectOptions(till, 'till-2')
+  // A till alone needs no key.
+  expect(screen.queryByLabelText('API-ключ')).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Перевірити зміни' }))
+
+  const dialog = await screen
+    .findByRole('alertdialog')
+    .catch(() => screen.findByRole('dialog'))
+  expect(
+    within(dialog).getByText('Каса: Основна каса → Каса магазину'),
+  ).toBeVisible()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти зміни' }),
+  )
+
+  expect(integrationsApi.savePreferences).toHaveBeenCalledWith(
+    'integration-1',
+    {
+      codCashRegisterId: 'till-2',
+      senderCounterpartyRef: 'snd-1',
+      senderContactRef: 'ct-1',
+    },
+  )
+  expect(novaPoshtaSetupApi.begin).not.toHaveBeenCalled()
+  expect(
+    await screen.findByText(
+      'Налаштування збережено. Вони діятимуть для нових накладних.',
+    ),
+  ).toBeVisible()
+  expect(await screen.findByText('Оновлено')).toBeVisible()
+})
+
+it('checks a new sender with the key before anything is saved', async () => {
+  configuredDelivery()
+  vi.mocked(novaPoshtaSetupApi.begin).mockResolvedValue({
+    id: 's-1',
+    version: 'v1',
+    state: 'Pending',
+    expiresAt: '2099-01-01T00:00:00Z',
+    configuration: null,
+  })
+  vi.mocked(novaPoshtaSetupApi.configure).mockResolvedValue({
+    id: 's-1',
+    version: 'v2',
+    state: 'Pending',
+    expiresAt: '2099-01-01T00:00:00Z',
+    configuration: null,
+  })
+  vi.mocked(novaPoshtaSetupApi.complete).mockResolvedValue({
+    connectionId: 'c-2',
+    dispatchPointId: 'p-2',
+    integrationVersion: 'iv',
+  })
+  const user = userEvent.setup()
+  renderScreen('/settings')
+
+  const sender = await screen.findByLabelText('Відправник')
+  await screen.findByRole('option', { name: 'ТОВ «Розбірка Плюс» · 44871203' })
+  await user.selectOptions(sender, 'snd-2')
+  expect(
+    screen.getByText('Змінено · було ФОП Коваль Олег Петрович'),
+  ).toBeVisible()
+  await screen.findByRole('option', {
+    name: 'Ірина Мельник · +380 50 118 42 70',
+  })
+  await user.selectOptions(screen.getByLabelText('Контактна особа'), 'ct-2')
+
+  await user.click(screen.getByRole('button', { name: 'Перевірити зміни' }))
+  expect(
+    await screen.findByText('Вставте ключ, щоб перевірити зміни.'),
+  ).toBeVisible()
+  expect(novaPoshtaSetupApi.begin).not.toHaveBeenCalled()
+
+  await user.type(screen.getByLabelText('API-ключ'), 'key-1')
+  await user.click(screen.getByRole('button', { name: 'Перевірити зміни' }))
+
+  expect(vi.mocked(novaPoshtaSetupApi.configure).mock.calls[0]).toMatchObject([
+    'integration-1',
+    's-1',
+    'v1',
+    {
+      codCashRegisterId: 'till-1',
+      sender: {
+        counterpartyRef: 'snd-2',
+        contactRef: 'ct-2',
+        warehouseRef: 'div-12',
+      },
+    },
+  ])
+  const dialog = await screen
+    .findByRole('alertdialog')
+    .catch(() => screen.findByRole('dialog'))
+  expect(
+    within(dialog).getByText(
+      'Відправник: ФОП Коваль Олег Петрович → ТОВ «Розбірка Плюс»',
+    ),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByText('Точка відправлення й каса не змінюються.'),
+  ).toBeVisible()
+  expect(novaPoshtaSetupApi.complete).not.toHaveBeenCalled()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти зміни' }),
+  )
+  expect(novaPoshtaSetupApi.complete).toHaveBeenCalledWith(
+    'integration-1',
+    's-1',
+    'v2',
+  )
+})
+
+it('keeps the current settings when the carrier refuses the new sender', async () => {
+  configuredDelivery()
+  vi.mocked(novaPoshtaSetupApi.begin).mockResolvedValue({
+    id: 's-1',
+    version: 'v1',
+    state: 'Pending',
+    expiresAt: '2099-01-01T00:00:00Z',
+    configuration: null,
+  })
+  vi.mocked(novaPoshtaSetupApi.configure).mockRejectedValue({
+    kind: 'validation',
+    code: 'nova_poshta_rejected',
+    message: 'rejected',
+  })
+  const user = userEvent.setup()
+  renderScreen('/settings')
+
+  const sender = await screen.findByLabelText('Відправник')
+  await screen.findByRole('option', { name: 'ТОВ «Розбірка Плюс» · 44871203' })
+  await user.selectOptions(sender, 'snd-2')
+  await screen.findByRole('option', {
+    name: 'Ірина Мельник · +380 50 118 42 70',
+  })
+  await user.selectOptions(screen.getByLabelText('Контактна особа'), 'ct-2')
+  await user.type(screen.getByLabelText('API-ключ'), 'key-1')
+  await user.click(screen.getByRole('button', { name: 'Перевірити зміни' }))
+
+  expect(
+    await screen.findByText(
+      'Нова пошта не підтвердила відправника «ТОВ «Розбірка Плюс»» для цього ключа. Чинні налаштування не змінено.',
+    ),
+  ).toBeVisible()
+  expect(novaPoshtaSetupApi.cancel).toHaveBeenCalledWith(
+    'integration-1',
+    's-1',
+    'v1',
+  )
+  expect(novaPoshtaSetupApi.complete).not.toHaveBeenCalled()
 })

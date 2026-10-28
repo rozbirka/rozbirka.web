@@ -25,7 +25,7 @@ import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
 
 type Zone = WarehouseDetail['zones'][number]
-const PAGE_SIZE = 10
+const PAGE_SIZE = 15
 
 export function WarehouseZoneBrowser({
   zones,
@@ -257,7 +257,7 @@ export function WarehouseZoneBrowser({
               ) : null}
             </div>
           ) : null}
-          {totalPages > 1 ? (
+          {visible.length > 0 ? (
             <div className="location-browser__pagination">
               <Pagination
                 label={tb('zonePagination')}

@@ -3,15 +3,14 @@ import type { ComponentType } from 'react'
 import App from '@/App'
 import { LocaleOverride } from '@/i18n/LocaleProvider'
 import { RedirectIfAuth, RequireAuth } from '@/auth/guards'
+import { RouteLoadingFallback } from './route-loading-fallback'
 import type { CabinetModuleScreenProps } from '@/cabinet/ModuleBoundary'
 import {
   cabinetModules,
   type CabinetModuleKey,
 } from '@/cabinet/module-registry'
 
-const hydrateFallbackElement = (
-  <div className="min-h-screen bg-background" aria-busy="true" />
-)
+const hydrateFallbackElement = <RouteLoadingFallback />
 
 const cabinetModuleRoute = (module: CabinetModuleKey): RouteObject => ({
   path: cabinetModules[module].routeSegment.slice(1),
@@ -113,6 +112,10 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
   orders: cabinetScreenRoute('orders', async () => {
     const { OrdersScreen } = await import('@/cabinet/orders/OrdersScreen')
     return OrdersScreen
+  }),
+  waybills: cabinetScreenRoute('waybills', async () => {
+    const { WaybillsScreen } = await import('@/cabinet/waybills/WaybillsScreen')
+    return WaybillsScreen
   }),
   cash: cabinetScreenRoute('cash', async () => {
     const { CashScreen } = await import('@/cabinet/cash/CashScreen')
@@ -251,6 +254,16 @@ const commerceDetailRoutes: RouteObject[] = [
     },
     'settings/integrations/:integrationId',
   ),
+  // The connection wizard is a page of its own, outside the carrier's tabs.
+  cabinetScreenRoute(
+    'integrations',
+    async () => {
+      const { NovaPoshtaConnectScreen } =
+        await import('@/cabinet/integrations/NovaPoshtaConnectScreen')
+      return NovaPoshtaConnectScreen
+    },
+    'settings/integrations/:integrationId/connect',
+  ),
   // Every tab of the carrier screen is its own route, so a link into the
   // diagnostics opens the diagnostics rather than the overview.
   ...[
@@ -293,6 +306,15 @@ const commerceDetailRoutes: RouteObject[] = [
         },
         path,
       ),
+  ),
+  cabinetScreenRoute(
+    'waybills',
+    async () => {
+      const { WaybillsScreen } =
+        await import('@/cabinet/waybills/WaybillsScreen')
+      return WaybillsScreen
+    },
+    'sales/waybills/:shipmentId',
   ),
   ...['cash/new', 'cash/:registerId', 'cash/:registerId/edit'].map((path) =>
     cabinetScreenRoute(

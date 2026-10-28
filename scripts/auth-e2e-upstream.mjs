@@ -1,7 +1,8 @@
 import { createServer } from 'node:http'
 
 const hostname = '127.0.0.1'
-const port = 4174
+// playwright.config.ts starts one stub per worker, each on its own port.
+const port = Number(process.env.E2E_UPSTREAM_PORT ?? 4174)
 const maxBodyBytes = 16 * 1024
 const validOtp = '123456'
 const dashboardPeriods = ['day', 'week', 'month']

@@ -40,10 +40,12 @@ import {
   Sheet,
 } from '@/components/app'
 import { commonMessages, translate, useFormat, useLocale, useT } from '@/i18n'
+import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
 import { roleLabel, teamMessages } from './messages'
 import { RoleSearchPicker } from './RoleSearchPicker'
 import { TeamInvitationDrawer } from './TeamInvitationDrawer'
+import { TeamRoleDrawer } from './TeamRoleDrawer'
 import { permissionMessages } from './permission-messages'
 import { activityDayDifference } from './activity-day'
 import { Crumbs, RedesignShell } from '../redesign-shell'
@@ -64,6 +66,15 @@ interface TeamData {
   members: TeamMemberDto[]
   roles: RoleDto[]
   invitations: InvitationDto[]
+}
+
+interface RoleEdit {
+  memberId: string
+  roleId: string
+  tenantId: string | null
+  generation: number | null
+  roles: RoleDto[] | null
+  loadFailed: boolean
 }
 
 interface Confirmation {
@@ -174,12 +185,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const [invitationHistoryOpen, setInvitationHistoryOpen] = useState(false)
   const accessRefreshRequiredRef = useRef(false)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
-  const [roleEdit, setRoleEdit] = useState<{
-    memberId: string
-    roleId: string
-    tenantId: string | null
-    generation: number | null
-  } | null>(null)
+  const [roleEdit, setRoleEdit] = useState<RoleEdit | null>(null)
+  const roleLoadController = useRef<AbortController | null>(null)
+  useEffect(() => () => roleLoadController.current?.abort(), [])
   const memberActionRefs = useRef(new Map<string, HTMLButtonElement>())
   const tenantId = cabinet.snapshot?.tenantId ?? null
   const generation = cabinet.snapshot?.generation ?? null
@@ -187,7 +195,6 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const canManageAccess =
     accessRefreshState === 'ready' &&
     cabinet.snapshot?.permissions.has('team.manage') === true
-
   const canManage = useCallback(
     () =>
       !accessRefreshRequiredRef.current &&
@@ -251,11 +258,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       setError(null)
       try {
         await operation(signal)
-      } catch {
+      } catch (failure) {
         // A dead request is reported where the user triggered it; a tenant
         // switch is not a failure, it is the old screen going away.
         if (signal.aborted) return false
-        throw new Error(translate(teamMessages, locale, 'actionFailed'))
+        throw failure
       }
       if (signal.aborted) return false
 
@@ -263,7 +270,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       await refreshAccess()
       return true
     },
-    [accessLostMessage, canManage, locale, refreshAccess, toast],
+    [accessLostMessage, canManage, refreshAccess, toast],
   )
 
   const teamData =
@@ -291,13 +298,16 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     roleEdit?.tenantId === tenantId && roleEdit?.generation === generation
       ? teamData?.members.find((member) => member.id === roleEdit.memberId)
       : undefined
+  const roleChoices =
+    roleEdit?.roles?.filter((role) => !isOwnerRole(role)) ?? null
   const roleChoiceValid =
     roleMember !== undefined &&
     roleMember.userId !== cabinet.snapshot?.userId &&
     !isOwnerRole(roleMember.role) &&
     roleEdit !== null &&
     roleEdit.roleId !== roleMember.role.id &&
-    assignableRoles.some((role) => role.id === roleEdit.roleId)
+    !roleEdit.loadFailed &&
+    roleChoices?.some((role) => role.id === roleEdit.roleId) === true
 
   const roleAssignment = useOperation(
     async () => {
@@ -315,6 +325,35 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     },
   )
 
+  const loadRoleChoices = (editor: RoleEdit) => {
+    roleLoadController.current?.abort()
+    const controller = new AbortController()
+    roleLoadController.current = controller
+    const signal = AbortSignal.any([
+      controller.signal,
+      tenantRequestScope.signal,
+    ])
+    setRoleEdit({ ...editor, roles: null, loadFailed: false })
+    const apply = (roles: RoleDto[] | null, loadFailed: boolean) => {
+      if (signal.aborted) return
+      setRoleEdit((current) =>
+        current?.memberId === editor.memberId &&
+        current.tenantId === editor.tenantId &&
+        current.generation === editor.generation
+          ? { ...current, roles, loadFailed }
+          : current,
+      )
+    }
+    void teamApi.listRoles({ signal }).then(
+      (roles) => apply(roles, false),
+      () => apply(null, true),
+    )
+  }
+  const closeRoleEditor = () => {
+    roleLoadController.current?.abort()
+    setRoleEdit(null)
+  }
+
   const openRoleEditor = (member: TeamMemberDto) => {
     if (
       !canManage() ||
@@ -324,11 +363,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       return
     roleAssignment.reset()
     setError(null)
-    setRoleEdit({
+    loadRoleChoices({
       memberId: member.id,
       roleId: member.role.id,
       tenantId,
       generation,
+      roles: null,
+      loadFailed: false,
     })
   }
 
@@ -344,8 +385,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       )
     },
     {
-      errorMessage: () => t('permissionsSaveFailed'),
-      onSuccess: () => closePermissions(),
+      errorMessage: (failure) => {
+        const problem = normalizeApiProblem(failure)
+        return problem.fieldErrors?.['']?.[0] ?? problem.message
+      },
+      onSuccess: (updated) => {
+        if (updated) closePermissions()
+      },
     },
   )
 
@@ -1008,41 +1054,30 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       )}
 
       {roleMember !== undefined && roleEdit !== null && (
-        <ConfirmDialog
-          title={t('changeRole')}
-          consequence={t('changeRoleDescription', { name: roleMember.name })}
-          confirmLabel={tc('save')}
-          confirmDisabled={!canManageAccess || !roleChoiceValid}
-          destructive={false}
+        <TeamRoleDrawer
+          name={roleMember.name}
+          roles={roleChoices}
+          roleId={roleEdit.roleId}
+          loadFailed={roleEdit.loadFailed}
+          onRetry={() => loadRoleChoices(roleEdit)}
+          pending={roleAssignment.pending}
+          valid={roleChoiceValid}
+          canManage={canManageAccess}
           error={
             roleAssignment.error ??
             (!roleAssignment.pending && !canManageAccess
               ? accessLostMessage
               : null)
           }
-          open
-          pending={roleAssignment.pending}
-          onConfirm={roleAssignment.run}
-          onOpenChange={(open) => {
-            if (!open && !roleAssignment.pending) setRoleEdit(null)
-          }}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
+          onSubmit={roleAssignment.run}
+          onClose={closeRoleEditor}
+          returnFocus={() =>
             memberActionRefs.current.get(roleEdit.memberId)?.focus()
-          }}
-        >
-          <RoleSearchPicker
-            label={t('roleFor', { name: roleMember.name })}
-            showLabel
-            busy={roleAssignment.pending}
-            disabled={!canManageAccess}
-            roles={assignableRoles}
-            value={roleEdit.roleId}
-            onSelect={(roleId) =>
-              setRoleEdit((current) => current && { ...current, roleId })
-            }
-          />
-        </ConfirmDialog>
+          }
+          onRoleChange={(roleId) =>
+            setRoleEdit((current) => current && { ...current, roleId })
+          }
+        />
       )}
 
       {permissionMember !== null && (
@@ -1052,30 +1087,38 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             role: roleLabel(permissionMember.role, locale),
           })}
           footer={
-            <>
-              <Button
-                disabled={memberPermissions.pending}
-                onClick={closePermissions}
-                size="lg"
-                type="button"
-              >
-                {tc('cancel')}
-              </Button>
-              <Button
-                aria-busy={memberPermissions.pending}
-                disabled={
-                  memberPermissions.pending ||
-                  !canManageAccess ||
-                  permissionsLoad !== 'ready'
-                }
-                form={MEMBER_PERMISSIONS_FORM}
-                size="lg"
-                type="submit"
-                variant="primary"
-              >
-                {t('savePermissions')}
-              </Button>
-            </>
+            <div className="grid w-full gap-3">
+              {memberPermissions.error ||
+              (!memberPermissions.pending && !canManageAccess) ? (
+                <Notice tone="danger">
+                  {memberPermissions.error ?? accessLostMessage}
+                </Notice>
+              ) : null}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  disabled={memberPermissions.pending}
+                  onClick={closePermissions}
+                  size="lg"
+                  type="button"
+                >
+                  {tc('cancel')}
+                </Button>
+                <Button
+                  aria-busy={memberPermissions.pending}
+                  disabled={
+                    memberPermissions.pending ||
+                    !canManageAccess ||
+                    permissionsLoad !== 'ready'
+                  }
+                  form={MEMBER_PERMISSIONS_FORM}
+                  size="lg"
+                  type="submit"
+                  variant="primary"
+                >
+                  {t('savePermissions')}
+                </Button>
+              </div>
+            </div>
           }
           onOpenChange={(open) => {
             if (!open && !memberPermissions.pending) closePermissions()
@@ -1096,9 +1139,6 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               memberPermissions.run()
             }}
           >
-            {memberPermissions.error === null ? null : (
-              <Notice tone="danger">{memberPermissions.error}</Notice>
-            )}
             {permissionsLoad === 'failed' ? (
               <Notice tone="danger">{t('permissionsLoadFailed')}</Notice>
             ) : permissionsLoad === 'loading' ? (

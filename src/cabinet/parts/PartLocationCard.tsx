@@ -3,6 +3,7 @@ import type { PartInventoryZone } from '@/api/inventory'
 import { Button, Card, Notice, SkeletonRows } from '@/components/app'
 import { useT } from '@/i18n'
 import { commonMessages } from '@/i18n/common-messages'
+import { locationContentsMessages } from '../inventory/location-contents-messages'
 import { partDetailMessages } from './part-detail-messages'
 
 export function PartLocationCard({
@@ -24,6 +25,7 @@ export function PartLocationCard({
 }) {
   const t = useT(partDetailMessages)
   const tc = useT(commonMessages)
+  const tl = useT(locationContentsMessages)
   const placed = zones ?? []
   return (
     <Card
@@ -31,7 +33,12 @@ export function PartLocationCard({
       bodyClassName={allowed && !failed && placed.length > 0 ? 'p-0' : ''}
       aside={
         canMove ? (
-          <Button size="sm" onClick={onMove}>
+          <Button
+            size="sm"
+            onClick={onMove}
+            disabled={!inStock}
+            title={!inStock ? tl('placementNoStock') : undefined}
+          >
             <Move aria-hidden />
             {t('move')}
           </Button>
@@ -48,7 +55,13 @@ export function PartLocationCard({
           </Button>
         </Notice>
       ) : zones === null ? (
-        <SkeletonRows rows={2} embedded label={t('loadingShort')} />
+        <SkeletonRows
+          rows={4}
+          embedded
+          columnWidths={['2fr', '3fr']}
+          variant="content"
+          label={t('loadingShort')}
+        />
       ) : placed.length === 0 ? (
         <p className="text-app-dim m-0">{t('notPlaced')}</p>
       ) : (

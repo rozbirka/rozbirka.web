@@ -37,6 +37,7 @@ import {
 } from '@/components/app'
 import {
   inventoryApi,
+  type PartPlacementJob,
   type InventoryZone,
   type InventorySection,
   type InventoryShelf,
@@ -81,10 +82,13 @@ import { BackAction, WarehousePageHead } from './warehouse-page'
 import { inventoryCodeFromName } from '../inventory/inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
 import { Resource } from '../inventory/InventoryResource'
+import { PlacementSkeleton } from '../inventory/PlacementSkeleton'
 import { WarehouseStatisticsError } from './WarehouseStatisticsError'
 import { LocationPartsList } from '../inventory/LocationPartsList'
 import { unassignedMessages } from './unassigned-messages'
 import { BulkPlacementSheet } from './BulkPlacementSheet'
+import { PlacementJobsMonitor } from './PlacementJobsMonitor'
+import { placementJobMessages } from './placement-job-messages'
 import { PlacementPartInfo } from './PlacementPartInfo'
 import {
   hasPlacementStock,
@@ -108,6 +112,7 @@ function WarehouseRoutes({
   definition: _definition,
 }: CabinetModuleScreenProps) {
   const { pathname, search } = useLocation()
+  const { snapshot: routeScope } = useCabinet()
   const segments = pathname.split('/').filter(Boolean)
   const route = segments[0] === 'app' ? segments.slice(2) : segments
   if (
@@ -132,7 +137,12 @@ function WarehouseRoutes({
   if (route[0] === 'parts' && route[1] && route[2] === 'inventory')
     return <PartPlacementView partId={route[1]} />
   if (route[1] && route[2] === 'unassigned')
-    return <UnassignedPartsView key={route[1]} id={route[1]} />
+    return (
+      <UnassignedPartsView
+        key={`${routeScope?.tenantId}:${routeScope?.userId}:${routeScope?.generation}:${route[1]}`}
+        id={route[1]}
+      />
+    )
   if (route[1] === 'zones' && route[2])
     return <LocationView key={`zone:${route[2]}`} id={route[2]} kind="zone" />
   if (route[1] === 'sections' && route[2])
@@ -150,6 +160,7 @@ function useWarehouseBase() {
 
 function UnassignedPartsView({ id }: { id: string }) {
   const t = useT(unassignedMessages)
+  const tj = useT(placementJobMessages)
   const tw = useT(warehouseMessages)
   const ti = useT(inventoryMessages)
   const tp = useT(partsListMessages)
@@ -170,6 +181,44 @@ function UnassignedPartsView({ id }: { id: string }) {
     ReadonlyMap<string, PartSearchItem>
   >(new Map())
   const [bulkParts, setBulkParts] = useState<PartSearchItem[] | null>(null)
+  const [jobsRevision, setJobsRevision] = useState(0)
+  const appliedJobs = useRef(new Set<string>())
+  const runningJobs = useRef(new Set<string>())
+  const finishedJobs = useRef(new Set<string>())
+  const trackJob = useCallback((job: PartPlacementJob) => {
+    if (!finishedJobs.current.has(job.id)) runningJobs.current.add(job.id)
+  }, [])
+  const completeJob = useCallback(
+    (job: PartPlacementJob) => {
+      if (finishedJobs.current.has(job.id)) return
+      finishedJobs.current.add(job.id)
+      if (!runningJobs.current.delete(job.id)) return
+      const failed =
+        job.status === 'failed' ||
+        job.results.some((item) => item.status === 'failed')
+      toast?.show({
+        tone: failed ? 'danger' : 'ok',
+        message: tj(failed ? 'failed' : 'completed'),
+      })
+    },
+    [toast, tj],
+  )
+  const applyJob = useCallback(
+    (
+      ids: ReadonlySet<string>,
+      _placed: ReadonlySet<string>,
+      jobId?: string,
+    ) => {
+      if (jobId && appliedJobs.current.has(jobId)) return
+      if (jobId) appliedJobs.current.add(jobId)
+      setSelectedParts(
+        (current) =>
+          new Map([...current].filter(([partId]) => !ids.has(partId))),
+      )
+      setRevision((value) => value + 1)
+    },
+    [],
+  )
   return (
     <Resource state={resource.state} retry={resource.reload}>
       {(warehouse: WarehouseDetail) => {
@@ -206,6 +255,17 @@ function UnassignedPartsView({ id }: { id: string }) {
               sub={t('lead', { warehouse: warehouse.name })}
             />
             {!warehouse.isActive ? <Notice>{t('archived')}</Notice> : null}
+            {zone && canManage && canSeeParts ? (
+              <PlacementJobsMonitor
+                key={`${targetTenant?.id}:${zone.id}`}
+                sourceZoneId={zone.id}
+                paused={Boolean(bulkParts)}
+                revision={jobsRevision}
+                onRunning={trackJob}
+                onCompleted={completeJob}
+                onApplied={applyJob}
+              />
+            ) : null}
             {zone ? (
               <LocationPartsList
                 target={{
@@ -237,8 +297,11 @@ function UnassignedPartsView({ id }: { id: string }) {
                               {
                                 key: 'place',
                                 label: t('placeSelected'),
-                                onRun: () =>
-                                  setBulkParts([...selectedParts.values()]),
+                                onRun: () => {
+                                  const parts = [...selectedParts.values()]
+                                  if (parts.length === 1) setPlacing(parts[0]!)
+                                  else setBulkParts(parts)
+                                },
                               },
                               ...(targetTenant
                                 ? [
@@ -264,11 +327,6 @@ function UnassignedPartsView({ id }: { id: string }) {
                           />
                         ) : null,
                       }
-                    : undefined
-                }
-                onPlace={
-                  canManage && warehouse.isActive
-                    ? (part) => setPlacing(part)
                     : undefined
                 }
               />
@@ -320,16 +378,16 @@ function UnassignedPartsView({ id }: { id: string }) {
                 warehouseId={warehouse.id}
                 sourceZoneId={zone.id}
                 parts={bulkParts}
-                onClose={() => setBulkParts(null)}
-                onApplied={(ids) => {
-                  setSelectedParts(
-                    (current) =>
-                      new Map(
-                        [...current].filter(([partId]) => !ids.has(partId)),
-                      ),
-                  )
-                  setRevision((value) => value + 1)
+                onClose={() => {
+                  setBulkParts(null)
+                  setJobsRevision((value) => value + 1)
                 }}
+                onApplied={applyJob}
+                onJobStarted={(job) => {
+                  trackJob(job)
+                  setJobsRevision((value) => value + 1)
+                }}
+                onCompleted={completeJob}
               />
             ) : null}
           </RedesignShell>
@@ -2058,7 +2116,12 @@ function PartPlacementView({
     : '/'
 
   const content = (
-    <Resource retry={resource.reload} state={resource.state} framed={!drawer}>
+    <Resource
+      retry={resource.reload}
+      state={resource.state}
+      framed={!drawer}
+      loadingContent={drawer ? <PlacementSkeleton /> : undefined}
+    >
       {({
         warehouses,
         zones,
@@ -2958,7 +3021,7 @@ function PartPlacementView({
         </>
       }
     >
-      {content}
+      <div data-placement-drawer={partId}>{content}</div>
     </Sheet>
   )
 }

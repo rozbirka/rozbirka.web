@@ -37,6 +37,7 @@ export function Resource<T>({
   framed = true,
   crumb,
   layout,
+  loadingContent,
 }: {
   state: LoadState<T>
   errorContent?: ReactNode
@@ -47,6 +48,7 @@ export function Resource<T>({
   crumb?: ReactNode
   /** `record` sketches a main column and an aside, as Record.dc.html does. */
   layout?: 'list' | 'record'
+  loadingContent?: ReactNode
 }) {
   const t = useT(inventoryMessages)
   const frame = (content: ReactNode) =>
@@ -58,6 +60,7 @@ export function Resource<T>({
       content
     )
   if (state.kind === 'loading') {
+    if (loadingContent !== undefined) return frame(loadingContent)
     if (crumb === undefined && framed)
       return (
         <CabinetLoadingScreen

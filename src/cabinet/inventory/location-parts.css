@@ -81,12 +81,17 @@
     table-layout: fixed;
   }
 
-  .location-parts--unassigned .rz-table thead th:nth-last-child(-n + 2) {
-    width: 192px;
-  }
-
   .location-parts--unassigned .rz-table thead th.rz-num {
     width: 128px;
+  }
+
+  .location-parts--unassigned .rz-table thead th:last-child {
+    width: 144px;
+  }
+
+  .location-parts--unassigned .rz-table thead th:last-child,
+  .location-parts--unassigned .rz-table tbody td:last-child {
+    text-align: right;
   }
 
   .location-parts--unassigned .rz-table tbody tr {

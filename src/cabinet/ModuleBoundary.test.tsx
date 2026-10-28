@@ -262,7 +262,7 @@ describe('ModuleBoundary', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: 'Підписка неактивна — дані лише для читання',
+        name: 'Поновіть підписку, щоб відновити доступ',
       }),
     ).toBeVisible()
     // Запчастини are closed while blocked; Підписка stays open. Both come from
@@ -368,4 +368,33 @@ describe('sticker mode boundary', () => {
       await screen.findByText('inventory.view ?type=locations'),
     ).toBeVisible()
   })
+})
+
+it('does not offer forbidden billing routes or reveal billing summary to a blocked member', () => {
+  mockedUseCabinet.mockReturnValue({
+    ...cabinet(['parts.view']),
+    snapshot: {
+      ...cabinet(['parts.view']).snapshot!,
+      role: 'manager',
+      entitlement: { state: 'blocked', usage: subscription.usage },
+      subscription: { ...subscription, state: 'blocked' },
+    },
+  })
+  renderBoundary(
+    'parts',
+    lazy(() => Promise.resolve({ default: () => <p>Protected parts</p> })),
+  )
+  expect(
+    screen.getByText(
+      'Керування підпискою недоступне для ваших прав. Зверніться до власника розбірки або підтримки.',
+    ),
+  ).toBeVisible()
+  for (const name of [
+    'Перейти до підписки',
+    'Порівняти тарифи',
+    'Історія платежів',
+  ])
+    expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+  expect(screen.queryByText('Сума до сплати')).not.toBeInTheDocument()
+  expect(screen.queryByText('Protected parts')).not.toBeInTheDocument()
 })

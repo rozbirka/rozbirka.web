@@ -5,7 +5,7 @@ import { expect, it, vi } from 'vitest'
 import { WarehouseZoneBrowser } from './WarehouseZoneBrowser'
 import { LocationSearch } from '../inventory/LocationBrowser'
 
-const physical = Array.from({ length: 12 }, (_, index) => ({
+const physical = Array.from({ length: 17 }, (_, index) => ({
   id: `zone-${index + 1}`,
   name: `Зона ${index + 1}`,
   code: `Z${index + 1}`,
@@ -62,9 +62,9 @@ it('searches physical zones by code, resets pagination and keeps unassigned visi
   expect(screen.getByRole('heading', { name: 'Зони' })).toHaveTextContent(
     /^Зони$/,
   )
-  expect(screen.getByRole('link', { name: 'Зона 11' })).toHaveAttribute(
+  expect(screen.getByRole('link', { name: 'Зона 16' })).toHaveAttribute(
     'href',
-    '/warehouses/zones/zone-11',
+    '/warehouses/zones/zone-16',
   )
   await user.type(screen.getByRole('searchbox', { name: 'Пошук зони' }), 'Z1')
   expect(screen.getByRole('link', { name: 'Зона 1' })).toHaveTextContent('Z1')
@@ -95,22 +95,22 @@ it('searches physical zones by code, resets pagination and keeps unassigned visi
 it('keeps edit and archive actions independent of opening a zone', async () => {
   const user = userEvent.setup()
   const { onEdit, onArchive } = mount()
-  await user.click(screen.getByRole('button', { name: 'Дії із зоною Зона 11' }))
+  await user.click(screen.getByRole('button', { name: 'Дії із зоною Зона 16' }))
   await user.click(screen.getByRole('menuitem', { name: 'Редагувати' }))
-  expect(onEdit).toHaveBeenCalledWith(physical[10])
-  await user.click(screen.getByRole('button', { name: 'Дії із зоною Зона 11' }))
+  expect(onEdit).toHaveBeenCalledWith(physical[15])
+  await user.click(screen.getByRole('button', { name: 'Дії із зоною Зона 16' }))
   await user.click(screen.getByRole('menuitem', { name: 'Архівувати' }))
-  expect(onArchive).toHaveBeenCalledWith(physical[10])
+  expect(onArchive).toHaveBeenCalledWith(physical[15])
 })
 
 it('keeps zone navigation without management or parts links', () => {
   mount(false)
-  expect(screen.getByRole('link', { name: 'Зона 11' })).toHaveTextContent('Z11')
+  expect(screen.getByRole('link', { name: 'Зона 16' })).toHaveTextContent('Z16')
   expect(screen.queryByRole('meter')).toBeNull()
   expect(screen.queryByRole('link', { name: 'Без зони' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Додати зону' })).toBeNull()
   expect(
-    screen.queryByRole('button', { name: 'Дії із зоною Зона 11' }),
+    screen.queryByRole('button', { name: 'Дії із зоною Зона 16' }),
   ).toBeNull()
 })
 
@@ -138,3 +138,27 @@ it.each([true, false])(
     } else expect(action).not.toBeInTheDocument()
   },
 )
+
+it('shows a range and disabled navigation for a single page of zones', async () => {
+  const user = userEvent.setup()
+  mount()
+  const pager = screen.getByRole('navigation', { name: 'Сторінки зон' })
+  expect(pager).toHaveTextContent('16–17 з 17')
+  expect(
+    within(pager).getByRole('button', { name: 'Наступна сторінка' }),
+  ).toBeDisabled()
+  await user.click(
+    within(pager).getByRole('button', { name: 'Попередня сторінка' }),
+  )
+  expect(pager).toHaveTextContent('1–15 з 17')
+  expect(screen.queryByRole('link', { name: 'Зона 16' })).toBeNull()
+  await user.type(screen.getByRole('searchbox', { name: 'Пошук зони' }), 'Z17')
+  expect(pager).toHaveTextContent('1–1 з 1')
+  expect(
+    within(pager).getByRole('button', { name: 'Попередня сторінка' }),
+  ).toBeDisabled()
+  expect(
+    within(pager).getByRole('button', { name: 'Наступна сторінка' }),
+  ).toBeDisabled()
+  expect(screen.getByRole('link', { name: 'Без зони' })).toBeVisible()
+})

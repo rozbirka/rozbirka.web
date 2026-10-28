@@ -348,7 +348,7 @@ it('pre-opens a print window synchronously and closes it when download fails', a
     totalPages: 1,
   })
   vi.mocked(reportsApi.download).mockReturnValue(pending.promise)
-  render(<ReportsScreen {...screenProps} />)
+  render(<ReportsScreen {...screenProps} />, { wrapper: ToastProvider })
 
   await userEvent
     .setup()
@@ -358,6 +358,10 @@ it('pre-opens a print window synchronously and closes it when download fails', a
   pending.reject(new Error('offline'))
   await act(() => pending.promise.catch(() => undefined))
   expect(close).toHaveBeenCalledTimes(1)
+  const failure = await screen.findByRole('alert')
+  expect(failure).toHaveClass('rz-toast')
+  expect(failure).toHaveTextContent('Натисніть «Друкувати» ще раз')
+  expect(document.querySelector('.rz-notice--danger')).toBeNull()
 })
 
 it('recovers an expired report by creating a replacement with the selected range', async () => {
@@ -700,15 +704,17 @@ it('says what a failed download costs and how to run it again', async () => {
     totalPages: 1,
   })
   vi.mocked(reportsApi.download).mockRejectedValue(new Error('offline'))
-  render(<ReportsScreen {...screenProps} />)
+  render(<ReportsScreen {...screenProps} />, { wrapper: ToastProvider })
 
   await userEvent
     .setup()
     .click(await screen.findByRole('button', { name: 'Завантажити PDF' }))
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Натисніть «Завантажити PDF» ще раз',
-  )
+  const failure = await screen.findByRole('alert')
+  expect(failure).toHaveClass('rz-toast')
+  expect(failure).toHaveTextContent('Натисніть «Завантажити PDF» ще раз')
+  expect(document.querySelector('.rz-notice--danger')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Завантажити PDF' })).toBeEnabled()
 })
 
 it('names a blocked print window and how to allow it', async () => {
@@ -720,16 +726,52 @@ it('names a blocked print window and how to allow it', async () => {
     total: 1,
     totalPages: 1,
   })
-  render(<ReportsScreen {...screenProps} />)
+  render(<ReportsScreen {...screenProps} />, { wrapper: ToastProvider })
 
   await userEvent
     .setup()
     .click(await screen.findByRole('button', { name: 'Друкувати' }))
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Дозвольте спливні вікна для цього сайту',
-  )
+  const failure = await screen.findByRole('alert')
+  expect(failure).toHaveClass('rz-toast')
+  expect(failure).toHaveTextContent('Дозвольте спливні вікна для цього сайту')
+  expect(document.querySelector('.rz-notice--danger')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Друкувати' })).toBeEnabled()
 })
+
+it.each(['tenant change', 'unmount'] as const)(
+  'suppresses a late download failure after %s',
+  async (change) => {
+    const pending = deferred<Awaited<ReturnType<typeof reportsApi.download>>>()
+    vi.mocked(reportsApi.list).mockResolvedValue({
+      items: [report('completed')],
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      totalPages: 1,
+    })
+    vi.mocked(reportsApi.download).mockReturnValue(pending.promise)
+    const view = render(<ReportsScreen {...screenProps} />, {
+      wrapper: ToastProvider,
+    })
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Завантажити PDF' }))
+    const signal = vi.mocked(reportsApi.download).mock.lastCall?.[1]?.signal
+    if (change === 'tenant change') {
+      vi.mocked(useCabinet).mockReturnValue(
+        cabinet({ tenantId: 'tenant-2', generation: 2 }),
+      )
+      view.rerender(<ReportsScreen {...screenProps} />)
+    } else view.rerender(<></>)
+    expect(signal?.aborted).toBe(true)
+    await act(async () => {
+      pending.reject(new Error('late transfer failure'))
+      await pending.promise.catch(() => undefined)
+    })
+    expect(document.querySelector('.rz-toast')).toBeNull()
+  },
+)
 
 it('aborts stale report polling when the screen unmounts', async () => {
   const pending = deferred<Awaited<ReturnType<typeof reportsApi.list>>>()

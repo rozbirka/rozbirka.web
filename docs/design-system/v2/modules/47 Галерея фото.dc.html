@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}a{color:var(--rz-brand-text);text-decoration:none}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;padding:56px 64px 120px;background:var(--rz-bg-sidebar);display:grid;gap:72px;align-content:start;width:max-content">
+  <header style="display:grid;gap:16px;max-width:1280px">
+    <span class="rz-eyebrow">Rozbirka v2 · модуль 47 · Склад</span>
+    <h1 class="rz-h-page" style="font-size:var(--rz-fs-display)">Галерея фото</h1>
+    <p class="rz-muted" style="margin:0;max-width:84ch;text-wrap:pretty">Повноекранний перегляд фото зі стрічкою мініатюр. Відкривається з блоку «Фото» в картці й формі запчастини та автомобіля, починаючи з натиснутого фото. Перегляд завжди темний, незалежно від теми кабінету. Кадри розділу 2 інтерактивні: стрілки, мініатюри, клавіші ← → Home End.</p>
+    <p class="rz-caption" style="margin:0">Тексти не звірені з <span class="rz-mono">*messages.ts</span> — позначено <span class="rz-mono" style="color:var(--rz-warn)">[unverified]</span>.</p>
+    <nav aria-label="Зміст модуля" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;padding:16px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+      <sc-for list="{{ sections }}" as="s" hint-placeholder-count="5">
+        <div style="display:grid;gap:4px;align-content:start">
+          <a href="{{ s.href }}" style="font-weight:700;color:var(--rz-text-strong)"><span class="rz-mono" style="color:var(--rz-brand-text)">{{ s.num }}</span> {{ s.title }}</a>
+          <sc-for list="{{ s.frames }}" as="fr" hint-placeholder-count="3"><a href="{{ fr.href }}" style="color:var(--rz-text-muted);font-size:var(--rz-fs-caption)"><span class="rz-mono rz-dim">{{ fr.num }}</span> {{ fr.label }}</a></sc-for>
+        </div>
+      </sc-for>
+    </nav>
+  </header>
+
+  <sc-for list="{{ sections }}" as="s" hint-placeholder-count="1">
+    <section id="{{ s.anchor }}" style="display:grid;gap:28px">
+      <header style="display:flex;align-items:baseline;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--rz-border-strong)">
+        <span class="rz-mono" style="font-size:var(--rz-fs-display);color:var(--rz-brand-text)">{{ s.num }}</span>
+        <h2 class="rz-h-page" style="font-size:var(--rz-fs-display)">{{ s.title }}</h2>
+        <span class="rz-mono" style="font-size:var(--rz-fs-caption);color:var(--rz-warn)">[unverified] тексти розділу</span>
+        <span class="rz-caption" style="margin-left:auto">{{ s.source }}</span>
+      </header>
+      <div style="display:grid;grid-template-columns:repeat(3,1280px);gap:56px 48px">
+        <sc-for list="{{ s.frames }}" as="fr" hint-placeholder-count="3">
+          <figure id="{{ fr.anchor }}" style="margin:0;display:grid;gap:10px;align-content:start">
+            <figcaption style="display:flex;align-items:baseline;gap:10px;min-height:22px"><span class="rz-mono" style="font-size:var(--rz-fs-title);color:var(--rz-brand-text)">{{ fr.num }}</span><span class="rz-h-title">{{ fr.label }}</span><span class="rz-caption">{{ fr.note }}</span></figcaption>
+            <div style="position:relative;width:1280px;height:800px;overflow:hidden;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-bg)">
+
+              <sc-if value="{{ fr.e }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:16px;padding:24px">
+                  <section style="width:600px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:8px 16px;border-bottom:1px solid var(--rz-border)">
+                      <span style="display:grid;gap:2px"><span class="rz-caption">{{ fr.e.ctx }}</span><h2 class="rz-h-card">{{ fr.e.title }} <span class="rz-dim" style="font-weight:400">{{ fr.e.count }}</span></h2></span>
+                      <button type="button" class="rz-btn rz-btn--sm"><i class="icon-image-plus"></i>Додати фото</button>
+                    </div>
+                    <div style="display:grid;gap:12px;padding:16px">
+                      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+                        <sc-for list="{{ fr.e.tiles }}" as="t" hint-placeholder-count="4">
+                          <button type="button" class="{{ t.cls }}" aria-label="{{ t.aria }}" style="{{ t.style }}">
+                            <sc-if value="{{ t.cover }}" hint-placeholder-val="{{ false }}"><span class="rz-photo__badge">Обкладинка</span></sc-if>
+                            <span style="display:grid;gap:4px;justify-items:center"><i class="{{ t.icon }}" style="font-size:var(--rz-icon-md)"></i><sc-if value="{{ t.label }}" hint-placeholder-val="{{ false }}"><span class="rz-caption">{{ t.label }}</span></sc-if></span>
+                            <sc-if value="{{ t.status }}" hint-placeholder-val="{{ false }}"><span style="{{ t.statusStyle }}">{{ t.status }}</span></sc-if>
+                          </button>
+                        </sc-for>
+                      </div>
+                      <sc-if value="{{ fr.e.caption }}" hint-placeholder-val="{{ false }}"><span class="rz-caption" style="text-wrap:pretty">{{ fr.e.caption }}</span></sc-if>
+                    </div>
+                  </section>
+                  <div style="width:600px;display:flex;align-items:flex-start;gap:8px;color:var(--rz-text-muted)"><i class="icon-mouse-pointer-click" style="margin-top:2px;color:var(--rz-text-dim)"></i><span style="text-wrap:pretty">{{ fr.e.hint }}</span></div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ fr.v }}" hint-placeholder-val="{{ false }}">
+                <div class="rz" data-theme="dark" role="dialog" aria-modal="true" aria-label="Перегляд фото" tabIndex="0" onKeyDown="{{ fr.v.onKey }}" style="{{ fr.v.box }}">
+                  <div style="{{ fr.v.top }}">
+                    <span style="flex:1;min-width:0;display:grid;gap:2px"><span class="rz-strong" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ fr.v.title }}</span><span class="rz-caption">{{ fr.v.caption }}</span></span>
+                    <span class="rz-mono" style="color:var(--rz-text-strong)">{{ fr.v.counter }}</span>
+                    <sc-if value="{{ fr.v.desk }}" hint-placeholder-val="{{ true }}"><span class="rz-kbd">Esc</span></sc-if>
+                    <button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Закрити перегляд" style="{{ fr.v.closeStyle }}"><i class="icon-x" style="font-size:var(--rz-icon-md)"></i></button>
+                  </div>
+                  <div style="{{ fr.v.stage }}">
+                    <div style="{{ fr.v.photo }}">
+                      <sc-if value="{{ fr.v.cover }}" hint-placeholder-val="{{ false }}"><span class="rz-photo__badge">Обкладинка</span></sc-if>
+                      <sc-if value="{{ fr.v.ok }}" hint-placeholder-val="{{ true }}"><span style="display:grid;gap:8px;justify-items:center;color:var(--rz-text-dim)"><i class="icon-image" style="font-size:var(--rz-icon-lg)"></i><span>{{ fr.v.label }}</span></span></sc-if>
+                      <sc-if value="{{ fr.v.loading }}" hint-placeholder-val="{{ false }}"><span role="status" style="display:grid;gap:8px;justify-items:center;color:var(--rz-text-dim)"><i class="icon-loader-circle rz-spin" style="font-size:var(--rz-icon-lg)"></i><span>{{ fr.v.loadText }}</span></span></sc-if>
+                      <sc-if value="{{ fr.v.error }}" hint-placeholder-val="{{ false }}"><span role="alert" style="display:grid;gap:8px;justify-items:center;max-width:320px;text-align:center"><i class="icon-image-off" style="font-size:var(--rz-icon-lg);color:var(--rz-text-dim)"></i><span class="rz-strong" style="font-weight:600">Не вдалося завантажити фото</span><span class="rz-muted" style="text-wrap:pretty">Перевірте з’єднання й спробуйте ще раз. Інші фото можна гортати.</span><button type="button" class="rz-btn rz-btn--sm"><i class="icon-rotate-cw"></i>Повторити</button></span></sc-if>
+                    </div>
+                    <sc-if value="{{ fr.v.arrows }}" hint-placeholder-val="{{ true }}">
+                      <button type="button" aria-label="Попереднє фото" disabled="{{ fr.v.prevOff }}" onClick="{{ fr.v.prev }}" style="{{ fr.v.prevStyle }}"><i class="icon-chevron-left" style="font-size:var(--rz-icon-lg)"></i></button>
+                      <button type="button" aria-label="Наступне фото" disabled="{{ fr.v.nextOff }}" onClick="{{ fr.v.next }}" style="{{ fr.v.nextStyle }}"><i class="icon-chevron-right" style="font-size:var(--rz-icon-lg)"></i></button>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ fr.v.note }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;justify-content:center;align-items:center;gap:8px;padding:0 16px 8px;color:var(--rz-text-muted);font-size:var(--rz-fs-caption)"><i class="{{ fr.v.noteIcon }}"></i>{{ fr.v.note }}</div></sc-if>
+                  <sc-if value="{{ fr.v.strip }}" hint-placeholder-val="{{ true }}">
+                    <div role="tablist" aria-label="Мініатюри" style="{{ fr.v.stripStyle }}">
+                      <sc-for list="{{ fr.v.thumbs }}" as="t" hint-placeholder-count="4">
+                        <button type="button" role="tab" aria-selected="{{ t.cur }}" aria-label="{{ t.aria }}" onClick="{{ t.go }}" style="{{ t.style }}"><i class="{{ t.icon }}" style="{{ t.iconStyle }}"></i></button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ fr.k }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;inset:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;padding:32px;align-content:start">
+                  <sc-for list="{{ fr.k }}" as="tb" hint-placeholder-count="2">
+                    <section style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface);overflow:hidden">
+                      <div style="display:flex;align-items:center;min-height:44px;padding:8px 16px;border-bottom:1px solid var(--rz-border)"><h2 class="rz-h-card">{{ tb.title }}</h2></div>
+                      <table style="width:100%;border-collapse:collapse"><caption class="rz-sr">{{ tb.title }}</caption>
+                        <thead><tr style="height:32px"><th scope="col" class="rz-th-label" style="text-align:left;padding:0 16px;width:160px">{{ tb.c1 }}</th><th scope="col" class="rz-th-label" style="text-align:left;padding:0 16px">{{ tb.c2 }}</th></tr></thead>
+                        <tbody><sc-for list="{{ tb.rows }}" as="r" hint-placeholder-count="5"><tr style="border-top:1px solid var(--rz-border)"><th scope="row" style="text-align:left;padding:10px 16px;font-weight:400;vertical-align:top"><span style="display:flex;flex-wrap:wrap;gap:4px"><sc-for list="{{ r.keys }}" as="kk" hint-placeholder-count="1"><span class="rz-kbd">{{ kk }}</span></sc-for></span></th><td style="padding:10px 16px;text-wrap:pretty">{{ r.text }}</td></tr></sc-for></tbody>
+                      </table>
+                    </section>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+            </div>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;,&quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;,&quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const PART = { ctx: 'Запчастина · Генератор · 03L903023', title: 'Генератор · 03L903023', photos: ['Загальний вигляд', 'Маркування', 'Роз’єм'] };
+const CAR = { ctx: 'Автомобіль · VW Passat B8 · 2016', title: 'VW Passat B8 · 2016', photos: ['Передня частина', 'Задня чверть', 'Бік', 'Салон'] };
+const MANY = { ...CAR, photos: ['Передня частина', 'Задня чверть', 'Бік', 'Салон', 'Моторний відсік', 'Багажник', 'Колесо', 'Пробіг', 'VIN-табличка', 'Днище'] };
+const ST_OK = 'position:absolute;left:6px;bottom:6px;font-size:var(--rz-fs-micro);color:var(--rz-ok)';
+const ST_BAD = 'position:absolute;left:6px;bottom:6px;font-size:var(--rz-fs-micro);color:var(--rz-danger)';
+const ST_DIM = 'position:absolute;left:6px;bottom:6px;font-size:var(--rz-fs-micro);color:var(--rz-text-dim)';
+const TILE = 'padding:0;font:inherit;color:var(--rz-text-dim);cursor:zoom-in';
+const FOCUS = ';outline:2px solid var(--rz-brand);outline-offset:2px';
+
+class Component extends DCLogic {
+  state = { cur: {} };
+  go(key, i) { this.setState((s) => ({ cur: { ...s.cur, [key]: i } })); }
+
+  entry(src, x) {
+    const tiles = (x.tiles || src.photos.map((label, i) => ({ cover: i === 0 }))).map((t, i) => ({
+      cls: t.add ? 'rz-photo rz-photo--add' : 'rz-photo', cover: !!t.cover, label: t.add ? 'Додати фото' : '', status: t.status || '', statusStyle: t.statusStyle || '',
+      icon: t.add ? 'icon-image-plus' : t.bad ? 'icon-image-off' : t.busy ? 'icon-loader-circle rz-spin' : 'icon-image',
+      aria: t.add ? 'Додати фото' : 'Відкрити фото ' + (i + 1) + ' з ' + src.photos.length,
+      style: TILE + (t.add || t.bad || t.busy ? ';cursor:default' : '') + (x.focus === i ? FOCUS : ''),
+    }));
+    return { ctx: src.ctx, title: 'Фото', count: x.count, tiles, caption: x.caption || '', hint: x.hint };
+  }
+
+  viewer(key, src, x) {
+    x = x || {}; const n = src.photos.length; const mob = !!x.mob;
+    const i = Math.min(n - 1, this.state.cur[key] ?? x.idx ?? 0);
+    const set = (j) => this.go(key, Math.max(0, Math.min(n - 1, j)));
+    const onKey = (e) => { const m = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: n - 1 }[e.key]; if (m !== undefined) { e.preventDefault(); set(m); } };
+    const strip = n > 1; const thumbW = mob ? 56 : 72; const thumbH = mob ? 42 : 54;
+    const nav = (side, off) => 'position:absolute;top:50%;' + side + ':16px;transform:translateY(-50%);width:44px;height:44px;padding:0;display:grid;place-items:center;border-radius:var(--rz-r-full);border:1px solid var(--rz-border-strong);background:var(--rz-surface);color:var(--rz-text-strong);' + (off ? 'opacity:0.35;cursor:default' : 'cursor:pointer');
+    const bad = x.badAt === i, busy = x.loading || x.busyAt === i;
+    return {
+      onKey, desk: !mob, title: src.title, caption: x.caption || src.photos[i], counter: (i + 1) + ' / ' + n,
+      box: (mob ? 'position:absolute;top:19px;left:452px;width:375px;height:760px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);overflow:hidden;' : 'position:absolute;inset:0;') + 'display:grid;grid-template-rows:' + (mob ? '56px' : '56px') + ' minmax(0,1fr)' + (x.note ? ' auto' : '') + (strip ? (mob ? ' 74px' : ' 96px') : '') + ';background:var(--rz-camera-bg);color:var(--rz-text);outline:none',
+      top: 'display:flex;align-items:center;gap:12px;padding:0 ' + (mob ? '4px 0 16px' : '12px 0 20px') + ';border-bottom:1px solid var(--rz-border)',
+      closeStyle: mob ? 'width:44px;height:44px' : '',
+      stage: 'position:relative;min-height:0;display:grid;place-items:center;padding:' + (mob ? '16px 0' : '24px 84px'),
+      photo: 'position:relative;' + (mob ? 'width:100%;aspect-ratio:4/3;border-radius:0;border-width:1px 0' : 'height:100%;max-width:100%;aspect-ratio:4/3;border-radius:var(--rz-r-sm)') + ';display:grid;place-items:center;border:1px solid var(--rz-border);background:var(--rz-surface-2)',
+      cover: i === 0 && !bad && !busy, label: src.photos[i], ok: !bad && !busy, error: bad, loading: busy, loadText: x.loadText || 'Завантаження фото…',
+      arrows: !mob && strip, prevOff: i === 0, nextOff: i === n - 1, prev: () => set(i - 1), next: () => set(i + 1), prevStyle: nav('left', i === 0), nextStyle: nav('right', i === n - 1),
+      note: x.note || '', noteIcon: x.noteIcon || 'icon-info',
+      strip, stripStyle: 'display:flex;align-items:center;gap:8px;padding:0 16px;border-top:1px solid var(--rz-border);overflow:hidden;justify-content:' + (mob ? 'flex-start' : 'center'),
+      thumbs: src.photos.map((l, j) => ({ cur: j === i, aria: 'Фото ' + (j + 1) + ' з ' + n + ': ' + l, go: () => set(j),
+        icon: x.badAt === j ? 'icon-image-off' : x.busyAt === j ? 'icon-loader-circle rz-spin' : 'icon-image', iconStyle: 'font-size:var(--rz-icon-md)',
+        style: 'width:' + thumbW + 'px;height:' + thumbH + 'px;flex:none;padding:0;display:grid;place-items:center;border-radius:var(--rz-r-sm);border:1px solid var(--rz-border);background:var(--rz-surface-2);cursor:pointer;' + (j === i ? 'outline:2px solid var(--rz-brand);outline-offset:2px;color:var(--rz-text-strong)' : 'color:var(--rz-text-dim)') })),
+    };
+  }
+
+  renderVals() {
+    const S = [
+      { num: '1', title: 'Точки входу', source: 'блок «Фото» у модулях 10 і 11', frames: [
+        { label: 'Картка запчастини', note: 'фокус на фото 2', e: this.entry(PART, { count: '3 знімки', focus: 1, hint: 'Клік або Enter на фото відкриває перегляд із цього фото (кадр 2.2). Фокус після закриття повертається на це фото.' }) },
+        { label: 'Картка автомобіля', note: 'обкладинка', e: this.entry(CAR, { count: '4 знімки', focus: 0, hint: 'Перегляд відкривається з обкладинки (кадр 2.1). Порядок фото в перегляді такий самий, як у сітці.' }) },
+        { label: 'Форма запчастини', note: 'є фото з помилкою', e: this.entry(PART, { count: '3 знімки', focus: 1, tiles: [{ cover: true, status: 'Завантажено', statusStyle: ST_OK }, { status: 'Завантажено', statusStyle: ST_OK }, { bad: true, status: 'Не завантажено', statusStyle: ST_BAD }, { add: true }], caption: 'Зміни застосуються після збереження.', hint: 'У формі відкриваються лише завантажені фото. Фото з помилкою в перегляд не потрапляє — його повторюють або прибирають у сітці.' }) },
+        { label: 'Форма автомобіля', note: 'фото ще завантажується', e: this.entry(CAR, { count: '4 знімки', focus: 0, tiles: [{ cover: true }, {}, {}, { busy: true, status: 'Завантаження…', statusStyle: ST_DIM }], caption: 'Перше фото — обкладинка. Максимум 10.', hint: 'Фото, що ще завантажується, видно в стрічці перегляду зі спінером (кадр 3.2).' }) },
+      ] },
+      { num: '2', title: 'Перегляд', source: 'desktop · інтерактивно', frames: [
+        { label: 'Перше фото', note: 'обкладинка, «назад» вимкнено', v: this.viewer('2.1', CAR, { idx: 0 }) },
+        { label: 'Середнє фото', note: 'з картки запчастини', v: this.viewer('2.2', PART, { idx: 1 }) },
+        { label: 'Останнє фото', note: '«вперед» вимкнено', v: this.viewer('2.3', CAR, { idx: 3 }) },
+        { label: 'Одне фото', note: 'без стрілок і стрічки', v: this.viewer('2.4', { ...PART, photos: ['Загальний вигляд'] }) },
+        { label: 'Багато фото', note: '10 — максимум для авто', v: this.viewer('2.5', MANY, { idx: 4 }) },
+        { label: 'Завантаження', note: 'велике фото ще вантажиться', v: this.viewer('2.6', PART, { idx: 1, loading: true }) },
+        { label: 'Помилка фото', note: 'інші фото доступні', v: this.viewer('2.7', CAR, { idx: 2, badAt: 2 }) },
+      ] },
+      { num: '3', title: 'З форми', source: 'модулі 10 і 11, режим редагування', frames: [
+        { label: 'Незбережені зміни', note: 'нове фото у формі', v: this.viewer('3.1', PART, { idx: 2, note: 'Нове фото. Зміни застосуються після збереження.' }) },
+        { label: 'Фото завантажується', note: 'спінер у стрічці', v: this.viewer('3.2', CAR, { idx: 3, busyAt: 3, loadText: 'Фото завантажується…' }) },
+      ] },
+      { num: '4', title: 'Mobile 375', source: 'touch 44 · свайп', frames: [
+        { label: 'Перегляд', note: 'свайп вліво/вправо', v: this.viewer('4.1', CAR, { idx: 1, mob: true, note: 'Гортайте вбік', noteIcon: 'icon-move-horizontal' }) },
+        { label: 'Одне фото', note: '', v: this.viewer('4.2', { ...PART, photos: ['Загальний вигляд'] }, { mob: true }) },
+        { label: 'Помилка фото', note: '', v: this.viewer('4.3', PART, { idx: 2, mob: true, badAt: 2 }) },
+      ] },
+      { num: '5', title: 'Передача', source: 'клавіатура, фокус, жести', frames: [
+        { label: 'Клавіатура й фокус', note: 'для розробки', k: [
+          { title: 'Клавіатура', c1: 'Клавіша', c2: 'Дія', rows: [
+            { keys: ['←', '→'], text: 'Попереднє / наступне фото. На краях нічого не відбувається.' },
+            { keys: ['Home', 'End'], text: 'Перше / останнє фото.' },
+            { keys: ['Esc'], text: 'Закрити перегляд. Фокус повертається на фото в сітці, з якого відкрили.' },
+            { keys: ['Tab'], text: 'Закрити → Попереднє → Наступне → мініатюри. Фокус не виходить за межі перегляду.' },
+            { keys: ['Enter'], text: 'На мініатюрі — відкрити це фото.' },
+          ] },
+          { title: 'Поведінка', c1: 'Випадок', c2: 'Як', rows: [
+            { keys: ['Свайп'], text: 'На touch — гортання; стрілок немає, кнопка закриття 44×44.' },
+            { keys: ['1 фото'], text: 'Без стрілок, стрічки й лічильника кліків; лічильник 1 / 1 лишається.' },
+            { keys: ['Помилка'], text: 'Помилка одного фото не блокує інші; «Повторити» перезавантажує лише його.' },
+            { keys: ['Тема'], text: 'Перегляд завжди темний (data-theme="dark", фон --rz-camera-bg).' },
+            { keys: ['Обкладинка'], text: 'Позначка лише на першому фото, як у сітці.' },
+          ] },
+        ] },
+      ] },
+    ];
+    return {
+      theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact',
+      sections: S.map((s) => ({ ...s, anchor: 's' + s.num, href: '#s' + s.num, frames: s.frames.map((f, j) => { const num = s.num + '.' + (j + 1); return { ...f, num, anchor: 'f' + num.replace('.', '-'), href: '#f' + num.replace('.', '-'), e: f.e || null, v: f.v || null, k: f.k || null }; }) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

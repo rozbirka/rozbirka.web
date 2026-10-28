@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Field, Notice, Sheet, TextInput } from '@/components/app'
 import { cn } from '@/lib/utils'
 import { cashApi, type CashRegister, type CashTransaction } from '@/api/cash'
 import type {
   DeliveryOrder,
+  DeliveryPaymentKind,
   LinkDeliveryPayment,
   RecordDeliveryPayment,
 } from '@/api/delivery'
+import { normalizeApiProblem } from '@/api/errors'
 import { commonMessages, useFormat, useLocale, useT, type Locale } from '@/i18n'
 import {
   hryvnia,
@@ -16,6 +18,7 @@ import {
   uah,
 } from './delivery-money'
 import { deliveryDrawerMessages } from './drawer-messages'
+import { deliveryFlowMessages } from './flow-messages'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 
 type Mode = 'record' | 'link'
@@ -52,17 +55,26 @@ const held = (register: CashRegister, locale: Locale): string => {
  * and their arithmetic is opposite — a recorded gross loses the fee on the way
  * to the till, a linked receipt gains it on the way to the order — so each tab
  * says which way its own number moves.
+ *
+ * Opened for the carrier's post-payment (module 46, 9.8) it books the money
+ * as `cod` against the waybill and says where the operation will show up. A
+ * failed save keeps what was typed and says so at the top (9.9).
  */
 export function PaymentDrawer({
+  codWaybill = null,
   delivery,
   mode: initialMode,
   onClose,
+  onCloseAutoFocus,
   onLink,
   onRecord,
   orderNumber,
 }: {
+  /** The waybill whose post-payment this records; null for a prepayment. */
+  codWaybill?: string | null
   delivery: DeliveryOrder
   mode: Mode
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
   onClose: () => void
   onLink: (input: LinkDeliveryPayment) => Promise<void>
   onRecord: (input: RecordDeliveryPayment) => Promise<void>
@@ -70,8 +82,11 @@ export function PaymentDrawer({
 }) {
   const { locale } = useLocale()
   const t = useT(deliveryDrawerMessages)
+  const tf = useT(deliveryFlowMessages)
   const tc = useT(commonMessages)
   const format = useFormat()
+  const kind: DeliveryPaymentKind = codWaybill === null ? 'prepayment' : 'cod'
+  const alertRef = useRef<HTMLDivElement | null>(null)
   const when = (value: string) => format.dateWith(value, stampOptions) ?? value
   const [mode, setMode] = useState<Mode>(initialMode)
   const [registers, setRegisters] = useState<CashRegister[] | null>(null)
@@ -151,32 +166,37 @@ export function PaymentDrawer({
       ? t('outcomeClosedNote')
       : t('outcomeLeftNote')
 
+  const fail = (message: string) => {
+    setError(message)
+    window.requestAnimationFrame(() => alertRef.current?.focus())
+  }
+
   const submit = async () => {
     if (pending) return
     if (fee === null) {
-      setError(t('feeError'))
+      fail(t('feeError'))
       return
     }
     if (mode === 'record') {
       if (amount === null) {
-        setError(t('amountError'))
+        fail(t('amountError'))
         return
       }
       if (fee >= amount) {
-        setError(t('feeTooHigh'))
+        fail(t('feeTooHigh'))
         return
       }
     }
     if (mode === 'link' && receipt === null) {
-      setError(t('pickReceipt'))
+      fail(t('pickReceipt'))
       return
     }
     if (outcome.over) {
-      setError(outcomeNote)
+      fail(outcomeNote)
       return
     }
     if (registerId === null) {
-      setError(t('pickTill'))
+      fail(t('pickTill'))
       return
     }
     setPending(true)
@@ -187,17 +207,22 @@ export function PaymentDrawer({
           accountId: registerId,
           amountUah: amount,
           feeUah: fee,
-          kind: 'prepayment',
+          kind,
         })
       if (mode === 'link' && receipt !== null)
         await onLink({
           cashTransactionId: receipt.id,
           feeUah: fee,
-          kind: 'prepayment',
+          kind,
         })
       onClose()
     } catch (problem) {
-      setError(deliveryProblemMessage(problem, locale))
+      const failure = normalizeApiProblem(problem).kind
+      fail(
+        failure === 'network' || failure === 'timeout' || failure === 'server'
+          ? tf('paymentSaveFailed')
+          : deliveryProblemMessage(problem, locale),
+      )
       setPending(false)
     }
   }
@@ -208,16 +233,27 @@ export function PaymentDrawer({
 
   return (
     <Sheet
-      eyebrow={t('eyebrowOrder', {
-        number: String(orderNumber),
-        part: t('partPayment'),
-      })}
+      {...(codWaybill === null
+        ? {
+            eyebrow: t('eyebrowOrder', {
+              number: String(orderNumber),
+              part: t('partPayment'),
+            }),
+          }
+        : {
+            description: tf('codDescription', {
+              number: String(orderNumber),
+              waybill: codWaybill,
+            }),
+          })}
       footer={
         <>
           <p className="rz-muted m-0 min-w-0 flex-1 truncate">
-            {mode === 'record'
-              ? t('tillFooter', { name: registerName })
-              : t('linkFooter')}
+            {codWaybill !== null
+              ? tf('codFooter')
+              : mode === 'record'
+                ? t('tillFooter', { name: registerName })
+                : t('linkFooter')}
           </p>
           <Button disabled={pending} onClick={onClose}>
             {tc('cancel')}
@@ -231,16 +267,26 @@ export function PaymentDrawer({
           >
             {/* Not the tab's own words: two buttons in one dialog must not
                 answer to the same name. */}
-            {mode === 'record' ? t('savePayment') : t('saveLink')}
+            {mode === 'link'
+              ? t('saveLink')
+              : codWaybill !== null && amount !== null
+                ? tf('codSubmit', { amount: uah(amount, locale) })
+                : t('savePayment')}
           </Button>
         </>
       }
+      onCloseAutoFocus={onCloseAutoFocus}
       onOpenChange={(open) => {
         if (!open && !pending) onClose()
       }}
       open
       title={mode === 'record' ? t('recordPayment') : t('linkTransaction')}
     >
+      {error === null ? null : (
+        <div className="mb-4" ref={alertRef} tabIndex={-1}>
+          <Notice tone="danger">{error}</Notice>
+        </div>
+      )}
       <form
         className="grid gap-4"
         id={FORM_ID}
@@ -433,8 +479,6 @@ export function PaymentDrawer({
             </Field>
           </>
         )}
-
-        {error !== null && <Notice tone="danger">{error}</Notice>}
 
         <dl className="rz-inset m-0 grid min-h-fit grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2">
           <dt className="text-app-muted">{t('agreed')}</dt>

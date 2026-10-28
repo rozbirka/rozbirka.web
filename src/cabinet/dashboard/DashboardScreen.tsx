@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ChevronRight, RefreshCw, Search } from 'lucide-react'
-import { Button, Segmented, SkeletonRows } from '@/components/app'
+import { Button, Segmented } from '@/components/app'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
@@ -15,6 +15,10 @@ import { ActivityCard } from './ActivityCard'
 import { CarPayoffCard } from './CarPayoffCard'
 import { DashboardBillingBanner } from './DashboardBillingBanner'
 import { DashboardErrorState } from './DashboardErrorState'
+import {
+  DashboardChartSkeleton,
+  DashboardSkeleton,
+} from '../overview-skeletons'
 import { DashboardKpis } from './DashboardKpis'
 import { RecentOrdersCard } from './RecentOrdersCard'
 import { RevenueChart } from './RevenueChart'
@@ -26,6 +30,7 @@ import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
 import { useDashboardData } from './use-dashboard-data'
 import { getDashboardBillingPath } from './dashboard-billing-access'
+import { SubscriptionStateScreen } from '../screens/module-unavailable'
 import {
   useCashRegisters,
   usePartsSummary,
@@ -46,12 +51,6 @@ const PERIODS = {
 
 const PERIOD_OPTIONS = Object.keys(PERIODS) as DashboardPeriod[]
 
-/** The main column's placeholder cards while the summary loads. */
-const SKELETON_MAIN = ['a', 'b'] as const
-function SkeletonCard({ lines }: { lines: number }) {
-  return <SkeletonRows announce={false} rows={lines} />
-}
-
 const DAY_NAME: Intl.DateTimeFormatOptions = {
   weekday: 'long',
   day: 'numeric',
@@ -59,6 +58,19 @@ const DAY_NAME: Intl.DateTimeFormatOptions = {
 }
 
 export function DashboardScreen() {
+  const { snapshot } = useCabinet()
+  const state = snapshot?.entitlement?.state ?? snapshot?.subscription?.state
+  if (state === 'blocked' || state === 'none')
+    return (
+      <SubscriptionStateScreen
+        definition={cabinetModules.dashboard}
+        state={state}
+      />
+    )
+  return <DashboardContent />
+}
+
+function DashboardContent() {
   const { targetTenant, snapshot } = useCabinet()
   const accounting = useAccountingCurrency()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -117,7 +129,13 @@ export function DashboardScreen() {
   // beside its neighbour. With nothing in the main column the aside takes the
   // whole width rather than sitting alone in 380px.
   const main = [
-    analytics === null ? null : (
+    analytics === null ? (
+      dashboard.analytics.status === 'loading' ? (
+        <div key="revenue" role="status" aria-label={t('summaryLoading')}>
+          <DashboardChartSkeleton />
+        </div>
+      ) : null
+    ) : (
       <RevenueChart data={analytics} key="revenue" periodLabel={periodLabel} />
     ),
     orders === null || ordersPath === null ? null : (
@@ -285,15 +303,12 @@ export function DashboardScreen() {
               className="flex flex-wrap items-start gap-4"
               role="status"
             >
-              {/* The board's own columns, each card a stack of bars. */}
-              <div className="grid min-w-0 flex-[1_1_480px] gap-4">
-                {SKELETON_MAIN.map((key) => (
-                  <SkeletonCard key={key} lines={6} />
-                ))}
-              </div>
-              <div className="grid min-w-0 flex-[1_1_280px] gap-4 xl:max-w-[380px]">
-                <SkeletonCard lines={4} />
-              </div>
+              <span className="sr-only">{t('summaryLoading')}</span>
+              <DashboardSkeleton
+                showOrders={ordersPath !== null}
+                showCars={path('cars') !== null}
+                showCash={cashPath !== null}
+              />
             </div>
           ) : null}
 
@@ -306,7 +321,8 @@ export function DashboardScreen() {
             />
           )}
 
-          {main.length === 0 && aside.length === 0 ? null : (
+          {(summary === null && dashboard.summary.status === 'loading') ||
+          (main.length === 0 && aside.length === 0) ? null : (
             <div className="flex flex-wrap items-start gap-4">
               {main.length === 0 ? null : (
                 <div className="grid min-w-0 flex-[1_1_480px] gap-4">

@@ -37,7 +37,7 @@ export function useNovaPoshtaAvailability(): NovaPoshtaAvailability {
 
 /**
  * A delivery API failure in the interface language, with the cabinet's wording
- * for a country refusal.
+ * for a country refusal and for a permission withdrawn mid-action.
  */
 export function deliveryProblemMessage(
   problem: unknown,
@@ -45,5 +45,10 @@ export function deliveryProblemMessage(
 ): string {
   if (isProblemCode(problem, INTEGRATION_COUNTRY_UNAVAILABLE))
     return translate(deliveryMessages, locale, 'countryUnavailable')
-  return localizeApiError(normalizeApiProblem(problem), locale)
+  const normalized = normalizeApiProblem(problem)
+  // A right taken away mid-action (module 46 §11 «Права»): the sheet keeps
+  // what was typed and says who can help.
+  if (normalized.kind === 'forbidden')
+    return translate(deliveryMessages, locale, 'noRight')
+  return localizeApiError(normalized, locale)
 }

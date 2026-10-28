@@ -9,6 +9,7 @@ export interface LoadingLayout {
     | 'settings'
     | 'reports'
     | 'plans'
+  form?: 'part' | 'intake' | 'car'
   rows: number
   columns: readonly string[]
   stats: number
@@ -29,18 +30,19 @@ const list = (columns: readonly string[], rows = 6): LoadingLayout => ({
 const layouts: Record<CabinetModuleKey, LoadingLayout> = {
   dashboard: { ...list(['2fr', '1fr'], 4), kind: 'dashboard', stats: 4 },
   warehouses: { ...list(['4fr', '1fr', '1fr'], 3), stats: 2 },
-  inventory: { ...list(['3fr', '1fr', '1fr', '1fr']), stats: 3 },
+  inventory: { ...list(['3fr', '1fr', '1fr', '1fr']), stats: 4 },
   cars: { ...list(['3fr', '1fr', '1fr', '1fr', '1fr']), thumbnails: true },
   parts: { ...list(['4fr', '1fr', '1fr', '1fr', '1fr'], 8), thumbnails: true },
   customers: list(['3fr', '2fr', '1fr', '1fr']),
   orders: list(['2fr', '3fr', '1fr', '1fr', '1fr'], 8),
+  waybills: list(['2fr', '1fr', '3fr', '2fr', '1fr', '1fr', '1fr'], 8),
   team: list(['3fr', '1fr', '1fr', '1fr']),
   cash: { ...list(['3fr', '1fr', '1fr', '1fr']), stats: 3 },
   intakes: list(['3fr', '1fr', '1fr', '1fr']),
   stickers: { ...list(['3fr', '1fr'], 4), kind: 'form' },
   reports: { ...list(['2fr', '1fr', '3fr'], 3), kind: 'reports' },
   billing: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
-  plans: { ...list(['1fr', '1fr', '1fr'], 3), kind: 'plans' },
+  plans: { ...list(['2fr', '1fr', '1fr', '1fr', '8rem'], 2), kind: 'plans' },
   payments: list(['2fr', '1fr', '1fr', '1fr'], 4),
   profile: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
   business: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
@@ -65,6 +67,9 @@ export function loadingLayout(
   module: CabinetModuleKey,
   pathname: string,
 ): LoadingLayout {
+  // This parts route is rendered by the warehouses module boundary.
+  if (module === 'warehouses' && /\/parts\/[^/]+\/inventory\/?$/.test(pathname))
+    return { ...layouts.parts, kind: 'form', stats: 0, photo: false }
   const baseSegments = cabinetModules[module].routeSegment
     .split('/')
     .filter(Boolean).length
@@ -73,8 +78,39 @@ export function loadingLayout(
     .filter(Boolean)
     .slice(2 + baseSegments)
   const base = layouts[module]
-  if (segments.some((segment) => segment === 'new' || segment === 'edit'))
-    return { ...base, kind: 'form', stats: 0 }
+  if (
+    module === 'inventory' &&
+    segments.length === 2 &&
+    segments[0] === 'sessions' &&
+    segments[1] === 'new'
+  )
+    return base
+  const orderItemDrawer =
+    module === 'orders' &&
+    segments.length === 3 &&
+    segments[1] === 'items' &&
+    segments[2] === 'new'
+  if (
+    !orderItemDrawer &&
+    segments.some((segment) => segment === 'new' || segment === 'edit')
+  )
+    return {
+      ...base,
+      kind: 'form',
+      stats: 0,
+      ...(module === 'parts' &&
+      (segments[0] === 'new' || segments[1] === 'edit')
+        ? { form: 'part' as const }
+        : module === 'cars'
+          ? { form: 'car' as const }
+          : module === 'intakes'
+            ? {
+                form: segments.includes('parts')
+                  ? ('part' as const)
+                  : ('intake' as const),
+              }
+            : {}),
+    }
   if (module === 'parts' && segments.includes('inventory'))
     return { ...base, kind: 'form', stats: 0, photo: false }
   if (module === 'parts' && segments[0] === 'imports')
@@ -87,6 +123,7 @@ export function loadingLayout(
     }
   if (module === 'integrations' && segments.length > 0) {
     if (segments.includes('dispatch-points')) return base
+    if (segments.includes('connect')) return { ...base, kind: 'form', stats: 0 }
     if (segments.includes('webhook'))
       return { ...base, kind: 'dashboard', stats: 3 }
     return {
@@ -112,6 +149,7 @@ export function loadingLayout(
       'parts',
       'customers',
       'orders',
+      'waybills',
       'intakes',
       'cash',
       'inventory',

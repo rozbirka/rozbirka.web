@@ -42,6 +42,35 @@ export interface DeliveryOrder {
   returnedAt: string | null
   awaitingCodReconciliation: boolean
   payments: DeliveryPayment[]
+  /**
+   * `Open`, `Completed`, `AwaitingGoods` (return started, goods not back),
+   * `AwaitingRefund` (money still owed back) or `Cancelled`. Kept as a string:
+   * a state added later must render as unknown, not crash the order.
+   */
+  workflowState: string
+  /** Payments not yet given back; the refund step is done only at zero. */
+  refundDueUah: number
+  refundAllocations: DeliveryRefundAllocation[]
+}
+
+/** Which payment a full refund gave back, and through which expense. */
+export interface DeliveryRefundAllocation {
+  paymentId: string
+  cashTransactionId: string
+  amountUah: number
+}
+
+/** Exactly one of the two: a new expense from a till, or one already booked. */
+export type DeliveryRefundSource =
+  | { accountId: string }
+  | { existingCashTransactionId: string }
+
+export interface LateCarrierPayment {
+  shipmentId: string
+  amountUah: number
+  feeUah: number
+  /** Required when the payout differs from what the waybill promised. */
+  verificationNote?: string
 }
 
 /** A payment either goes in up front or settles the post-payment afterwards. */
@@ -75,8 +104,13 @@ const requestConfig = (options: RequestOptions) =>
  * received, and the whole lifecycle reads as finished. Every optional field is
  * put back as an explicit null here, once, so nothing downstream has to know.
  */
-const normalize = (delivery: DeliveryOrder): DeliveryOrder => ({
+export const normalizeDeliveryOrder = (
+  delivery: DeliveryOrder,
+): DeliveryOrder => ({
   ...delivery,
+  workflowState: delivery.workflowState ?? 'Open',
+  refundDueUah: delivery.refundDueUah ?? 0,
+  refundAllocations: delivery.refundAllocations ?? [],
   dispatchedAt: delivery.dispatchedAt ?? null,
   receivedAt: delivery.receivedAt ?? null,
   returnedAt: delivery.returnedAt ?? null,
@@ -93,7 +127,7 @@ export const deliveryApi = {
     orderId: string,
     options: RequestOptions = {},
   ): Promise<DeliveryOrder> {
-    return normalize(
+    return normalizeDeliveryOrder(
       (
         await apiClient.get<DeliveryOrder>(
           endpoint(orderId),
@@ -113,7 +147,7 @@ export const deliveryApi = {
     orderId: string,
     agreedTotalUah?: number,
   ): Promise<DeliveryOrder> {
-    return normalize(
+    return normalizeDeliveryOrder(
       (
         await apiClient.put<DeliveryOrder>(endpoint(orderId), {
           ...(agreedTotalUah === undefined ? {} : { agreedTotalUah }),
@@ -127,7 +161,7 @@ export const deliveryApi = {
     input: RecordDeliveryPayment,
     replay: IdempotentMutation,
   ): Promise<DeliveryOrder> {
-    return normalize(
+    return normalizeDeliveryOrder(
       (
         await apiClient.post<DeliveryOrder>(
           `${endpoint(orderId)}/payments`,
@@ -143,7 +177,7 @@ export const deliveryApi = {
     input: LinkDeliveryPayment,
     replay: IdempotentMutation,
   ): Promise<DeliveryOrder> {
-    return normalize(
+    return normalizeDeliveryOrder(
       (
         await apiClient.post<DeliveryOrder>(
           `${endpoint(orderId)}/payments/link`,
@@ -158,7 +192,7 @@ export const deliveryApi = {
     paymentId: string,
     replay: IdempotentMutation,
   ): Promise<DeliveryOrder> {
-    return normalize(
+    return normalizeDeliveryOrder(
       (
         await apiClient.post<DeliveryOrder>(
           `${endpoint(orderId)}/payments/${encodeURIComponent(paymentId)}/refund`,
@@ -170,29 +204,100 @@ export const deliveryApi = {
   },
   /** Writes the goods off the shelf. Core reruns the full readiness check. */
   async dispatch(orderId: string): Promise<DeliveryOrder> {
-    return normalize(
+    return normalizeDeliveryOrder(
       (await apiClient.post<DeliveryOrder>(`${endpoint(orderId)}/dispatch`))
         .data,
     )
   },
   /** The step that confirms the order and opens post-payment reconciliation. */
   async receive(orderId: string): Promise<DeliveryOrder> {
-    return normalize(
+    return normalizeDeliveryOrder(
       (await apiClient.post<DeliveryOrder>(`${endpoint(orderId)}/received`))
         .data,
     )
   },
   /**
-   * Puts the goods back on the shelf and marks the order refunded. Core takes
-   * the intact flag only as true — a damaged or partial return is a manual
-   * matter and restores no stock.
+   * Puts the goods back on the shelf. Core takes only a full return: every
+   * unit came back. A damaged one is still accepted, but only with a note
+   * that says what is wrong; a partial return is a manual matter and
+   * restores no stock.
    */
-  async acceptReturn(orderId: string): Promise<DeliveryOrder> {
-    return normalize(
+  async acceptReturn(
+    orderId: string,
+    condition: { damaged: boolean; notes?: string } = { damaged: false },
+  ): Promise<DeliveryOrder> {
+    const notes = condition.notes?.trim() ?? ''
+    return normalizeDeliveryOrder(
       (
         await apiClient.post<DeliveryOrder>(
           `${endpoint(orderId)}/return-received`,
-          { allItemsReceivedUndamaged: true },
+          condition.damaged
+            ? {
+                allItemsReceived: true,
+                allItemsReceivedUndamaged: false,
+                notes,
+              }
+            : {
+                allItemsReceivedUndamaged: true,
+                ...(notes === '' ? {} : { notes }),
+              },
+        )
+      ).data,
+    )
+  },
+  /**
+   * Cancels an order that has not left. Core cancels the waybill with Nova
+   * Poshta first; payments still held keep the order waiting for the full
+   * refund, and with nothing to give back it is cancelled at once. A sent
+   * order is refused: it can only come back as a return.
+   */
+  async cancel(orderId: string): Promise<DeliveryOrder> {
+    return normalizeDeliveryOrder(
+      (await apiClient.post<DeliveryOrder>(`${endpoint(orderId)}/cancel`)).data,
+    )
+  },
+  /**
+   * Opens a return for a sent order. Nothing moves yet: stock and money wait
+   * for the goods to be accepted and the refund to be booked.
+   */
+  async startReturn(orderId: string, notes?: string): Promise<DeliveryOrder> {
+    return normalizeDeliveryOrder(
+      (
+        await apiClient.post<DeliveryOrder>(
+          `${endpoint(orderId)}/return-start`,
+          notes === undefined ? {} : { notes },
+        )
+      ).data,
+    )
+  },
+  /** Books the refund of every payment still held, in one expense. */
+  async confirmFullRefund(
+    orderId: string,
+    source: DeliveryRefundSource,
+    replay: IdempotentMutation,
+  ): Promise<DeliveryOrder> {
+    return normalizeDeliveryOrder(
+      (
+        await apiClient.post<DeliveryOrder>(
+          `${endpoint(orderId)}/full-refund`,
+          source,
+          withIdempotency({}, replay),
+        )
+      ).data,
+    )
+  },
+  /** A post-payment the carrier paid out after the order was cancelled. */
+  async recordLateCarrierPayment(
+    orderId: string,
+    payment: LateCarrierPayment & DeliveryRefundSource,
+    replay: IdempotentMutation,
+  ): Promise<DeliveryOrder> {
+    return normalizeDeliveryOrder(
+      (
+        await apiClient.post<DeliveryOrder>(
+          `${endpoint(orderId)}/late-carrier-payment`,
+          payment,
+          withIdempotency({}, replay),
         )
       ).data,
     )

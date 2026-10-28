@@ -17,6 +17,10 @@
 .rz a.rz-btn, .rz a.rz-card, .rz a.rz-nav-item { text-decoration: none; }
 .rz-app > .sc-host:first-child { flex: 0 0 var(--rz-sidebar-w); }
 .rz :focus-visible { outline: none; box-shadow: var(--rz-focus); }
+/* Programmatic landmarks announce context; only interactive controls need a ring. */
+.rz :is(h1, h2, h3, h4, h5, h6, [role="dialog"], [role="alertdialog"], [role="region"])[tabindex="-1"]:focus-visible,
+.rz :is(div, section, main, article, aside, header, footer, nav)[tabindex="-1"]:not([role], [contenteditable]):focus-visible { outline: none; box-shadow: none; }
+
 .rz-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .rz-mono { font-family: var(--rz-font-mono); font-variant-numeric: tabular-nums; }
 .rz-num { font-family: var(--rz-font-mono); font-variant-numeric: tabular-nums; text-align: right; }
@@ -109,7 +113,6 @@
 .rz-input:disabled, .rz-select:disabled { opacity: 0.5; cursor: not-allowed; }
 .rz-input[readonly] { background: transparent; border-color: var(--rz-border); color: var(--rz-text-muted); }
 .rz-input--num { font-family: var(--rz-font-mono); text-align: right; font-variant-numeric: tabular-nums; }
-.rz-input[inputmode="decimal"] { direction: ltr; text-align: left; }
 .rz-input--sm { height: var(--rz-control-h); }
 .rz-select { appearance: none; padding-right: 30px; cursor: pointer; background-image: none; }
 .rz-select-wrap { position: relative; }
@@ -122,7 +125,7 @@
 .rz-search { display: flex; align-items: center; gap: 8px; height: var(--rz-control-h); padding: 0 10px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-sm); background: var(--rz-surface-2); }
 .rz-search i { font-size:var(--rz-icon); color: var(--rz-text-dim); }
 .rz-search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; }
-.rz-search:focus-within { border-color: var(--rz-text-muted); }
+.rz-search:focus-within { border-color: var(--rz-brand); box-shadow: 0 0 0 3px var(--rz-brand-soft); }
 /* Composite fields: the wrapper shows focus, the inner control never draws its own ring */
 .rz-input-group > input:focus-visible, .rz-search input:focus-visible, .rz-stepper input:focus-visible, .rz-input:focus-visible, .rz-select:focus-visible, .rz-textarea:focus-visible { box-shadow: none; outline: none; }
 .rz-input:focus, .rz-select:focus, .rz-textarea:focus { box-shadow: 0 0 0 3px var(--rz-brand-soft); }
@@ -210,7 +213,6 @@
 .rz-toolbar__end { margin-left: auto; display: flex; gap: 4px; }
 .rz-filter { display: inline-flex; align-items: center; gap: 6px; height: var(--rz-control-h); padding: 0 8px 0 10px; border: 1px dashed var(--rz-border-strong); border-radius: var(--rz-r-sm); background: transparent; color: var(--rz-text-muted); cursor: pointer; white-space: nowrap; }
 .rz-filter:hover { background: var(--rz-fill-hover); color: var(--rz-text); }
-.rz-filter select:focus-visible { outline: none; box-shadow: none; text-decoration: underline; }
 .rz-filter--set { border-style: solid; background: var(--rz-surface); color: var(--rz-text); }
 .rz-filter--set .rz-filter__key { color: var(--rz-text-dim); }
 .rz-chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 4px 0 8px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-xs); background: var(--rz-surface-2); font-size: var(--rz-fs-caption); color: var(--rz-text); cursor: pointer; }
@@ -296,9 +298,6 @@
 :is(.rz-sheet, .rz-dialog, .rz-confirm, .rz-form-page) :is(.rz-input, .rz-select, .rz-textarea, .rz-input-group, .rz-search) { background: var(--rz-sheet-field); }
 @media (max-width: 639px) { .rz-sheet { top: auto; left: 0; width: 100%; max-height: 92dvh; border-left: 0; border-top: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-lg) var(--rz-r-lg) 0 0; } }
 .rz-menu { min-width: 220px; display: grid; gap: 1px; padding: 4px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-md); background: var(--rz-overlay); box-shadow: var(--rz-shadow-popover); }
-/* Menu focus is shown by the active row, never an orange ring around the popup. */
-.rz-menu:focus-visible { outline: none; box-shadow: var(--rz-shadow-popover); }
-.rz-btn[aria-haspopup="menu"]:focus-visible, .rz-menu__item:focus-visible { outline: none; box-shadow: none; background: var(--rz-fill-active); }
 .rz-menu__item { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 8px; border: 0; border-radius: var(--rz-r-sm); background: transparent; color: var(--rz-text); text-align: left; cursor: pointer; }
 .rz-menu__item i { font-size:var(--rz-icon); color: var(--rz-text-muted); }
 .rz-menu__item:hover, .rz-menu__item[data-highlighted] { background: var(--rz-fill-active); color: var(--rz-text-strong); }
@@ -317,10 +316,6 @@
 .rz-stepper--glove button { width: var(--rz-target-glove); }
 .rz-stepper--glove input { width: 64px; font-size: var(--rz-fs-page); }
 .rz-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.rz-photos--tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-@media (min-width: 640px) {
-  .rz-photos--tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 180px)); }
-}
 .rz-photo { position: relative; aspect-ratio: 4 / 3; border: 1px solid var(--rz-border); border-radius: var(--rz-r-sm); background: var(--rz-surface-2); overflow: hidden; display: grid; place-items: center; color: var(--rz-text-dim); font-size: var(--rz-fs-caption); }
 .rz-photo img { width: 100%; height: 100%; object-fit: cover; }
 .rz-photo__badge { position: absolute; left: 6px; top: 6px; height: 18px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: var(--rz-r-xs); background: var(--rz-overlay); color: var(--rz-text); font-size: var(--rz-fs-micro); font-weight: 600; box-shadow: var(--rz-shadow-popover); }

@@ -5,11 +5,10 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
-import { Link, useLocation, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, Link2Off } from 'lucide-react'
 import {
   Button,
-  DateValue,
   Field,
   StateScreen,
   StatusPill,
@@ -31,27 +30,24 @@ import { moduleLabel, navigationGroupLabel } from '../module-messages'
 import { cabinetModules } from '../module-registry'
 import { RedesignShell } from '../redesign-shell'
 import { CabinetLoadingContent } from '../loading-screen'
-import { Kpi, KpiStrip } from '../redesign-kpi'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { DeliveryPreferencesPanel } from './delivery-preferences-panel'
 import { DeliveryDepositPanel } from './delivery-deposit-panel'
 import { DispatchPointsPanel } from './dispatch-points-panel'
 import { TrackingSubscriptionPanel } from './tracking-panel'
 import { WebhookPanel } from './webhook-panel'
-import { Switch } from './dispatch-point-form'
 import {
-  diagnosticCheckLabel,
-  integrationErrorMessage,
   integrationProblemMessage,
   integrationStatusPresentation,
   isCountryUnavailableProblem,
   isNovaPoshtaAvailable,
 } from './integration-labels'
 import { integrationsMessages } from './integrations-messages'
-import { IntegrationCrumbs, Mark } from './IntegrationsScreen'
+import { IntegrationCrumbs } from './IntegrationsScreen'
 import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
-
-const FACTS = ['fact1', 'fact2', 'fact3', 'fact4'] as const
+import { NpOverview, NpRightsCard } from './np-overview'
+import { useNpSettingsEditor } from './np-settings-editor'
+import { npSettingsMessages } from './np-settings-messages'
+import { useNpDeliverySettings } from './use-np-delivery-settings'
 
 type Tab = 'overview' | 'points' | 'statuses' | 'settings'
 
@@ -100,10 +96,12 @@ export function NovaPoshtaScreen() {
   const cabinet = useCabinet()
   const params = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
   const integrationId = params['integrationId'] ?? ''
   const { locale } = useLocale()
   const t = useT(integrationsMessages)
   const tc = useT(commonMessages)
+  const ts = useT(npSettingsMessages)
   const { countryCode } = useTenantSettings()
   // Outside Ukraine nothing is read: Core would refuse every request anyway.
   const countryBlocked = !isNovaPoshtaAvailable(countryCode)
@@ -131,6 +129,49 @@ export function NovaPoshtaScreen() {
 
   const state: LoadState =
     loaded?.key === scopeKey ? loaded.state : { kind: 'loading' }
+  const tab: Tab = location.pathname.endsWith('/dispatch-points')
+    ? 'points'
+    : location.pathname.endsWith('/webhook')
+      ? 'statuses'
+      : location.pathname.endsWith('/settings')
+        ? 'settings'
+        : 'overview'
+  const configuredNow = state.kind === 'ready' && state.integration.configured
+  const delivery = useNpDeliverySettings(
+    integrationId,
+    !countryBlocked &&
+      configuredNow &&
+      (tab === 'overview' || tab === 'settings'),
+  )
+  const permissions = cabinet.snapshot?.permissions
+  const rights = {
+    integrations: permissions?.has('team.manage') === true,
+    orders: permissions?.has('orders.manage') === true,
+    finance: permissions?.has('finance.manage') === true,
+  }
+  // «Оновлено» on the dispatch card right after a save (2.5).
+  const updated =
+    (location.state as { npUpdated?: boolean } | null)?.npUpdated === true
+  const tabPathFor = (target: Tab) =>
+    cabinetPath(
+      tenant?.slug ?? '',
+      'integrations',
+      TAB_SUFFIX[target] === ''
+        ? integrationId
+        : `${integrationId}/${TAB_SUFFIX[target]}`,
+    )
+  const editor = useNpSettingsEditor({
+    integrationId,
+    onCancel: () => void navigate(tabPathFor('overview')),
+    onSaved: () => {
+      delivery.reload()
+      toast?.show({ tone: 'ok', message: ts('saved') })
+      void navigate(tabPathFor('overview'), { state: { npUpdated: true } })
+    },
+    reload: delivery.reload,
+    requireLatestMutation: () => requireLatestMutation(),
+    settings: delivery.state,
+  })
 
   useEffect(() => {
     mountedRef.current = true
@@ -200,21 +241,7 @@ export function NovaPoshtaScreen() {
   const settingsLabel = navigationGroupLabel('settings', locale) ?? ''
 
   const listPath = cabinetPath(tenant.slug, 'integrations')
-  const tabPath = (target: Tab) =>
-    cabinetPath(
-      tenant.slug,
-      'integrations',
-      TAB_SUFFIX[target] === ''
-        ? integrationId
-        : `${integrationId}/${TAB_SUFFIX[target]}`,
-    )
-  const tab: Tab = location.pathname.endsWith('/dispatch-points')
-    ? 'points'
-    : location.pathname.endsWith('/webhook')
-      ? 'statuses'
-      : location.pathname.endsWith('/settings')
-        ? 'settings'
-        : 'overview'
+  const tabPath = tabPathFor
 
   const backToList = (
     <Button asChild>
@@ -274,7 +301,6 @@ export function NovaPoshtaScreen() {
   const status = integrationStatusPresentation(integration.status, locale)
   const active = integration.status === 'active'
   const configured = integration.configured
-  const failing = integration.status === 'error'
 
   const apply = (updated: Integration) => {
     if (!mountedRef.current) return
@@ -375,7 +401,11 @@ export function NovaPoshtaScreen() {
 
   return (
     <RedesignShell
-      actions={backToList}
+      actions={
+        tab === 'settings' && configured && rights.integrations
+          ? editor.actions
+          : backToList
+      }
       crumb={
         <IntegrationCrumbs
           current={integration.displayName}
@@ -383,31 +413,17 @@ export function NovaPoshtaScreen() {
         />
       }
     >
-      <div className="flex flex-wrap items-start gap-3">
-        <Mark code={integration.code} large />
-        <div className="grid min-w-0 flex-[1_1_300px] gap-1">
-          <div className="rz-page-head items-center">
-            <h1 className="rz-h-page">{integration.displayName}</h1>
-            <StatusPill tone={status.tone}>{status.label}</StatusPill>
-          </div>
-          <p className="rz-muted m-0 max-w-[62ch] text-pretty">{t('intro')}</p>
+      <div className="grid min-w-0 gap-1.5">
+        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <h1 className="rz-h-page">{integration.displayName}</h1>
+          <span className="rz-muted">{ts('headSub')}</span>
         </div>
-        <div className="flex items-center gap-2.5 pt-1">
-          <span
-            className={`font-medium ${active ? 'text-app-ink' : 'text-app-muted'}`}
-          >
-            {active ? t('stateOn') : t('stateOff')}
-          </span>
-          <Switch
-            checked={active}
-            disabled={busy !== null || (!active && !configured)}
-            label={t('switchLabel')}
-            onChange={toggle}
-            title={!active && !configured ? t('saveKeyFirst') : undefined}
-          />
+        <div>
+          <StatusPill tone={status.tone}>
+            {active ? t('stateOn') : status.label}
+          </StatusPill>
         </div>
       </div>
-
       <nav aria-label={t('sectionsNav')} className="rz-tabs">
         {tabs.map((item) => (
           <Link
@@ -434,120 +450,21 @@ export function NovaPoshtaScreen() {
       {error !== null && <Notice tone="danger">{error}</Notice>}
 
       {tab === 'overview' && (
-        <div className="grid gap-4">
-          <Card
-            title={t('statusCard')}
-            tone={failing ? 'danger' : active ? 'ok' : 'plain'}
-          >
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <p
-                className={`m-0 font-semibold ${failing ? 'text-state-danger' : 'text-app-strong'}`}
-              >
-                {failing
-                  ? t('rejected')
-                  : configured
-                    ? active
-                      ? t('working')
-                      : t('integrationOff')
-                    : t('noKeyYet')}
-              </p>
-              <p className="rz-mono rz-caption m-0">
-                {integration.verifiedAt === null ? (
-                  t('notCheckedYet')
-                ) : (
-                  <>
-                    {t('checkedPrefix')}{' '}
-                    <DateValue value={integration.verifiedAt} />
-                  </>
-                )}
-              </p>
-            </div>
-            <p className="rz-muted m-0 text-pretty">
-              {integration.lastErrorCode === null
-                ? configured
-                  ? t('keyAccepted')
-                  : t('addKeyHint')
-                : integrationErrorMessage(integration.lastErrorCode, locale)}
-            </p>
-            {diagnostics !== null && (
-              <ul className="rz-inset m-0 grid list-none gap-2">
-                {diagnostics.checks.map((check) => (
-                  <li className="grid gap-0.5" key={check.code}>
-                    <span
-                      className={`rz-dot text-app-ink ${
-                        check.status === 'passed'
-                          ? 'rz-dot--ok'
-                          : 'rz-dot--danger'
-                      }`}
-                    >
-                      {diagnosticCheckLabel(check.code, locale)}
-                    </span>
-                    {check.errorCode !== null && (
-                      <span className="rz-caption pl-3 text-pretty">
-                        {integrationErrorMessage(check.errorCode, locale)}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="rz-btn-row">
-              <Button
-                aria-busy={busy === 'verify'}
-                disabled={busy !== null || !configured}
-                onClick={() => void verify()}
-                title={configured ? undefined : t('nothingToVerify')}
-              >
-                {busy === 'verify' ? t('verifying') : t('verifyAgain')}
-              </Button>
-              {(failing || !configured) && (
-                <Button asChild variant="primary">
-                  <Link to={tabPath('settings')}>
-                    {configured ? t('replaceKey') : t('addKey')}
-                  </Link>
-                </Button>
-              )}
-            </div>
-          </Card>
-
-          <KpiStrip>
-            <Kpi
-              label={t('statPoints')}
-              meta={t('statPointsNote')}
-              value={points == null ? '—' : String(points)}
-            />
-            <Kpi
-              label={t('statFailures')}
-              meta={
-                failures === null || failures === 0
-                  ? t('statFailuresOk')
-                  : t('statFailuresBad')
-              }
-              tone={failures !== null && failures > 0 ? 'warn' : 'plain'}
-              value={failures == null ? '—' : String(failures)}
-            />
-            <Kpi
-              label={t('statDeliveries')}
-              meta={t('statDeliveriesNote')}
-              title={t('noShipmentTotals')}
-              tone="dim"
-              value="—"
-            />
-          </KpiStrip>
-
-          <Card title={t('factsTitle')}>
-            <ul className="m-0 grid list-none gap-2 p-0">
-              {FACTS.map((fact) => (
-                <li
-                  className="rz-dot text-app-muted items-baseline whitespace-normal text-pretty"
-                  key={fact}
-                >
-                  {t(fact)}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
+        <NpOverview
+          connectPath={cabinetPath(
+            tenant.slug,
+            'integrations',
+            `${integrationId}/connect`,
+          )}
+          diagnostics={diagnostics}
+          editPath={tabPath('settings')}
+          integration={integration}
+          onVerify={() => void verify()}
+          rights={rights}
+          settings={delivery.state}
+          updated={updated}
+          verifying={busy === 'verify'}
+        />
       )}
 
       {tab === 'points' && (
@@ -558,7 +475,7 @@ export function NovaPoshtaScreen() {
       )}
 
       {tab === 'statuses' && (
-        <div className="grid gap-4">
+        <div className="rz-form-page grid gap-4">
           {/* The managed subscription first: whether the carrier is asked to
               send anything at all. The queue below is a separate question —
               what happened to the events that did arrive. */}
@@ -571,109 +488,118 @@ export function NovaPoshtaScreen() {
       )}
 
       {tab === 'settings' && (
-        <div className="grid max-w-[640px] gap-4">
-          <DeliveryDepositPanel key={scopeKey} />
-          <DeliveryPreferencesPanel integrationId={integration.id} />
-          <Card title={t('connectionCard')}>
-            <Field hint={t('noRename')} label={t('nameLabel')}>
-              <TextInput
-                disabled
-                readOnly
-                title={t('noRename')}
-                value={integration.displayName}
-              />
-            </Field>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="rz-form-page grid min-w-0 gap-4">
+            {configured && rights.integrations ? editor.body : null}
+            <DeliveryDepositPanel key={scopeKey} />
+            <Card title={t('connectionCard')}>
+              <Field hint={t('noRename')} label={t('nameLabel')}>
+                <TextInput
+                  disabled
+                  readOnly
+                  title={t('noRename')}
+                  value={integration.displayName}
+                />
+              </Field>
 
-            {editingKey ? (
-              <form
-                className="grid gap-3"
-                noValidate
-                onSubmit={(event) => void saveKey(event)}
-              >
-                <Field hint={t('newKeyHint')} label={t('newKeyLabel')} required>
-                  <TextInput
-                    autoComplete="off"
-                    className="rz-mono"
-                    onChange={(event) => setKey(event.target.value)}
-                    placeholder={t('keyPlaceholder')}
-                    value={key}
-                  />
-                </Field>
-                <div className="rz-btn-row">
-                  <Button
-                    aria-busy={busy === 'save'}
-                    disabled={busy !== null || key.trim() === ''}
-                    type="submit"
-                    variant="primary"
+              {editingKey ? (
+                <form
+                  className="grid gap-3"
+                  noValidate
+                  onSubmit={(event) => void saveKey(event)}
+                >
+                  <Field
+                    hint={t('newKeyHint')}
+                    label={t('newKeyLabel')}
+                    required
                   >
-                    {busy === 'save' ? tc('saving') : t('saveKey')}
-                  </Button>
-                  <Button
-                    disabled={busy !== null}
-                    onClick={() => {
-                      setEditingKey(false)
-                      setKey('')
-                    }}
-                  >
-                    {tc('cancel')}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <>
-                <div className="rz-inset flex flex-wrap items-center gap-3">
-                  <span className="rz-mono text-app-muted min-w-0">
-                    {configured ? '••••••••••••••••' : t('keyNotSaved')}
-                  </span>
-                  {configured && (
-                    <StatusPill className="ml-auto" tone="ok">
-                      {tc('saved')}
-                    </StatusPill>
-                  )}
-                </div>
-                <p className="rz-caption m-0 text-pretty">
-                  {t('keyHiddenNote')}
-                </p>
-                <div className="rz-btn-row">
-                  <Button
-                    disabled={busy !== null}
-                    onClick={() => setEditingKey(true)}
-                    variant={configured ? 'ghost' : 'primary'}
-                  >
-                    {configured ? t('replaceKey') : t('addKey')}
-                  </Button>
-                  <Button
-                    aria-busy={busy === 'verify'}
-                    disabled={busy !== null || !configured}
-                    onClick={() => void verify()}
-                    title={configured ? undefined : t('nothingToVerify')}
-                  >
-                    {busy === 'verify' ? t('verifying') : t('verifyConnection')}
-                  </Button>
-                </div>
-              </>
-            )}
-          </Card>
+                    <TextInput
+                      autoComplete="off"
+                      className="rz-mono"
+                      onChange={(event) => setKey(event.target.value)}
+                      placeholder={t('keyPlaceholder')}
+                      value={key}
+                    />
+                  </Field>
+                  <div className="rz-btn-row">
+                    <Button
+                      aria-busy={busy === 'save'}
+                      disabled={busy !== null || key.trim() === ''}
+                      type="submit"
+                      variant="primary"
+                    >
+                      {busy === 'save' ? tc('saving') : t('saveKey')}
+                    </Button>
+                    <Button
+                      disabled={busy !== null}
+                      onClick={() => {
+                        setEditingKey(false)
+                        setKey('')
+                      }}
+                    >
+                      {tc('cancel')}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="rz-inset flex flex-wrap items-center gap-3">
+                    <span className="rz-mono text-app-muted min-w-0">
+                      {configured ? '••••••••••••••••' : t('keyNotSaved')}
+                    </span>
+                    {configured && (
+                      <StatusPill className="ml-auto" tone="ok">
+                        {tc('saved')}
+                      </StatusPill>
+                    )}
+                  </div>
+                  <p className="rz-caption m-0 text-pretty">
+                    {t('keyHiddenNote')}
+                  </p>
+                  <div className="rz-btn-row">
+                    <Button
+                      disabled={busy !== null}
+                      onClick={() => setEditingKey(true)}
+                      variant={configured ? 'ghost' : 'primary'}
+                    >
+                      {configured ? t('replaceKey') : t('addKey')}
+                    </Button>
+                    <Button
+                      aria-busy={busy === 'verify'}
+                      disabled={busy !== null || !configured}
+                      onClick={() => void verify()}
+                      title={configured ? undefined : t('nothingToVerify')}
+                    >
+                      {busy === 'verify'
+                        ? t('verifying')
+                        : t('verifyConnection')}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </Card>
 
-          <Card
-            title={active ? t('disableCard') : t('enableCard')}
-            tone={active ? 'danger' : 'plain'}
-          >
-            <p className="rz-muted m-0 text-pretty">
-              {active ? t('disableText') : t('enableText')}
-            </p>
-            <div>
-              <Button
-                aria-busy={busy === 'toggle'}
-                disabled={busy !== null || (!active && !configured)}
-                onClick={toggle}
-                title={!active && !configured ? t('saveKeyFirst') : undefined}
-                variant={active ? 'danger' : 'primary'}
-              >
-                {active ? t('disableButton') : t('enableButton')}
-              </Button>
-            </div>
-          </Card>
+            <Card
+              title={active ? t('disableCard') : t('enableCard')}
+              tone={active ? 'danger' : 'plain'}
+            >
+              <p className="rz-muted m-0 text-pretty">
+                {active ? t('disableText') : t('enableText')}
+              </p>
+              <div>
+                <Button
+                  aria-busy={busy === 'toggle'}
+                  disabled={busy !== null || (!active && !configured)}
+                  onClick={toggle}
+                  title={!active && !configured ? t('saveKeyFirst') : undefined}
+                  variant={active ? 'danger' : 'primary'}
+                >
+                  {active ? t('disableButton') : t('enableButton')}
+                </Button>
+              </div>
+            </Card>
+          </div>
+          <NpRightsCard className="max-lg:hidden" {...rights} />
         </div>
       )}
     </RedesignShell>

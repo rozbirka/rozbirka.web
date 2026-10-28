@@ -197,7 +197,7 @@ beforeEach(() => {
 it('uses the cabinet subscription snapshot without loading it again', () => {
   renderScreen(<SubscriptionScreen />)
 
-  expect(screen.getByRole('heading', { name: 'Pro' })).toBeVisible()
+  expect(screen.getByText('Pro')).toBeVisible()
   expect(screen.getByText(/7 днів/)).toBeInTheDocument()
   expect(billingApi.getSubscription).not.toHaveBeenCalled()
 })
@@ -314,7 +314,7 @@ it('revalidates the latest provider before dispatching Mono reactivation', async
   renderScreen(<SubscriptionScreen />)
   // The overview loads its payment strip; let it land before interacting, or
   // the re-render replaces the button mid-click.
-  await screen.findByText('Платежів ще не було.')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
 
   const currentSnapshot = currentCabinet.snapshot
   if (!currentSnapshot) throw new Error('Expected ready cabinet snapshot')
@@ -338,7 +338,7 @@ it('revalidates the latest provider before dispatching Mono cancellation', async
   renderScreen(<SubscriptionScreen />)
   // The overview loads its payment strip; let it land before interacting, or
   // the re-render replaces the button mid-click.
-  await screen.findByText('Платежів ще не було.')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
 
   const currentSnapshot = currentCabinet.snapshot
   if (!currentSnapshot) throw new Error('Expected ready cabinet snapshot')
@@ -398,7 +398,9 @@ it('confirms a completed cancellation with the refreshed subscription state', as
   expect(await screen.findByRole('status')).toHaveTextContent(
     'Підписку скасовано.',
   )
-  expect(screen.getByText('Скасована')).toBeInTheDocument()
+  expect(
+    screen.getAllByText('Скасована').every((element) => element.isConnected),
+  ).toBe(true)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
@@ -413,7 +415,7 @@ it('uses source-appropriate payment copy for native subscriptions', async () => 
   renderScreen(<PaymentsScreen />)
 
   // Let the ledger land: the card moves into its column once it does.
-  await screen.findByText('Платежів ще не було.')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
   expect(
     screen.getByText(/Спосіб оплати керується App Store/),
   ).toBeInTheDocument()
@@ -423,13 +425,13 @@ it('uses source-appropriate payment copy for native subscriptions', async () => 
 it('orders the payment page heading before the billing history section', async () => {
   const view = renderScreen(<PaymentsScreen />)
 
-  await screen.findByText('Платежів ще не було.')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   expect(
     screen.getByRole('heading', { level: 1, name: 'Платежі' }),
   ).toBeVisible()
   expect(
-    screen.getByRole('heading', { level: 2, name: 'Спосіб оплати' }),
+    screen.getByRole('heading', { level: 2, name: 'Історія платежів' }),
   ).toBeVisible()
   expect(view.container.querySelector('.text-neutral-500')).toBeNull()
 })
@@ -666,6 +668,248 @@ it('surfaces a conflicting payment cancellation without leaking an unhandled rej
   }
 })
 
+it.each(['pastDue', 'blocked'] as const)(
+  'recovers an expired %s renewal by cancelling Mono before opening the same plan checkout',
+  async (state) => {
+    const overdue = {
+      ...cancellableSubscription,
+      state,
+      planCode: 'enterprise_monthly',
+      currentPeriodEnd: '2020-01-01T00:00:00Z',
+      nextChargeAt: '2020-01-01T00:00:00Z',
+    }
+    vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+    vi.mocked(billingApi.getSubscription)
+      .mockResolvedValueOnce(overdue)
+      .mockResolvedValueOnce({
+        ...overdue,
+        state: 'blocked',
+        canCancel: false,
+        canSubscribe: true,
+        nextChargeAt: null,
+      })
+    const cancelled = deferred<void>()
+    vi.mocked(billingApi.cancel).mockReturnValue(cancelled.promise)
+    vi.mocked(billingApi.subscribe).mockReturnValue(
+      new Promise(() => undefined),
+    )
+    const user = userEvent.setup()
+    renderScreen(<SubscriptionScreen />)
+
+    await user.click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+    await waitFor(() =>
+      expect(billingApi.cancel).toHaveBeenCalledWith(
+        {
+          recovery: {
+            planCode: 'enterprise_monthly',
+            currentPeriodEnd: '2020-01-01T00:00:00Z',
+          },
+        },
+        { signal: tenantRequestScope.signal },
+      ),
+    )
+    expect(billingApi.subscribe).not.toHaveBeenCalled()
+    cancelled.resolve()
+
+    await waitFor(() =>
+      expect(billingApi.subscribe).toHaveBeenCalledWith(
+        { planCode: 'enterprise_monthly' },
+        { signal: tenantRequestScope.signal },
+      ),
+    )
+  },
+)
+
+it('does not create a replacement checkout when Mono cancellation is unconfirmed', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription).mockResolvedValue(overdue)
+  const error = axiosFailure(409, 'private provider detail')
+  error.response!.data = {
+    error: {
+      code: 'billing.cancellation_unconfirmed',
+      message: 'private provider detail',
+    },
+  }
+  vi.mocked(billingApi.cancel).mockRejectedValue(error)
+  renderScreen(<SubscriptionScreen />)
+  await userEvent
+    .setup()
+    .click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'monobank ще не підтвердив скасування.',
+  )
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+  expect(
+    screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+  ).toBeEnabled()
+})
+
+it('retries a failed replacement checkout on the original plan without cancelling Mono twice', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    planCode: 'enterprise_monthly',
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription)
+    .mockResolvedValueOnce(overdue)
+    .mockResolvedValueOnce({
+      ...overdue,
+      state: 'blocked',
+      canCancel: false,
+      canSubscribe: true,
+      canReactivate: true,
+    })
+  vi.mocked(billingApi.cancel).mockResolvedValue()
+  vi.mocked(billingApi.subscribe).mockRejectedValue(
+    new AxiosError('offline', 'ERR_NETWORK'),
+  )
+  renderScreen(<SubscriptionScreen />)
+  const user = userEvent.setup()
+  await user.click(
+    screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+  )
+  await screen.findByRole('alert')
+  await user.click(screen.getAllByRole('button', { name: /^Оплатити 29/ })[0]!)
+
+  await waitFor(() => expect(billingApi.subscribe).toHaveBeenCalledTimes(2))
+  expect(billingApi.cancel).toHaveBeenCalledOnce()
+  expect(billingApi.subscribe).toHaveBeenLastCalledWith(
+    { planCode: 'enterprise_monthly' },
+    { signal: tenantRequestScope.signal },
+  )
+})
+
+it('does not offer card replacement while the paid period is still active', () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'pastDue',
+      currentPeriodEnd: '2099-11-20T00:00:00Z',
+    }),
+  )
+  renderScreen(<SubscriptionScreen />)
+  expect(
+    screen.queryByRole('button', { name: 'Оплатити іншою карткою' }),
+  ).not.toBeInTheDocument()
+})
+
+it('does not create a replacement payment after leaving the tenant during cancellation', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription).mockResolvedValue(overdue)
+  const cancelled = deferred<void>()
+  vi.mocked(billingApi.cancel).mockReturnValue(cancelled.promise)
+  const view = renderScreen(<SubscriptionScreen />)
+  await userEvent
+    .setup()
+    .click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+  await waitFor(() => expect(billingApi.cancel).toHaveBeenCalledOnce())
+  tenantRequestScope.rotate()
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, subscription, 5))
+  view.rerender(inShell(<SubscriptionScreen />))
+  cancelled.resolve()
+  await Promise.resolve()
+
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+  expect(billingApi.getSubscription).toHaveBeenCalledOnce()
+})
+
+it('does not start another payment if the failed renewal has already succeeded', async () => {
+  const overdue = {
+    ...cancellableSubscription,
+    state: 'pastDue' as const,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  }
+  vi.mocked(useCabinet).mockReturnValue(cabinet(undefined, overdue))
+  vi.mocked(billingApi.getSubscription).mockResolvedValue({
+    ...overdue,
+    state: 'active',
+    currentPeriodEnd: '2099-11-20T00:00:00Z',
+  })
+  renderScreen(<SubscriptionScreen />)
+  await userEvent
+    .setup()
+    .click(
+      screen.getAllByRole('button', { name: 'Оплатити іншою карткою' })[0]!,
+    )
+  await waitFor(() => expect(billingApi.getSubscription).toHaveBeenCalledOnce())
+  expect(billingApi.cancel).not.toHaveBeenCalled()
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+})
+
+it('shows paid access expiry instead of a future charge after cancellation', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'cancelled',
+      canCancel: false,
+      currentPeriodEnd: '2099-11-20T00:00:00Z',
+      nextChargeAt: null,
+    }),
+  )
+  renderScreen(<SubscriptionScreen />)
+
+  expect(await screen.findByText('Доступ до')).toBeInTheDocument()
+  expect(screen.getByText('Автопродовження вимкнено')).toBeInTheDocument()
+  expect(screen.queryByText('Наступне списання')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Скасувати підписку' }),
+  ).not.toBeInTheDocument()
+})
+
+it('keeps cancellation retryable when monobank has not confirmed stopping renewal', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, cancellableSubscription),
+  )
+  const error = axiosFailure(409, 'private provider detail')
+  error.response!.data = {
+    error: {
+      code: 'billing.cancellation_unconfirmed',
+      message: 'private provider detail',
+    },
+  }
+  vi.mocked(billingApi.cancel).mockRejectedValue(error)
+  const user = userEvent.setup()
+  renderScreen(<SubscriptionScreen />)
+  await user.click(screen.getByRole('button', { name: 'Скасувати підписку' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Так, скасувати підписку' }),
+  )
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'monobank ще не підтвердив скасування. Спробуйте ще раз, щоб перевірити стан підписки.',
+  )
+  expect(screen.getByRole('alert')).not.toHaveTextContent(
+    'private provider detail',
+  )
+  expect(
+    screen.getByRole('button', { name: 'Так, скасувати підписку' }),
+  ).toBeEnabled()
+  expect(
+    screen.queryByText(
+      'Підписку скасовано. Доступ діє до кінця сплаченого періоду.',
+    ),
+  ).not.toBeInTheDocument()
+})
+
 it('settles a rejected subscription cancellation with truthful feedback', async () => {
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(undefined, cancellableSubscription),
@@ -749,28 +993,23 @@ it('does not surface a late mutation failure from a stale cabinet generation', a
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-it('says which billing controls are unavailable instead of faking them', async () => {
+it('omits unsupported payment controls', async () => {
   renderScreen(<PaymentsScreen />)
 
-  await screen.findByText('Платежів ще не було.')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
   for (const label of [
     'Додати спосіб оплати',
     'Експорт CSV',
     'Змінити реквізити',
   ])
-    expect(screen.getByRole('button', { name: label })).toBeDisabled()
-  expect(
-    screen.getByRole('button', { name: 'Додати спосіб оплати' }).title,
-  ).toContain('Підписка тримає одну картку')
+    expect(screen.queryByRole('button', { name: label })).toBeNull()
 })
 
-it('keeps the card-change control on the subscription overview disabled', async () => {
+it('omits the unsupported card-change control from the subscription overview', async () => {
   renderScreen(<SubscriptionScreen />)
 
-  await screen.findByText('Платежів ще не було.')
-  const card = screen.getByRole('button', { name: 'Змінити карту' })
-  expect(card).toBeDisabled()
-  expect(card.title).toContain('Замінити картку тут не можна')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
+  expect(screen.queryByRole('button', { name: 'Змінити карту' })).toBeNull()
 })
 
 it.each([
@@ -814,7 +1053,7 @@ it('offers checkout without billing history from the subscription overview', asy
   )
   vi.mocked(billingApi.subscribe).mockRejectedValue(new Error('offline'))
   renderScreen(<SubscriptionScreen />)
-  await screen.findByText('Платежів ще не було.')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
   await userEvent
     .setup()
     .click(screen.getByRole('button', { name: 'Оформити підписку' }))
@@ -997,7 +1236,7 @@ it('does not offer duplicate default checkout for a blocked but still active Mon
     }),
   )
   renderScreen(<SubscriptionScreen />)
-  await screen.findByText('Платежів ще не було.')
+  await waitFor(() => expect(billingApi.getPayments).toHaveBeenCalled())
   expect(screen.queryByRole('button', { name: 'Оформити підписку' })).toBeNull()
 })
 
@@ -1058,7 +1297,7 @@ it('does not substitute trial dates for an unknown paid-store period end', async
   expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
 })
 
-it('renders the subscription in English (UK) with UK dates', async () => {
+it('renders the subscription in English (UK) with UK dates', () => {
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(undefined, {
       ...cancellableSubscription,
@@ -1078,7 +1317,7 @@ it('renders the subscription in English (UK) with UK dates', async () => {
     screen.getByRole('heading', { name: 'Subscription' }),
   ).toBeInTheDocument()
   // Server plan names stay as received.
-  expect(screen.getByRole('heading', { name: 'Pro' })).toBeVisible()
+  expect(screen.getByText('Pro')).toBeVisible()
   expect(screen.getByText('Active')).toBeInTheDocument()
   expect(screen.getByText(/^Next charge/).closest('.rz-kpi')).toHaveTextContent(
     '21/08/2026',
@@ -1087,9 +1326,7 @@ it('renders the subscription in English (UK) with UK dates', async () => {
   expect(
     screen.getByRole('button', { name: 'Cancel subscription' }),
   ).toBeVisible()
-  expect(await screen.findByText('First payment')).toBeInTheDocument()
-  expect(screen.getByText('Pending')).toBeInTheDocument()
-  expect(screen.getByText('15/08/2026')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Available now' })).toBeVisible()
   expect(screen.queryByText(/Підписка|Наступне списання/)).toBeNull()
 })
 
@@ -1103,7 +1340,7 @@ it('renders plans in English (UK) and Polish', async () => {
   )
   expect(await screen.findByText('per month')).toBeInTheDocument()
   expect(screen.getByText('14 days free')).toBeInTheDocument()
-  expect(screen.getAllByText('Tills').length).toBeGreaterThan(0)
+  expect(screen.getByRole('columnheader', { name: 'Users' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Choose' })).toBeVisible()
   unmount()
 
@@ -1115,4 +1352,220 @@ it('renders plans in English (UK) and Polish', async () => {
   expect(await screen.findByText('za miesiąc')).toBeInTheDocument()
   expect(screen.getByText('14 dni za darmo')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Wybierz' })).toBeVisible()
+})
+
+it('archive overview keeps the actual plan and replaces an expired countdown with renewal context', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      currentPeriodEnd: '2026-10-27T10:00:00Z',
+      nextChargeAt: '2026-10-27T10:00:00Z',
+      canCancel: false,
+      canSubscribe: true,
+    }),
+  )
+  renderScreen(<SubscriptionScreen />)
+  expect(screen.getByText('Pro')).toBeVisible()
+  expect(
+    await screen.findByRole('heading', { name: 'Останні списання' }),
+  ).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Дані збережено' })).toBeVisible()
+  expect(
+    screen.getByRole('heading', { name: 'Що доступно зараз' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByText(/до списання|Прострочено на/),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByText(/не списалась|Чому могло не списатись/),
+  ).not.toBeInTheDocument()
+})
+
+it('archive overview describes an evidenced failed renewal and keeps its amount and currency', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      currentPeriodEnd: '2026-10-27T10:00:00Z',
+      nextChargeAt: null,
+      cardBrand: 'MASTERCARD',
+      cardLast4: '0044',
+      amount: 59,
+      canCancel: true,
+      canReactivate: true,
+    }),
+  )
+  vi.mocked(billingApi.getPayments).mockResolvedValue({
+    items: [
+      {
+        ...pendingPayment,
+        type: 'recurring',
+        status: 'failed',
+        amount: 59,
+        currency: 'USD',
+        createdAt: '2026-10-27T10:00:01Z',
+        checkoutUrl: null,
+      },
+    ],
+    page: 1,
+    pageSize: 4,
+    total: 1,
+    totalPages: 1,
+  })
+  renderScreen(<SubscriptionScreen />)
+  expect(
+    await screen.findByRole('heading', { name: 'Чому могло не списатись' }),
+  ).toBeVisible()
+  expect(
+    screen.getByText(/не списалась — доступ до кабінету закрито/),
+  ).toBeVisible()
+  expect(
+    screen.getByText('Не списано', { selector: '.rz-kpi__label' }),
+  ).toBeVisible()
+  expect(billingApi.cancel).not.toHaveBeenCalled()
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+})
+
+it('archive overview does not blame an old failed payment after a newer successful one', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      canCancel: false,
+      canSubscribe: true,
+      currentPeriodEnd: '2026-10-27T10:00:00Z',
+      nextChargeAt: null,
+    }),
+  )
+  vi.mocked(billingApi.getPayments).mockResolvedValue({
+    items: [
+      {
+        ...pendingPayment,
+        id: 'paid',
+        type: 'recurring',
+        status: 'success',
+        createdAt: '2026-10-27T10:00:02Z',
+      },
+      {
+        ...pendingPayment,
+        id: 'failed',
+        type: 'recurring',
+        status: 'failed',
+        createdAt: '2026-10-27T10:00:01Z',
+      },
+    ],
+    page: 1,
+    pageSize: 4,
+    total: 2,
+    totalPages: 1,
+  })
+  renderScreen(<SubscriptionScreen />)
+  await screen.findByRole('heading', { name: 'Останні списання' })
+  expect(
+    screen.queryByRole('heading', { name: 'Чому могло не списатись' }),
+  ).not.toBeInTheDocument()
+})
+
+it('archive plans show the catalogue as a table with real API limits and checkout actions', async () => {
+  vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+  renderScreen(<PlansScreen />)
+  const table = await screen.findByRole('table', { name: 'Тарифи' })
+  expect(table).toHaveTextContent('Lite')
+  expect(table).toHaveTextContent('1000')
+  expect(screen.getByRole('button', { name: 'Обрати' })).toBeEnabled()
+  expect(
+    screen.queryByRole('heading', { name: 'Що входить у кожен тариф' }),
+  ).not.toBeInTheDocument()
+})
+
+it('archive history failure remains retryable instead of claiming there were no payments', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      canCancel: false,
+      canSubscribe: true,
+    }),
+  )
+  vi.mocked(billingApi.getPayments)
+    .mockRejectedValueOnce(new Error('unavailable'))
+    .mockResolvedValueOnce(paymentPage([]))
+  const user = userEvent.setup()
+  renderScreen(<SubscriptionScreen />)
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Не вдалося завантажити списання.',
+  )
+  expect(screen.queryByText('Платежів ще не було.')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
+  expect(await screen.findByText('Платежів ще не було.')).toBeVisible()
+  expect(billingApi.getPayments).toHaveBeenCalledTimes(2)
+})
+
+it('archive history clears the former tenant rows as soon as the tenant generation changes', async () => {
+  const first = cabinet(
+    undefined,
+    { ...cancellableSubscription, state: 'blocked' },
+    4,
+  )
+  vi.mocked(useCabinet).mockReturnValue(first)
+  vi.mocked(billingApi.getPayments).mockResolvedValueOnce(
+    paymentPage([{ ...pendingPayment, amount: 143 }]),
+  )
+  const pending = deferred<ReturnType<typeof paymentPage>>()
+  vi.mocked(billingApi.getPayments).mockReturnValueOnce(pending.promise)
+  const { rerender } = renderScreen(<SubscriptionScreen />)
+  expect(
+    await screen.findByRole('table', { name: 'Останні списання' }),
+  ).toHaveTextContent('143')
+  const second = cabinet(
+    undefined,
+    { ...cancellableSubscription, state: 'blocked' },
+    5,
+  )
+  if (second.snapshot) second.snapshot.tenantId = 'tenant-2'
+  vi.mocked(useCabinet).mockReturnValue(second)
+  tenantRequestScope.rotate()
+  rerender(inShell(<SubscriptionScreen />))
+  expect(
+    screen.queryByRole('table', { name: 'Останні списання' }),
+  ).not.toBeInTheDocument()
+  pending.resolve(paymentPage([]))
+  expect(await screen.findByText('Платежів ще не було.')).toBeVisible()
+})
+
+it('archive blocked Mono subscription can still stop an existing recurring agreement without checkout', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      canCancel: true,
+      canReactivate: true,
+      currentPeriodEnd: '2026-10-27T10:00:00Z',
+    }),
+  )
+  const user = userEvent.setup()
+  renderScreen(<SubscriptionScreen />)
+  await user.click(screen.getByRole('button', { name: 'Скасувати підписку' }))
+  expect(
+    screen.getByRole('dialog', { name: 'Скасувати підписку?' }),
+  ).toBeVisible()
+  expect(billingApi.subscribe).not.toHaveBeenCalled()
+  expect(billingApi.cancel).not.toHaveBeenCalled()
+})
+
+it('archive expired access retains a link to plans after removing billing tabs', () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      canCancel: false,
+      canSubscribe: true,
+    }),
+  )
+  renderScreen(<SubscriptionScreen />)
+  expect(screen.getByRole('link', { name: 'Усі тарифи' })).toHaveAttribute(
+    'href',
+    '/app/koval/settings/billing/plans',
+  )
 })

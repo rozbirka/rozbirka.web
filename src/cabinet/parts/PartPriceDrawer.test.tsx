@@ -61,6 +61,8 @@ it('edits only the asking price using the shared drawer and money field', async 
   expect(screen.getByRole('dialog', { name: 'Ціна продажу' })).toBeVisible()
   const input = screen.getByRole('textbox', { name: 'Ціна продажу' })
   expect(input).toHaveValue('100')
+  expect(input).toHaveAttribute('dir', 'ltr')
+  expect(input).toHaveClass('text-left')
   await user.clear(input)
   await user.type(input, '125,5')
   await user.click(screen.getByRole('button', { name: 'Зберегти' }))

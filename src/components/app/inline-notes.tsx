@@ -9,6 +9,7 @@ import { Field } from './field'
 import { TextArea } from './input'
 import { Notice } from './notice'
 import { inlineNotesMessages } from './inline-notes-messages'
+import { useOptionalToast } from './toast-context'
 
 export interface InlineNotesProps {
   value: string | null | undefined
@@ -56,6 +57,7 @@ export function InlineNotes({
   labels,
   children,
 }: InlineNotesProps) {
+  const toast = useOptionalToast()
   const t = useT(inlineNotesMessages)
   const tc = useT(commonMessages)
   const tl = useT(lostResponseMessages)
@@ -116,7 +118,8 @@ export function InlineNotes({
       if (!mountedRef.current) return
       onSaved?.(saved)
       finishEditing()
-      setStatus(tc('saved'))
+      setStatus(null)
+      toast?.show({ tone: 'ok', message: tc('saved') })
     } catch (failure) {
       if (!mountedRef.current) return
       const problem = normalizeApiProblem(failure)
@@ -152,7 +155,7 @@ export function InlineNotes({
     <div className="grid min-w-0 gap-3">
       {editing && canEdit ? (
         <form
-          className="grid min-w-0 gap-3"
+          className="rz-form-page grid min-w-0 gap-3"
           aria-busy={disabled}
           onSubmit={(event) => void save(event)}
         >

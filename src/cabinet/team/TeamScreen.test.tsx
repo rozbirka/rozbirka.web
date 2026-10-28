@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest resolves object methods into typed mocks. */
 
+import { AxiosError, AxiosHeaders } from 'axios'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
@@ -205,11 +206,9 @@ beforeEach(() => {
   tenantRequestScope.rotate()
   vi.mocked(useCabinet).mockReturnValue(cabinet())
   vi.mocked(teamApi.listMembers).mockResolvedValue([member])
-  vi.mocked(teamApi.listRoles).mockResolvedValue([
-    ownerRole,
-    mechanicRole,
-    managerRole,
-  ])
+  vi.mocked(teamApi.listRoles)
+    .mockReset()
+    .mockResolvedValue([ownerRole, mechanicRole, managerRole])
   vi.mocked(teamApi.listInvitations).mockResolvedValue([invitation()])
   vi.mocked(teamApi.changeRole).mockResolvedValue({
     ...member,
@@ -619,9 +618,9 @@ it('does not read team data before an access-changing mutation retry settles', a
   ]
   accessRetry.resolve(undefined)
 
-  expect(readsBeforeAccessSettles).toEqual([1, 1, 1])
+  expect(readsBeforeAccessSettles).toEqual([1, 2, 1])
   await waitFor(() => expect(teamApi.listMembers).toHaveBeenCalledTimes(2))
-  expect(teamApi.listRoles).toHaveBeenCalledTimes(2)
+  expect(teamApi.listRoles).toHaveBeenCalledTimes(3)
   expect(teamApi.listInvitations).toHaveBeenCalledTimes(2)
 })
 
@@ -1473,4 +1472,157 @@ it('closes the role editor when switching tenant identity without submitting its
   ).not.toBeInTheDocument()
   expect(teamApi.changeRole).not.toHaveBeenCalled()
   await screen.findByText('Олена')
+})
+
+it('keeps permission save failures beside the footer actions and preserves choices for retry', async () => {
+  const user = userEvent.setup()
+  vi.mocked(teamApi.updateUserPermissions).mockRejectedValueOnce(
+    new Error('offline'),
+  )
+  renderScreen()
+  await user.click(
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Права',
+    }),
+  )
+  const dialog = await screen.findByRole('dialog', { name: 'Права: Олена' })
+  const cars = await within(dialog).findByRole('checkbox', {
+    name: 'Перегляд автомобілів',
+  })
+  await user.click(cars)
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти права' }),
+  )
+  const alert = await within(dialog).findByRole('alert')
+  expect(alert.closest('.rz-sheet__foot')).not.toBeNull()
+  expect(cars).toBeChecked()
+  expect(
+    within(dialog).getByRole('button', { name: 'Зберегти права' }),
+  ).toBeEnabled()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти права' }),
+  )
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(teamApi.updateUserPermissions).toHaveBeenCalledTimes(2)
+  expect(teamApi.updateUserPermissions).toHaveBeenLastCalledWith(
+    'user-1',
+    ['parts.view', 'cars.view'],
+    { signal: tenantRequestScope.signal },
+  )
+})
+
+it('shows the server reason when a manager tries to change their own permissions', async () => {
+  const user = userEvent.setup()
+  const currentCabinet = cabinet()
+  currentCabinet.snapshot.userId = member.userId
+  currentCabinet.snapshot.role = 'manager'
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  vi.mocked(teamApi.updateUserPermissions).mockRejectedValueOnce(
+    new AxiosError('Request failed', undefined, undefined, undefined, {
+      status: 400,
+      statusText: 'Bad Request',
+      config: { headers: new AxiosHeaders() },
+      headers: {},
+      data: {
+        data: null,
+        error: {
+          code: 'VALIDATION_ERROR',
+          details: null,
+          message: 'Cannot change own permissions.',
+        },
+      },
+    }),
+  )
+  renderScreen()
+  await user.click(
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Права',
+    }),
+  )
+  const dialog = await screen.findByRole('dialog', { name: 'Права: Олена' })
+  await within(dialog).findByRole('checkbox', { name: 'Перегляд автомобілів' })
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти права' }),
+  )
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+    'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
+  )
+  expect(currentCabinet.retry).not.toHaveBeenCalled()
+})
+
+it('keeps permission editing available to a manager with team.manage', async () => {
+  const user = userEvent.setup()
+  const currentCabinet = cabinet([
+    'team.view',
+    'team.manage',
+    'parts.view',
+    'cars.view',
+  ])
+  currentCabinet.snapshot.role = 'manager'
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  renderScreen()
+  await user.click(
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Права',
+    }),
+  )
+  const dialog = await screen.findByRole('dialog', { name: 'Права: Олена' })
+  await user.click(
+    await within(dialog).findByRole('checkbox', {
+      name: 'Перегляд автомобілів',
+    }),
+  )
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти права' }),
+  )
+  await waitFor(() =>
+    expect(teamApi.updateUserPermissions).toHaveBeenCalledWith(
+      'user-1',
+      ['parts.view', 'cars.view'],
+      { signal: tenantRequestScope.signal },
+    ),
+  )
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+})
+
+it('opens role assignment as a drawer with a loading field and blocks saving until roles arrive', async () => {
+  const user = userEvent.setup()
+  const roles = deferred<RoleDto[]>()
+  renderScreen()
+  await screen.findByRole('button', { name: 'Дії з учасником Олена' })
+  vi.mocked(teamApi.listRoles).mockReturnValueOnce(roles.promise)
+  const editor = await openRoleEditor(user)
+  const dialog = screen.getByRole('dialog', { name: 'Змінити роль' })
+  expect(dialog).toHaveClass('rz-sheet')
+  expect(editor.getByRole('status')).toHaveTextContent('Завантаження')
+  expect(editor.getByRole('button', { name: 'Зберегти' })).toBeDisabled()
+  expect(editor.queryByRole('button', { name: 'Роль для Олена' })).toBeNull()
+  roles.resolve([ownerRole, mechanicRole, managerRole])
+  expect(
+    await editor.findByRole('button', { name: 'Роль для Олена' }),
+  ).toBeEnabled()
+  await chooseRole(user, 'Роль для Олена', 'Менеджер')
+  await user.click(editor.getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() => expect(teamApi.changeRole).toHaveBeenCalledOnce())
+})
+
+it('keeps the role drawer open on a roles-load failure and retries without submitting', async () => {
+  const user = userEvent.setup()
+  renderScreen()
+  await screen.findByRole('button', { name: 'Дії з учасником Олена' })
+  vi.mocked(teamApi.listRoles).mockRejectedValueOnce(new Error('offline'))
+  const editor = await openRoleEditor(user)
+  expect(await editor.findByRole('alert')).toHaveTextContent(
+    'Не вдалося завантажити ролі',
+  )
+  expect(editor.getByRole('button', { name: 'Зберегти' })).toBeDisabled()
+  await user.click(editor.getByRole('button', { name: 'Спробувати ще раз' }))
+  expect(
+    await editor.findByRole('button', { name: 'Роль для Олена' }),
+  ).toBeEnabled()
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
 })
