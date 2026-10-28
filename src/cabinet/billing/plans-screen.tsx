@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { BillingCard, BillingShell } from './billing-shell'
-import { translate, useLocale, useT, type Locale } from '@/i18n'
+import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
 import { daysText, intervalLabel, intervalName } from './billing-vocabulary'
 import { billingMessages } from './messages'
 import { plansMessages } from './plans-messages'
@@ -63,6 +63,7 @@ export function PlansScreen() {
   const { locale } = useLocale()
   const t = useT(plansMessages)
   const td = useT(subscriptionDesignMessages)
+  const tc = useT(commonMessages)
   const [searchParams] = useSearchParams()
   const { cabinet, controlDecision, requireLatestMutation } =
     useBillingMutation('plans')
@@ -236,9 +237,13 @@ export function PlansScreen() {
         !canCheckout &&
         !contractManaged && <BillingUnavailableNotice />}
 
-      <BillingCard title={t('title')} bodyClassName="p-0">
+      <BillingCard
+        title={t('title')}
+        bodyClassName="p-0 sm:[&_.rz-table_td]:px-6 sm:[&_.rz-table_td]:py-5 sm:[&_.rz-table_th]:px-6 sm:[&_.rz-table_thead_th]:py-3 sm:[&_.rz-table_tbody_th]:py-5 sm:[&_.rz-table_td:last-child]:w-40"
+      >
         <DataTable
           caption={t('title')}
+          density="comfortable"
           embedded
           rowKey={(plan) => plan.code}
           rows={plans}
@@ -254,8 +259,8 @@ export function PlansScreen() {
                     (!providerSubscription?.canSubscribe &&
                       !providerSubscription?.canReactivate))
                 return (
-                  <span className="grid gap-1">
-                    <span className="flex flex-wrap items-center gap-2">
+                  <div className="grid gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3
                         className={cn(
                           'rz-h-card',
@@ -269,7 +274,7 @@ export function PlansScreen() {
                       ) : isCurrent ? (
                         <StatusPill tone="ok">{t('currentPlan')}</StatusPill>
                       ) : null}
-                    </span>
+                    </div>
                     {plan.trialDays > 0 && (
                       <span className="rz-caption">
                         {t('trialFree', {
@@ -277,7 +282,7 @@ export function PlansScreen() {
                         })}
                       </span>
                     )}
-                  </span>
+                  </div>
                 )
               },
             },
@@ -301,6 +306,19 @@ export function PlansScreen() {
               key: 'price',
               label: td('price'),
               align: 'end',
+              cell: (plan) => (
+                <span className="grid gap-2 whitespace-nowrap">
+                  <Amount currency={plan.currency} value={plan.amount} />
+                  <span className="rz-caption">
+                    {intervalLabel(plan.interval, locale)}
+                  </span>
+                </span>
+              ),
+            },
+            {
+              key: 'actions',
+              label: tc('actions'),
+              headerHidden: true,
               cell: (plan) => {
                 const isCurrent =
                   plan.code === currentCode &&
@@ -308,13 +326,7 @@ export function PlansScreen() {
                     (!providerSubscription?.canSubscribe &&
                       !providerSubscription?.canReactivate))
                 return (
-                  <span className="flex flex-wrap items-center justify-end gap-3">
-                    <span className="grid gap-0.5">
-                      <Amount currency={plan.currency} value={plan.amount} />
-                      <span className="rz-caption">
-                        {intervalLabel(plan.interval, locale)}
-                      </span>
-                    </span>
+                  <div className="flex w-full justify-end">
                     {!isCurrent && canCheckout && (
                       <BillingMutationGate decision={controlDecision}>
                         <Button
@@ -324,13 +336,15 @@ export function PlansScreen() {
                             planCodeRef.current = plan.code
                             checkout.run()
                           }}
+                          size="touch"
+                          className="min-w-28"
                           variant="primary"
                         >
                           {t('choose')}
                         </Button>
                       </BillingMutationGate>
                     )}
-                  </span>
+                  </div>
                 )
               },
             },

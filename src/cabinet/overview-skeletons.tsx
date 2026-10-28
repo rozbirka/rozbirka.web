@@ -334,7 +334,7 @@ export function PaymentHistorySkeleton({ label }: { label: string }) {
   )
 }
 
-/** Two full plan cards followed by the limits/features comparison table. */
+/** Plans catalogue with limits, aligned prices and a separate action column. */
 export function PlansSkeleton() {
   const t = useT(plansMessages)
   return (
@@ -344,7 +344,7 @@ export function PlansSkeleton() {
       data-screen-skeleton="plans"
     >
       <BillingCard title={t('title')} bodyClassName="p-0">
-        <Rows header count={3} columns={['2fr', '1fr', '1fr', '1fr']} />
+        <Rows header count={2} columns={['2fr', '1fr', '1fr', '1fr', '8rem']} />
       </BillingCard>
       <Skeleton className="h-10 w-full" />
     </div>
