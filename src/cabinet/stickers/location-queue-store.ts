@@ -253,6 +253,17 @@ export function createLocationQueueStore({
       if (result.ok) mutate(result.queue)
       return result
     },
+    retarget(target: LocationLabelTarget, expected: LocationQueueExpected) {
+      if (
+        !prepareMutation() ||
+        !current(expected) ||
+        target.kind !== 'warehouse' ||
+        !target.parentId.trim()
+      )
+        return false
+      if (snapshot.queue!.target.kind === 'warehouse') return false
+      return mutate({ ...snapshot.queue!, target })
+    },
     acknowledge(ids: string[], expected: LocationQueueExpected) {
       if (!prepareMutation() || !current(expected)) return false
       return mutate(acknowledgeLabels(snapshot.queue!, ids, now()))

@@ -3619,7 +3619,7 @@ test('storage stickers: inventory.view-only navigation opens locations and never
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Стікери')
   await expect(page).toHaveURL(
-    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1',
+    '/app/koval/stickers?type=locations&kind=warehouse&parent=warehouse-1',
   )
   await expect(
     page.getByRole('radio', { name: 'Запчастини', exact: true }),
@@ -3628,11 +3628,11 @@ test('storage stickers: inventory.view-only navigation opens locations and never
     page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
   ).toBeChecked()
   await expect(
-    page.getByRole('list', { name: 'Етикетки зон', exact: true }),
+    page.getByRole('list', { name: 'Місця зберігання', exact: true }),
   ).toBeVisible()
   await page.goto('/app/koval/stickers')
   await expect(page).toHaveURL(
-    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1',
+    '/app/koval/stickers?type=locations&kind=warehouse&parent=warehouse-1',
   )
   await expect(
     page.getByRole('radio', { name: 'Місця зберігання', exact: true }),

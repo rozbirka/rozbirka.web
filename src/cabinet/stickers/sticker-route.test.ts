@@ -18,6 +18,11 @@ describe('sticker routes', () => {
 
   it.each([
     [
+      'warehouse',
+      'warehouse-1',
+      '/app/koval/stickers?type=locations&kind=warehouse&parent=warehouse-1&select=all',
+    ],
+    [
       'zone',
       'warehouse-1',
       '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',

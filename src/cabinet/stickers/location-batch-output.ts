@@ -10,7 +10,12 @@ export function resolveLocationBatch(
   const byId = new Map(labels.map((label) => [label.id, label]))
   return nextLabelBatch(queue).map((id) => {
     const label = byId.get(id)
-    if (!label?.qrCode.trim() || label.kind !== queue.target.kind)
+    if (
+      !label?.qrCode.trim() ||
+      (queue.target.kind === 'warehouse'
+        ? !label.kind || !['zone', 'section', 'shelf'].includes(label.kind)
+        : label.kind !== queue.target.kind)
+    )
       throw new Error('queued-location-unavailable')
     return label
   })

@@ -3,6 +3,7 @@ import { SOURCE_LOCALE, translate, type Locale } from '@/i18n'
 import { zoneLabelMessages } from './zone-label-messages'
 
 export interface PrintableZoneLabel {
+  parentId?: string
   id: string
   qrCode: string
   zoneName: string

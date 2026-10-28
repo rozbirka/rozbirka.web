@@ -2,7 +2,7 @@ import { cabinetPath } from '../cabinet-paths'
 
 export type StickerMode = 'parts' | 'locations'
 export interface LocationCollection {
-  kind: 'zone' | 'section' | 'shelf'
+  kind: 'warehouse' | 'zone' | 'section' | 'shelf'
   parentId: string
 }
 export interface StickerRoute {
@@ -50,7 +50,10 @@ export function parseStickerRoute(params: URLSearchParams): StickerRoute {
     return selection !== null || selectedIds.length > 0 ? invalid() : empty
   }
   if (
-    (kind !== 'zone' && kind !== 'section' && kind !== 'shelf') ||
+    (kind !== 'warehouse' &&
+      kind !== 'zone' &&
+      kind !== 'section' &&
+      kind !== 'shelf') ||
     parentId === null ||
     !validId(parentId)
   )

@@ -1,6 +1,6 @@
 export type LocationLabelKind = 'zone' | 'section' | 'shelf'
 export interface LocationLabelTarget {
-  kind: LocationLabelKind
+  kind: LocationLabelKind | 'warehouse'
   parentId: string
   parentName: string
 }
@@ -101,7 +101,7 @@ export function removeQueueLabel(
 function validLabelTarget(target: LocationLabelTarget): boolean {
   return (
     !!target &&
-    ['zone', 'section', 'shelf'].includes(target.kind) &&
+    ['warehouse', 'zone', 'section', 'shelf'].includes(target.kind) &&
     typeof target.parentId === 'string' &&
     !!target.parentId &&
     typeof target.parentName === 'string'
@@ -153,7 +153,7 @@ export function decodeLabelQueue(
       !Number.isFinite(value.expiresAt) ||
       value.expiresAt <= now ||
       !value.target ||
-      !['zone', 'section', 'shelf'].includes(value.target.kind) ||
+      !['warehouse', 'zone', 'section', 'shelf'].includes(value.target.kind) ||
       typeof value.target.parentId !== 'string' ||
       !value.target.parentId ||
       typeof value.target.parentName !== 'string' ||

@@ -412,3 +412,27 @@ it('retains the memory queue when a storage event cannot read authoritative data
     queue: { remainingIds: ['a', 'b'] },
   })
 })
+
+it('upgrades a legacy collection without losing queue progress, expiry or stale-write guards', () => {
+  const { store, expected, setTime, deps } = setup()
+  store.hydrate(scope)
+  store.start(target, ['a', 'b'])
+  store.acknowledge(['a'], expected())
+  const previous = store.getSnapshot().queue!
+  const token = expected()
+  setTime(200)
+  const warehouse = {
+    kind: 'warehouse' as const,
+    parentId: 'w',
+    parentName: 'Warehouse',
+  }
+  expect(store.retarget(warehouse, token)).toBe(true)
+  expect(store.getSnapshot().queue).toEqual({ ...previous, target: warehouse })
+  expect(store.retarget(warehouse, token)).toBe(false)
+  const reloaded = createLocationQueueStore(deps)
+  reloaded.hydrate(scope)
+  expect(reloaded.getSnapshot().queue).toEqual({
+    ...previous,
+    target: warehouse,
+  })
+})

@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import {
+  loadStorageStickerCatalogue,
   loadLocationLabels,
   loadLocationLabelCollection,
 } from './location-label-data'
@@ -166,4 +167,45 @@ it('rejects archived and mismatched parents before returning any printable list'
       new AbortController().signal,
     ),
   ).rejects.toThrow()
+})
+
+it('lists zones, sections and shelves in order, excluding foreign and inactive ancestry', async () => {
+  api.getWarehouse.mockResolvedValue({
+    id: 'w',
+    name: 'Warehouse',
+    isActive: true,
+  })
+  api.getZones.mockResolvedValue([
+    { ...base, id: 'z' },
+    { ...base, id: 'inactive', isActive: false },
+    { ...base, id: 'system', isSystemUnassigned: true },
+    { ...base, id: 'foreign', warehouseId: 'other' },
+  ])
+  api.getSections.mockResolvedValue([
+    { ...base, id: 's' },
+    { ...base, id: 'hidden', zoneId: 'inactive' },
+    { ...base, id: 'foreign-section', warehouseId: 'other' },
+  ])
+  api.getShelves.mockResolvedValue([
+    { ...base, id: 'shelf' },
+    { ...base, id: 'hidden-shelf', sectionId: 'hidden' },
+    { ...base, id: 'bad-zone', zoneId: 'foreign' },
+    { ...base, id: 'blank', qrCode: ' ' },
+  ])
+  const result = await loadStorageStickerCatalogue(
+    { kind: 'warehouse', parentId: 'w' },
+    new AbortController().signal,
+  )
+  expect(result.target).toEqual({
+    kind: 'warehouse',
+    parentId: 'w',
+    parentName: 'Warehouse',
+  })
+  expect(
+    result.labels.map(({ id, kind, parentId }) => ({ id, kind, parentId })),
+  ).toEqual([
+    { id: 'z', kind: 'zone', parentId: 'w' },
+    { id: 's', kind: 'section', parentId: 'z' },
+    { id: 'shelf', kind: 'shelf', parentId: 's' },
+  ])
 })

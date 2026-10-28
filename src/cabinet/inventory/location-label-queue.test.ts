@@ -55,7 +55,7 @@ describe('location label queue', () => {
       'null',
       JSON.stringify({ ...queue, printedCount: 99 }),
       JSON.stringify({ ...queue, remainingIds: ['x', 'x'] }),
-      JSON.stringify({ ...queue, target: { ...target, kind: 'warehouse' } }),
+      JSON.stringify({ ...queue, target: { ...target, kind: 'unknown' } }),
     ]) {
       expect(decodeLabelQueue(value, Date.now())).toBeNull()
     }

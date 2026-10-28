@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router'
-import { Printer, SlidersHorizontal } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router'
+import { Printer } from 'lucide-react'
 import { inventoryApi } from '@/api/inventory'
 import {
   Button,
@@ -11,7 +11,6 @@ import {
   Pagination,
   SearchInput,
   SkeletonRows,
-  Sheet,
 } from '@/components/app'
 import { useT } from '@/i18n'
 import { useTenantSettings } from '@/auth/useTenantSettings'
@@ -19,7 +18,10 @@ import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { locationLabelMessages } from '../inventory/location-label-messages'
-import { loadLocationLabelCollection } from '../inventory/location-label-data'
+import {
+  loadLocationLabelCollection,
+  loadStorageStickerCatalogue,
+} from '../inventory/location-label-data'
 import {
   MAX_LOCATION_LABELS,
   LOCATION_LABEL_BATCH,
@@ -42,7 +44,6 @@ import {
   StickerSheetPreview,
   type StickerPreviewCard,
 } from './StickerSheetPreview'
-import { LocationCollectionPicker } from './LocationCollectionPicker'
 import { LocationPrintQueueCard } from './LocationPrintQueueCard'
 import { LocationQueueEditor } from './LocationQueueEditor'
 import { LocationBatchConfirmation } from './LocationBatchConfirmation'
@@ -133,8 +134,7 @@ function ScopedLocationStickers({
     [page, setPage] = useState(1)
   const [error, setError] = useState<string | null>(null),
     [message, setMessage] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false),
-    [pickerOpen, setPickerOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<PendingBatch | null>(null)
   const [editor, setEditor] = useState<QueueEditorState | null>(null)
   const [cancel, setCancel] = useState<LocationQueueExpected | null>(null)
@@ -152,11 +152,30 @@ function ScopedLocationStickers({
     const requestKey = `${kind}:${parentId}:${reload}`
     if (!seed && loadedRequest.current === requestKey) return
     const controller = new AbortController()
-    void loadLocationLabelCollection(
-      { kind, parentId },
-      controller.signal,
-    ).then(
-      (result) => {
+    void loadStorageStickerCatalogue({ kind, parentId }, controller.signal)
+      .then(async (result) => {
+        if (controller.signal.aborted) return
+        // Upgrade only the resolved legacy collection, under the same owner lock.
+        const owner = { userId: scope.userId, tenantId: scope.tenantId }
+        await withLocationQueueLock(owner, () => {
+          if (controller.signal.aborted) return
+          const current = locationQueueStore.getSnapshot()
+          if (
+            current.scope?.userId !== owner.userId ||
+            current.scope?.tenantId !== owner.tenantId
+          )
+            return
+          if (
+            current.queue?.target.kind === kind &&
+            current.queue.target.parentId === parentId &&
+            kind !== 'warehouse'
+          ) {
+            locationQueueStore.retarget(result.target, {
+              queueId: current.queue.id,
+              revision: current.revision,
+            })
+          }
+        })
         if (controller.signal.aborted) return
         loadedRequest.current = requestKey
         setData(result)
@@ -174,6 +193,8 @@ function ScopedLocationStickers({
               result.labels
                 .filter(
                   (label) =>
+                    (kind === 'warehouse' ||
+                      (label.kind === kind && label.parentId === parentId)) &&
                     !queuedIds.has(label.id) &&
                     (!requested || requested.has(label.id)),
                 )
@@ -190,13 +211,12 @@ function ScopedLocationStickers({
             { replace: true },
           )
         }
-      },
-      () => {
+      })
+      .catch(() => {
         if (!controller.signal.aborted) setStatus('error')
-      },
-    )
+      })
     return () => controller.abort()
-  }, [kind, parentId, reload, seed, setParams])
+  }, [kind, parentId, reload, seed, setParams, scope.userId, scope.tenantId])
   useEffect(() => {
     if (route.invalid || kind || !queue) return
     void navigate(locationStickersHref(tenantSlug, queue.target, []), {
@@ -214,7 +234,7 @@ function ScopedLocationStickers({
           void navigate(
             locationStickersHref(
               tenantSlug,
-              { kind: 'zone', parentId: first.id },
+              { kind: 'warehouse', parentId: first.id },
               [],
             ),
             { replace: true },
@@ -436,11 +456,6 @@ function ScopedLocationStickers({
       setEditor(null)
     })
   }
-  const sourceHref = data
-    ? data.target.kind === 'zone'
-      ? `/app/${tenantSlug}/warehouses/${encodeURIComponent(data.target.parentId)}`
-      : `/app/${tenantSlug}/warehouses/${data.target.kind === 'section' ? 'zones' : 'sections'}/${encodeURIComponent(data.target.parentId)}`
-    : null
   const list = (
     <div className="grid min-w-0 gap-3">
       {queue ? (
@@ -517,20 +532,6 @@ function ScopedLocationStickers({
             >
               {tp('clear')}
             </Button>
-            <Button
-              aria-label={ts('changeCollection')}
-              title={
-                data
-                  ? `${t(data.target.kind)} · ${data.target.parentName}`
-                  : ts('chooseCollection')
-              }
-              size="icon"
-              variant="quiet"
-              disabled={busy}
-              onClick={() => setPickerOpen(true)}
-            >
-              <SlidersHorizontal aria-hidden />
-            </Button>
           </>
         }
         footer={
@@ -560,7 +561,7 @@ function ScopedLocationStickers({
         ) : null}
         <ul
           className="divide-app-line m-0 grid list-none divide-y p-0"
-          aria-label={t(kind ?? 'zone')}
+          aria-label={t('warehouse')}
         >
           {visible.map((label) => (
             <StickerSelectionRow
@@ -588,7 +589,7 @@ function ScopedLocationStickers({
                   >
                     {queued.has(label.id)
                       ? t('queued')
-                      : t(data?.target.kind ?? 'zone')}
+                      : t(label.kind ?? 'zone')}
                   </span>
                 </>
               }
@@ -689,26 +690,6 @@ function ScopedLocationStickers({
         />
       }
     >
-      <Sheet
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        title={ts('chooseCollection')}
-        footer={
-          sourceHref ? (
-            <Button asChild variant="quiet">
-              <Link to={sourceHref}>{ts('back')}</Link>
-            </Button>
-          ) : undefined
-        }
-      >
-        <LocationCollectionPicker
-          embedded
-          onChoose={(collection) => {
-            setPickerOpen(false)
-            void navigate(locationStickersHref(tenantSlug, collection, []))
-          }}
-        />
-      </Sheet>
       {editorValid ? (
         <LocationQueueEditor
           key={`${editorValid.expected.queueId}:${editorValid.expected.revision}:${editorValid.mode}`}

@@ -35,3 +35,26 @@ it('rejects a missing or invalid QR instead of silently skipping queued labels',
     resolveLocationBatch(queue, [label('a'), { ...label('b'), kind: 'zone' }]),
   ).toThrow()
 })
+
+it('prints a mixed warehouse batch while rejecting warehouse labels themselves', () => {
+  const queue = createLabelQueue(
+    { kind: 'warehouse', parentId: 'w', parentName: 'Warehouse' },
+    ['z', 's', 'p'],
+  )
+  const labels = [
+    { ...label('z'), kind: 'zone' as const },
+    { ...label('s'), kind: 'section' as const },
+    label('p'),
+  ]
+  expect(resolveLocationBatch(queue, labels).map((x) => x.id)).toEqual([
+    'z',
+    's',
+    'p',
+  ])
+  expect(() =>
+    resolveLocationBatch(queue, [
+      { ...labels[0]!, kind: 'warehouse' },
+      ...labels.slice(1),
+    ]),
+  ).toThrow()
+})

@@ -13,6 +13,7 @@ import { LocationStickersScreen } from './LocationStickersScreen'
 import { locationQueueStore } from './location-queue-store'
 import { tenantResetRegistry } from '../tenant-reset-registry'
 import type { InventoryZone } from '@/api/inventory'
+import type { buildZoneLabelHtml } from '../inventory/zone-label-output'
 import { labelQueueKey } from '../inventory/location-label-queue'
 
 const api = vi.hoisted(() => ({
@@ -25,7 +26,9 @@ const api = vi.hoisted(() => ({
   getWarehouse: vi.fn(),
 }))
 const output = vi.hoisted(() => ({
-  buildZoneLabelHtml: vi.fn().mockResolvedValue('<html>labels</html>'),
+  buildZoneLabelHtml: vi
+    .fn<typeof buildZoneLabelHtml>()
+    .mockResolvedValue('<html>labels</html>'),
 }))
 const session = vi.hoisted(() => ({
   tenantId: 't',
@@ -110,6 +113,7 @@ beforeEach(() => {
     { id: 'w', name: 'Warehouse', isActive: true },
   ])
   api.getZones.mockResolvedValue([zoneRecord()])
+  api.getShelves.mockResolvedValue([])
   output.buildZoneLabelHtml.mockResolvedValue('<html>labels</html>')
   vi.spyOn(window, 'open').mockReturnValue({
     opener: null,
@@ -132,10 +136,10 @@ it('uses the same sticker header, list selection and ten-row pagination as parts
     ),
   ).toBeInTheDocument()
   expect(
-    await screen.findByRole('listitem', { name: 'Обрати: Section 10' }),
+    await screen.findByRole('listitem', { name: 'Обрати: Section 9' }),
   ).toBeInTheDocument()
   expect(
-    screen.queryByRole('listitem', { name: 'Обрати: Section 11' }),
+    screen.queryByRole('listitem', { name: 'Обрати: Section 10' }),
   ).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Вибрати всі' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Зняти' })).toBeDisabled()
@@ -240,9 +244,11 @@ it('keeps manually deselected rows across search changes and blocks oversized qu
     })),
   )
   mount()
-  expect(
-    await screen.findByRole('button', { name: 'Підготувати 201' }),
-  ).toBeDisabled()
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Підготувати 201' }),
+    ).toBeDisabled(),
+  )
   fireEvent.click(screen.getByRole('checkbox', { name: 'Обрати: Section 1' }))
   fireEvent.change(screen.getByRole('searchbox', { name: 'Назва або код' }), {
     target: { value: 'Section 1' },
@@ -489,56 +495,94 @@ it('invalidates a pending async output when the same queue changes in another ta
   ])
 })
 
-it('continues an active queue from a different collection without replacing it', async () => {
+it('continues a legacy queue from another warehouse and upgrades it without losing progress', async () => {
   api.getZone.mockImplementation((id: string) =>
     Promise.resolve({
-      id,
-      name: id === 'z' ? 'Zone' : 'Other zone',
-      isActive: true,
+      ...zoneRecord(id),
+      warehouseId: id === 'z' ? 'w' : 'other-w',
     }),
   )
-  api.getSections.mockImplementation((id: string) =>
-    Promise.resolve(
-      id === 'z'
-        ? records
-        : [
-            {
-              ...records[0],
-              id: 'other-section',
-              name: 'Other section',
-              zoneId: 'other',
-            },
-          ],
-    ),
+  api.getWarehouse.mockImplementation((id: string) =>
+    Promise.resolve({ id, name: id, isActive: true }),
   )
+  api.getZones.mockImplementation(({ warehouseId }: { warehouseId: string }) =>
+    Promise.resolve([
+      { ...zoneRecord(warehouseId === 'w' ? 'z' : 'other'), warehouseId },
+    ]),
+  )
+  api.getSections.mockResolvedValue([
+    ...records,
+    {
+      ...records[0],
+      id: 'other-section',
+      name: 'Other section',
+      zoneId: 'other',
+      warehouseId: 'other-w',
+    },
+  ])
   locationQueueStore.hydrate({ userId: 'u', tenantId: 't' })
   locationQueueStore.start(
     { kind: 'section', parentId: 'z', parentName: 'Zone' },
     ['s0'],
   )
-  const initial = locationQueueStore.getSnapshot().queue
+  const initial = locationQueueStore.getSnapshot().queue!
   const user = userEvent.setup()
   mount('?type=locations&kind=section&parent=other&select=all')
-  const continueQueue = await screen.findByRole('button', {
-    name: 'Продовжити чергу',
-  })
-  await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Додати до черги · 1' }),
-    ).toBeDisabled(),
+  await user.click(
+    await screen.findByRole('button', { name: 'Продовжити чергу' }),
   )
-  expect(
-    screen.queryByRole('button', { name: 'Друк наступних 1' }),
-  ).not.toBeInTheDocument()
-  await user.click(continueQueue)
   expect(
     await screen.findByRole('button', { name: 'Друк наступних 1' }),
   ).toBeEnabled()
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).toBeDisabled()
-  expect(locationQueueStore.getSnapshot().queue).toBe(initial)
+  expect(locationQueueStore.getSnapshot().queue).toEqual({
+    ...initial,
+    target: { kind: 'warehouse', parentId: 'w', parentName: 'w' },
+  })
   expect(print).not.toHaveBeenCalled()
+})
+
+it('shows all levels immediately, removes the filter and prints a mixed selection', async () => {
+  api.getSections.mockResolvedValue(records.slice(0, 1))
+  api.getShelves.mockResolvedValue([
+    {
+      ...records[0],
+      id: 'shelf',
+      name: 'Shelf',
+      sectionId: 's0',
+      sectionName: 'Section 1',
+    },
+  ])
+  const user = userEvent.setup()
+  mount('?type=locations&kind=zone&parent=w&select=all')
+  await screen.findByRole('checkbox', { name: 'Обрати: Shelf' })
+  expect(
+    screen.getAllByRole('listitem').map((x) => x.getAttribute('aria-label')),
+  ).toEqual(['Обрати: Zone', 'Обрати: Section 1', 'Обрати: Shelf'])
+  expect(
+    screen.queryByRole('button', { name: 'Змінити список' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  expect(screen.getByRole('checkbox', { name: 'Обрати: Zone' })).toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).not.toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Shelf' }),
+  ).not.toBeChecked()
+  await user.click(screen.getByRole('button', { name: 'Вибрати всі' }))
+  await user.click(screen.getByRole('button', { name: 'Підготувати 3' }))
+  expect(locationQueueStore.getSnapshot().queue?.target).toMatchObject({
+    kind: 'warehouse',
+    parentId: 'w',
+  })
+  await user.click(screen.getByRole('button', { name: 'Друк наступних 3' }))
+  await waitFor(() => expect(print).toHaveBeenCalledOnce())
+  expect(
+    output.buildZoneLabelHtml.mock.calls[0]?.[0].map((x) => x.kind),
+  ).toEqual(['zone', 'section', 'shelf'])
 })
 
 it('ignores an old tenant collection response arriving after the new tenant list', async () => {
@@ -605,4 +649,38 @@ it('allows removing an unavailable queued ID so it cannot trap the queue', async
     printedCount: 0,
   })
   expect(screen.getByRole('button', { name: 'Друк наступних 1' })).toBeEnabled()
+})
+
+it('keeps a shelf deep link selection limited to that section while showing siblings', async () => {
+  api.getSections.mockResolvedValue(records.slice(0, 2))
+  api.getSection.mockResolvedValue(records[0])
+  api.getShelves.mockResolvedValue([
+    {
+      ...records[0],
+      id: 'p0',
+      name: 'Chosen shelf',
+      sectionId: 's0',
+      sectionName: 'Section 1',
+    },
+    {
+      ...records[0],
+      id: 'p1',
+      name: 'Other shelf',
+      sectionId: 's1',
+      sectionName: 'Section 2',
+    },
+  ])
+  mount('?type=locations&kind=shelf&parent=s0&select=all')
+  await waitFor(() =>
+    expect(
+      screen.getByRole('checkbox', { name: 'Обрати: Chosen shelf' }),
+    ).toBeChecked(),
+  )
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Other shelf' }),
+  ).not.toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Zone' }),
+  ).not.toBeChecked()
+  expect(screen.getByRole('button', { name: 'Підготувати 1' })).toBeEnabled()
 })
