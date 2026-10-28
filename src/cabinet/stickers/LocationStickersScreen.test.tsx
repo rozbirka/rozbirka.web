@@ -684,3 +684,117 @@ it('keeps a shelf deep link selection limited to that section while showing sibl
   ).not.toBeChecked()
   expect(screen.getByRole('button', { name: 'Підготувати 1' })).toBeEnabled()
 })
+
+it('opens the page containing the first shelf requested from a section menu, keeping every requested shelf selected', async () => {
+  api.getSection.mockResolvedValue(records[0])
+  const shelves = Array.from({ length: 11 }, (_, i) => ({
+    ...records[0],
+    id: `p${i}`,
+    name: `Requested shelf ${i + 1}`,
+    sectionId: 's0',
+    sectionName: 'Section 1',
+  }))
+  api.getShelves.mockResolvedValue([
+    ...Array.from({ length: 4 }, (_, i) => ({
+      ...shelves[0],
+      id: `other${i}`,
+      name: `Other shelf ${i + 1}`,
+      sectionId: 's1',
+    })),
+    ...shelves,
+  ])
+  const user = userEvent.setup()
+  mount('?type=locations&kind=shelf&parent=s0&select=all')
+  expect(
+    await screen.findByRole('checkbox', { name: 'Обрати: Requested shelf 1' }),
+  ).toBeChecked()
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Zone' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Підготувати 11' })).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Попередня сторінка' }),
+  ).toBeEnabled()
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Requested shelf 11' }),
+  ).toBeChecked()
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Requested shelf 1' }),
+  ).not.toBeInTheDocument()
+})
+
+it('opens the requested shelf page even when its label is already queued', async () => {
+  api.getSection.mockResolvedValue(records[0])
+  api.getShelves.mockResolvedValue([
+    {
+      ...records[0],
+      id: 'p0',
+      name: 'Queued shelf',
+      sectionId: 's0',
+      sectionName: 'Section 1',
+    },
+  ])
+  locationQueueStore.hydrate({ userId: 'u', tenantId: 't' })
+  locationQueueStore.start(
+    { kind: 'warehouse', parentId: 'w', parentName: 'Warehouse' },
+    ['p0'],
+  )
+  mount('?type=locations&kind=shelf&parent=s0&select=all')
+  expect(
+    await screen.findByRole('checkbox', { name: 'Обрати: Queued shelf' }),
+  ).toBeDisabled()
+  expect(
+    screen.getByText('Вибрано 0 обʼєктів · 0 стікерів'),
+  ).toBeInTheDocument()
+})
+
+it('opens a later section page from a zone menu and does not force that page again after manual pagination', async () => {
+  api.getZone.mockResolvedValue(zoneRecord('other-zone'))
+  api.getZones.mockResolvedValue([zoneRecord(), zoneRecord('other-zone')])
+  api.getSections.mockResolvedValue([
+    ...records,
+    {
+      ...records[0],
+      id: 'requested-section',
+      name: 'Requested section',
+      zoneId: 'other-zone',
+    },
+  ])
+  const user = userEvent.setup()
+  mount('?type=locations&kind=section&parent=other-zone&select=all')
+  expect(
+    await screen.findByRole('checkbox', { name: 'Обрати: Requested section' }),
+  ).toBeChecked()
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Zone' }),
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Попередня сторінка' }))
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Requested section' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Підготувати 1' })).toBeEnabled()
+})
+
+it('restores the shelf context page on a direct revisit without selecting labels again', async () => {
+  api.getSection.mockResolvedValue(records[0])
+  api.getShelves.mockResolvedValue([
+    {
+      ...records[0],
+      id: 'p0',
+      name: 'Context shelf',
+      sectionId: 's0',
+      sectionName: 'Section 1',
+    },
+  ])
+  const user = userEvent.setup()
+  mount('?type=locations&kind=shelf&parent=s0')
+  expect(
+    await screen.findByRole('checkbox', { name: 'Обрати: Context shelf' }),
+  ).not.toBeChecked()
+  expect(screen.getByRole('button', { name: 'Підготувати 0' })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Попередня сторінка' }))
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Context shelf' }),
+  ).not.toBeInTheDocument()
+})

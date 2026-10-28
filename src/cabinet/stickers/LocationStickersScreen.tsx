@@ -177,29 +177,36 @@ function ScopedLocationStickers({
           }
         })
         if (controller.signal.aborted) return
+        const initialLoad = loadedRequest.current === ''
         loadedRequest.current = requestKey
         setData(result)
         setStatus('ready')
-        if (seed) {
-          const requested = seed === 'all' ? null : new Set(seed.split(','))
+        if (seed || initialLoad) {
+          const requested =
+            !seed || seed === 'all' ? null : new Set(seed.split(','))
           const activeQueue = locationQueueStore.getSnapshot().queue
           const queuedIds = new Set(
             activeQueue && sameLabelTarget(result.target, activeQueue.target)
               ? activeQueue.remainingIds
               : [],
           )
+          const requestedIds = new Set(
+            result.labels
+              .filter(
+                (label) =>
+                  (kind === 'warehouse' ||
+                    (label.kind === kind && label.parentId === parentId)) &&
+                  (!requested || requested.has(label.id)),
+              )
+              .map((label) => label.id),
+          )
+          const firstRequestedIndex = result.labels.findIndex((label) =>
+            requestedIds.has(label.id),
+          )
+          setPage(Math.floor(Math.max(0, firstRequestedIndex) / PAGE_SIZE) + 1)
+          if (!seed) return
           setSelected(
-            new Set(
-              result.labels
-                .filter(
-                  (label) =>
-                    (kind === 'warehouse' ||
-                      (label.kind === kind && label.parentId === parentId)) &&
-                    !queuedIds.has(label.id) &&
-                    (!requested || requested.has(label.id)),
-                )
-                .map((label) => label.id),
-            ),
+            new Set([...requestedIds].filter((id) => !queuedIds.has(id))),
           )
           setParams(
             (current) => {
