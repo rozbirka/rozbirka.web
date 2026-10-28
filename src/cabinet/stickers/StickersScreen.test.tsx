@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { tenantResetRegistry } from '../tenant-reset-registry'
 import { LocaleProvider } from '@/i18n'
 import { StickersScreen } from './StickersScreen'
+import { partQueueStore } from './part-queue-store'
 
 const stickerMocks = vi.hoisted(() => ({ getBatchData: vi.fn() }))
 const partsMocks = vi.hoisted(() => ({ get: vi.fn(), list: vi.fn() }))
@@ -66,6 +67,7 @@ const add = async (name: string) => {
 }
 
 beforeEach(() => {
+  partQueueStore.clear()
   localStorage.clear()
   stickerMocks.getBatchData.mockReset().mockResolvedValue({ items: [] })
   partsMocks.get
@@ -216,7 +218,7 @@ it('loads sticker data and renders a real QR SVG preview for each queued copy', 
       signal: expect.any(AbortSignal) as AbortSignal,
     }),
   )
-  const qr = screen.getByRole('img', { name: 'QR-код Bumper' })
+  const qr = await screen.findByRole('img', { name: 'QR-код Bumper' })
   expect(qr.querySelectorAll('svg')).toHaveLength(1)
   expect(qr.querySelector('svg path')).not.toBeNull()
   expect(preview).toHaveTextContent('CAR-01 · Ford Focus (2018)')
@@ -247,6 +249,7 @@ it('previews every selected sticker copy while keeping the separate-page print h
   )
   fireEvent.click(screen.getByRole('button', { name: 'Підготувати 2' }))
 
+  await screen.findAllByRole('img', { name: 'QR-код Bumper' })
   const preview = await screen.findByRole('region', {
     name: 'Аркуш стікерів',
   })
@@ -305,7 +308,7 @@ it('downloads, prints, and shares the same printable QR artifact with URL cleanu
   renderScreen()
   await add('Bumper')
   fireEvent.click(screen.getByRole('button', { name: 'Підготувати 1' }))
-  await screen.findByRole('button', { name: 'Друкувати 1' })
+  await screen.findByRole('button', { name: 'Завантажити' })
 
   fireEvent.click(screen.getByRole('button', { name: 'Завантажити' }))
   await vi.waitFor(() => expect(anchorClick).toHaveBeenCalled())

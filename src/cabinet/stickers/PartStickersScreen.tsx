@@ -1,15 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Download, Minus, Plus, Printer, Share2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { partsApi, type PartListItem } from '@/api/parts'
-import {
-  Button,
-  Notice,
-  Pagination,
-  SearchInput,
-  useOptionalToast,
-} from '@/components/app'
-import { stickersApi } from '@/api/stickers'
+import { Button, Notice, Pagination, SearchInput } from '@/components/app'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
@@ -17,12 +10,11 @@ import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { tenantResetRegistry } from '../tenant-reset-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import {
-  buildStickerHtml,
-  renderStickers,
-  type PrintableSticker,
-  type RenderedSticker,
-} from './sticker-output'
+import { usePartStickerPrinting } from './use-part-sticker-printing'
+import { PartPrintQueuePanel } from './PartPrintQueuePanel'
+import { PART_BATCH_SIZE, type PartStickerSelection } from './part-print-queue'
+import { locationLabelMessages } from '../inventory/location-label-messages'
+import { partQueueMessages } from './part-queue-messages'
 import { stickersMessages } from './messages'
 import {
   StickerPageWorkspace,
@@ -32,19 +24,12 @@ import {
 } from './StickerWorkspace'
 import { StickerSheetPreview } from './StickerSheetPreview'
 
-interface QueueItem {
-  id: string
-  quantity: number
-  availableQuantity?: number
-  name?: string
-  externalCode?: string | null
-  carLabel?: string | null
-}
+type QueueItem = PartStickerSelection
 interface QueueScope {
   userId: string
   tenantId: string
 }
-interface StoredQueue {
+interface StoredSelection {
   version: 1
   expiresAt: number
   items: QueueItem[]
@@ -52,9 +37,9 @@ interface StoredQueue {
 
 const MAX_STICKERS = 200
 const QUEUE_TTL_MS = 24 * 60 * 60 * 1000
-const queueKey = ({ userId, tenantId }: QueueScope) =>
+const selectionKey = ({ userId, tenantId }: QueueScope) =>
   `rozbirka.stickers.queue.v1:${userId}:${tenantId}`
-const validQueueItem = (value: unknown): value is QueueItem => {
+const validSelectionItem = (value: unknown): value is QueueItem => {
   if (typeof value !== 'object' || value === null) return false
   const item = value as Record<string, unknown>
   const optionalText = (entry: unknown) =>
@@ -72,22 +57,22 @@ const validQueueItem = (value: unknown): value is QueueItem => {
     optionalText(item['carLabel'])
   )
 }
-const validQueue = (value: unknown): value is QueueItem[] => {
-  if (!Array.isArray(value) || !value.every(validQueueItem)) return false
+const validSelection = (value: unknown): value is QueueItem[] => {
+  if (!Array.isArray(value) || !value.every(validSelectionItem)) return false
   return value.reduce((sum, item) => sum + item.quantity, 0) <= MAX_STICKERS
 }
-const readQueue = (scope: QueueScope): QueueItem[] => {
+const readSelection = (scope: QueueScope): QueueItem[] => {
   if (typeof window === 'undefined') return []
-  const key = queueKey(scope)
+  const key = selectionKey(scope)
   try {
     const raw = localStorage.getItem(key)
     if (!raw) return []
-    const stored = JSON.parse(raw) as Partial<StoredQueue>
+    const stored = JSON.parse(raw) as Partial<StoredSelection>
     if (
       stored.version !== 1 ||
       typeof stored.expiresAt !== 'number' ||
       stored.expiresAt <= Date.now() ||
-      !validQueue(stored.items)
+      !validSelection(stored.items)
     ) {
       localStorage.removeItem(key)
       return []
@@ -97,14 +82,14 @@ const readQueue = (scope: QueueScope): QueueItem[] => {
     try {
       localStorage.removeItem(key)
     } catch {
-      // Storage is unavailable; use an empty in-memory queue.
+      // Storage is unavailable; use an empty in-memory selection.
     }
     return []
   }
 }
-const writeQueue = (scope: QueueScope, items: QueueItem[]) => {
+const writeSelection = (scope: QueueScope, items: QueueItem[]) => {
   if (typeof window === 'undefined') return
-  const key = queueKey(scope)
+  const key = selectionKey(scope)
   try {
     if (!items.length) {
       localStorage.removeItem(key)
@@ -116,10 +101,10 @@ const writeQueue = (scope: QueueScope, items: QueueItem[]) => {
         version: 1,
         expiresAt: Date.now() + QUEUE_TTL_MS,
         items,
-      } satisfies StoredQueue),
+      } satisfies StoredSelection),
     )
   } catch {
-    // Storage can be blocked or full; the active in-memory queue remains usable.
+    // Storage can be blocked or full; the active in-memory selection remains usable.
   }
 }
 export function PartStickersScreen({
@@ -173,22 +158,17 @@ function TenantStickerQueue({
   >['requireLatestMutation']
 }) {
   const t = useT(stickersMessages)
-  const toast = useOptionalToast()
-  /* A failed hand-off (print, download, share) is reported as a toast, as the
-     module page draws it; without a toast host it stays on the page. */
-  const failed = (message: string) => {
-    if (toast === null) setError(message)
-    else toast.show({ tone: 'danger', message })
-  }
+  const tq = useT(locationLabelMessages),
+    tc = useT(partQueueMessages)
   // Printed stickers follow the tenant document language, not the UI locale.
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const [searchParams, setSearchParams] = useSearchParams()
   // Another screen can send parts here to be printed — one from a part card, a
-  // whole batch from an intake. The ids arrive in the URL and join the queue as
-  // it is read, so a queue is never a render behind the address bar.
+  // whole batch from an intake. The ids arrive in the URL and join the selection as
+  // it is read, so a selection is never a render behind the address bar.
   const requested = useMemo(() => searchParams.getAll('part'), [searchParams])
-  const [queue, setQueue] = useState<QueueItem[]>(() => {
-    const stored = scope ? readQueue(scope) : []
+  const [selection, setSelection] = useState<QueueItem[]>(() => {
+    const stored = scope ? readSelection(scope) : []
     const additions: QueueItem[] = []
     for (const id of requested)
       if (
@@ -212,19 +192,31 @@ function TenantStickerQueue({
   const [parts, setParts] = useState<PartListItem[]>([])
   const [partsUnavailable, setPartsUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [printable, setPrintable] = useState<PrintableSticker[]>([])
-  const [preview, setPreview] = useState<RenderedSticker[]>([])
-  const [busy, setBusy] = useState(false)
-  const generationRef = useRef(0)
   const canGenerate = generationDecision === 'allowed'
   const total = useMemo(
-    () => queue.reduce((sum, item) => sum + item.quantity, 0),
-    [queue],
+    () => selection.reduce((sum, item) => sum + item.quantity, 0),
+    [selection],
   )
 
+  const printing = usePartStickerPrinting({
+    scope,
+    canGenerate,
+    requireLatestMutation,
+    documentLocale,
+  })
+  const { preview, busy } = printing
+  const batchCount = Math.min(
+    PART_BATCH_SIZE,
+    printing.queue?.remaining.length ?? 0,
+  )
+  const exceedsQueueLimit =
+    total + (printing.queue?.remaining.length ?? 0) > MAX_STICKERS
+  const queuedCounts = new Map<string, number>()
+  for (const copy of printing.queue?.remaining ?? [])
+    queuedCounts.set(copy.partId, (queuedCounts.get(copy.partId) ?? 0) + 1)
   useEffect(() => {
-    if (scope) writeQueue(scope, queue)
-  }, [queue, scope])
+    if (scope) writeSelection(scope, selection)
+  }, [selection, scope])
   useEffect(() => {
     const controller = new AbortController()
     void partsApi
@@ -245,7 +237,7 @@ function TenantStickerQueue({
           const availability = new Map(
             page.items.map((part) => [part.id, part.quantityAvailable]),
           )
-          setQueue((current) =>
+          setSelection((current) =>
             current.flatMap((item) => {
               const available = availability.get(item.id)
               if (available === undefined) return [item]
@@ -275,11 +267,11 @@ function TenantStickerQueue({
       )
         return
       try {
-        localStorage.removeItem(queueKey(scope))
+        localStorage.removeItem(selectionKey(scope))
       } catch {
         // Scope state is still cleared from memory when storage is unavailable.
       }
-      setQueue([])
+      setSelection([])
     })
     return unregister
   }, [scope])
@@ -293,7 +285,7 @@ function TenantStickerQueue({
       setError(t('limit', { max: MAX_STICKERS }))
       return
     }
-    setQueue((current) => {
+    setSelection((current) => {
       return current.some((item) => item.id === part.id)
         ? current
         : [
@@ -311,17 +303,13 @@ function TenantStickerQueue({
           ]
     })
     setError(null)
-    setPrintable([])
-    setPreview([])
   }
   const removePart = (partId: string) => {
-    setQueue((current) => current.filter((item) => item.id !== partId))
-    setPrintable([])
-    setPreview([])
+    setSelection((current) => current.filter((item) => item.id !== partId))
     setError(null)
   }
   const togglePart = (part: PartListItem) => {
-    const selected = queue.some((item) => item.id === part.id)
+    const selected = selection.some((item) => item.id === part.id)
     if (selected) {
       removePart(part.id)
       return
@@ -329,9 +317,7 @@ function TenantStickerQueue({
     selectPart(part)
   }
   const clear = () => {
-    setQueue([])
-    setPrintable([])
-    setPreview([])
+    setSelection([])
     setError(null)
   }
 
@@ -340,7 +326,7 @@ function TenantStickerQueue({
       setError(t('limit', { max: MAX_STICKERS }))
       return
     }
-    setQueue((current) => {
+    setSelection((current) => {
       const entry = current.find((item) => item.id === partId)
       if (!entry) return current
       const available = entry.availableQuantity ?? 1
@@ -349,118 +335,12 @@ function TenantStickerQueue({
         item.id === partId ? { ...item, quantity } : item,
       )
     })
-    setPrintable([])
-    setPreview([])
-  }
-
-  const generate = async () => {
-    if (!canGenerate || !queue.length || busy) return
-    const generation = ++generationRef.current
-    setBusy(true)
-    setError(null)
-    try {
-      const scope = requireLatestMutation({ quota: false })
-      const response = await stickersApi.getBatchData(
-        queue.map((item) => item.id),
-        { signal: scope.signal },
-      )
-      if (generation !== generationRef.current) return
-      const next = queue.map((queued) => {
-        const sticker = response.items.find((item) => item.id === queued.id)
-        if (!sticker) throw new Error('missing-sticker')
-        const vehicle = [sticker.carBrand, sticker.carModel]
-          .filter(Boolean)
-          .join(' ')
-        const vehicleWithYear = [
-          vehicle,
-          sticker.carYear ? `(${sticker.carYear})` : '',
-        ]
-          .filter(Boolean)
-          .join(' ')
-        const carLabel = [sticker.carCode, vehicleWithYear]
-          .filter(Boolean)
-          .join(' · ')
-        return {
-          id: sticker.id,
-          name: sticker.name,
-          qrCode: sticker.qrCode,
-          quantity: queued.quantity,
-          carLabel: carLabel || null,
-        }
-      })
-      const rendered = await renderStickers(next, window.location.origin)
-      if (generation !== generationRef.current) return
-      setPrintable(next)
-      setPreview(rendered)
-    } catch {
-      if (generation === generationRef.current) setError(t('prepareFailed'))
-    } finally {
-      if (generation === generationRef.current) setBusy(false)
-    }
-  }
-  const artifact = () =>
-    buildStickerHtml(printable, window.location.origin, documentLocale)
-  const download = async () => {
-    try {
-      const html = await artifact()
-      const url = URL.createObjectURL(
-        new Blob([html], { type: 'text/html;charset=utf-8' }),
-      )
-      try {
-        const link = document.createElement('a')
-        link.href = url
-        link.download = 'rozbirka-stickers.html'
-        link.click()
-      } finally {
-        URL.revokeObjectURL(url)
-      }
-    } catch {
-      failed(t('downloadFailed'))
-    }
-  }
-  const print = async () => {
-    try {
-      const html = await artifact()
-      const printWindow = window.open('', '_blank')
-      if (!printWindow) throw new Error('popup-blocked')
-      printWindow.opener = null
-      printWindow.document.write(html)
-      printWindow.document.close()
-      printWindow.focus()
-      printWindow.print()
-    } catch {
-      failed(t('printFailed'))
-    }
-  }
-  const share = async () => {
-    try {
-      const html = await artifact()
-      const file = new File([html], 'rozbirka-stickers.html', {
-        type: 'text/html',
-      })
-      if (!navigator.share || !navigator.canShare?.({ files: [file] })) {
-        setError(t('shareUnsupported'))
-        return
-      }
-      await navigator.share({
-        files: [file],
-        title: t('shareTitle'),
-      })
-    } catch {
-      failed(t('shareFailed'))
-    }
   }
 
   const labelFor = (item: QueueItem) => item.name ?? t('unknownPart')
-  const selectedIds = new Set(queue.map((item) => item.id))
-  const previewCards = preview.length
-    ? preview.slice(0, 6).map((sticker) => ({
-        id: sticker.id,
-        name: sticker.name,
-        detail: sticker.carLabel,
-        qrSvg: sticker.qrSvg,
-      }))
-    : queue
+  const selectedIds = new Set(selection.map((item) => item.id))
+  const previewCards = selection.length
+    ? selection
         .flatMap((item) =>
           Array.from({ length: item.quantity }, () => ({
             id: item.id,
@@ -470,9 +350,22 @@ function TenantStickerQueue({
           })),
         )
         .slice(0, 6)
+    : preview.length
+      ? preview.slice(0, 6).map((sticker) => ({
+          id: sticker.id,
+          name: sticker.name,
+          detail: sticker.carLabel,
+          qrSvg: sticker.qrSvg,
+        }))
+      : (printing.queue?.remaining.slice(0, 6).map((copy) => ({
+          id: copy.id,
+          name: copy.name ?? t('unknownPart'),
+          detail: copy.carLabel ?? null,
+          qrSvg: null,
+        })) ?? [])
   const selectVisible = () => {
     if (!canGenerate || partsUnavailable) return
-    setQueue((current) => {
+    setSelection((current) => {
       const selected = new Set(current.map((item) => item.id))
       let remaining =
         MAX_STICKERS - current.reduce((sum, item) => sum + item.quantity, 0)
@@ -499,8 +392,6 @@ function TenantStickerQueue({
       return [...current, ...additions]
     })
     setError(null)
-    setPrintable([])
-    setPreview([])
   }
   return (
     <StickerPageWorkspace
@@ -508,153 +399,187 @@ function TenantStickerQueue({
       actions={
         <Button
           aria-busy={busy}
-          disabled={!queue.length || !canGenerate || busy}
-          onClick={() => (preview.length ? void print() : void generate())}
+          disabled={
+            (!selection.length && !printing.queue) ||
+            !canGenerate ||
+            busy ||
+            exceedsQueueLimit
+          }
+          onClick={() =>
+            selection.length
+              ? void printing.enqueue(selection, clear)
+              : void printing.output('print')
+          }
           variant="primary"
         >
           <Printer aria-hidden />
           {busy
             ? t('preparing')
-            : preview.length
-              ? t('print', { count: total })
-              : t('prepare', { count: total })}
+            : selection.length
+              ? printing.queue
+                ? tq('add', { count: total })
+                : t('prepare', { count: total })
+              : printing.queue
+                ? t('print', { count: batchCount })
+                : t('prepare', { count: 0 })}
         </Button>
       }
       notice={!scope ? <Notice tone="danger">{t('noScope')}</Notice> : null}
       list={
-        <StickerListPanel
-          search={
-            <SearchInput
-              aria-label={t('searchLabel')}
-              disabled={!canGenerate}
-              onChange={(event) => {
-                setSearch(event.target.value)
-                setPartsPage(1)
-              }}
-              placeholder={t('searchPlaceholder')}
-              value={search}
-            />
-          }
-          summary={t('selectedSummary', {
-            objects: queue.length,
-            stickers: total,
-          })}
-          actions={
-            <>
-              {' '}
-              <Button
-                disabled={
-                  !canGenerate || partsUnavailable || parts.length === 0
-                }
-                onClick={selectVisible}
-              >
-                {t('selectAll')}
-              </Button>
-              <Button disabled={!queue.length} onClick={clear}>
-                {t('clear')}
-              </Button>
-            </>
-          }
-          footer={
-            <Pagination
-              label={t('pagination')}
-              onPage={setPartsPage}
-              page={partsPage}
-              pageSize={PARTS_PAGE_SIZE}
-              total={partsTotal}
-              totalPages={partsTotalPages}
-            />
-          }
-        >
-          {partsUnavailable ? (
-            <div className="p-3">
-              <Notice tone="danger">{t('partsLoadFailed')}</Notice>
-            </div>
-          ) : null}
-          <ul
-            className="divide-app-line m-0 grid list-none divide-y p-0"
-            aria-label={t('partsList')}
-          >
-            {parts.map((part) => {
-              const selected = selectedIds.has(part.id)
-              const queued = queue.find((item) => item.id === part.id)
-              const vehicle = part.car
-                ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
-                : t('noCar')
-              return (
-                <StickerSelectionRow
-                  key={part.id}
-                  label={t('partItem', { name: part.name })}
-                  checkboxLabel={part.name}
-                  selected={selected}
-                  disabled={!canGenerate || partsUnavailable}
-                  onToggle={() => togglePart(part)}
-                  name={part.name}
-                  code={part.externalCode ?? null}
-                  detail={
-                    <>
-                      {vehicle}
-                      <span
-                        className={
-                          part.quantityAvailable > 0
-                            ? 'rz-dot rz-dot--ok ml-2'
-                            : 'rz-dot rz-dot--danger ml-2'
-                        }
-                      >
-                        {t('available', { count: part.quantityAvailable })}
-                      </span>
-                    </>
-                  }
-                  controls={
-                    selected && queued ? (
-                      <div
-                        className="rz-stepper col-start-2 w-fit sm:col-start-auto"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <button
-                          aria-label={t('decrease', { name: part.name })}
-                          disabled={queued.quantity <= 1}
-                          onClick={() => changeQuantity(queued.id, -1)}
-                          type="button"
-                        >
-                          <Minus aria-hidden className="size-3.5" />
-                        </button>
-                        <span className="rz-mono rz-strong grid h-full min-w-10 place-items-center border-app-line border-x px-2">
-                          {queued.quantity}
-                        </span>
-                        <button
-                          aria-label={t('increase', { name: part.name })}
-                          disabled={
-                            total >= MAX_STICKERS ||
-                            queued.quantity >= part.quantityAvailable
-                          }
-                          onClick={() => changeQuantity(queued.id, 1)}
-                          type="button"
-                        >
-                          <Plus aria-hidden className="size-3.5" />
-                        </button>
-                      </div>
-                    ) : null
-                  }
-                />
-              )
+        <div className="grid min-w-0 gap-3">
+          <PartPrintQueuePanel printing={printing} disabled={!canGenerate} />
+          <StickerListPanel
+            search={
+              <SearchInput
+                aria-label={t('searchLabel')}
+                disabled={!canGenerate}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPartsPage(1)
+                }}
+                placeholder={t('searchPlaceholder')}
+                value={search}
+              />
+            }
+            summary={t('selectedSummary', {
+              objects: selection.length,
+              stickers: total,
             })}
-          </ul>
-        </StickerListPanel>
+            actions={
+              <>
+                {' '}
+                <Button
+                  disabled={
+                    !canGenerate ||
+                    busy ||
+                    partsUnavailable ||
+                    parts.length === 0
+                  }
+                  onClick={selectVisible}
+                >
+                  {t('selectAll')}
+                </Button>
+                <Button disabled={busy || !selection.length} onClick={clear}>
+                  {t('clear')}
+                </Button>
+              </>
+            }
+            footer={
+              <Pagination
+                label={t('pagination')}
+                onPage={setPartsPage}
+                page={partsPage}
+                pageSize={PARTS_PAGE_SIZE}
+                total={partsTotal}
+                totalPages={partsTotalPages}
+              />
+            }
+          >
+            {partsUnavailable ? (
+              <div className="p-3">
+                <Notice tone="danger">{t('partsLoadFailed')}</Notice>
+              </div>
+            ) : null}
+            <ul
+              className="divide-app-line m-0 grid list-none divide-y p-0"
+              aria-label={t('partsList')}
+            >
+              {parts.map((part) => {
+                const selected = selectedIds.has(part.id)
+                const queued = selection.find((item) => item.id === part.id)
+                const vehicle = part.car
+                  ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
+                  : t('noCar')
+                return (
+                  <StickerSelectionRow
+                    key={part.id}
+                    label={t('partItem', { name: part.name })}
+                    checkboxLabel={part.name}
+                    selected={selected}
+                    disabled={!canGenerate || partsUnavailable || busy}
+                    onToggle={() => togglePart(part)}
+                    name={part.name}
+                    code={part.externalCode ?? null}
+                    detail={
+                      <>
+                        {vehicle}
+                        <span
+                          className={
+                            part.quantityAvailable > 0
+                              ? 'rz-dot rz-dot--ok ml-2'
+                              : 'rz-dot rz-dot--danger ml-2'
+                          }
+                        >
+                          {t('available', { count: part.quantityAvailable })}
+                        </span>
+                        {queuedCounts.has(part.id) ? (
+                          <span className="rz-caption ml-2">
+                            {tc('queued', {
+                              count: queuedCounts.get(part.id)!,
+                            })}
+                          </span>
+                        ) : null}
+                      </>
+                    }
+                    controls={
+                      selected && queued ? (
+                        <div
+                          className="rz-stepper col-start-2 w-fit sm:col-start-auto"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <button
+                            aria-label={t('decrease', { name: part.name })}
+                            disabled={busy || queued.quantity <= 1}
+                            onClick={() => changeQuantity(queued.id, -1)}
+                            type="button"
+                          >
+                            <Minus aria-hidden className="size-3.5" />
+                          </button>
+                          <span className="rz-mono rz-strong grid h-full min-w-10 place-items-center border-app-line border-x px-2">
+                            {queued.quantity}
+                          </span>
+                          <button
+                            aria-label={t('increase', { name: part.name })}
+                            disabled={
+                              busy ||
+                              total >= MAX_STICKERS ||
+                              queued.quantity >= part.quantityAvailable
+                            }
+                            onClick={() => changeQuantity(queued.id, 1)}
+                            type="button"
+                          >
+                            <Plus aria-hidden className="size-3.5" />
+                          </button>
+                        </div>
+                      ) : null
+                    }
+                  />
+                )
+              })}
+            </ul>
+          </StickerListPanel>
+        </div>
       }
       preview={
         <StickerSheetPreview
           cards={previewCards}
-          objects={queue.length}
-          total={total}
+          objects={
+            selection.length ||
+            new Set(
+              printing.queue?.remaining
+                .slice(0, PART_BATCH_SIZE)
+                .map((copy) => copy.partId),
+            ).size
+          }
+          total={total || batchCount}
           actions={
             <>
-              {preview.length ? (
+              {preview.length && !selection.length ? (
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     className="min-w-0"
                     disabled={busy}
-                    onClick={() => void download()}
+                    onClick={() => void printing.output('download')}
                   >
                     <Download aria-hidden />
                     {t('download')}
@@ -662,7 +587,7 @@ function TenantStickerQueue({
                   <Button
                     className="min-w-0"
                     disabled={busy}
-                    onClick={() => void share()}
+                    onClick={() => void printing.output('share')}
                   >
                     <Share2 aria-hidden />
                     {t('share')}
@@ -684,6 +609,9 @@ function TenantStickerQueue({
                 ? t('accessError')
                 : t('noPermission')}
         </p>
+      ) : null}
+      {exceedsQueueLimit ? (
+        <Notice tone="warn">{t('limit', { max: MAX_STICKERS })}</Notice>
       ) : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
     </StickerPageWorkspace>
