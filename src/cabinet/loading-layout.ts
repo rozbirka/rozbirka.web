@@ -42,7 +42,7 @@ const layouts: Record<CabinetModuleKey, LoadingLayout> = {
   stickers: { ...list(['3fr', '1fr'], 4), kind: 'form' },
   reports: { ...list(['2fr', '1fr', '3fr'], 3), kind: 'reports' },
   billing: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
-  plans: { ...list(['1fr', '1fr', '1fr'], 3), kind: 'plans' },
+  plans: { ...list(['2fr', '1fr', '1fr', '1fr', '8rem'], 2), kind: 'plans' },
   payments: list(['2fr', '1fr', '1fr', '1fr'], 4),
   profile: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
   business: { ...list(['2fr', '1fr'], 3), kind: 'settings' },

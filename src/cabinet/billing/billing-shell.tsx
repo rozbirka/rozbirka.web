@@ -1,13 +1,6 @@
 import { Fragment, type ReactNode } from 'react'
-import { NavLink } from 'react-router'
 import { ChevronRight } from 'lucide-react'
-import { useT } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { useCabinet } from '../CabinetContext'
-import { cabinetPath } from '../cabinet-paths'
-import { paymentsMessages } from './payments-messages'
-import { plansMessages } from './plans-messages'
-import { subscriptionMessages } from './subscription-messages'
 
 /**
  * The frame of a record / settings screen as `Record.dc.html` draws it: the
@@ -95,15 +88,22 @@ export function RecordHead({
 export function RecordColumns({
   main,
   aside,
+  compactAside = false,
 }: {
   main: ReactNode
   aside?: ReactNode
+  compactAside?: boolean
 }) {
   return (
     <div className="flex min-w-0 flex-wrap items-start gap-4">
       <div className="grid min-w-0 flex-[1_1_480px] gap-4">{main}</div>
       {aside === undefined ? null : (
-        <aside className="grid max-w-[380px] min-w-0 flex-[1_1_280px] gap-4 max-md:max-w-none">
+        <aside
+          className={cn(
+            'grid min-w-0 flex-[1_1_280px] gap-4 max-md:max-w-none',
+            compactAside ? 'max-w-[340px]' : 'max-w-[380px]',
+          )}
+        >
           {aside}
         </aside>
       )}
@@ -113,7 +113,7 @@ export function RecordColumns({
 
 /**
  * The three billing screens share one frame: the record shell, the page head
- * and the `.rz-tabs` route tabs Subscription · Plans · Payments.
+ * with header actions for subscription, plans and payments.
  */
 export function BillingShell({
   crumb,
@@ -139,33 +139,8 @@ export function BillingShell({
           <div className="flex flex-wrap items-center gap-2">{chips}</div>
         )}
       </div>
-      <BillingTabs />
       {children}
     </RecordShell>
-  )
-}
-
-/** Route tabs of the billing section (`components/Tabs.dc.html`). */
-function BillingTabs() {
-  const cabinet = useCabinet()
-  const ts = useT(subscriptionMessages)
-  const tp = useT(plansMessages)
-  const tpay = useT(paymentsMessages)
-  const slug = cabinet.targetTenant?.slug
-  if (slug === undefined) return null
-  const tabs = [
-    { to: cabinetPath(slug, 'billing'), label: ts('title') },
-    { to: cabinetPath(slug, 'plans'), label: tp('title') },
-    { to: cabinetPath(slug, 'payments'), label: tpay('title') },
-  ]
-  return (
-    <nav aria-label={ts('title')} className="rz-tabs">
-      {tabs.map((tab) => (
-        <NavLink end key={tab.to} to={tab.to}>
-          {tab.label}
-        </NavLink>
-      ))}
-    </nav>
   )
 }
 

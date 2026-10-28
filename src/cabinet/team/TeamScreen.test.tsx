@@ -206,11 +206,9 @@ beforeEach(() => {
   tenantRequestScope.rotate()
   vi.mocked(useCabinet).mockReturnValue(cabinet())
   vi.mocked(teamApi.listMembers).mockResolvedValue([member])
-  vi.mocked(teamApi.listRoles).mockResolvedValue([
-    ownerRole,
-    mechanicRole,
-    managerRole,
-  ])
+  vi.mocked(teamApi.listRoles)
+    .mockReset()
+    .mockResolvedValue([ownerRole, mechanicRole, managerRole])
   vi.mocked(teamApi.listInvitations).mockResolvedValue([invitation()])
   vi.mocked(teamApi.changeRole).mockResolvedValue({
     ...member,
@@ -620,9 +618,9 @@ it('does not read team data before an access-changing mutation retry settles', a
   ]
   accessRetry.resolve(undefined)
 
-  expect(readsBeforeAccessSettles).toEqual([1, 1, 1])
+  expect(readsBeforeAccessSettles).toEqual([1, 2, 1])
   await waitFor(() => expect(teamApi.listMembers).toHaveBeenCalledTimes(2))
-  expect(teamApi.listRoles).toHaveBeenCalledTimes(2)
+  expect(teamApi.listRoles).toHaveBeenCalledTimes(3)
   expect(teamApi.listInvitations).toHaveBeenCalledTimes(2)
 })
 
@@ -1589,4 +1587,42 @@ it('keeps permission editing available to a manager with team.manage', async () 
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   )
+})
+
+it('opens role assignment as a drawer with a loading field and blocks saving until roles arrive', async () => {
+  const user = userEvent.setup()
+  const roles = deferred<RoleDto[]>()
+  renderScreen()
+  await screen.findByRole('button', { name: 'Дії з учасником Олена' })
+  vi.mocked(teamApi.listRoles).mockReturnValueOnce(roles.promise)
+  const editor = await openRoleEditor(user)
+  const dialog = screen.getByRole('dialog', { name: 'Змінити роль' })
+  expect(dialog).toHaveClass('rz-sheet')
+  expect(editor.getByRole('status')).toHaveTextContent('Завантаження')
+  expect(editor.getByRole('button', { name: 'Зберегти' })).toBeDisabled()
+  expect(editor.queryByRole('button', { name: 'Роль для Олена' })).toBeNull()
+  roles.resolve([ownerRole, mechanicRole, managerRole])
+  expect(
+    await editor.findByRole('button', { name: 'Роль для Олена' }),
+  ).toBeEnabled()
+  await chooseRole(user, 'Роль для Олена', 'Менеджер')
+  await user.click(editor.getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() => expect(teamApi.changeRole).toHaveBeenCalledOnce())
+})
+
+it('keeps the role drawer open on a roles-load failure and retries without submitting', async () => {
+  const user = userEvent.setup()
+  renderScreen()
+  await screen.findByRole('button', { name: 'Дії з учасником Олена' })
+  vi.mocked(teamApi.listRoles).mockRejectedValueOnce(new Error('offline'))
+  const editor = await openRoleEditor(user)
+  expect(await editor.findByRole('alert')).toHaveTextContent(
+    'Не вдалося завантажити ролі',
+  )
+  expect(editor.getByRole('button', { name: 'Зберегти' })).toBeDisabled()
+  await user.click(editor.getByRole('button', { name: 'Спробувати ще раз' }))
+  expect(
+    await editor.findByRole('button', { name: 'Роль для Олена' }),
+  ).toBeEnabled()
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
 })

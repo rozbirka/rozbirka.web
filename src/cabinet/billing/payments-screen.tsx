@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { CreditCard } from 'lucide-react'
 import {
   Amount,
   Button,
@@ -20,10 +19,10 @@ import {
   type ProviderAwareSubscriptionDto,
 } from '@/api/billing'
 import { normalizeApiProblem } from '@/api/errors'
-import type { PagedResult, PaymentDto, SubscriptionDto } from '@/api/types'
+import type { PagedResult, PaymentDto } from '@/api/types'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
-import { BillingCard, BillingShell } from './billing-shell'
+import { BillingShell } from './billing-shell'
 import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
 import { paymentStatusMeta, paymentTypeLabel } from './billing-vocabulary'
 import { billingMessages } from './messages'
@@ -60,11 +59,6 @@ const PAYMENT_SEGMENTS = [
   { key: 'pending', message: 'segmentPending' },
   { key: 'failed', message: 'segmentFailed' },
 ] as const
-
-type PaymentSubscription = Readonly<
-  Pick<SubscriptionDto, 'cardBrand' | 'cardLast4'>
-> &
-  Partial<Pick<ProviderAwareSubscriptionDto, 'source' | 'manageVia'>>
 
 export function PaymentsScreen() {
   const { locale } = useLocale()
@@ -177,9 +171,17 @@ export function PaymentsScreen() {
       ? paymentsState
       : ({ kind: 'loading', generation, attempt: loadAttempt } as const)
 
-  const paymentMethod = (
-    <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
-  )
+  const provider = cabinet.snapshot?.subscription
+    ? resolveProviderManagement(
+        cabinet.snapshot.subscription as ProviderAwareSubscriptionDto,
+      )
+    : { kind: 'unavailable' as const }
+  const paymentMethod =
+    provider.kind === 'provider' ? (
+      <Notice tone="info">
+        {t('methodByProvider', { provider: provider.label })}
+      </Notice>
+    ) : null
   const actionable =
     currentPaymentsState.kind === 'ready' &&
     currentPaymentsState.page.items.some(
@@ -398,12 +400,9 @@ export function PaymentsScreen() {
               rows={shown}
             />
           )}
-          <p className="rz-caption border-app-line m-0 border-t px-[var(--rz-card-p)] py-2.5 text-pretty">
-            {t('noReceiptFile')} {t('noStatusFilter')}
-          </p>
         </div>
       </section>
-      <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
+      {paymentMethod}
     </PaymentsFrame>
   )
 }
@@ -477,48 +476,6 @@ function isCurrentScope(
     !scope.signal.aborted &&
     snapshot?.tenantId === scope.tenantId &&
     snapshot.generation === scope.generation
-  )
-}
-
-function PaymentMethod({
-  subscription,
-}: {
-  subscription: PaymentSubscription | null
-}) {
-  const management = subscription
-    ? resolveProviderManagement(
-        subscription as unknown as Pick<
-          ProviderAwareSubscriptionDto,
-          'source' | 'manageVia'
-        >,
-      )
-    : { kind: 'unavailable' as const }
-  const hasCard = Boolean(subscription?.cardLast4)
-  const t = useT(paymentsMessages)
-
-  return (
-    <BillingCard footer={t('noCardList')} title={t('paymentMethod')}>
-      {management.kind === 'provider' ? (
-        <p className="rz-muted m-0">
-          {t('methodByProvider', { provider: management.label })}
-        </p>
-      ) : management.kind === 'unavailable' ? (
-        <p className="rz-muted m-0">{t('methodUnavailable')}</p>
-      ) : hasCard ? (
-        <div className="rz-inset flex items-center gap-3">
-          <CreditCard aria-hidden className="text-app-muted size-4 shrink-0" />
-          <span className="grid min-w-0 gap-0.5">
-            <span className="rz-mono rz-strong">
-              {(subscription?.cardBrand ?? 'Card').toUpperCase()} ••••{' '}
-              {subscription?.cardLast4}
-            </span>
-            <span className="rz-caption">{t('cardAuthorised')}</span>
-          </span>
-        </div>
-      ) : (
-        <p className="rz-muted m-0">{t('noCard')}</p>
-      )}
-    </BillingCard>
   )
 }
 

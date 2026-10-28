@@ -53,7 +53,7 @@ export function CabinetLoadingContent({
   ) : key === 'team' && kind === 'list' ? (
     <TeamSkeleton />
   ) : key === 'plans' && kind === 'plans' ? (
-    <PlansSkeleton tabs={heading} />
+    <PlansSkeleton />
   ) : key === 'customers' && kind === 'record' ? (
     <CustomerRecordSkeleton />
   ) : key === 'orders' && kind === 'record' ? (

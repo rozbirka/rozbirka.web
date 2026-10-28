@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { BadgeDollarSign, Check, ReceiptText } from 'lucide-react'
+import {
+  BadgeDollarSign,
+  CreditCard,
+  ReceiptText,
+  RefreshCw,
+} from 'lucide-react'
 import {
   Amount,
   Button,
@@ -25,15 +30,17 @@ import type { BillingState, PaymentDto, SubscriptionDto } from '@/api/types'
 import type { TenantAccessSnapshot } from '../access-types'
 import { cn } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
-import { ModuleAccessDeniedError } from '../policy'
+import { evaluateModuleAccess, ModuleAccessDeniedError } from '../policy'
+import { cabinetModules, type CabinetModuleKey } from '../module-registry'
+import { subscriptionDesignMessages } from './subscription-design-messages'
+import { failedRenewal, scheduledCharge } from './subscription-presentation'
 import { PaymentHistorySkeleton } from '../overview-skeletons'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { BillingCard, BillingShell, RecordColumns } from './billing-shell'
-import { translate, useLocale, useT, type Locale } from '@/i18n'
+import { translate, useFormat, useLocale, useT, type Locale } from '@/i18n'
 import {
   daysText,
   daysUntil,
-  featureLabel,
   limitLabels,
   paymentStatusMeta,
   paymentTypeLabel,
@@ -76,7 +83,24 @@ export function SubscriptionScreen() {
     value: NonNullable<typeof snapshotSubscription>
   } | null>(null)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
-  const [history, setHistory] = useState<PaymentDto[] | null>(null)
+  const [historyState, setHistoryState] = useState<{
+    generation: number | undefined
+    items: PaymentDto[] | null
+    failed: boolean
+  } | null>(null)
+  const [historyAttempt, setHistoryAttempt] = useState(0)
+  const history =
+    historyState !== null && historyState.generation === generation
+      ? historyState.items
+      : null
+  const historyFailed =
+    historyState !== null &&
+    historyState.generation === generation &&
+    historyState.failed
+  const retryHistory = () => {
+    setHistoryState(null)
+    setHistoryAttempt((value) => value + 1)
+  }
   const subscription =
     refreshedSubscription !== null &&
     refreshedSubscription.generation === generation
@@ -92,15 +116,15 @@ export function SubscriptionScreen() {
     void billingApi
       .getPayments(1, HISTORY_SIZE, { signal: controller.signal })
       .then((page) => {
-        if (!controller.signal.aborted) setHistory(page.items)
+        if (!controller.signal.aborted)
+          setHistoryState({ generation, items: page.items, failed: false })
       })
       .catch(() => {
-        // The history strip is context, not the point of the screen: a
-        // failure leaves it empty instead of taking the page down.
-        if (!controller.signal.aborted) setHistory([])
+        if (!controller.signal.aborted)
+          setHistoryState({ generation, items: null, failed: true })
       })
     return () => controller.abort()
-  }, [generation])
+  }, [generation, historyAttempt])
 
   const checkout = useOperation<MutationOutcome>(
     async () => {
@@ -273,6 +297,9 @@ export function SubscriptionScreen() {
       cancelPending={cancelSubscription.pending}
       confirmingCancel={confirmingCancel}
       history={history}
+      historyFailed={historyFailed}
+      onHistoryRetry={retryHistory}
+      snapshot={cabinet.snapshot!}
       manageDecision={controlDecision}
       mutationError={
         confirmingCancel
@@ -291,13 +318,16 @@ export function SubscriptionScreen() {
   )
 }
 
-function SubscriptionPanel({
+export function SubscriptionPanel({
   subscription,
+  snapshot,
   busy,
   cancelError,
   cancelPending,
   confirmingCancel,
   history,
+  historyFailed,
+  onHistoryRetry,
   mutationError,
   manageDecision,
   onCancelConfirm,
@@ -309,12 +339,14 @@ function SubscriptionPanel({
   plansPath,
 }: {
   subscription: NonNullable<TenantAccessSnapshot['subscription']>
+  snapshot: TenantAccessSnapshot
   busy: boolean
   cancelError: string | null
   cancelPending: boolean
   confirmingCancel: boolean
-  /** The newest few payments, straight from `GET /billing/payments`. */
   history: PaymentDto[] | null
+  historyFailed: boolean
+  onHistoryRetry: () => void
   mutationError: string | null
   manageDecision: ReturnType<typeof useBillingMutation>['controlDecision']
   onCancelConfirm: () => void
@@ -326,25 +358,26 @@ function SubscriptionPanel({
   plansPath: string
 }) {
   const { locale } = useLocale()
+  const format = useFormat()
   const t = useT(subscriptionMessages)
+  const td = useT(subscriptionDesignMessages)
   const tb = useT(billingMessages)
   const tp = useT(paymentsMessages)
   const tplans = useT(plansMessages)
   const accessEnded = subscription.state === 'blocked'
-  const providerSubscription = subscription as ProviderAwareSubscriptionDto
-  const management = resolveProviderManagement(providerSubscription)
-  const contractManaged = isContractManagedSubscription(providerSubscription)
+  const management = resolveProviderManagement(
+    subscription as ProviderAwareSubscriptionDto,
+  )
+  const contractManaged = isContractManagedSubscription(
+    subscription as ProviderAwareSubscriptionDto,
+  )
   const state = stateMeta[subscription.state]
-  const stateLabel = t(state.message)
-  const planLabel = accessEnded
-    ? t('accessClosed')
-    : subscription.state === 'trial'
-      ? (subscription.planName ?? t('trialAccess'))
-      : (subscription.planName ?? t('noPlan'))
-  const canReactivate =
-    subscription.canReactivate && subscription.state !== 'blocked'
+  const planLabel =
+    subscription.planName ??
+    (subscription.state === 'trial' ? t('trialAccess') : t('noPlan'))
   const isMono = management.kind === 'mono'
   const canRecover = canRecoverWithAnotherCard(subscription)
+  const canReactivate = subscription.canReactivate && !accessEnded
   const canCheckout =
     canStartWebCheckout(subscription) &&
     !hasUnexpiredCancelledMonoPeriod(subscription) &&
@@ -353,9 +386,8 @@ function SubscriptionPanel({
       canReactivate ||
       (subscription.canReactivate && !isMono))
   const renewalStopped = subscription.state === 'cancelled'
-  const nextChargeAt = renewalStopped
-    ? null
-    : (subscription.nextChargeAt ?? subscription.currentPeriodEnd)
+  const nextChargeAt = scheduledCharge(subscription)
+  const failed = failedRenewal(subscription, history)
   const daysLeft =
     subscription.state === 'trial'
       ? subscription.trialDaysRemaining
@@ -367,118 +399,284 @@ function SubscriptionPanel({
   const overLimits = limits.filter(
     (item) => item.data.max != null && item.data.used >= item.data.max,
   )
-  const features = subscription.features
-
-  const summary = (
-    <>
-      <div className="grid min-w-0 flex-[1_1_320px] gap-1">
-        <p className="rz-h-title m-0">
-          {daysLeft === null
-            ? t('noNextChargeDate')
-            : daysLeft >= 0
-              ? t('daysToCharge', { days: daysText(daysLeft, locale) })
-              : t('overdueBy', { days: daysText(-daysLeft, locale) })}
-        </p>
-        <p className="rz-muted m-0 text-pretty">
-          {nextChargeAt === null ? (
-            t('noNextChargeYet')
+  const amount = failed?.amount ?? subscription.amount
+  const currency = failed?.currency ?? subscription.currency
+  const money = format.money(amount, currency)
+  const card = subscription.cardLast4
+    ? `${(subscription.cardBrand ?? 'Card').toUpperCase()} •••• ${subscription.cardLast4}`
+    : null
+  const knownPrice =
+    !!subscription.planCode &&
+    subscription.planCode !== 'trial' &&
+    typeof subscription.amount === 'number' &&
+    subscription.amount > 0
+  const payMoney = format.money(subscription.amount, subscription.currency)
+  const payLabel =
+    accessEnded && knownPrice && payMoney
+      ? td('payAmount', { amount: payMoney })
+      : canRecover
+        ? t('payWithAnotherCard')
+        : canReactivate
+          ? t('reactivate')
+          : accessEnded
+            ? t('subscribe')
+            : t('renew')
+  const pay = (primary = false) =>
+    canCheckout ? (
+      <BillingMutationGate decision={manageDecision}>
+        <Button
+          aria-busy={busy}
+          disabled={busy}
+          onClick={onSubscribe}
+          variant={primary ? 'primary' : 'quiet'}
+          className={primary ? undefined : 'text-brand'}
+        >
+          {primary && <RefreshCw aria-hidden />}
+          {payLabel}
+        </Button>
+      </BillingMutationGate>
+    ) : null
+  const banner = accessEnded
+    ? {
+        title: failed
+          ? td('failedTitle', { date: format.date(failed.createdAt) ?? '—' })
+          : td('blockedTitle'),
+        body: failed
+          ? td('failedBody', {
+              amount: money ?? '—',
+              card: card ? td('fromCard', { card }) : '',
+            })
+          : td('blockedBody'),
+      }
+    : subscription.state === 'pastDue'
+      ? { title: td('pastDueTitle'), body: td('pastDueBody') }
+      : renewalStopped
+        ? { title: td('cancelledTitle'), body: td('cancelledBody') }
+        : subscription.state === 'none'
+          ? { title: td('noneTitle'), body: td('noneBody') }
+          : null
+  const accessRows: { key: CabinetModuleKey; label: string }[] = accessEnded
+    ? [
+        { key: 'parts', label: td('stock') },
+        { key: 'orders', label: td('orders') },
+        { key: 'reports', label: td('reports') },
+        { key: 'billing', label: td('billing') },
+      ]
+    : [
+        { key: 'parts', label: td('stock') },
+        { key: 'reports', label: td('reports') },
+        { key: 'team', label: td('team') },
+      ]
+  const metrics = (
+    <KpiStrip>
+      <Kpi
+        label={td('plan')}
+        value={planLabel}
+        meta={accessEnded ? td('paused') : null}
+      />
+      <Kpi
+        label={
+          failed
+            ? td('notCharged')
+            : renewalStopped
+              ? t('accessUntil')
+              : accessEnded
+                ? td('periodEnd')
+                : subscription.state === 'trial'
+                  ? t('kpiTrialDays')
+                  : t('nextCharge')
+        }
+        tone={failed ? 'warn' : 'plain'}
+        value={
+          failed ? (
+            format.dateWith(failed.createdAt, {
+              day: '2-digit',
+              month: '2-digit',
+            })
+          ) : subscription.state === 'trial' ? (
+            (subscription.trialDaysRemaining ?? '—')
           ) : (
-            <>
-              {t('nextCharge')}{' '}
-              <DateValue value={nextChargeAt} withTime={false} />
-              {typeof subscription.amount === 'number' && (
-                <>
-                  {' — '}
-                  <Amount
-                    currency={subscription.currency}
-                    value={subscription.amount}
-                  />
-                </>
-              )}
-              .{' '}
-            </>
-          )}
-          {subscription.cardLast4 ? (
-            <>
-              {t('card', {
-                brand: (subscription.cardBrand ?? 'Card').toUpperCase(),
-              })}{' '}
-              <span className="rz-mono">{subscription.cardLast4}</span>.{' '}
-              <span title={t('noCardExpiry')}>{t('expiryHidden')}</span>
-            </>
-          ) : (
-            t('noCardLinked')
-          )}
-        </p>
-      </div>
-      <div className="rz-btn-row">
-        {canCheckout && (
-          <BillingMutationGate decision={manageDecision}>
-            <Button aria-busy={busy} disabled={busy} onClick={onSubscribe}>
-              {canRecover ? t('payWithAnotherCard') : t('payNow')}
-            </Button>
-          </BillingMutationGate>
-        )}
-      </div>
-    </>
+            <DateValue
+              value={
+                renewalStopped || accessEnded
+                  ? subscription.currentPeriodEnd
+                  : nextChargeAt
+              }
+              withTime={false}
+            />
+          )
+        }
+        meta={
+          failed
+            ? td('attemptFailed')
+            : renewalStopped
+              ? t('renewalStopped')
+              : accessEnded
+                ? td('accessEnded')
+                : daysLeft === null
+                  ? t('kpiNoChargeDate')
+                  : daysLeft >= 0
+                    ? t('daysToCharge', { days: daysText(daysLeft, locale) })
+                    : t('overdueBy', { days: daysText(-daysLeft, locale) })
+        }
+      />
+      <Kpi
+        label={failed ? td('amountDue') : t('kpiPeriodPrice')}
+        value={
+          amount === null ? '—' : <Amount currency={currency} value={amount} />
+        }
+        meta={card ?? t('noCardLinked')}
+      />
+    </KpiStrip>
   )
-  const alarming = state.tone === 'danger' || state.tone === 'warn'
-
+  const historyCard = (
+    <BillingCard
+      title={td('recentCharges')}
+      aside={
+        <Button asChild size="sm">
+          <Link to={paymentsPath}>{t('allPayments')}</Link>
+        </Button>
+      }
+      bodyClassName={history?.length ? 'p-0' : ''}
+    >
+      {historyFailed ? (
+        <Notice
+          tone="danger"
+          action={
+            <Button onClick={onHistoryRetry} size="sm">
+              {td('retry')}
+            </Button>
+          }
+        >
+          {td('loadingHistoryFailed')}
+        </Notice>
+      ) : history === null ? (
+        <PaymentHistorySkeleton label={tb('loadingPayments')} />
+      ) : history.length === 0 ? (
+        <p className="rz-muted m-0">{tb('noPayments')}</p>
+      ) : (
+        <DataTable
+          caption={td('recentCharges')}
+          embedded
+          rowKey={(payment) => payment.id}
+          rows={history}
+          columns={[
+            {
+              key: 'date',
+              label: tp('columnDate'),
+              variant: 'primary',
+              cell: (payment) => (
+                <span className="font-mono">
+                  <DateValue value={payment.createdAt} withTime={false} />
+                </span>
+              ),
+            },
+            {
+              key: 'description',
+              label: tp('columnDescription'),
+              cell: (payment) => (
+                <span className="rz-muted">
+                  {paymentTypeLabel(payment.type, locale)}
+                </span>
+              ),
+            },
+            {
+              key: 'amount',
+              label: tp('columnAmount'),
+              align: 'end',
+              cell: (payment) => (
+                <Amount currency={payment.currency} value={payment.amount} />
+              ),
+            },
+            {
+              key: 'status',
+              label: tp('columnStatus'),
+              cell: (payment) => {
+                const meta = paymentStatusMeta(payment.status, locale)
+                return (
+                  <StatusPill tone={meta.tone}>
+                    {payment.id === failed?.id ? td('notCharged') : meta.label}
+                  </StatusPill>
+                )
+              },
+            },
+          ]}
+        />
+      )}
+    </BillingCard>
+  )
   return (
     <BillingShell
+      crumb={t('crumb')}
+      title={t('title')}
+      chips={<StatusPill tone={state.tone}>{t(state.message)}</StatusPill>}
       actions={
-        <>
-          <Button asChild>
-            <Link to={plansPath}>
-              <BadgeDollarSign aria-hidden />
-              {tplans('title')}
-            </Link>
-          </Button>
-          <Button asChild>
-            <Link to={paymentsPath}>
-              <ReceiptText aria-hidden />
-              {t('payments')}
-            </Link>
-          </Button>
-          {canCheckout && (
-            <BillingMutationGate decision={manageDecision}>
-              <Button
-                aria-busy={busy}
-                disabled={busy}
-                onClick={onSubscribe}
-                variant="primary"
-              >
-                {canRecover
-                  ? t('payWithAnotherCard')
-                  : accessEnded
-                    ? t('subscribe')
-                    : canReactivate
-                      ? t('reactivate')
-                      : t('renew')}
-              </Button>
-            </BillingMutationGate>
-          )}
-        </>
+        accessEnded ? (
+          <>
+            {canRecover && (
+              <BillingMutationGate decision={manageDecision}>
+                <Button
+                  aria-label={t('payWithAnotherCard')}
+                  title={td('chooseCardHint')}
+                  disabled={busy}
+                  onClick={onSubscribe}
+                >
+                  <CreditCard aria-hidden />
+                  {td('changeCard')}
+                </Button>
+              </BillingMutationGate>
+            )}
+            {pay(true)}
+          </>
+        ) : (
+          <>
+            <Button asChild>
+              <Link to={plansPath}>
+                <BadgeDollarSign aria-hidden />
+                {tplans('title')}
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to={paymentsPath}>
+                <ReceiptText aria-hidden />
+                {t('payments')}
+              </Link>
+            </Button>
+            {pay(true)}
+          </>
+        )
       }
       banner={
-        alarming ? (
+        banner ? (
           <div
             className={cn(
-              'rz-banner gap-y-2 py-2.5',
-              state.tone === 'danger' ? 'rz-banner--danger' : 'rz-banner--warn',
+              'rz-banner items-start gap-y-2 py-2.5',
+              accessEnded || subscription.state === 'pastDue'
+                ? 'rz-banner--warn'
+                : 'rz-banner--info',
             )}
           >
-            {summary}
+            <StatusPill
+              tone={
+                accessEnded || subscription.state === 'pastDue'
+                  ? 'warn'
+                  : 'info'
+              }
+            >
+              {t(state.message)}
+            </StatusPill>
+            <p className="m-0 min-w-0 flex-[1_1_320px] text-pretty">
+              <strong className="text-app-strong">{banner.title}</strong>{' '}
+              <span className="text-app-muted">{banner.body}</span>
+            </p>
+            {knownPrice &&
+              (accessEnded || subscription.state === 'pastDue') &&
+              pay()}
           </div>
         ) : undefined
       }
-      chips={<StatusPill tone={state.tone}>{stateLabel}</StatusPill>}
-      crumb={t('crumb')}
-      title={t('title')}
     >
-      {mutationError === null ? null : (
-        <Notice tone="danger">{mutationError}</Notice>
-      )}
+      {mutationError !== null && <Notice tone="danger">{mutationError}</Notice>}
       {management.kind === 'provider' && (
         <Notice tone="info">
           {t('managedByProvider', { provider: management.label })}{' '}
@@ -491,268 +689,121 @@ function SubscriptionPanel({
       {management.kind === 'unavailable' &&
         !canCheckout &&
         !contractManaged && <BillingUnavailableNotice />}
-
-      <KpiStrip>
-        <Kpi label={t('currentPlan')} meta={null} value={planLabel} />
-        <Kpi
-          label={
-            renewalStopped
-              ? t('accessUntil')
-              : subscription.state === 'trial'
-                ? t('kpiTrialDays')
-                : t('nextCharge')
-          }
-          meta={
-            renewalStopped
-              ? t('renewalStopped')
-              : daysLeft === null
-                ? t('kpiNoChargeDate')
-                : daysLeft >= 0
-                  ? t('daysToCharge', { days: daysText(daysLeft, locale) })
-                  : t('overdueBy', { days: daysText(-daysLeft, locale) })
-          }
-          tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
-          value={
-            renewalStopped ? (
-              subscription.currentPeriodEnd === null ? (
-                '—'
-              ) : (
-                <DateValue
-                  value={subscription.currentPeriodEnd}
-                  withTime={false}
-                />
-              )
-            ) : subscription.state === 'trial' ? (
-              daysLeft == null ? (
-                '—'
-              ) : (
-                String(daysLeft)
-              )
-            ) : nextChargeAt === null ? (
-              '—'
-            ) : (
-              <DateValue value={nextChargeAt} withTime={false} />
-            )
-          }
-        />
-        <Kpi
-          label={t('kpiPeriodPrice')}
-          meta={
-            subscription.cardLast4 ? (
-              <>
-                {t('card', {
-                  brand: (subscription.cardBrand ?? 'Card').toUpperCase(),
-                })}{' '}
-                <span className="rz-mono">{subscription.cardLast4}</span>
-              </>
-            ) : (
-              t('noCardLinked')
-            )
-          }
-          value={
-            typeof subscription.amount === 'number' ? (
-              <Amount
-                currency={subscription.currency}
-                value={subscription.amount}
-              />
-            ) : (
-              '—'
-            )
-          }
-        />
-      </KpiStrip>
-
       <RecordColumns
-        aside={
-          <section className="rz-card min-w-0">
-            <header className="rz-card__head gap-y-1 py-2.5">
-              <div className="grid min-w-0 gap-0.5">
-                <p className="rz-eyebrow m-0">{t('currentPlan')}</p>
-                <h2 className="rz-h-title">{planLabel}</h2>
-              </div>
-              <p className="m-0 grid justify-items-end gap-0.5">
-                <span className="rz-mono rz-strong text-title font-semibold">
-                  {typeof subscription.amount === 'number' ? (
-                    <Amount
-                      currency={subscription.currency}
-                      value={subscription.amount}
-                    />
-                  ) : (
-                    '—'
-                  )}
-                </span>
-                <span className="rz-caption">{t('perPeriod')}</span>
-              </p>
-            </header>
-            <div className="rz-card__body grid gap-3">
-              <ul className="m-0 grid list-none gap-2 p-0">
-                {features.length === 0 ? (
-                  <li className="rz-dim">{t('noFeatures')}</li>
-                ) : (
-                  features.map((code) => (
-                    <li className="flex items-start gap-2.5" key={code}>
-                      <Check
-                        aria-hidden
-                        className="text-state-ok mt-0.5 size-3.5 shrink-0"
-                      />
-                      {featureLabel(code, locale)}
-                    </li>
-                  ))
-                )}
-              </ul>
-              <p className="rz-caption m-0 text-pretty">
-                {t('noCycleDiscount')}
-              </p>
-            </div>
-            <div className="rz-card__foot flex-wrap">
-              <Button asChild>
-                <Link to={plansPath}>{t('allPlans')}</Link>
-              </Button>
-              {isMono && subscription.canCancel && (
-                <BillingMutationGate decision={manageDecision}>
-                  <Button
-                    disabled={busy}
-                    onClick={onCancelRequest}
-                    variant="danger"
-                  >
-                    {t('cancelSubscription')}
-                  </Button>
-                </BillingMutationGate>
-              )}
-            </div>
-          </section>
-        }
+        compactAside
         main={
           <>
-            <BillingCard title={t('planLimits')}>
-              {overLimits.length > 0 && (
-                <Notice
-                  action={
-                    <Button onClick={onSeePlans} size="sm">
-                      {t('upgrade')}
-                    </Button>
-                  }
-                  tone="warn"
-                >
-                  {t('limitReached', {
-                    limits: overLimits
-                      .map(
-                        (item) =>
-                          `${item.label} ${String(item.data.used)}/${item.data.max == null ? '∞' : String(item.data.max)}`,
-                      )
-                      .join(', '),
-                  })}
-                </Notice>
-              )}
-              <dl className="rz-facts px-0 py-0">
-                {limits.map((item) => {
-                  const max = item.data.max
-                  const over = max != null && item.data.used > max
-                  return (
+            {metrics}
+            {accessEnded ? (
+              <>
+                {historyCard}
+                <BillingCard title={td('savedData')} bodyClassName="p-0">
+                  <dl className="rz-facts">
+                    {(['parts', 'cars', 'users', 'cashRegisters'] as const).map(
+                      (key) => (
+                        <div key={key}>
+                          <dt>{td(key)}</dt>
+                          <dd className="rz-mono">
+                            {format.number(subscription.usage[key].used)}
+                          </dd>
+                        </div>
+                      ),
+                    )}
+                  </dl>
+                </BillingCard>
+              </>
+            ) : (
+              <BillingCard title={t('planLimits')}>
+                {overLimits.length > 0 && (
+                  <Notice
+                    tone="warn"
+                    action={
+                      <Button onClick={onSeePlans} size="sm">
+                        {t('upgrade')}
+                      </Button>
+                    }
+                  >
+                    {t('limitReached', {
+                      limits: overLimits
+                        .map(
+                          (item) =>
+                            `${item.label} ${item.data.used}/${item.data.max ?? '∞'}`,
+                        )
+                        .join(', '),
+                    })}
+                  </Notice>
+                )}
+                <dl className="rz-facts px-0 py-0">
+                  {limits.map((item) => (
                     <div key={item.label}>
                       <dt>{item.label}</dt>
                       <dd>
-                        <span className="flex items-baseline justify-between gap-3">
-                          <span
-                            className={cn(
-                              'rz-mono',
-                              over ? 'text-state-warn' : 'rz-strong',
-                            )}
-                          >
-                            {item.data.used} / {max ?? '∞'}
-                          </span>
-                          <span className="rz-caption">
-                            {max == null
-                              ? t('unlimited')
-                              : t('remaining', {
-                                  count: Math.max(max - item.data.used, 0),
-                                })}
-                          </span>
+                        <span className="rz-mono rz-strong">
+                          {format.number(item.data.used)} /{' '}
+                          {item.data.max ?? '∞'}
                         </span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </BillingCard>
+            )}
+          </>
+        }
+        aside={
+          <>
+            <BillingCard title={td('availableNow')} bodyClassName="p-0">
+              <dl className="rz-facts">
+                {accessRows.map((row) => {
+                  const allowed =
+                    evaluateModuleAccess(
+                      cabinetModules[row.key],
+                      { status: 'ready', snapshot, error: null },
+                      'view',
+                    ).kind === 'allowed'
+                  return (
+                    <div key={row.key}>
+                      <dt>{row.label}</dt>
+                      <dd>
+                        {allowed
+                          ? td('available')
+                          : accessEnded
+                            ? td('closed')
+                            : td('denied')}
                       </dd>
                     </div>
                   )
                 })}
               </dl>
-            </BillingCard>
-
-            <BillingCard
-              aside={<Link to={paymentsPath}>{t('allPayments')}</Link>}
-              bodyClassName={
-                history !== null && history.length > 0 ? 'p-0' : ''
-              }
-              footer={t('noRetentionPolicy')}
-              title={t('history')}
-            >
-              {history === null ? (
-                <PaymentHistorySkeleton label={tb('loadingPayments')} />
-              ) : history.length === 0 ? (
-                <p className="rz-muted m-0">{tb('noPayments')}</p>
-              ) : (
-                <DataTable
-                  caption={t('history')}
-                  columns={[
-                    {
-                      key: 'date',
-                      label: tp('columnDate'),
-                      variant: 'primary',
-                      cell: (payment) => (
-                        <span className="font-mono">
-                          <DateValue
-                            value={payment.createdAt}
-                            withTime={false}
-                          />
-                        </span>
-                      ),
-                    },
-                    {
-                      key: 'description',
-                      label: tp('columnDescription'),
-                      cell: (payment) => (
-                        <span className="grid min-w-0">
-                          <span className="rz-strong">
-                            {paymentTypeLabel(payment.type, locale)}
-                          </span>
-                          <span className="rz-caption">
-                            {payment.providerInvoiceId ?? tb('noInvoiceNumber')}
-                          </span>
-                        </span>
-                      ),
-                    },
-                    {
-                      key: 'amount',
-                      label: tp('columnAmount'),
-                      align: 'end',
-                      cell: (payment) => (
-                        <Amount
-                          currency={payment.currency}
-                          value={payment.amount}
-                        />
-                      ),
-                    },
-                    {
-                      key: 'status',
-                      label: tp('columnStatus'),
-                      cell: (payment) => {
-                        const status = paymentStatusMeta(payment.status, locale)
-                        return (
-                          <StatusPill tone={status.tone}>
-                            {status.label}
-                          </StatusPill>
-                        )
-                      },
-                    },
-                  ]}
-                  embedded
-                  rowKey={(payment) => payment.id}
-                  rows={history}
-                />
+              {(accessEnded || (isMono && subscription.canCancel)) && (
+                <div className="border-app-line flex flex-wrap gap-2 border-t px-4 py-3">
+                  {accessEnded && (
+                    <Button asChild>
+                      <Link to={plansPath}>{t('allPlans')}</Link>
+                    </Button>
+                  )}
+                  {isMono && subscription.canCancel && (
+                    <BillingMutationGate decision={manageDecision}>
+                      <Button
+                        disabled={busy}
+                        onClick={onCancelRequest}
+                        variant="danger"
+                      >
+                        {t('cancelSubscription')}
+                      </Button>
+                    </BillingMutationGate>
+                  )}
+                </div>
               )}
             </BillingCard>
+            {failed && (
+              <BillingCard title={td('reasonTitle')}>
+                <p className="rz-muted m-0 text-pretty">{td('reasonBody')}</p>
+              </BillingCard>
+            )}
           </>
         }
       />
-
       <ConfirmDialog
         cancelLabel={t('keepSubscription')}
         confirmLabel={t('confirmCancel')}

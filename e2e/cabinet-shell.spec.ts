@@ -1112,9 +1112,7 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
     await expect(
       page.getByRole('heading', { name: 'Підписка', level: 1 }),
     ).toBeVisible()
-    await expect(
-      page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
-    ).toBeVisible()
+    await expect(page.getByText('Koval Pro', { exact: true })).toBeVisible()
     return
   }
   if (path === '/app/koval/settings/billing/plans') {
@@ -1122,7 +1120,9 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
       page.getByRole('heading', { name: 'Тарифи', level: 1 }),
     ).toBeVisible()
     await expect(
-      page.getByRole('heading', { name: 'Lite', level: 2 }),
+      page
+        .getByRole('table', { name: 'Тарифи', exact: true })
+        .getByRole('rowheader', { name: /^Lite/ }),
     ).toBeVisible()
     return
   }
@@ -1131,7 +1131,7 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
       page.getByRole('heading', { name: 'Платежі', level: 1 }),
     ).toBeVisible()
     await expect(
-      page.getByRole('heading', { name: 'Спосіб оплати', level: 2 }),
+      page.getByRole('heading', { name: 'Історія платежів', level: 2 }),
     ).toBeVisible()
     await expect(page.getByText('Платежів ще не було.')).toBeVisible()
     return
@@ -1293,7 +1293,9 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
-  const fixture = await installCabinetApiBoundary(page)
+  const fixture = await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/dashboard')
@@ -1367,9 +1369,7 @@ test('loads tenant-specific subscription data from tenant-scoped requests @cabin
   const fixture = await installCabinetApiBoundary(page, { sobolBilling: true })
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Підписка')
-  await expect(
-    page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
-  ).toBeVisible()
+  await expect(page.getByText('Koval Pro', { exact: true })).toBeVisible()
 
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/settings/billing/overview')
@@ -1393,7 +1393,9 @@ test('loads tenant-specific subscription data from tenant-scoped requests @cabin
 test('falls back to the target dashboard when its policy denies the current module @cabinet-smoke', async ({
   page,
 }) => {
-  await installCabinetApiBoundary(page)
+  await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Підписка')
   await expect(page).toHaveURL('/app/koval/settings/billing/overview')
@@ -1404,6 +1406,35 @@ test('falls back to the target dashboard when its policy denies the current modu
   await expect(
     page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Соболя' }),
   ).toBeVisible()
+})
+
+test('blocked tenant dashboard shows renewal without requesting business data @cabinet-smoke', async ({
+  page,
+}) => {
+  const fixture = await installCabinetApiBoundary(page)
+  await loginFrom(page)
+  await selectVisibleTenant(page, 'tenant-2')
+
+  await expect(page).toHaveURL('/app/sobol/dashboard')
+  await expect(
+    page.getByRole('combobox', { name: 'Перемкнути розбірку' }),
+  ).toHaveValue('tenant-2')
+  await expect(
+    page.getByRole('heading', { name: 'Доступ призупинено', level: 1 }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(
+      'Керування підпискою недоступне для ваших прав. Зверніться до власника розбірки або підтримки.',
+    ),
+  ).toBeVisible()
+  expect(
+    fixture.requests.filter(
+      ({ path, tenantId }) =>
+        tenantId === 'tenant-2' &&
+        (path === '/api/v1/dashboard' ||
+          path === '/api/v1/dashboard/analytics'),
+    ),
+  ).toHaveLength(0)
 })
 
 test('boots an active Manager entitlement without requesting detailed billing @cabinet-smoke', async ({
@@ -1566,7 +1597,11 @@ test('clears stale dashboard totals while the next tenant summary is pending', a
   page,
   request,
 }) => {
-  const fixture = await installCabinetApiBoundary(page)
+  // Both tenants need active access: a blocked subscription correctly skips
+  // business-data requests and renders the renewal entry instead.
+  const fixture = await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await expect(dashboardGreeting(page)).toContainText('Олена')
   await armDelayedDashboard(request, 'tenant-2')

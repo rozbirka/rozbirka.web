@@ -67,6 +67,7 @@ function renderDashboard(initialEntries: string[]) {
 }
 
 beforeEach(() => {
+  vi.mocked(useDashboardData).mockClear()
   vi.mocked(useCabinet).mockReturnValue({
     status: 'ready',
     targetTenant: tenant,
@@ -422,3 +423,61 @@ it('pushes selected periods and keeps tenant, scan, and browser-back state', asy
     '/app/koval/dashboard?scan=QR-123%7Epart&period=day',
   )
 })
+
+it.each([
+  ['owner', ['billing.view', 'billing.manage']],
+  ['manager', []],
+] as const)(
+  'shows subscription recovery instead of loading forbidden dashboard data for blocked %s',
+  (role, permissions) => {
+    vi.mocked(useCabinet).mockReturnValue({
+      status: 'ready',
+      targetTenant: tenant,
+      snapshot: {
+        ...snapshot,
+        role,
+        permissions: new Set(permissions),
+        entitlement: {
+          state: 'blocked',
+          usage: {
+            cars: { used: 0, max: 10 },
+            intakes: { used: 0, max: 10 },
+            parts: { used: 0, max: 10 },
+            users: { used: 1, max: 10 },
+            cashRegisters: { used: 0, max: 10 },
+          },
+        },
+      },
+      error: null,
+      retry: vi.fn(),
+      switchTenant: vi.fn(),
+    } satisfies CabinetContextValue)
+    renderDashboard(['/app/koval/dashboard'])
+    expect(
+      screen.getByRole('heading', {
+        name:
+          role === 'owner'
+            ? 'Поновіть підписку, щоб відновити доступ'
+            : 'Доступ призупинено',
+      }),
+    ).toBeVisible()
+    expect(useDashboardData).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('button', { name: 'Спробувати ще раз' }),
+    ).not.toBeInTheDocument()
+    if (role === 'owner') {
+      expect(
+        screen.getByRole('link', { name: 'Перейти до підписки' }),
+      ).toHaveAttribute('href', '/app/koval/settings/billing/overview')
+    } else {
+      expect(
+        screen.queryByRole('link', { name: 'Перейти до підписки' }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'Керування підпискою недоступне для ваших прав. Зверніться до власника розбірки або підтримки.',
+        ),
+      ).toBeVisible()
+    }
+  },
+)

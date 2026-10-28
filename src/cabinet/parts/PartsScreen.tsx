@@ -1,3 +1,5 @@
+import { hasPlacementStock } from '../warehouses/placement-availability'
+import { locationContentsMessages } from '../inventory/location-contents-messages'
 import { localizeApiError } from '@/api/error-localization'
 import { PartSourceFilter } from './PartSourceFilter'
 import { PartLocationCard } from './PartLocationCard'
@@ -1451,6 +1453,8 @@ function PartDetailScreen({
   const format = useFormat()
   const { currency: partCurrency } = useAccountingCurrency()
   const priceRestriction = partEditingRestriction(detail?.status, locale)
+  const inStock = detail !== null && hasPlacementStock(detail)
+  const tl = useT(locationContentsMessages)
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -1606,7 +1610,7 @@ function PartDetailScreen({
           returnFocus={() => priceTrigger.current?.focus()}
         />
       ) : null}
-      {placementOpen && links.inventory ? (
+      {placementOpen && canManage && links.inventory && inStock ? (
         <Suspense
           fallback={
             <Sheet
@@ -1659,6 +1663,10 @@ function PartDetailScreen({
                         {
                           key: 'move',
                           label: t('move'),
+                          disabled: !inStock,
+                          ...(!inStock
+                            ? { title: tl('placementNoStock') }
+                            : {}),
                           icon: <MapPin aria-hidden />,
                           onSelect: () => setPlacementOpen(true),
                         },
@@ -2365,9 +2373,11 @@ function PartDetailScreen({
                 zones={zones}
                 allowed={links.inventory}
                 failed={zonesFailed}
-                inStock={detail.quantityAvailable + detail.quantityReserved > 0}
+                inStock={inStock}
                 canMove={canManage && links.inventory}
-                onMove={() => setPlacementOpen(true)}
+                onMove={() => {
+                  if (inStock) setPlacementOpen(true)
+                }}
                 onRetry={() => {
                   setZones(null)
                   setZonesFailed(false)

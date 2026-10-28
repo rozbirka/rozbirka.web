@@ -46,14 +46,14 @@ export const accessMessages = defineMessages({
     'state.pastDue.title': 'Платіж не пройшов',
     'state.pastDue.body':
       'Списання за підписку не вдалося. Поки платіж не пройде, частина розділів працює лише на перегляд — дані розбірки лишаються на місці.',
-    'state.blocked.chip': 'Кабінет у режимі перегляду',
-    'state.blocked.title': 'Підписка неактивна — дані лише для читання',
+    'state.blocked.chip': 'Доступ призупинено',
+    'state.blocked.title': 'Поновіть підписку, щоб відновити доступ',
     'state.blocked.body':
-      'Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.',
+      'Підписка неактивна. Поновіть її, щоб знову відкрити розділи розбірки.',
     'state.cancelled.chip': 'Підписку скасовано',
     'state.cancelled.title': 'Підписка скасована — доступ діє до кінця періоду',
     'state.cancelled.body':
-      'Списань більше не буде. Коли сплачений період завершиться, кабінет перейде в режим перегляду.',
+      'Списань більше не буде. Після завершення сплаченого періоду потрібно поновити підписку, щоб продовжити роботу.',
     'state.none.chip': 'Підписки ще немає',
     'state.none.title': 'Щоб відкрити цей розділ, потрібна підписка',
     'state.none.body':
@@ -71,6 +71,8 @@ export const accessMessages = defineMessages({
     accessUntil: 'Доступ до',
     noRetention:
       'До якої дати зберігаються дані після зупинки підписки — питання до підтримки.',
+    renewalRequiresPermission:
+      'Керування підпискою недоступне для ваших прав. Зверніться до власника розбірки або підтримки.',
     toSubscription: 'Перейти до підписки',
     paymentHistory: 'Історія платежів',
     availableNow: 'Що доступно зараз',
@@ -129,15 +131,15 @@ export const accessMessages = defineMessages({
     'state.pastDue.title': 'Payment failed',
     'state.pastDue.body':
       'The subscription charge didn’t go through. Until it does, some sections are view-only — your business data stays where it is.',
-    'state.blocked.chip': 'Cabinet in view-only mode',
-    'state.blocked.title': 'Subscription inactive — data is read-only',
+    'state.blocked.chip': 'Access suspended',
+    'state.blocked.title': 'Renew your subscription to restore access',
     'state.blocked.body':
-      'Stock, orders and money history are fully kept, but you can’t create or change records until the subscription is restored.',
+      'Your subscription is inactive. Renew it to reopen the business sections.',
     'state.cancelled.chip': 'Subscription cancelled',
     'state.cancelled.title':
       'Subscription cancelled — access lasts until the end of the period',
     'state.cancelled.body':
-      'There will be no more charges. When the paid period ends, the cabinet will switch to view-only mode.',
+      'There will be no more charges. Once the paid period ends, renew your subscription to continue working.',
     'state.none.chip': 'No subscription yet',
     'state.none.title': 'You need a subscription to open this section',
     'state.none.body':
@@ -155,6 +157,8 @@ export const accessMessages = defineMessages({
     accessUntil: 'Access until',
     noRetention:
       'Ask support how long data is kept after a subscription stops.',
+    renewalRequiresPermission:
+      'Your permissions do not allow subscription management. Contact the business owner or support.',
     toSubscription: 'Go to subscription',
     paymentHistory: 'Payment history',
     availableNow: 'What’s available now',
@@ -214,15 +218,15 @@ export const accessMessages = defineMessages({
     'state.pastDue.title': 'Płatność nie przeszła',
     'state.pastDue.body':
       'Nie udało się pobrać opłaty za subskrypcję. Dopóki płatność nie przejdzie, część sekcji działa tylko w trybie podglądu — dane firmy zostają na miejscu.',
-    'state.blocked.chip': 'Panel w trybie podglądu',
-    'state.blocked.title': 'Subskrypcja nieaktywna — dane tylko do odczytu',
+    'state.blocked.chip': 'Dostęp wstrzymany',
+    'state.blocked.title': 'Odnów subskrypcję, aby przywrócić dostęp',
     'state.blocked.body':
-      'Magazyn, zamówienia i historia finansów zachowały się w całości, ale nie można tworzyć ani zmieniać wpisów, dopóki subskrypcja nie zostanie przywrócona.',
+      'Twoja subskrypcja jest nieaktywna. Odnów ją, aby ponownie otworzyć sekcje firmy.',
     'state.cancelled.chip': 'Subskrypcja anulowana',
     'state.cancelled.title':
       'Subskrypcja anulowana — dostęp działa do końca okresu',
     'state.cancelled.body':
-      'Nie będzie więcej obciążeń. Po zakończeniu opłaconego okresu panel przejdzie w tryb podglądu.',
+      'Nie będzie więcej obciążeń. Po zakończeniu opłaconego okresu odnów subskrypcję, aby kontynuować pracę.',
     'state.none.chip': 'Brak subskrypcji',
     'state.none.title': 'Aby otworzyć tę sekcję, potrzebna jest subskrypcja',
     'state.none.body':
@@ -240,6 +244,8 @@ export const accessMessages = defineMessages({
     accessUntil: 'Dostęp do',
     noRetention:
       'Do kiedy dane są przechowywane po zatrzymaniu subskrypcji — zapytaj wsparcie.',
+    renewalRequiresPermission:
+      'Twoje uprawnienia nie pozwalają zarządzać subskrypcją. Skontaktuj się z właścicielem firmy lub pomocą techniczną.',
     toSubscription: 'Przejdź do subskrypcji',
     paymentHistory: 'Historia płatności',
     availableNow: 'Co jest teraz dostępne',
