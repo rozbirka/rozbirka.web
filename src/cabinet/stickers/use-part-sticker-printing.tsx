@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { stickersApi, type StickerData } from '@/api/stickers'
 import { useT, type Locale } from '@/i18n'
+import { useStickerFeedback } from './use-sticker-feedback'
 import { usePartPrintQueue } from './use-part-print-queue'
 import { partQueueStore, withPartQueueLock } from './part-queue-store'
 import {
@@ -77,9 +78,8 @@ export function usePartStickerPrinting({
     tp = useT(stickersMessages)
   const userId = scope?.userId,
     tenantId = scope?.tenantId
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState<string | null>(null),
-    [message, setMessage] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const { error, message, setError, setMessage } = useStickerFeedback()
   const [previewData, setPreviewData] = useState<{
     expected: PrintQueueExpected
     items: RenderedSticker[]
@@ -136,7 +136,7 @@ export function usePartStickerPrinting({
         if (!controller.signal.aborted && mounted.current) setError(t('failed'))
       })
     return () => controller.abort()
-  }, [queue, userId, tenantId, canGenerate, state.revision, t])
+  }, [queue, userId, tenantId, canGenerate, state.revision, t, setError])
   const runMutation = async (
     operation: () => boolean | Promise<boolean>,
     success?: () => void,

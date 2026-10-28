@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { ToastProvider } from '@/components/app'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { StickersScreen } from './StickersScreen'
@@ -56,7 +57,9 @@ const stickersDefinition = {
 const renderScreen = () =>
   render(
     <MemoryRouter>
-      <StickersScreen definition={stickersDefinition as never} />
+      <ToastProvider>
+        <StickersScreen definition={stickersDefinition as never} />
+      </ToastProvider>
     </MemoryRouter>,
   )
 
@@ -192,6 +195,16 @@ it('prints twenty copies, confirms only seven and restores eighteen after remoun
     await screen.findByText('7 з 25 надруковано · 18 залишилось'),
   ).toBeVisible()
   expect(partQueueStore.getSnapshot().queue?.remaining).toHaveLength(18)
+  fireEvent.click(screen.getByRole('button', { name: 'Друк наступних 18' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Усі надруковано' }),
+  )
+  expect(
+    (await screen.findByText('Чергу надруковано.')).closest('.rz-toast'),
+  ).not.toBeNull()
+  expect(
+    screen.queryByText('Чергу надруковано.', { selector: '.rz-notice *' }),
+  ).not.toBeInTheDocument()
 })
 it('PDF, blocked popups and nothing printed never acknowledge copies', async () => {
   savedSelection(2)

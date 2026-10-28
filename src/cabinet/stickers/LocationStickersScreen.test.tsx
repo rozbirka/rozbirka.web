@@ -7,6 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { ToastProvider } from '@/components/app'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { LocationStickersScreen } from './LocationStickersScreen'
@@ -92,7 +93,9 @@ const print = vi.fn(),
 const mount = (query = '?type=locations&kind=section&parent=z&select=all') =>
   render(
     <MemoryRouter initialEntries={[`/app/test/stickers${query}`]}>
-      <LocationStickersScreen />
+      <ToastProvider>
+        <LocationStickersScreen />
+      </ToastProvider>
     </MemoryRouter>,
   )
 beforeEach(() => {
@@ -345,7 +348,9 @@ it('removes searched selections without printing them and clears the final queue
     within(editor).getByRole('button', { name: 'Прибрати з черги · 1' }),
   )
   expect(locationQueueStore.getSnapshot().queue).toBeNull()
-  expect(screen.getByText('У черзі більше немає позицій.')).toBeInTheDocument()
+  expect(
+    screen.getByText('У черзі більше немає позицій.').closest('.rz-toast'),
+  ).not.toBeNull()
   expect(print).not.toHaveBeenCalled()
 })
 

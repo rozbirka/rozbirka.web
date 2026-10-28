@@ -49,6 +49,7 @@ import { LocationQueueEditor } from './LocationQueueEditor'
 import { LocationBatchConfirmation } from './LocationBatchConfirmation'
 import { locationStickersMessages } from './location-stickers-messages'
 import { locationStickersHref, parseStickerRoute } from './sticker-route'
+import { useStickerFeedback } from './use-sticker-feedback'
 import { useLocationPrintQueue } from './use-location-print-queue'
 import {
   locationQueueStore,
@@ -132,8 +133,7 @@ function ScopedLocationStickers({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [search, setSearch] = useState(''),
     [page, setPage] = useState(1)
-  const [error, setError] = useState<string | null>(null),
-    [message, setMessage] = useState<string | null>(null)
+  const { error, message, setError, setMessage } = useStickerFeedback()
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<PendingBatch | null>(null)
   const [editor, setEditor] = useState<QueueEditorState | null>(null)
