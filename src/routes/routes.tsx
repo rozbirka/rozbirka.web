@@ -93,10 +93,18 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
       await import('@/cabinet/inventory/InventoryScreen')
     return InventoryScreen
   }),
-  stickers: cabinetScreenRoute('stickers', async () => {
-    const { StickersScreen } = await import('@/cabinet/stickers/StickersScreen')
-    return StickersScreen
-  }),
+  stickers: {
+    path: cabinetModules.stickers.routeSegment.slice(1),
+    hydrateFallbackElement,
+    lazy: async () => {
+      const [{ StickersModuleBoundary }, { StickersScreen }] =
+        await Promise.all([
+          import('@/cabinet/stickers/StickersModuleBoundary'),
+          import('@/cabinet/stickers/StickersScreen'),
+        ])
+      return { element: <StickersModuleBoundary screen={StickersScreen} /> }
+    },
+  },
   customers: cabinetScreenRoute('customers', async () => {
     const { CustomersScreen } =
       await import('@/cabinet/customers/CustomersScreen')

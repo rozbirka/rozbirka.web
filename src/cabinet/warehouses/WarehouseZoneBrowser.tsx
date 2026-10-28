@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams, useNavigate } from 'react-router'
 import {
   Archive,
@@ -36,8 +35,6 @@ export function WarehouseZoneBrowser({
   onAdd,
   onEdit,
   onArchive,
-  headerActions,
-  printWorkspace,
   unassignedHref,
   onRestore,
   pending = false,
@@ -49,8 +46,6 @@ export function WarehouseZoneBrowser({
   onAdd: () => void
   onEdit: (zone: Zone) => void
   onArchive: (zone: Zone) => void
-  headerActions: ReactNode
-  printWorkspace: ReactNode
   unassignedHref: string
   onRestore?: (zone: Zone) => void
   pending?: boolean
@@ -141,7 +136,7 @@ export function WarehouseZoneBrowser({
       }
     />
   )
-  const noZones = physical.length === 0 && !printWorkspace && !archivedOnly
+  const noZones = physical.length === 0 && !archivedOnly
 
   return (
     <>
@@ -151,143 +146,132 @@ export function WarehouseZoneBrowser({
       >
         <LocationBrowserHeader
           title={t('zonesTitle')}
-          lead={
-            noZones || printWorkspace || archivedOnly
-              ? undefined
-              : tb('chooseZone')
-          }
+          lead={noZones || archivedOnly ? undefined : tb('chooseZone')}
           actions={
             <>
-              {!printWorkspace ? (
-                <LocationStatusFilter label={t('statusZones')} />
-              ) : null}
+              <LocationStatusFilter label={t('statusZones')} />
               {canManage && !archivedOnly ? (
                 <Button onClick={onAdd}>
                   <Plus aria-hidden />
                   {t('addZone')}
                 </Button>
               ) : null}
-              {archivedOnly ? null : headerActions}
             </>
           }
         />
-        {printWorkspace ? (
-          <div className="p-[var(--rz-card-p)]">{printWorkspace}</div>
-        ) : (
-          <>
-            {unassigned.length > 0 || !noZones ? (
-              <div
-                role="group"
-                aria-label={tb('zoneList')}
-                tabIndex={0}
-                className="location-browser__list"
-              >
-                <DataTable
-                  embedded
-                  caption={t('zonesTitle')}
-                  rows={[
-                    ...unassigned,
-                    ...visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-                  ]}
-                  rowKey={(zone) => zone.id}
-                  {...(!archivedOnly && (unassigned.length === 0 || partsBase)
-                    ? {
-                        onRowClick: (zone: Zone) => {
-                          if (zone.isSystemUnassigned) {
-                            if (partsBase) void navigate(unassignedHref)
-                          } else
-                            void navigate(
-                              `${base}/zones/${encodeURIComponent(zone.id)}`,
-                            )
+        <>
+          {unassigned.length > 0 || !noZones ? (
+            <div
+              role="group"
+              aria-label={tb('zoneList')}
+              tabIndex={0}
+              className="location-browser__list"
+            >
+              <DataTable
+                embedded
+                caption={t('zonesTitle')}
+                rows={[
+                  ...unassigned,
+                  ...visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+                ]}
+                rowKey={(zone) => zone.id}
+                {...(!archivedOnly && (unassigned.length === 0 || partsBase)
+                  ? {
+                      onRowClick: (zone: Zone) => {
+                        if (zone.isSystemUnassigned) {
+                          if (partsBase) void navigate(unassignedHref)
+                        } else
+                          void navigate(
+                            `${base}/zones/${encodeURIComponent(zone.id)}`,
+                          )
+                      },
+                    }
+                  : {})}
+                columns={[
+                  {
+                    key: 'name',
+                    label: t('colZone'),
+                    variant: 'primary',
+                    cell: (zone) =>
+                      archivedOnly ||
+                      (zone.isSystemUnassigned && !partsBase) ? (
+                        zoneContents(zone)
+                      ) : (
+                        <Link
+                          aria-label={zone.name}
+                          className="location-browser__link"
+                          onClick={(event) => event.stopPropagation()}
+                          to={
+                            zone.isSystemUnassigned
+                              ? unassignedHref
+                              : `${base}/zones/${encodeURIComponent(zone.id)}`
+                          }
+                        >
+                          {zoneContents(zone)}
+                        </Link>
+                      ),
+                  },
+                  {
+                    key: 'open',
+                    label: tc('actions'),
+                    headerHidden: true,
+                    align: 'end',
+                    cell: (zone) =>
+                      !archivedOnly &&
+                      (!zone.isSystemUnassigned || partsBase) ? (
+                        <ChevronRight
+                          aria-hidden
+                          className="location-browser__arrow"
+                        />
+                      ) : null,
+                  },
+                  ...(canManage
+                    ? [
+                        {
+                          key: 'actions',
+                          label: tc('actions'),
+                          headerHidden: true,
+                          align: 'end' as const,
+                          cell: (zone: Zone) =>
+                            zone.isSystemUnassigned ? null : (
+                              <span
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                {zoneMenu(zone)}
+                              </span>
+                            ),
                         },
-                      }
-                    : {})}
-                  columns={[
-                    {
-                      key: 'name',
-                      label: t('colZone'),
-                      variant: 'primary',
-                      cell: (zone) =>
-                        archivedOnly ||
-                        (zone.isSystemUnassigned && !partsBase) ? (
-                          zoneContents(zone)
-                        ) : (
-                          <Link
-                            aria-label={zone.name}
-                            className="location-browser__link"
-                            onClick={(event) => event.stopPropagation()}
-                            to={
-                              zone.isSystemUnassigned
-                                ? unassignedHref
-                                : `${base}/zones/${encodeURIComponent(zone.id)}`
-                            }
-                          >
-                            {zoneContents(zone)}
-                          </Link>
-                        ),
-                    },
-                    {
-                      key: 'open',
-                      label: tc('actions'),
-                      headerHidden: true,
-                      align: 'end',
-                      cell: (zone) =>
-                        !archivedOnly &&
-                        (!zone.isSystemUnassigned || partsBase) ? (
-                          <ChevronRight
-                            aria-hidden
-                            className="location-browser__arrow"
-                          />
-                        ) : null,
-                    },
-                    ...(canManage
-                      ? [
-                          {
-                            key: 'actions',
-                            label: tc('actions'),
-                            headerHidden: true,
-                            align: 'end' as const,
-                            cell: (zone: Zone) =>
-                              zone.isSystemUnassigned ? null : (
-                                <span
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  {zoneMenu(zone)}
-                                </span>
-                              ),
-                          },
-                        ]
-                      : []),
-                  ]}
-                  empty={
-                    <p className="location-browser__empty">
-                      {needle
-                        ? tb('noMatches')
-                        : t(archivedOnly ? 'noArchivedZones' : 'noZones')}
-                    </p>
-                  }
-                />
-                {needle && visible.length === 0 && unassigned.length > 0 ? (
-                  <p className="location-browser__empty">{tb('noMatches')}</p>
-                ) : null}
-              </div>
-            ) : null}
-            {totalPages > 1 ? (
-              <div className="location-browser__pagination">
-                <Pagination
-                  label={tb('zonePagination')}
-                  page={page}
-                  pageSize={PAGE_SIZE}
-                  total={visible.length}
-                  totalPages={totalPages}
-                  onPage={(next) =>
-                    update({ locationPage: next === 1 ? null : String(next) })
-                  }
-                />
-              </div>
-            ) : null}
-          </>
-        )}
+                      ]
+                    : []),
+                ]}
+                empty={
+                  <p className="location-browser__empty">
+                    {needle
+                      ? tb('noMatches')
+                      : t(archivedOnly ? 'noArchivedZones' : 'noZones')}
+                  </p>
+                }
+              />
+              {needle && visible.length === 0 && unassigned.length > 0 ? (
+                <p className="location-browser__empty">{tb('noMatches')}</p>
+              ) : null}
+            </div>
+          ) : null}
+          {totalPages > 1 ? (
+            <div className="location-browser__pagination">
+              <Pagination
+                label={tb('zonePagination')}
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={visible.length}
+                totalPages={totalPages}
+                onPage={(next) =>
+                  update({ locationPage: next === 1 ? null : String(next) })
+                }
+              />
+            </div>
+          ) : null}
+        </>
       </section>
       {noZones ? (
         <EmptyState

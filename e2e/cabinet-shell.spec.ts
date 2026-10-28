@@ -1723,7 +1723,7 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/app/koval/inventory/warehouses/warehouse-1?labels=1#queue')
   await expect(page).toHaveURL(
-    '/app/koval/warehouses/warehouse-1?labels=1#queue',
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
   )
   await page.goto('/app/koval/inventory/sessions/session-1')
   await expect(page.getByRole('heading', { name: 'INV-001' })).toBeVisible()
@@ -3251,4 +3251,388 @@ test('placement drawer searches large section and shelf choices without moving t
     })
     await expect(page).toHaveURL(/\/parts\/part-picker$/)
   }
+})
+
+/** Storage-sticker acceptance uses intercepted Core records and a fake popup.
+ * It verifies browser UI and emitted label HTML, not a real printer or Core. */
+async function installStorageStickerFixture(page: Page, inventoryOnly = false) {
+  const fixture = await installCabinetApiBoundary(page, {
+    inventoryManage: false,
+  })
+  const zones = Array.from({ length: 25 }, (_, index) => ({
+    id: `storage-zone-${index + 1}`,
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: `Зона ${String(index + 1).padStart(2, '0')}`,
+    code: `Z${String(index + 1).padStart(2, '0')}`,
+    qrCode: `fixture-storage-zone:${index + 1}`,
+    isActive: true,
+    isSystemUnassigned: false,
+    partCount: 0,
+  }))
+  const section = {
+    id: 'storage-section-1',
+    zoneId: zones[0].id,
+    zoneName: zones[0].name,
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: 'Секція 01',
+    code: 'S01',
+    qrCode: 'fixture-storage-section:1',
+    isActive: true,
+    partCount: 0,
+  }
+  const shelf = {
+    id: 'storage-shelf-1',
+    sectionId: section.id,
+    sectionName: section.name,
+    zoneId: zones[0].id,
+    zoneName: zones[0].name,
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: 'Полиця 01',
+    code: 'P01',
+    qrCode: 'fixture-storage-shelf:1',
+    isActive: true,
+    partCount: 0,
+  }
+  await page.route('**/api/v1/warehouses/warehouse-1', (route) =>
+    fulfillData(route, {
+      id: 'warehouse-1',
+      name: 'Основний склад',
+      code: 'main',
+      qrCode: 'fixture-storage-warehouse:1',
+      isActive: true,
+      isSystemDefault: true,
+      unassignedPartCount: 0,
+      zones,
+    }),
+  )
+  await page.route('**/api/v1/inventory/zones*', (route) =>
+    fulfillData(route, zones),
+  )
+  await page.route('**/api/v1/inventory/zones/*', (route) =>
+    fulfillData(
+      route,
+      zones.find(
+        ({ id }) =>
+          id === new URL(route.request().url()).pathname.split('/').at(-1),
+      ),
+    ),
+  )
+  await page.route('**/api/v1/inventory/sections*', (route) =>
+    fulfillData(route, [section]),
+  )
+  await page.route('**/api/v1/inventory/sections/*', (route) =>
+    fulfillData(route, section),
+  )
+  await page.route('**/api/v1/inventory/shelves*', (route) =>
+    fulfillData(route, [shelf]),
+  )
+  await page.route('**/api/v1/inventory/shelves/*', (route) =>
+    fulfillData(route, shelf),
+  )
+  if (inventoryOnly)
+    await page.route('**/api/v1/me/permissions', (route) =>
+      fulfillData(route, {
+        role: 'member',
+        permissions: ['inventory.view'],
+        features: [],
+        entitlement: { state: 'active', usage: activeSubscription.usage },
+      }),
+    )
+  const partsRequests: string[] = []
+  page.on('request', (request) => {
+    if (
+      /^\/api\/v1\/(?:parts|stickers)(?:\/|$)/.test(
+        new URL(request.url()).pathname,
+      )
+    )
+      partsRequests.push(request.url())
+  })
+  return { fixture, zones, partsRequests }
+}
+
+async function installStoragePrintPopup(page: Page) {
+  await page.addInitScript(() => {
+    const state = window as unknown as Window & { __storagePrintHtml: string[] }
+    state.__storagePrintHtml = []
+    window.open = () => {
+      let html = ''
+      return {
+        opener: null,
+        document: {
+          write: (chunk: string) => {
+            html += chunk
+          },
+          close: () => undefined,
+        },
+        focus: () => undefined,
+        close: () => undefined,
+        print: () => state.__storagePrintHtml.push(html),
+      } as unknown as Window
+    }
+  })
+}
+
+async function storagePrintedCodes(page: Page) {
+  return page.evaluate(() => {
+    const html =
+      (
+        window as unknown as Window & { __storagePrintHtml: string[] }
+      ).__storagePrintHtml.at(-1) ?? ''
+    return [
+      ...new DOMParser()
+        .parseFromString(html, 'text/html')
+        .querySelectorAll('.label .code'),
+    ].map((element) => element.textContent)
+  })
+}
+
+for (const target of [
+  {
+    path: 'warehouse-1',
+    menu: 'Інші дії зі складом',
+    action: 'Друк стікерів зон',
+    kind: 'zone',
+    parent: 'warehouse-1',
+    count: 25,
+  },
+  {
+    path: 'zones/storage-zone-1',
+    menu: 'Дії із зоною Зона 01',
+    action: 'Друк стікерів секцій',
+    kind: 'section',
+    parent: 'storage-zone-1',
+    count: 1,
+  },
+  {
+    path: 'sections/storage-section-1',
+    menu: 'Дії з секцією Секція 01',
+    action: 'Друк стікерів полиць',
+    kind: 'shelf',
+    parent: 'storage-section-1',
+    count: 1,
+  },
+]) {
+  test(`storage stickers: ${target.kind} top menu opens canonical direct-child selection (fixture)`, async ({
+    page,
+  }) => {
+    await installStorageStickerFixture(page, true)
+    await loginFrom(page)
+    await page.goto(`/app/koval/warehouses/${target.path}`)
+    const menu = page.getByRole('button', { name: target.menu, exact: true })
+    await expect(
+      page
+        .locator('.rz-topbar__actions')
+        .getByRole('button', { name: target.menu, exact: true }),
+    ).toBeVisible()
+    await menu.focus()
+    await page.keyboard.press('Enter')
+    await expect(
+      page.getByRole('menuitem', { name: target.action }),
+    ).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeFocused()
+    await page.keyboard.press('Enter')
+    await page.getByRole('menuitem', { name: target.action }).click()
+    await expect(page).toHaveURL(
+      `/app/koval/stickers?type=locations&kind=${target.kind}&parent=${target.parent}`,
+    )
+    await expect(
+      page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
+    ).toBeChecked()
+    await expect(
+      page.getByText(`Обрано: ${target.count}`, { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', {
+        name: `Створити чергу · ${target.count}`,
+        exact: true,
+      }),
+    ).toBeEnabled()
+    await expect(
+      page.getByRole('region', { name: 'Активна черга', exact: true }),
+    ).toHaveCount(0)
+  })
+}
+
+test('storage stickers: 25 queued, 20 printed, arbitrary 7 confirmed, reload leaves 18 (fixture)', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000)
+  await installStorageStickerFixture(page, true)
+  await installStoragePrintPopup(page)
+  await loginFrom(page)
+  await page.goto(
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
+  )
+  await page
+    .getByRole('button', { name: 'Створити чергу · 25', exact: true })
+    .click()
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page
+    .getByRole('button', { name: 'Друк наступних 20', exact: true })
+    .click()
+  await expect(
+    page.getByRole('region', {
+      name: 'Підтвердити результат друку',
+      exact: true,
+    }),
+  ).toBeVisible()
+  expect(await storagePrintedCodes(page)).toEqual(
+    Array.from(
+      { length: 20 },
+      (_, index) => `Z${String(index + 1).padStart(2, '0')}`,
+    ),
+  )
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Частково', exact: true }).click()
+  const confirmation = page.getByRole('dialog', {
+    name: 'Що вдалося надрукувати?',
+    exact: true,
+  })
+  for (const number of [1, 3, 6, 9, 12, 15, 20])
+    await confirmation
+      .getByRole('checkbox', {
+        name: `Зона ${String(number).padStart(2, '0')}`,
+        exact: true,
+      })
+      .check()
+  await confirmation
+    .getByRole('button', { name: 'Підтвердити · 7', exact: true })
+    .click()
+  await expect(confirmation).not.toBeVisible()
+  await expect(
+    page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole('region', { name: 'Аркуш стікерів', exact: true })
+      .getByRole('img', { name: /^QR-код Зона / }),
+  ).toHaveCount(6)
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const layout = await page.evaluate(() => ({
+    width: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(layout.scrollWidth, JSON.stringify(layout)).toBeLessThanOrEqual(
+    layout.width,
+  )
+  await page.screenshot({
+    path: testInfo.outputPath('storage-stickers-18-remaining.png'),
+    animations: 'disabled',
+    fullPage: true,
+  })
+  await page
+    .getByRole('button', { name: 'Друк наступних 18', exact: true })
+    .click()
+  await expect(
+    page.getByRole('region', {
+      name: 'Підтвердити результат друку',
+      exact: true,
+    }),
+  ).toBeVisible()
+  expect(await storagePrintedCodes(page)).toEqual([
+    'Z02',
+    'Z04',
+    'Z05',
+    'Z07',
+    'Z08',
+    'Z10',
+    'Z11',
+    'Z13',
+    'Z14',
+    'Z16',
+    'Z17',
+    'Z18',
+    'Z19',
+    'Z21',
+    'Z22',
+    'Z23',
+    'Z24',
+    'Z25',
+  ])
+  await page
+    .getByRole('button', { name: 'Усі надруковано', exact: true })
+    .click()
+  await expect(
+    page.getByText('Чергу надруковано.', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: 'Активна черга', exact: true }),
+  ).toHaveCount(0)
+  await page.reload()
+  await expect(
+    page.getByRole('region', { name: 'Активна черга', exact: true }),
+  ).toHaveCount(0)
+})
+
+test('storage stickers: PDF opens a 20-label document and leaves the queue unchanged (fixture)', async ({
+  page,
+}) => {
+  await installStorageStickerFixture(page, true)
+  await installStoragePrintPopup(page)
+  await loginFrom(page)
+  await page.goto(
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
+  )
+  await page
+    .getByRole('button', { name: 'Створити чергу · 25', exact: true })
+    .click()
+  await page
+    .getByRole('button', { name: 'PDF наступних 20', exact: true })
+    .click()
+  await expect
+    .poll(async () => (await storagePrintedCodes(page)).length)
+    .toBe(20)
+  await expect(
+    page.getByRole('region', {
+      name: 'Підтвердити результат друку',
+      exact: true,
+    }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+})
+
+test('storage stickers: inventory.view-only navigation opens locations and never requests parts (fixture)', async ({
+  page,
+}) => {
+  const fixture = await installStorageStickerFixture(page, true)
+  await loginFrom(page)
+  await clickVisibleCabinetLink(page, 'Стікери')
+  await expect(page).toHaveURL('/app/koval/stickers?type=locations')
+  await expect(
+    page.getByRole('radio', { name: 'Запчастини', exact: true }),
+  ).toBeDisabled()
+  await expect(
+    page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
+  ).toBeChecked()
+  await expect(
+    page.getByRole('region', { name: 'Оберіть місця зберігання', exact: true }),
+  ).toBeVisible()
+  await page.goto('/app/koval/stickers')
+  await expect(page).toHaveURL('/app/koval/stickers?type=locations')
+  await expect(
+    page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
+  ).toBeChecked()
+  await page.goto('/app/koval/stickers?type=parts&permission=parts.view')
+  await expect(
+    page.getByRole('heading', { name: 'Недостатньо прав', exact: true }),
+  ).toBeVisible()
+  expect(fixture.partsRequests).toEqual([])
 })

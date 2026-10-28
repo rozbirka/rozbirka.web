@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   Archive,
@@ -63,7 +71,8 @@ import {
   LocationSearch,
   LocationStatusFilter,
 } from '../inventory/LocationBrowser'
-import { LocationLabelsPage } from '../inventory/LocationLabelPrinter'
+import { LegacyLocationLabelsRedirect } from '../inventory/LocationLabelPrinter'
+import { locationStickersHref } from '../stickers/sticker-route'
 import { locationPartsHref } from '../inventory/location-contents'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { locationContentsMessages } from '../inventory/location-contents-messages'
@@ -99,9 +108,28 @@ export function WarehousesScreen({ ...props }: CabinetModuleScreenProps) {
 function WarehouseRoutes({
   definition: _definition,
 }: CabinetModuleScreenProps) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const segments = pathname.split('/').filter(Boolean)
   const route = segments[0] === 'app' ? segments.slice(2) : segments
+  if (
+    new URLSearchParams(search).get('labels') === '1' &&
+    route[0] === 'warehouses' &&
+    route[1] &&
+    (!route[2] || route[1] === 'zones' || route[1] === 'sections')
+  )
+    return (
+      <LegacyLocationLabelsRedirect
+        target={{
+          kind:
+            route[1] === 'sections'
+              ? 'shelf'
+              : route[1] === 'zones'
+                ? 'section'
+                : 'zone',
+          parentId: route[2] ?? route[1],
+        }}
+      />
+    )
   if (route[0] === 'parts' && route[1] && route[2] === 'inventory')
     return <PartPlacementView partId={route[1]} />
   if (route[1] && route[2] === 'unassigned')
@@ -675,10 +703,9 @@ function WarehouseView({ id }: { id: string }) {
   const base = useWarehouseBase()
   const { targetTenant } = useCabinet()
   const navigate = useNavigate()
-  const [labelParams, setLabelParams] = useSearchParams()
-  const labelsOpen = labelParams.get('labels') === '1'
-  const archivedOnly = labelParams.get('locationStatus') === 'archived'
-  const labelTriggerRef = useRef<HTMLButtonElement>(null)
+  const [params] = useSearchParams()
+  const archivedOnly = params.get('locationStatus') === 'archived'
+  const canPrint = usePermission('inventory.view')
   const canManage = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
   const partsBase = targetTenant
@@ -702,6 +729,7 @@ function WarehouseView({ id }: { id: string }) {
             })
           : Promise.resolve([]),
       ])
+      if (warehouse.id !== id) throw new Error('Warehouse unavailable')
       return {
         warehouse: {
           ...warehouse,
@@ -820,13 +848,7 @@ function WarehouseView({ id }: { id: string }) {
       retry={resource.reload}
       state={resource.state}
       errorContent={
-        labelsOpen ? (
-          <LocationLabelsPage
-            target={{ kind: 'zone', parentId: id, parentName: '' }}
-            inventoryBase={base}
-            returnFocusRef={labelTriggerRef}
-          />
-        ) : archivedOnly ? (
+        archivedOnly ? (
           <div className="grid gap-3 p-[var(--rz-card-p)]">
             <LocationStatusFilter label={t('statusZones')} />
             <Button onClick={resource.reload}>{ti('retry')}</Button>
@@ -877,6 +899,23 @@ function WarehouseView({ id }: { id: string }) {
                 ) : null}
                 <ActionMenu
                   actions={[
+                    ...(canPrint && warehouse.isActive && targetTenant
+                      ? [
+                          {
+                            key: 'print',
+                            label: t('printZones'),
+                            icon: <Printer aria-hidden />,
+                            onSelect: () =>
+                              void navigate(
+                                locationStickersHref(
+                                  targetTenant.slug,
+                                  { kind: 'zone', parentId: warehouse.id },
+                                  'all',
+                                ),
+                              ),
+                          },
+                        ]
+                      : []),
                     {
                       key: 'export',
                       label: t('exportStock'),
@@ -925,12 +964,10 @@ function WarehouseView({ id }: { id: string }) {
               }
             />
 
-            {labelsOpen ? null : (
-              <LocationSearch
-                label={tb('searchZones')}
-                placeholder={tb('nameOrCode')}
-              />
-            )}
+            <LocationSearch
+              label={tb('searchZones')}
+              placeholder={tb('nameOrCode')}
+            />
 
             {operationError ? (
               <Notice tone="danger">{operationError}</Notice>
@@ -992,42 +1029,6 @@ function WarehouseView({ id }: { id: string }) {
                 setOperationError(null)
                 setArchivingZone(zone)
               }}
-              headerActions={
-                <ActionMenu
-                  triggerRef={labelTriggerRef}
-                  label={tb('zonesActions')}
-                  actions={[
-                    {
-                      key: 'print',
-                      label: t('printZones'),
-                      icon: <Printer aria-hidden />,
-                      onSelect: () =>
-                        setLabelParams(
-                          (current) => {
-                            const next = new URLSearchParams(current)
-                            next.set('labels', '1')
-                            return next
-                          },
-                          { preventScrollReset: true },
-                        ),
-                    },
-                  ]}
-                />
-              }
-              printWorkspace={
-                labelsOpen ? (
-                  <LocationLabelsPage
-                    flush
-                    target={{
-                      kind: 'zone',
-                      parentId: id,
-                      parentName: warehouse.name,
-                    }}
-                    inventoryBase={base}
-                    returnFocusRef={labelTriggerRef}
-                  />
-                ) : null
-              }
             />
 
             <WarehouseEditorSheet
@@ -1114,7 +1115,6 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
   const ti = useT(inventoryMessages)
   const base = useWarehouseBase()
   const location = useLocation()
-  const labelsOpen = new URLSearchParams(location.search).get('labels') === '1'
   const { targetTenant } = useCabinet()
   const canViewParts = usePermission('parts.view')
   const loader = useCallback(
@@ -1132,29 +1132,19 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
         (!section && zone.id !== id)
       )
         throw new Error('Zone unavailable')
-      return { zone, section }
+      const warehouse = await inventoryApi.getWarehouse(zone.warehouseId, {
+        signal,
+      })
+      if (warehouse.id !== zone.warehouseId)
+        throw new Error('Warehouse unavailable')
+      return { zone, section, warehouse }
     },
     [id, kind],
   )
   const resource = useLoad(loader, id)
   return (
-    <Resource
-      state={resource.state}
-      retry={resource.reload}
-      errorContent={
-        labelsOpen ? (
-          <LocationLabelsPage
-            target={{
-              kind: kind === 'section' ? 'shelf' : 'section',
-              parentId: id,
-              parentName: '',
-            }}
-            inventoryBase={base}
-          />
-        ) : null
-      }
-    >
-      {({ zone, section }) => {
+    <Resource state={resource.state} retry={resource.reload}>
+      {({ zone, section, warehouse }) => {
         const state = location.state as {
           zoneId?: unknown
           zoneSearch?: unknown
@@ -1175,12 +1165,13 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
         const warehouseHref = `${base}/${encodeURIComponent(zone.warehouseId)}`
         const zoneHref = `${base}/zones/${encodeURIComponent(zone.id)}${returnQuery}`
         const usable =
+          warehouse.isActive &&
           zone.isActive &&
           section?.isActive !== false &&
           !zone.isSystemUnassigned
-        return (
+        const renderView = (content: ReactNode, actions?: ReactNode) => (
           <RedesignShell
-            width={usable && !labelsOpen ? 'workspace' : 'list'}
+            width={usable ? 'workspace' : 'list'}
             crumb={
               <Crumbs
                 items={[
@@ -1235,6 +1226,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                     </Link>
                   </Button>
                 ) : null}
+                {actions}
               </>
             }
           >
@@ -1265,36 +1257,26 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                 )
               }
             />
-            {usable ? (
-              <ZoneLocations
-                zone={zone}
-                {...(section ? { section } : {})}
-                onStructureChange={resource.refresh}
-              />
-            ) : (
-              <>
-                <Notice tone={zone.isSystemUnassigned ? 'info' : 'warn'}>
-                  {t(
-                    zone.isSystemUnassigned
-                      ? 'systemZoneStructure'
-                      : 'archivedZoneStructure',
-                  )}
-                </Notice>
-                {labelsOpen && !zone.isSystemUnassigned ? (
-                  <div className="rz-card p-[var(--rz-card-p)]">
-                    <LocationLabelsPage
-                      target={{
-                        kind: section ? 'shelf' : 'section',
-                        parentId: section?.id ?? zone.id,
-                        parentName: section?.name ?? zone.name,
-                      }}
-                      inventoryBase={base}
-                    />
-                  </div>
-                ) : null}
-              </>
-            )}
+            {content}
           </RedesignShell>
+        )
+        return usable ? (
+          <ZoneLocations
+            zone={zone}
+            {...(section ? { section } : {})}
+            onStructureChange={resource.refresh}
+            render={renderView}
+          />
+        ) : (
+          renderView(
+            <Notice tone={zone.isSystemUnassigned ? 'info' : 'warn'}>
+              {t(
+                zone.isSystemUnassigned
+                  ? 'systemZoneStructure'
+                  : 'archivedZoneStructure',
+              )}
+            </Notice>,
+          )
         )
       }}
     </Resource>
@@ -1305,19 +1287,19 @@ function ZoneLocations({
   zone,
   section,
   onStructureChange,
+  render,
 }: {
   zone: InventoryZone
   section?: InventorySection
   onStructureChange: () => void
+  render: (content: ReactNode, actions?: ReactNode) => ReactNode
 }) {
   const base = useWarehouseBase()
   const navigate = useNavigate()
   const location = useLocation()
-  const labelsOpen = new URLSearchParams(location.search).get('labels') === '1'
   const archivedOnly =
     !section &&
     new URLSearchParams(location.search).get('locationStatus') === 'archived'
-  const labelTriggerRef = useRef<HTMLButtonElement>(null)
   const warehouseId = zone.warehouseId
   const mounted = useRef(true)
   useEffect(() => {
@@ -1331,6 +1313,8 @@ function ZoneLocations({
   const tb = useT(locationBrowserMessages)
   const formId = useId()
   const canManage = usePermission('inventory.zones.manage')
+  const canPrint = usePermission('inventory.view')
+  const { targetTenant } = useCabinet()
   const canViewParts = usePermission('parts.view')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.warehouses,
@@ -1482,12 +1466,12 @@ function ZoneLocations({
     !section &&
     !archivedOnly &&
     !loadedSections.some((item) => item.isActive && item.zoneId === zone.id)
-  return (
+  return render(
     <>
-      {resource.state.kind === 'error' && !section && !labelsOpen ? (
+      {resource.state.kind === 'error' && !section ? (
         <LocationStatusFilter label={t('statusSections')} />
       ) : null}
-      {ready && !labelsOpen && !noSections ? (
+      {ready && !noSections ? (
         <LocationSearch
           label={tb(section ? 'searchShelves' : 'searchSections')}
           placeholder={tb(
@@ -1569,93 +1553,10 @@ function ZoneLocations({
                   </Notice>
                 ) : null
               }
-              printWorkspace={
-                labelsOpen ? (
-                  <LocationLabelsPage
-                    flush
-                    sectionShelfCounts={sectionShelfCounts}
-                    target={{
-                      kind: section ? 'shelf' : 'section',
-                      parentId: section?.id ?? zone.id,
-                      parentName: section?.name ?? zone.name,
-                    }}
-                    inventoryBase={base}
-                    returnFocusRef={labelTriggerRef}
-                  />
-                ) : null
-              }
               statusFilter={
-                !section && !labelsOpen ? (
+                !section ? (
                   <LocationStatusFilter label={t('statusSections')} />
                 ) : null
-              }
-              headerActions={
-                <>
-                  {!archivedOnly ? (
-                    <ActionMenu
-                      triggerRef={labelTriggerRef}
-                      label={
-                        section
-                          ? t('sectionActions', { name: section.name })
-                          : tb('zoneActions', { name: zone.name })
-                      }
-                      actions={[
-                        {
-                          key: 'print',
-                          label: tb(section ? 'printShelves' : 'printSections'),
-                          icon: <Printer aria-hidden />,
-                          onSelect: () => {
-                            setChoosingShelf(false)
-                            const params = new URLSearchParams(location.search)
-                            params.set('labels', '1')
-                            void navigate(
-                              { search: `?${params}` },
-                              {
-                                state: location.state as unknown,
-                                preventScrollReset: true,
-                              },
-                            )
-                          },
-                        },
-                        ...(canManage && section
-                          ? [
-                              {
-                                key: 'edit',
-                                label: t('editSection'),
-                                icon: <Pencil aria-hidden />,
-                                onSelect: () => {
-                                  setError(null)
-                                  setDraft({
-                                    name: section.name,
-                                    code: section.code,
-                                  })
-                                  setEditingSection(section)
-                                },
-                              },
-                              {
-                                key: 'edit-shelf',
-                                label: t('editShelf'),
-                                icon: <Pencil aria-hidden />,
-                                disabled: !loadedShelves.some(
-                                  (shelf) => shelf.isActive,
-                                ),
-                                onSelect: () => {
-                                  setChoosingShelf(true)
-                                },
-                              },
-                              {
-                                key: 'archive',
-                                label: t('archiveSection'),
-                                icon: <Archive aria-hidden />,
-                                destructive: true,
-                                onSelect: () => setArchivingSection(section),
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                  ) : null}
-                </>
               }
             />
           ) : null}
@@ -1766,7 +1667,73 @@ function ZoneLocations({
           />
         </section>
       </div>
-    </>
+    </>,
+    <>
+      {!archivedOnly && (canPrint || (canManage && section)) ? (
+        <ActionMenu
+          label={
+            section
+              ? t('sectionActions', { name: section.name })
+              : tb('zoneActions', { name: zone.name })
+          }
+          actions={[
+            ...(canPrint && targetTenant
+              ? [
+                  {
+                    key: 'print',
+                    label: tb(section ? 'printShelves' : 'printSections'),
+                    icon: <Printer aria-hidden />,
+                    onSelect: () =>
+                      void navigate(
+                        locationStickersHref(
+                          targetTenant.slug,
+                          {
+                            kind: section ? 'shelf' : 'section',
+                            parentId: section?.id ?? zone.id,
+                          },
+                          'all',
+                        ),
+                      ),
+                  },
+                ]
+              : []),
+            ...(canManage && section
+              ? [
+                  {
+                    key: 'edit',
+                    label: t('editSection'),
+                    icon: <Pencil aria-hidden />,
+                    onSelect: () => {
+                      setError(null)
+                      setDraft({
+                        name: section.name,
+                        code: section.code,
+                      })
+                      setEditingSection(section)
+                    },
+                  },
+                  {
+                    key: 'edit-shelf',
+                    label: t('editShelf'),
+                    icon: <Pencil aria-hidden />,
+                    disabled: !loadedShelves.some((shelf) => shelf.isActive),
+                    onSelect: () => {
+                      setChoosingShelf(true)
+                    },
+                  },
+                  {
+                    key: 'archive',
+                    label: t('archiveSection'),
+                    icon: <Archive aria-hidden />,
+                    destructive: true,
+                    onSelect: () => setArchivingSection(section),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      ) : null}
+    </>,
   )
 }
 

@@ -180,3 +180,11 @@ it('keeps personal account controls outside tenant and entitlement providers', a
     'AccountSecurityScreen',
   ])
 })
+
+it('selects the sticker mode before enforcing module access', async () => {
+  const route = cabinetRoute().children!.find(
+    (child) => child.path === 'stickers',
+  )!
+  const loaded = await loadRoute(route)
+  expect(elementTypeNames(loaded.element)).toEqual(['StickersModuleBoundary'])
+})

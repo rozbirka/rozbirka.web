@@ -17,6 +17,7 @@ export function StickerWorkspace({
   showHeader = true,
   embedded = false,
   className,
+  navigation,
 }: {
   title: string
   subtitle: ReactNode
@@ -33,6 +34,7 @@ export function StickerWorkspace({
   showHeader?: boolean
   embedded?: boolean
   className?: string | undefined
+  navigation?: ReactNode
 }) {
   const workspace = (
     <>
@@ -55,6 +57,7 @@ export function StickerWorkspace({
         className={cn('grid min-w-0 gap-3', className)}
       >
         {back}
+        {navigation}
         {showHeader ? (
           <div className="grid gap-1">
             <h1 className="rz-h-page">{title}</h1>
@@ -87,6 +90,7 @@ export function StickerWorkspace({
       </header>
       <div className="rz-page">
         {back}
+        {navigation}
         {showHeader ? (
           <div className="grid gap-1">
             <div className="rz-page-head">

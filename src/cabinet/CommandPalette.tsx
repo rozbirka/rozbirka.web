@@ -22,6 +22,7 @@ import { onOpenCommandPalette } from './command-palette-open'
 import { moduleLabel } from './module-messages'
 import { cabinetModules, type CabinetModuleKey } from './module-registry'
 import { evaluateModuleAccess } from './policy'
+import { stickerNavigationTarget } from './stickers/sticker-access'
 import { shellMessages } from './shell-messages'
 
 interface Command {
@@ -74,15 +75,21 @@ export function CommandPalette({
     const allowed = new Set<CabinetModuleKey>()
     for (const definition of Object.values(cabinetModules))
       if (
-        evaluateModuleAccess(
-          definition,
-          { status: 'ready', snapshot, error: null },
-          'view',
-        ).kind === 'allowed'
+        definition.key === 'stickers'
+          ? stickerNavigationTarget(tenant.slug, {
+              status: 'ready',
+              snapshot,
+              error: null,
+            }) !== null
+          : evaluateModuleAccess(
+              definition,
+              { status: 'ready', snapshot, error: null },
+              'view',
+            ).kind === 'allowed'
       )
         allowed.add(definition.key)
     return allowed
-  }, [snapshot])
+  }, [snapshot, tenant.slug])
 
   const destinations = useMemo<Command[]>(
     () =>
@@ -94,12 +101,19 @@ export function CommandPalette({
             id: `module:${definition.key}`,
             label: moduleLabel(definition.key, locale),
             detail: null,
-            to: cabinetPath(tenant.slug, definition.key),
+            to:
+              definition.key === 'stickers'
+                ? stickerNavigationTarget(tenant.slug, {
+                    status: 'ready',
+                    snapshot,
+                    error: null,
+                  })!
+                : cabinetPath(tenant.slug, definition.key),
             icon: navigation.icon,
           },
         ]
       }),
-    [canView, locale, tenant.slug],
+    [canView, locale, snapshot, tenant.slug],
   )
 
   useEffect(() => {

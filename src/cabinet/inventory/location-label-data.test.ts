@@ -1,6 +1,12 @@
 import { expect, it, vi } from 'vitest'
-import { loadLocationLabels } from './location-label-data'
+import {
+  loadLocationLabels,
+  loadLocationLabelCollection,
+} from './location-label-data'
 const api = vi.hoisted(() => ({
+  getWarehouse: vi.fn(),
+  getZone: vi.fn(),
+  getSection: vi.fn(),
   getZones: vi.fn(),
   getSections: vi.fn(),
   getShelves: vi.fn(),
@@ -61,4 +67,103 @@ it('does not mix sections and shelves or other parents', async () => {
     ).map((x) => x.id),
   ).toEqual(['ok'])
   expect(api.getShelves).toHaveBeenCalledWith(undefined, expect.anything(), 's')
+})
+
+it('resolves the real parent and excludes unprintable children', async () => {
+  api.getSection.mockResolvedValue({
+    id: 's',
+    name: 'Rack 4',
+    isActive: true,
+    zoneId: 'z',
+    warehouseId: 'w',
+  })
+  api.getZone.mockResolvedValue({
+    id: 'z',
+    isActive: true,
+    warehouseId: 'w',
+    isSystemUnassigned: false,
+  })
+  api.getWarehouse.mockResolvedValue({ id: 'w', isActive: true })
+  api.getShelves.mockResolvedValue([
+    base,
+    { ...base, id: 'empty', qrCode: ' ' },
+  ])
+  const result = await loadLocationLabelCollection(
+    { kind: 'shelf', parentId: 's' },
+    new AbortController().signal,
+  )
+  expect(result.target).toEqual({
+    kind: 'shelf',
+    parentId: 's',
+    parentName: 'Rack 4',
+  })
+  expect(result.labels.map((x) => x.id)).toEqual(['ok'])
+})
+
+it('does not print active sections inside an inactive warehouse', async () => {
+  api.getZone.mockResolvedValue({
+    id: 'z',
+    name: 'Zone',
+    isActive: true,
+    warehouseId: 'w',
+  })
+  api.getWarehouse.mockResolvedValue({ id: 'w', isActive: false })
+  api.getSections.mockResolvedValue([base])
+  await expect(
+    loadLocationLabelCollection(
+      { kind: 'section', parentId: 'z' },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow()
+})
+
+it('does not print active shelves inside an archived or foreign ancestor zone', async () => {
+  api.getSection.mockResolvedValue({
+    id: 's',
+    name: 'Section',
+    isActive: true,
+    zoneId: 'z',
+    warehouseId: 'w',
+  })
+  api.getWarehouse.mockResolvedValue({ id: 'w', isActive: true })
+  api.getZone.mockResolvedValue({ id: 'z', isActive: false, warehouseId: 'w' })
+  api.getShelves.mockResolvedValue([base])
+  await expect(
+    loadLocationLabelCollection(
+      { kind: 'shelf', parentId: 's' },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow()
+  api.getZone.mockResolvedValue({
+    id: 'z',
+    isActive: true,
+    warehouseId: 'foreign',
+  })
+  await expect(
+    loadLocationLabelCollection(
+      { kind: 'shelf', parentId: 's' },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow()
+})
+
+it('rejects archived and mismatched parents before returning any printable list', async () => {
+  api.getZone.mockResolvedValue({ id: 'z', name: 'Zone', isActive: false })
+  await expect(
+    loadLocationLabelCollection(
+      { kind: 'section', parentId: 'z' },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow()
+  api.getWarehouse.mockResolvedValue({
+    id: 'other',
+    name: 'Wrong',
+    isActive: true,
+  })
+  await expect(
+    loadLocationLabelCollection(
+      { kind: 'zone', parentId: 'w' },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow()
 })

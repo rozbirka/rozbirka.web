@@ -6,6 +6,8 @@ import type { SubscriptionDto } from '../api/types'
 import type { CabinetContextValue } from './CabinetContext'
 import { useCabinet } from './CabinetContext'
 import { ModuleBoundary, type CabinetModuleScreenProps } from './ModuleBoundary'
+import { StickersModuleBoundary } from './stickers/StickersModuleBoundary'
+import { stickerAccessDefinition } from './stickers/sticker-access'
 import type { CabinetModuleKey } from './module-registry'
 
 vi.mock('./CabinetContext', () => ({
@@ -268,5 +270,102 @@ describe('ModuleBoundary', () => {
     expect(screen.getAllByLabelText('закритий').length).toBeGreaterThan(0)
     expect(screen.getAllByLabelText('доступний').length).toBeGreaterThan(0)
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+describe('sticker mode boundary', () => {
+  it('accepts a trusted access definition and passes it to the screen', () => {
+    mockedUseCabinet.mockReturnValue(cabinet(['inventory.view']))
+    render(
+      <MemoryRouter>
+        <ModuleBoundary
+          module="stickers"
+          definition={stickerAccessDefinition('locations')}
+          screen={({ definition }) => (
+            <p>Permission {definition.viewPermission}</p>
+          )}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Permission inventory.view')).toBeVisible()
+  })
+
+  it('mounts locations for inventory-only access before the screen can request data', () => {
+    mockedUseCabinet.mockReturnValue(cabinet(['inventory.view']))
+    render(
+      <MemoryRouter initialEntries={['/app/koval/stickers?type=locations']}>
+        <StickersModuleBoundary
+          screen={({ definition }) => (
+            <p>Permission {definition.viewPermission}</p>
+          )}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Permission inventory.view')).toBeVisible()
+  })
+
+  it.each([
+    [[], '?type=locations&permission=inventory.view'],
+    [['parts.view'], '?type=locations'],
+    [['inventory.view'], '?type=parts'],
+  ] as const)(
+    'does not mount an inaccessible sticker mode for %j and %s',
+    (permissions, query) => {
+      mockedUseCabinet.mockReturnValue(cabinet([...permissions]))
+      const requestData = vi.fn(() =>
+        Promise.resolve({ default: () => <p>Sticker data</p> }),
+      )
+      render(
+        <MemoryRouter initialEntries={[`/app/koval/stickers${query}`]}>
+          <StickersModuleBoundary screen={lazy(requestData)} />
+        </MemoryRouter>,
+      )
+      expect(
+        screen.getByRole('heading', { name: 'Недостатньо прав' }),
+      ).toBeVisible()
+      expect(requestData).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['loading', 'error'] as const)(
+    'does not mount locations while access is %s',
+    (status) => {
+      mockedUseCabinet.mockReturnValue({
+        ...cabinet(),
+        status,
+        snapshot: null,
+        error: status === 'error' ? new Error('offline') : null,
+      })
+      const requestData = vi.fn(() =>
+        Promise.resolve({ default: () => <p>Sticker data</p> }),
+      )
+      render(
+        <MemoryRouter initialEntries={['/app/koval/stickers?type=locations']}>
+          <StickersModuleBoundary screen={lazy(requestData)} />
+        </MemoryRouter>,
+      )
+      expect(screen.queryByText('Sticker data')).not.toBeInTheDocument()
+      expect(requestData).not.toHaveBeenCalled()
+    },
+  )
+
+  it('defaults a bare sticker bookmark to locations for inventory-only access', async () => {
+    mockedUseCabinet.mockReturnValue(cabinet(['inventory.view']))
+    function Content({ definition }: CabinetModuleScreenProps) {
+      const location = useLocation()
+      return (
+        <p>
+          {definition.viewPermission} {location.search}
+        </p>
+      )
+    }
+    render(
+      <MemoryRouter initialEntries={['/app/koval/stickers']}>
+        <StickersModuleBoundary screen={Content} />
+      </MemoryRouter>,
+    )
+    expect(
+      await screen.findByText('inventory.view ?type=locations'),
+    ).toBeVisible()
   })
 })

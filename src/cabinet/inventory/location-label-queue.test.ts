@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   acknowledgeLabels,
+  appendLabelQueue,
+  removeQueueLabels,
   createLabelQueue,
   decodeLabelQueue,
   removeQueueLabel,
@@ -57,5 +59,90 @@ describe('location label queue', () => {
     ]) {
       expect(decodeLabelQueue(value, Date.now())).toBeNull()
     }
+  })
+})
+
+describe('location queue mutations', () => {
+  it('appends new ids in stable order, preserves no-op identity and enforces the remaining limit atomically', () => {
+    const queue = createLabelQueue(target, ['a', 'b'], 100)
+    expect(
+      appendLabelQueue(queue, target, ['b', 'c', 'c', 'd'], 200),
+    ).toMatchObject({
+      ok: true,
+      addedCount: 2,
+      queue: {
+        remainingIds: ['a', 'b', 'c', 'd'],
+        totalCount: 4,
+        expiresAt: 86400200,
+      },
+    })
+    expect(appendLabelQueue(queue, target, ['a'], 200)).toEqual({
+      ok: true,
+      queue,
+      addedCount: 0,
+    })
+    expect(
+      appendLabelQueue(
+        queue,
+        target,
+        Array.from({ length: 199 }, (_, i) => `new-${i}`),
+        200,
+      ),
+    ).toEqual({ ok: false, reason: 'limit' })
+    expect(queue.remainingIds).toEqual(['a', 'b'])
+    expect(
+      appendLabelQueue(queue, { ...target, parentId: 'other' }, ['c'], 200),
+    ).toEqual({ ok: false, reason: 'target-mismatch' })
+  })
+  it('allows total progress above 200 when no more than 200 remain', () => {
+    const queue = createLabelQueue(
+      target,
+      Array.from({ length: 200 }, (_, i) => `id-${i}`),
+      100,
+    )
+    const afterPrint = acknowledgeLabels(
+      queue,
+      queue.remainingIds.slice(0, 20),
+      200,
+    )!
+    const result = appendLabelQueue(
+      afterPrint,
+      target,
+      Array.from({ length: 20 }, (_, i) => `new-${i}`),
+      300,
+    )
+    expect(result).toMatchObject({
+      ok: true,
+      addedCount: 20,
+      queue: { totalCount: 220, printedCount: 20 },
+    })
+  })
+  it('renews TTL only for real removals and acknowledgements and removes only the supplied ids', () => {
+    const queue = createLabelQueue(target, ['a', 'b', 'c'], 100)
+    expect(acknowledgeLabels(queue, ['missing'], 200)).toBe(queue)
+    expect(removeQueueLabels(queue, ['missing'], 200)).toBe(queue)
+    const afterPrint = acknowledgeLabels(queue, ['a', 'c', 'a'], 200)!
+    expect(afterPrint).toMatchObject({
+      remainingIds: ['b'],
+      printedCount: 2,
+      totalCount: 3,
+      expiresAt: 86400200,
+    })
+    expect(acknowledgeLabels(afterPrint, ['a', 'c'], 300)).toBe(afterPrint)
+    expect(removeQueueLabels(afterPrint, ['b'], 300)).toBeNull()
+    expect(removeQueueLabels(queue, ['a', 'c'], 200)).toMatchObject({
+      remainingIds: ['b'],
+      printedCount: 0,
+      totalCount: 1,
+      expiresAt: 86400200,
+    })
+  })
+  it('rejects invalid targets and ids', () => {
+    expect(() => createLabelQueue(target, [''], 100)).toThrow()
+    const queue = createLabelQueue(target, ['a'], 100)
+    expect(appendLabelQueue(queue, target, [''], 200)).toEqual({
+      ok: false,
+      reason: 'invalid',
+    })
   })
 })

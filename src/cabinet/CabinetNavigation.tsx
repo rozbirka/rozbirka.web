@@ -24,6 +24,7 @@ import {
 } from './module-registry'
 import { moduleLabel, navigationGroupLabel } from './module-messages'
 import { evaluateModuleAccess } from './policy'
+import { stickerNavigationTarget } from './stickers/sticker-access'
 import { shellMessages } from './shell-messages'
 import { TenantSwitcher } from './TenantSwitcher'
 import { useNavigationCollapsed } from './use-navigation-collapsed'
@@ -84,16 +85,15 @@ export function CabinetNavigation({
     () =>
       Object.values(cabinetModules).flatMap((definition): NavigationEntry[] => {
         const navigation = definition.navigation
-        if (
-          navigation === undefined ||
-          evaluateModuleAccess(
-            { ...definition, navigation },
-            { status: 'ready', snapshot, error: null },
-            'view',
-          ).kind !== 'allowed'
-        ) {
-          return []
-        }
+        const access = { status: 'ready' as const, snapshot, error: null }
+        const to =
+          definition.key === 'stickers'
+            ? stickerNavigationTarget(tenant.slug, access)
+            : evaluateModuleAccess(definition, access, 'view').kind ===
+                'allowed'
+              ? cabinetPath(tenant.slug, definition.key)
+              : null
+        if (navigation === undefined || to === null) return []
 
         return [
           {
@@ -104,7 +104,7 @@ export function CabinetNavigation({
             group: navigation.group,
             mobilePriority:
               navigation.mobilePriority ?? Number.MAX_SAFE_INTEGER,
-            to: cabinetPath(tenant.slug, definition.key),
+            to,
           },
         ]
       }),

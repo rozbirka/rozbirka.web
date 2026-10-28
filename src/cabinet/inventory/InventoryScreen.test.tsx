@@ -379,6 +379,7 @@ function LocationProbe() {
 function StockRoutes() {
   return (
     <Routes>
+      <Route path="/app/:tenant/stickers" element={<h1>Стікери</h1>} />
       <Route
         path="/app/:tenant/warehouses/*"
         element={<WarehousesScreen definition={definition as never} />}
@@ -1582,21 +1583,9 @@ it('does not allow replacement when current part placement failed to load', asyn
   ).not.toBeInTheDocument()
 })
 
-it('offers warehouse and zone management and prints actual zone QR labels', async () => {
+it('offers warehouse and zone management and hands zone labels to the sticker workspace', async () => {
   const user = userEvent.setup()
-  const print = vi.fn()
-  const focus = vi.fn()
-  const close = vi.fn()
-  const write = vi.fn()
-  vi.spyOn(window, 'open').mockReturnValue({
-    document: { write, close },
-    focus,
-    print,
-    opener: null,
-  } as never)
-
   renderAt('/app/yard/warehouses/wh-1')
-
   expect(await screen.findByText('Стелаж A1')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Редагувати' })).toBeInTheDocument()
   await user.click(
@@ -1605,50 +1594,21 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
   expect(
     screen.getByRole('menuitem', { name: 'Архівувати' }),
   ).toBeInTheDocument()
-  await user.keyboard('{Escape}')
-
-  // Printing, exporting and archiving hide behind the overflow control, the
-  // way the toolbar is drawn.
-  await user.click(screen.getByRole('button', { name: 'Дії із зонами' }))
-  await user.click(screen.getByRole('menuitem', { name: 'Друк стікерів зон' }))
-
-  const picker = await screen.findByRole('region', { name: 'Етикетки зон' })
   expect(
-    screen.getByRole('heading', {
-      name: 'Основний склад',
-      level: 1,
-      hidden: true,
-    }),
-  ).toBeInTheDocument()
-  await user.click(
-    await within(picker).findByRole('checkbox', { name: 'Обрати: Стелаж A1' }),
+    screen.queryByRole('menuitem', { name: 'Друк стікерів зон' }),
+  ).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: 'Інші дії зі складом' }))
+  await user.click(screen.getByRole('menuitem', { name: 'Друк стікерів зон' }))
+  expect(await screen.findByRole('heading', { name: 'Стікери' })).toBeVisible()
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+    '/app/yard/stickers?type=locations&kind=zone&parent=wh-1&select=all',
   )
-  expect(print).not.toHaveBeenCalled()
-  await user.click(within(picker).getByRole('button', { name: 'Друк · 1' }))
-  await waitFor(() => expect(print).toHaveBeenCalled())
-  expect(printable.buildZoneLabelHtml).toHaveBeenCalledWith(
-    [
-      expect.objectContaining({
-        zoneName: 'Стелаж A1',
-        warehouseName: 'Основний склад',
-        qrCode: 'ZONE-1',
-      }),
-    ],
-    'uk',
-  )
-  expect(write).toHaveBeenCalledWith('<html>zones</html>')
-  expect(print).toHaveBeenCalled()
+  expect(printable.buildZoneLabelHtml).not.toHaveBeenCalled()
 })
 
-it('browses locations without row actions or part counts and prints selected shelf labels', async () => {
+it('browses locations without row actions or part counts and opens shelf sticker selection', async () => {
   const user = userEvent.setup()
-  const print = vi.fn()
-  vi.spyOn(window, 'open').mockReturnValue({
-    document: { write: vi.fn(), close: vi.fn() },
-    focus: vi.fn(),
-    print,
-    opener: null,
-  } as never)
   api.getShelves.mockResolvedValue([
     {
       id: 'shelf-1',
@@ -1705,21 +1665,11 @@ it('browses locations without row actions or part counts and prints selected she
   await user.click(
     screen.getByRole('menuitem', { name: 'Друк стікерів полиць' }),
   )
-  const picker = await screen.findByRole('region', { name: 'Етикетки полиць' })
-  await user.click(
-    await within(picker).findByRole('checkbox', { name: 'Обрати: Полиця 1' }),
+  expect(await screen.findByRole('heading', { name: 'Стікери' })).toBeVisible()
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+    '/app/yard/stickers?type=locations&kind=shelf&parent=section-1&select=all',
   )
-  await user.click(within(picker).getByRole('button', { name: 'Друк · 1' }))
-  await waitFor(() => expect(print).toHaveBeenCalled())
-  expect(printable.buildZoneLabelHtml).toHaveBeenCalledWith(
-    [
-      expect.objectContaining({
-        qrCode: 'inventory-shelf:shelf-1',
-        zoneName: 'Полиця 1',
-      }),
-    ],
-    'uk',
-  )
+  expect(printable.buildZoneLabelHtml).not.toHaveBeenCalled()
 })
 
 it('keeps large section lists compact and opens shelves for one section at a time', async () => {
@@ -2721,7 +2671,7 @@ it.each([
   },
 )
 
-it('prints shelf labels and keeps section editing and archiving in its detail menu', async () => {
+it('keeps section editing and archiving in the top detail menu', async () => {
   const user = userEvent.setup()
   renderAt('/app/yard/warehouses/sections/section-1')
   await user.click(
@@ -2730,16 +2680,9 @@ it('prints shelf labels and keeps section editing and archiving in its detail me
   expect(
     screen.queryByRole('menuitem', { name: 'QR-код' }),
   ).not.toBeInTheDocument()
-  await user.click(
+  expect(
     screen.getByRole('menuitem', { name: 'Друк стікерів полиць' }),
-  )
-  const labels = await screen.findByRole('region', { name: 'Етикетки полиць' })
-  await user.click(
-    within(labels).getByRole('button', { name: 'Завершити вибір' }),
-  )
-  await user.click(
-    screen.getByRole('button', { name: 'Дії з секцією Секція B' }),
-  )
+  ).toBeVisible()
   await user.click(screen.getByRole('menuitem', { name: 'Редагувати секцію' }))
   const editor = screen.getByRole('dialog', { name: 'Редагувати секцію' })
   const name = within(editor).getByRole('textbox', { name: 'Назва' })
@@ -2788,7 +2731,7 @@ it('shows the zone as one section list with a header hint and opens the selected
     within(card).getByRole('button', { name: 'Додати секцію' }),
   ).toBeVisible()
   expect(
-    within(card).getByRole('button', { name: 'Дії із зоною Стелаж A1' }),
+    screen.getByRole('button', { name: 'Дії із зоною Стелаж A1' }),
   ).toBeVisible()
   await user.click(within(card).getByRole('link', { name: 'Секція B, B' }))
   expect(
@@ -2844,7 +2787,7 @@ it('counts only active shelves in each section, including empty sections', async
   ).toHaveAccessibleDescription('Полиць: 2')
 })
 
-it('opens section label printing only through the zone menu', async () => {
+it('opens section stickers through the top zone menu', async () => {
   const user = userEvent.setup()
   renderAt('/app/yard/warehouses/zones/zone-1')
   await screen.findByRole('row', { name: /Секція B/ })
@@ -2858,8 +2801,11 @@ it('opens section label printing only through the zone menu', async () => {
     screen.getByRole('menuitem', { name: 'Друк стікерів секцій' }),
   )
   expect(
-    await screen.findByRole('region', { name: 'Етикетки секцій' }),
+    await screen.findByRole('heading', { name: 'Стікери' }),
   ).toBeInTheDocument()
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+    '/app/yard/stickers?type=locations&kind=section&parent=zone-1&select=all',
+  )
 })
 
 it('can cancel shelf editing mode and return to opening parts', async () => {
@@ -2899,64 +2845,45 @@ it('can cancel shelf editing mode and return to opening parts', async () => {
 it.each([
   [
     '/app/yard/warehouses/wh-1',
-    'Дії із зонами',
+    'Інші дії зі складом',
     'Друк стікерів зон',
-    'Етикетки зон',
-    'Основний склад',
+    'zone',
+    'wh-1',
   ],
   [
     '/app/yard/warehouses/zones/zone-1',
     'Дії із зоною Стелаж A1',
     'Друк стікерів секцій',
-    'Етикетки секцій',
-    'Стелаж A1',
+    'section',
+    'zone-1',
   ],
   [
     '/app/yard/warehouses/sections/section-1',
     'Дії з секцією Секція B',
     'Друк стікерів полиць',
-    'Етикетки полиць',
-    'Секція B',
+    'shelf',
+    'section-1',
   ],
 ])(
-  'selects and prints inline in its existing collection at %s',
-  async (path, menu, print, collection, title) => {
+  'opens the canonical sticker collection from %s',
+  async (path, menu, print, kind, parent) => {
     const user = userEvent.setup()
     renderAt(path)
-    const heading = await screen.findByRole('heading', {
-      name: title,
-      level: 1,
-    })
-    await user.click(await screen.findByRole('button', { name: menu }))
+    const trigger = await screen.findByRole('button', { name: menu })
+    expect(trigger.closest('.rz-topbar__actions')).not.toBeNull()
+    await user.click(trigger)
     await user.click(screen.getByRole('menuitem', { name: print }))
-    const workspace = await screen.findByRole('region', { name: collection })
+    expect(
+      await screen.findByRole('heading', { name: 'Стікери' }),
+    ).toBeVisible()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: title, level: 1 })).toBe(heading)
-    expect(heading).toBeVisible()
     expect(screen.getByTestId('inventory-url')).toHaveTextContent(
-      path + '?labels=1',
-    )
-    expect(
-      within(workspace).getByRole('searchbox', { name: 'Назва або код' }),
-    ).toBeInTheDocument()
-    await user.click(
-      within(workspace).getByRole('button', { name: 'Завершити вибір' }),
-    )
-    expect(
-      screen.queryByRole('region', { name: collection }),
-    ).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: title, level: 1 })).toBe(heading)
-    expect(screen.getByTestId('inventory-url')).toHaveTextContent(path)
-    expect(screen.getByTestId('inventory-url')).not.toHaveTextContent(
-      'labels=1',
-    )
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: menu })).toHaveFocus(),
+      `/app/yard/stickers?type=locations&kind=${kind}&parent=${parent}&select=all`,
     )
   },
 )
 
-it('restores the section browse filter after closing inline selection', async () => {
+it('hands off the collection independently of the current browse search', async () => {
   const user = userEvent.setup()
   renderAt('/app/yard/warehouses/zones/zone-1?locationSearch=B')
   await user.click(
@@ -2965,50 +2892,44 @@ it('restores the section browse filter after closing inline selection', async ()
   await user.click(
     screen.getByRole('menuitem', { name: 'Друк стікерів секцій' }),
   )
-  const workspace = await screen.findByRole('region', {
-    name: 'Етикетки секцій',
-  })
-  expect(within(workspace).getByRole('searchbox')).toHaveValue('B')
-  await user.click(
-    within(workspace).getByRole('button', { name: 'Завершити вибір' }),
+  expect(await screen.findByRole('heading', { name: 'Стікери' })).toBeVisible()
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+    '/app/yard/stickers?type=locations&kind=section&parent=zone-1&select=all',
   )
-  expect(screen.getByRole('searchbox', { name: 'Пошук секції' })).toHaveValue(
-    'B',
+  expect(screen.getByTestId('inventory-url')).not.toHaveTextContent(
+    'locationSearch',
   )
-  expect(api.getZone).toHaveBeenCalledTimes(1)
 })
 
 it.each(['missing-section', 'archived-section', 'missing-warehouse'])(
-  'clears a legacy saved queue even when its parent is %s',
+  'preserves a saved queue when redirecting legacy parent %s',
   async (scenario) => {
     const { labelQueueKey, createLabelQueue, writeLabelQueue, readLabelQueue } =
       await import('./location-label-queue')
     const key = labelQueueKey('user-1', 'tenant-1')
     const warehouse = scenario === 'missing-warehouse'
-    writeLabelQueue(
-      key,
-      createLabelQueue(
-        {
-          kind: warehouse ? 'zone' : 'shelf',
-          parentId: warehouse ? 'wh-1' : 'section-1',
-          parentName: warehouse ? 'Основний склад' : 'Секція B',
-        },
-        ['gone'],
-      ),
+    const saved = createLabelQueue(
+      {
+        kind: warehouse ? 'zone' : 'shelf',
+        parentId: warehouse ? 'wh-1' : 'section-1',
+        parentName: warehouse ? 'Основний склад' : 'Секція B',
+      },
+      ['gone'],
     )
-    if (warehouse) api.getWarehouse.mockRejectedValue(new Error('gone'))
-    else if (scenario === 'missing-section')
-      api.getSection.mockRejectedValue(new Error('gone'))
-    else {
-      const section = (await api.getSection()) as InventorySection
-      api.getSection.mockResolvedValue({ ...section, isActive: false })
-    }
+    writeLabelQueue(key, saved)
+    api.getWarehouse.mockRejectedValue(new Error('gone'))
+    api.getSection.mockRejectedValue(new Error('gone'))
     renderAt(
       warehouse
         ? '/app/yard/warehouses/wh-1?labels=1'
         : '/app/yard/warehouses/sections/section-1?labels=1',
     )
-    await waitFor(() => expect(readLabelQueue(key)).toBeNull())
+    expect(
+      await screen.findByRole('heading', { name: 'Стікери' }),
+    ).toBeVisible()
+    expect(readLabelQueue(key)).toEqual(saved)
+    expect(api.getWarehouse).not.toHaveBeenCalled()
+    expect(api.getSection).not.toHaveBeenCalled()
   },
 )
 
@@ -3449,16 +3370,16 @@ it('keeps stocktake usable when the warehouse list is unavailable', async () => 
 })
 
 it.each([
-  ['warehouses/wh-1', 'wh-1'],
-  ['zones/zone-1', 'zones/zone-1'],
-  ['sections/section-1', 'sections/section-1'],
+  ['warehouses/wh-1', 'zone', 'wh-1'],
+  ['zones/zone-1', 'section', 'zone-1'],
+  ['sections/section-1', 'shelf', 'section-1'],
 ])(
-  'redirects legacy %s links and preserves label parameters',
-  async (legacy, canonical) => {
+  'redirects legacy %s labels to their canonical sticker collection',
+  async (legacy, kind, parent) => {
     renderAt(`/app/yard/inventory/${legacy}?labels=1#queue`)
     await waitFor(() =>
       expect(screen.getByTestId('inventory-url')).toHaveTextContent(
-        `/app/yard/warehouses/${canonical}?labels=1#queue`,
+        `/app/yard/stickers?type=locations&kind=${kind}&parent=${parent}&select=all`,
       ),
     )
   },
@@ -4747,7 +4668,12 @@ it('can return to active zones when the archive request fails', async () => {
 })
 
 it.each([
-  ['/app/yard/warehouses/wh-1', 'Стан зон', 'Додати зону', 'Дії із зонами'],
+  [
+    '/app/yard/warehouses/wh-1',
+    'Стан зон',
+    'Додати зону',
+    'Інші дії зі складом',
+  ],
   [
     '/app/yard/warehouses/zones/zone-1',
     'Стан секцій',
@@ -4755,7 +4681,7 @@ it.each([
     'Дії із зоною Стелаж A1',
   ],
 ])(
-  'orders the status switch, add action and menu at %s',
+  'keeps the menu in top actions and status switch before add at %s',
   async (path, filterLabel, addLabel, menuLabel) => {
     renderAt(path)
     const filter = await screen.findByRole('group', { name: filterLabel })
@@ -4772,9 +4698,7 @@ it.each([
     expect(
       filter.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(
-      add.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    expect(menu.closest('.rz-topbar__actions')).toBeTruthy()
   },
 )
 

@@ -147,11 +147,9 @@ export function LocationBrowser({
   partsBase,
   onAddSection,
   onAddShelf,
-  headerActions,
   statusFilter,
   onEditShelf,
   selectionNotice,
-  printWorkspace,
   archivedOnly = false,
   onRestoreSection,
   pending = false,
@@ -168,11 +166,9 @@ export function LocationBrowser({
   partsBase: string
   onAddSection: (zone: InventoryZone) => void
   onAddShelf: (section: InventorySection) => void
-  headerActions?: ReactNode
   statusFilter?: ReactNode
   onEditShelf?: ((shelf: InventoryShelf) => void) | undefined
   selectionNotice?: ReactNode
-  printWorkspace?: ReactNode
   archivedOnly?: boolean
   onRestoreSection?: (section: InventorySection) => void
   pending?: boolean
@@ -252,19 +248,12 @@ export function LocationBrowser({
   }
 
   return (
-    <div
-      className={[
-        'location-browser',
-        printWorkspace == null && 'location-browser--navigation',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
+    <div className="location-browser location-browser--navigation">
       <LocationBrowserHeader
         title={t(section ? 'shelves' : 'sections')}
-        count={printWorkspace ? undefined : allCount}
+        count={allCount}
         lead={
-          printWorkspace || archivedOnly
+          archivedOnly
             ? undefined
             : section
               ? t(onEditShelf ? 'chooseShelfToEdit' : 'chooseShelf')
@@ -285,13 +274,10 @@ export function LocationBrowser({
                 {tw(section ? 'addShelf' : 'addSection')}
               </Button>
             ) : null}
-            {headerActions}
           </>
         }
       />
-      {printWorkspace != null ? (
-        <div className="p-[var(--rz-card-p)]">{printWorkspace}</div>
-      ) : allCount === 0 && !needle ? (
+      {allCount === 0 && !needle ? (
         <EmptyState
           className="location-browser__placeholder"
           icon={<Rows3 aria-hidden />}

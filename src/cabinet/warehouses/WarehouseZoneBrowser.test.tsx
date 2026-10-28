@@ -49,8 +49,6 @@ function mount(canManage = true, archivedOnly = false) {
         onEdit={onEdit}
         onArchive={onArchive}
         onRestore={onRestore}
-        headerActions={null}
-        printWorkspace={null}
       />
       <Url />
     </MemoryRouter>,
