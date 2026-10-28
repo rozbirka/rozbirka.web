@@ -256,21 +256,14 @@ export function PlansScreen() {
                       !providerSubscription?.canReactivate))
                 return (
                   <div className="rz-cell-main flex-wrap">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3
-                        className={cn(
-                          'rz-h-card',
-                          plan.code === selectedPlanCode && 'text-brand',
-                        )}
-                      >
-                        {plan.name}
-                      </h3>
-                      {plan.code === selectedPlanCode ? (
-                        <StatusPill tone="info">{t('selected')}</StatusPill>
-                      ) : isCurrent ? (
-                        <StatusPill tone="ok">{t('currentPlan')}</StatusPill>
-                      ) : null}
-                    </div>
+                    <h3
+                      className={cn(
+                        'rz-h-card',
+                        plan.code === selectedPlanCode && 'text-brand',
+                      )}
+                    >
+                      {plan.name}
+                    </h3>
                     {plan.trialDays > 0 && (
                       <span className="rz-caption">
                         {t('trialFree', {
@@ -278,6 +271,11 @@ export function PlansScreen() {
                         })}
                       </span>
                     )}
+                    {plan.code === selectedPlanCode ? (
+                      <StatusPill tone="info">{t('selected')}</StatusPill>
+                    ) : isCurrent ? (
+                      <StatusPill tone="ok">{t('currentPlan')}</StatusPill>
+                    ) : null}
                   </div>
                 )
               },
