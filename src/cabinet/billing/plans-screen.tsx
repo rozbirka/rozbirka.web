@@ -237,13 +237,9 @@ export function PlansScreen() {
         !canCheckout &&
         !contractManaged && <BillingUnavailableNotice />}
 
-      <BillingCard
-        title={t('title')}
-        bodyClassName="p-0 sm:[&_.rz-table_td]:px-5 sm:[&_.rz-table_td]:py-3 sm:[&_.rz-table_th]:px-5 sm:[&_.rz-table_thead_th]:py-2.5 sm:[&_.rz-table_tbody_th]:py-3 sm:[&_.rz-table_td:last-child]:w-40"
-      >
+      <BillingCard title={t('title')} bodyClassName="p-0">
         <DataTable
           caption={t('title')}
-          density="comfortable"
           embedded
           rowKey={(plan) => plan.code}
           rows={plans}
@@ -259,7 +255,7 @@ export function PlansScreen() {
                     (!providerSubscription?.canSubscribe &&
                       !providerSubscription?.canReactivate))
                 return (
-                  <div className="grid gap-2">
+                  <div className="rz-cell-main flex-wrap">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3
                         className={cn(
@@ -307,7 +303,7 @@ export function PlansScreen() {
               label: td('price'),
               align: 'end',
               cell: (plan) => (
-                <span className="grid gap-2 whitespace-nowrap">
+                <span className="inline-flex items-center gap-2 whitespace-nowrap">
                   <Amount currency={plan.currency} value={plan.amount} />
                   <span className="rz-caption">
                     {intervalLabel(plan.interval, locale)}
@@ -336,8 +332,6 @@ export function PlansScreen() {
                             planCodeRef.current = plan.code
                             checkout.run()
                           }}
-                          size="touch"
-                          className="min-w-28"
                           variant="primary"
                         >
                           {t('choose')}
