@@ -11,8 +11,7 @@ import {
 } from '@/components/app'
 import { stickersApi } from '@/api/stickers'
 import { useTenantSettings } from '@/auth/useTenantSettings'
-import { useLocale, useT } from '@/i18n'
-import { navigationGroupLabel } from '../module-messages'
+import { useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
@@ -26,7 +25,8 @@ import {
 } from './sticker-output'
 import { stickersMessages } from './messages'
 import {
-  StickerWorkspace,
+  StickerPageWorkspace,
+  STICKER_LIST_PAGE_SIZE as PARTS_PAGE_SIZE,
   StickerListPanel,
   StickerSelectionRow,
 } from './StickerWorkspace'
@@ -51,7 +51,6 @@ interface StoredQueue {
 }
 
 const MAX_STICKERS = 200
-const PARTS_PAGE_SIZE = 10
 const QUEUE_TTL_MS = 24 * 60 * 60 * 1000
 const queueKey = ({ userId, tenantId }: QueueScope) =>
   `rozbirka.stickers.queue.v1:${userId}:${tenantId}`
@@ -174,7 +173,6 @@ function TenantStickerQueue({
   >['requireLatestMutation']
 }) {
   const t = useT(stickersMessages)
-  const { locale } = useLocale()
   const toast = useOptionalToast()
   /* A failed hand-off (print, download, share) is reported as a toast, as the
      module page draws it; without a toast host it stays on the page. */
@@ -505,11 +503,8 @@ function TenantStickerQueue({
     setPreview([])
   }
   return (
-    <StickerWorkspace
+    <StickerPageWorkspace
       navigation={navigation}
-      title={t('title')}
-      subtitle={t('subtitle')}
-      crumb={navigationGroupLabel('stock', locale)}
       actions={
         <Button
           aria-busy={busy}
@@ -691,6 +686,6 @@ function TenantStickerQueue({
         </p>
       ) : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
-    </StickerWorkspace>
+    </StickerPageWorkspace>
   )
 }

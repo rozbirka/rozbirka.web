@@ -17,8 +17,10 @@ interface Option {
 }
 export function LocationCollectionPicker({
   onChoose,
+  embedded = false,
 }: {
   onChoose: (collection: LocationCollection) => void
+  embedded?: boolean
 }) {
   const t = useT(locationStickersMessages)
   const [kind, setKind] = useState<LocationCollection['kind']>('zone')
@@ -80,9 +82,14 @@ export function LocationCollectionPicker({
     (kind !== 'shelf' || options.sections.some((x) => x.id === section)),
   )
   return (
-    <section aria-label={t('chooseCollection')} className="rz-card">
-      <div className="rz-card__body grid gap-3">
-        <h2 className="rz-h-card">{t('chooseCollection')}</h2>
+    <section
+      aria-label={t('chooseCollection')}
+      className={embedded ? undefined : 'rz-card'}
+    >
+      <div className={embedded ? 'grid gap-3' : 'rz-card__body grid gap-3'}>
+        {embedded ? null : (
+          <h2 className="rz-h-card">{t('chooseCollection')}</h2>
+        )}
         <Field label={t('kind')}>
           <SelectInput
             value={kind}

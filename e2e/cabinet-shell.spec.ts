@@ -3443,11 +3443,14 @@ for (const target of [
       page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
     ).toBeChecked()
     await expect(
-      page.getByText(`Обрано: ${target.count}`, { exact: true }),
+      page.getByText(
+        `Вибрано ${target.count} обʼєктів · ${target.count} стікерів`,
+        { exact: true },
+      ),
     ).toBeVisible()
     await expect(
       page.getByRole('button', {
-        name: `Створити чергу · ${target.count}`,
+        name: `Підготувати ${target.count}`,
         exact: true,
       }),
     ).toBeEnabled()
@@ -3468,7 +3471,7 @@ test('storage stickers: 25 queued, 20 printed, arbitrary 7 confirmed, reload lea
     '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
   )
   await page
-    .getByRole('button', { name: 'Створити чергу · 25', exact: true })
+    .getByRole('button', { name: 'Підготувати 25', exact: true })
     .click()
   await expect(
     page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
@@ -3586,7 +3589,7 @@ test('storage stickers: PDF opens a 20-label document and leaves the queue uncha
     '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
   )
   await page
-    .getByRole('button', { name: 'Створити чергу · 25', exact: true })
+    .getByRole('button', { name: 'Підготувати 25', exact: true })
     .click()
   await page
     .getByRole('button', { name: 'PDF наступних 20', exact: true })
@@ -3615,7 +3618,9 @@ test('storage stickers: inventory.view-only navigation opens locations and never
   const fixture = await installStorageStickerFixture(page, true)
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Стікери')
-  await expect(page).toHaveURL('/app/koval/stickers?type=locations')
+  await expect(page).toHaveURL(
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1',
+  )
   await expect(
     page.getByRole('radio', { name: 'Запчастини', exact: true }),
   ).toBeDisabled()
@@ -3623,10 +3628,12 @@ test('storage stickers: inventory.view-only navigation opens locations and never
     page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
   ).toBeChecked()
   await expect(
-    page.getByRole('region', { name: 'Оберіть місця зберігання', exact: true }),
+    page.getByRole('list', { name: 'Етикетки зон', exact: true }),
   ).toBeVisible()
   await page.goto('/app/koval/stickers')
-  await expect(page).toHaveURL('/app/koval/stickers?type=locations')
+  await expect(page).toHaveURL(
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1',
+  )
   await expect(
     page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
   ).toBeChecked()

@@ -106,6 +106,10 @@ beforeEach(() => {
     isActive: true,
   })
   api.getSections.mockResolvedValue(records)
+  api.getWarehouses.mockResolvedValue([
+    { id: 'w', name: 'Warehouse', isActive: true },
+  ])
+  api.getZones.mockResolvedValue([zoneRecord()])
   output.buildZoneLabelHtml.mockResolvedValue('<html>labels</html>')
   vi.spyOn(window, 'open').mockReturnValue({
     opener: null,
@@ -116,11 +120,61 @@ beforeEach(() => {
   } as unknown as Window)
 })
 
+it('uses the same sticker header, list selection and ten-row pagination as parts', async () => {
+  const user = userEvent.setup()
+  mount('?type=locations&kind=section&parent=z')
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'Стікери' }),
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'QR-стікери для запчастин. Сканер відкриває запчастину за її кодом.',
+    ),
+  ).toBeInTheDocument()
+  expect(
+    await screen.findByRole('listitem', { name: 'Обрати: Section 10' }),
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('listitem', { name: 'Обрати: Section 11' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Вибрати всі' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Зняти' })).toBeDisabled()
+  await user.click(screen.getByRole('listitem', { name: 'Обрати: Section 1' }))
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).toBeChecked()
+  await user.click(screen.getByRole('button', { name: 'Зняти' }))
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).not.toBeChecked()
+  await user.click(screen.getByRole('button', { name: 'Вибрати всі' }))
+  expect(
+    screen.getByText('Вибрано 10 обʼєктів · 10 стікерів'),
+  ).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Section 11' }),
+  ).not.toBeChecked()
+})
+
+it('opens a storage list directly without a blocking collection form', async () => {
+  mount('?type=locations')
+  expect(
+    await screen.findByRole('listitem', { name: 'Обрати: Zone' }),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('searchbox', { name: 'Назва або код' })).toBeEnabled()
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Показати стікери' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Підготувати 0' })).toBeDisabled()
+})
+
 it('preselects the collection once and creates a queue without printing', async () => {
   const user = userEvent.setup()
   mount()
   await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 25' }),
+    await screen.findByRole('button', { name: 'Підготувати 25' }),
   )
   expect(
     screen.getByText('0 з 25 надруковано · 25 залишилось'),
@@ -136,7 +190,7 @@ it('prints twenty, confirms only chosen labels and restores eighteen remaining a
   const user = userEvent.setup()
   const view = mount()
   await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 25' }),
+    await screen.findByRole('button', { name: 'Підготувати 25' }),
   )
   await user.click(screen.getByRole('button', { name: 'Друк наступних 20' }))
   await waitFor(() => expect(print).toHaveBeenCalledOnce())
@@ -163,7 +217,7 @@ it('PDF and blocked popups never advance the queue', async () => {
   const user = userEvent.setup()
   mount()
   await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 25' }),
+    await screen.findByRole('button', { name: 'Підготувати 25' }),
   )
   await user.click(screen.getByRole('button', { name: 'PDF наступних 20' }))
   await waitFor(() => expect(print).toHaveBeenCalledOnce())
@@ -187,7 +241,7 @@ it('keeps manually deselected rows across search changes and blocks oversized qu
   )
   mount()
   expect(
-    await screen.findByRole('button', { name: 'Створити чергу · 201' }),
+    await screen.findByRole('button', { name: 'Підготувати 201' }),
   ).toBeDisabled()
   fireEvent.click(screen.getByRole('checkbox', { name: 'Обрати: Section 1' }))
   fireEvent.change(screen.getByRole('searchbox', { name: 'Назва або код' }), {
@@ -196,16 +250,14 @@ it('keeps manually deselected rows across search changes and blocks oversized qu
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).not.toBeChecked()
-  expect(
-    screen.getByRole('button', { name: 'Створити чергу · 200' }),
-  ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Підготувати 200' })).toBeEnabled()
 })
 
 it('rejects a stale confirmation after tenant cleanup', async () => {
   const user = userEvent.setup()
   mount()
   await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 25' }),
+    await screen.findByRole('button', { name: 'Підготувати 25' }),
   )
   await user.click(screen.getByRole('button', { name: 'Друк наступних 20' }))
   await waitFor(() => expect(print).toHaveBeenCalledOnce())
@@ -219,9 +271,7 @@ it('rejects a stale confirmation after tenant cleanup', async () => {
 it('appends only new selections to the existing collection and prevents selecting queued rows', async () => {
   const user = userEvent.setup()
   mount('?type=locations&kind=section&parent=z&label=s0&label=s1')
-  await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 2' }),
-  )
+  await user.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
   const queueId = locationQueueStore.getSnapshot().queue!.id
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
@@ -243,9 +293,7 @@ it('appends only new selections to the existing collection and prevents selectin
 it('requires cancel confirmation and dismissing the dialog preserves the queue', async () => {
   const user = userEvent.setup()
   mount('?type=locations&kind=section&parent=z&label=s0&label=s1')
-  await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 2' }),
-  )
+  await user.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
   const initial = locationQueueStore.getSnapshot().queue
   await user.click(screen.getByRole('button', { name: 'Скасувати чергу' }))
   let dialog = screen.getByRole('dialog', { name: 'Скасувати чергу друку?' })
@@ -267,9 +315,7 @@ it('requires cancel confirmation and dismissing the dialog preserves the queue',
 it('removes searched selections without printing them and clears the final queued label', async () => {
   const user = userEvent.setup()
   mount('?type=locations&kind=section&parent=z&label=s0&label=s1&label=s2')
-  await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 3' }),
-  )
+  await user.click(await screen.findByRole('button', { name: 'Підготувати 3' }))
   await user.click(screen.getByRole('button', { name: 'Змінити чергу' }))
   let editor = screen.getByRole('dialog')
   await user.click(within(editor).getByRole('checkbox', { name: 'Section 1' }))
@@ -301,7 +347,7 @@ it('rejects an unavailable member of the next batch without printing any labels 
   const user = userEvent.setup()
   mount()
   await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 25' }),
+    await screen.findByRole('button', { name: 'Підготувати 25' }),
   )
   api.getSections.mockResolvedValue(
     records.map((record, index) =>
@@ -332,7 +378,7 @@ it('does not block a valid next batch for an unavailable label outside that batc
   const user = userEvent.setup()
   mount()
   await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 25' }),
+    await screen.findByRole('button', { name: 'Підготувати 25' }),
   )
   api.getSections.mockResolvedValue(
     records.filter((record) => record.id !== 's24'),
@@ -351,9 +397,7 @@ it('does not block a valid next batch for an unavailable label outside that batc
 it('keeps the queue unchanged when the user reports that nothing printed', async () => {
   const user = userEvent.setup()
   mount('?type=locations&kind=section&parent=z&label=s0&label=s1')
-  await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 2' }),
-  )
+  await user.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
   const initial = locationQueueStore.getSnapshot().queue
   await user.click(screen.getByRole('button', { name: 'Друк наступних 2' }))
   await waitFor(() => expect(print).toHaveBeenCalledOnce())
@@ -377,9 +421,7 @@ it('closes a late prepared output after a tenant switch and cannot confirm it', 
   )
   const user = userEvent.setup()
   const view = mount('?type=locations&kind=section&parent=z&label=s0&label=s1')
-  await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 2' }),
-  )
+  await user.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
   await user.click(screen.getByRole('button', { name: 'Друк наступних 2' }))
   await waitFor(() => expect(resolveHtml).toBeDefined())
   session.tenantId = 'next'
@@ -417,9 +459,7 @@ it('invalidates a pending async output when the same queue changes in another ta
   )
   const user = userEvent.setup()
   mount('?type=locations&kind=section&parent=z&label=s0&label=s1')
-  await user.click(
-    await screen.findByRole('button', { name: 'Створити чергу · 2' }),
-  )
+  await user.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
   await user.click(screen.getByRole('button', { name: 'Друк наступних 2' }))
   await waitFor(() => expect(resolveHtml).toBeDefined())
   act(() => {
@@ -537,9 +577,7 @@ it('ignores an old tenant collection response arriving after the new tenant list
   expect(
     screen.queryByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).not.toBeInTheDocument()
-  expect(
-    screen.getByRole('button', { name: 'Створити чергу · 1' }),
-  ).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Підготувати 1' })).toBeEnabled()
   expect(locationQueueStore.getSnapshot().scope?.tenantId).toBe('next')
 })
 

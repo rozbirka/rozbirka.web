@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
+import { Printer, SlidersHorizontal } from 'lucide-react'
+import { inventoryApi } from '@/api/inventory'
 import {
   Button,
   ConfirmDialog,
-  DataTable,
   EmptyState,
   ErrorState,
   Notice,
   Pagination,
   SearchInput,
   SkeletonRows,
-  type DataColumn,
+  Sheet,
 } from '@/components/app'
 import { useT } from '@/i18n'
 import { useTenantSettings } from '@/auth/useTenantSettings'
@@ -30,7 +31,13 @@ import {
   type PrintableZoneLabel,
 } from '../inventory/zone-label-output'
 import { buildStickerSvg } from './sticker-output'
-import { StickerWorkspace } from './StickerWorkspace'
+import {
+  StickerPageWorkspace,
+  StickerListPanel,
+  StickerSelectionRow,
+  STICKER_LIST_PAGE_SIZE as PAGE_SIZE,
+} from './StickerWorkspace'
+import { stickersMessages } from './messages'
 import {
   StickerSheetPreview,
   type StickerPreviewCard,
@@ -50,7 +57,6 @@ import {
 } from './location-queue-store'
 import { resolveLocationBatch } from './location-batch-output'
 
-const PAGE_SIZE = 15
 interface PendingBatch {
   expected: LocationQueueExpected
   ids: string[]
@@ -99,7 +105,8 @@ function ScopedLocationStickers({
   navigation?: ReactNode
 }) {
   const t = useT(locationLabelMessages),
-    ts = useT(locationStickersMessages)
+    ts = useT(locationStickersMessages),
+    tp = useT(stickersMessages)
   const [params, setParams] = useSearchParams(),
     navigate = useNavigate()
   const route = parseStickerRoute(params)
@@ -196,6 +203,30 @@ function ScopedLocationStickers({
       replace: true,
     })
   }, [route.invalid, kind, queue, tenantSlug, navigate])
+  useEffect(() => {
+    if (route.invalid || kind || queue) return
+    const controller = new AbortController()
+    void inventoryApi.getWarehouses({ signal: controller.signal }).then(
+      (warehouses) => {
+        if (controller.signal.aborted) return
+        const first = warehouses.find((warehouse) => warehouse.isActive)
+        if (first)
+          void navigate(
+            locationStickersHref(
+              tenantSlug,
+              { kind: 'zone', parentId: first.id },
+              [],
+            ),
+            { replace: true },
+          )
+        else setStatus('ready')
+      },
+      () => {
+        if (!controller.signal.aborted) setStatus('error')
+      },
+    )
+    return () => controller.abort()
+  }, [route.invalid, kind, queue, tenantSlug, navigate, reload])
   const same = Boolean(
     data && queue && sameLabelTarget(data.target, queue.target),
   )
@@ -216,6 +247,10 @@ function ScopedLocationStickers({
     ) ?? []
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
     currentPage = Math.min(page, pageCount)
+  const visible = filtered.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  )
   const previewLabels = chosen.length
     ? chosen
     : ((same
@@ -401,27 +436,6 @@ function ScopedLocationStickers({
       setEditor(null)
     })
   }
-  const columns: DataColumn<PrintableZoneLabel>[] = [
-    {
-      key: 'name',
-      label: t('name'),
-      variant: 'primary',
-      cell: (label) => label.zoneName,
-    },
-    {
-      key: 'code',
-      label: t('code'),
-      cell: (label) => <span className="rz-mono">{label.zoneCode}</span>,
-    },
-    {
-      key: 'queued',
-      label: t('queue'),
-      cell: (label) =>
-        queued.has(label.id) ? (
-          <span className="rz-caption">{t('queued')}</span>
-        ) : null,
-    },
-  ]
   const sourceHref = data
     ? data.target.kind === 'zone'
       ? `/app/${tenantSlug}/warehouses/${encodeURIComponent(data.target.parentId)}`
@@ -463,137 +477,164 @@ function ScopedLocationStickers({
           onNone={() => setPending(null)}
         />
       ) : null}
-      {data ? (
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-          <h2 className="rz-h-card break-words">
-            {t(data.target.kind)} · {data.target.parentName}
-          </h2>
-          <Button
+      <StickerListPanel
+        search={
+          <SearchInput
+            aria-label={t('search')}
+            placeholder={t('search')}
+            value={search}
             disabled={busy}
-            onClick={() => setPickerOpen((value) => !value)}
-          >
-            {ts('changeCollection')}
-          </Button>
-        </div>
-      ) : null}
-      {!kind || pickerOpen || route.invalid ? (
-        <LocationCollectionPicker
-          onChoose={(collection) =>
-            void navigate(locationStickersHref(tenantSlug, collection, []))
-          }
-        />
-      ) : null}
-      {kind && !route.invalid ? (
-        <section className="rz-card min-w-0">
-          <div className="rz-toolbar flex-wrap">
-            <SearchInput
-              aria-label={t('search')}
-              placeholder={t('search')}
-              value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(1)
+            }}
+          />
+        }
+        summary={tp('selectedSummary', {
+          objects: chosen.length,
+          stickers: chosen.length,
+        })}
+        actions={
+          <>
+            <Button
+              disabled={busy || status !== 'ready' || !filtered.length}
+              onClick={() =>
+                setSelected(
+                  new Set([
+                    ...selected,
+                    ...visible
+                      .filter((label) => !queued.has(label.id))
+                      .map((label) => label.id),
+                  ]),
+                )
+              }
+            >
+              {tp('selectAll')}
+            </Button>
+            <Button
+              disabled={busy || !selected.size}
+              onClick={() => setSelected(new Set())}
+            >
+              {tp('clear')}
+            </Button>
+            <Button
+              aria-label={ts('changeCollection')}
+              title={
+                data
+                  ? `${t(data.target.kind)} · ${data.target.parentName}`
+                  : ts('chooseCollection')
+              }
+              size="icon"
+              variant="quiet"
               disabled={busy}
-              onChange={(event) => {
-                setSearch(event.target.value)
-                setPage(1)
-              }}
-            />
-            <div className="rz-btn-row">
-              <Button
-                disabled={busy || status !== 'ready'}
-                onClick={() =>
-                  setSelected(
-                    new Set([
-                      ...selected,
-                      ...filtered
-                        .filter((label) => !queued.has(label.id))
-                        .map((label) => label.id),
-                    ]),
-                  )
-                }
-              >
-                {t(needle ? 'selectResults' : 'selectAll', {
-                  count: filtered.filter((label) => !queued.has(label.id))
-                    .length,
-                })}
-              </Button>
-              <Button
-                disabled={busy || !selected.size}
-                onClick={() => setSelected(new Set())}
-              >
-                {t('reset')}
-              </Button>
-            </div>
-          </div>
-          <p className="rz-caption px-4">
-            {t('selected', { count: chosen.length })}
-          </p>
-          {status === 'loading' ? (
-            <SkeletonRows rows={4} columns={3} />
-          ) : status === 'error' ? (
-            <ErrorState
-              title={t('loadFailed')}
-              retryLabel={t('retry')}
-              onRetry={() => {
-                setStatus('loading')
-                setReload((value) => value + 1)
-              }}
-            />
-          ) : !filtered.length ? (
-            <EmptyState title={t(needle ? 'noMatches' : 'empty')} />
-          ) : (
-            <DataTable
-              caption={t(kind)}
-              columns={columns}
-              rowKey={(label) => label.id}
-              rows={filtered.slice(
-                (currentPage - 1) * PAGE_SIZE,
-                currentPage * PAGE_SIZE,
-              )}
-              selection={{
-                selected,
-                onChange: setSelected,
-                rowLabel: (label) => t('select', { name: label.zoneName }),
-                unavailable: (label) =>
-                  busy
-                    ? t('printing')
-                    : queued.has(label.id)
+              onClick={() => setPickerOpen(true)}
+            >
+              <SlidersHorizontal aria-hidden />
+            </Button>
+          </>
+        }
+        footer={
+          <Pagination
+            label={t('pagination')}
+            onPage={setPage}
+            page={currentPage}
+            pageSize={PAGE_SIZE}
+            total={filtered.length}
+            totalPages={pageCount}
+          />
+        }
+      >
+        {status === 'loading' && !route.invalid ? (
+          <SkeletonRows rows={4} columns={3} />
+        ) : status === 'error' ? (
+          <ErrorState
+            title={t('loadFailed')}
+            retryLabel={t('retry')}
+            onRetry={() => {
+              setStatus('loading')
+              setReload((value) => value + 1)
+            }}
+          />
+        ) : !filtered.length ? (
+          <EmptyState title={t(needle ? 'noMatches' : 'empty')} />
+        ) : null}
+        <ul
+          className="divide-app-line m-0 grid list-none divide-y p-0"
+          aria-label={t(kind ?? 'zone')}
+        >
+          {visible.map((label) => (
+            <StickerSelectionRow
+              key={label.id}
+              label={t('select', { name: label.zoneName })}
+              checkboxLabel={t('select', { name: label.zoneName })}
+              selected={selected.has(label.id)}
+              disabled={busy || status !== 'ready' || queued.has(label.id)}
+              onToggle={() =>
+                setSelected((current) => {
+                  const next = new Set(current)
+                  if (next.has(label.id)) next.delete(label.id)
+                  else next.add(label.id)
+                  return next
+                })
+              }
+              name={label.zoneName}
+              code={label.zoneCode}
+              detail={
+                <>
+                  {label.path?.slice(0, -1).join(' · ') ??
+                    data?.target.parentName}
+                  <span
+                    className={`rz-dot ${queued.has(label.id) ? 'rz-dot--warn' : 'rz-dot--ok'} ml-2`}
+                  >
+                    {queued.has(label.id)
                       ? t('queued')
-                      : undefined,
-                selectOnRowClick: 'always',
-              }}
-              footer={
-                <Pagination
-                  label={t('pagination')}
-                  onPage={setPage}
-                  page={currentPage}
-                  pageSize={PAGE_SIZE}
-                  total={filtered.length}
-                  totalPages={pageCount}
-                />
+                      : t(data?.target.kind ?? 'zone')}
+                  </span>
+                </>
               }
             />
-          )}
-          {queue && !same ? (
-            <div className="p-3">
-              <Notice tone="warn">
-                {t('otherQueue', { name: queue.target.parentName })}
-              </Notice>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+          ))}
+        </ul>
+        {queue && !same ? (
+          <div className="p-3">
+            <Notice tone="warn">
+              {t('otherQueue', { name: queue.target.parentName })}
+            </Notice>
+          </div>
+        ) : null}
+      </StickerListPanel>
     </div>
   )
   return (
-    <StickerWorkspace
-      title={ts('locations')}
-      subtitle={t('subtitle')}
+    <StickerPageWorkspace
       navigation={navigation}
-      back={
-        sourceHref ? (
-          <Button asChild variant="quiet">
-            <Link to={sourceHref}>{ts('back')}</Link>
-          </Button>
-        ) : undefined
+      actions={
+        <Button
+          aria-busy={busy}
+          variant="primary"
+          disabled={
+            busy ||
+            status !== 'ready' ||
+            chosen.length > MAX_LOCATION_LABELS ||
+            Boolean(queue && !same) ||
+            (!chosen.length && !(queue && same))
+          }
+          onClick={() => (chosen.length ? changeQueue() : void output('print'))}
+        >
+          <Printer aria-hidden />
+          {busy
+            ? tp('preparing')
+            : chosen.length && queue
+              ? t('add', { count: chosen.length })
+              : !chosen.length && queue && same
+                ? tp('print', {
+                    count: Math.min(
+                      LOCATION_LABEL_BATCH,
+                      queue.remainingIds.length,
+                    ),
+                  })
+                : tp('prepare', { count: chosen.length })}
+        </Button>
       }
       notice={
         <>
@@ -618,46 +659,56 @@ function ScopedLocationStickers({
           objects={previewCount}
           total={previewCount}
           actions={
-            <div className="grid gap-2">
-              {chosen.length > MAX_LOCATION_LABELS ? (
-                <Notice tone="warn">
-                  {ts('limit', { max: MAX_LOCATION_LABELS })}
-                </Notice>
-              ) : null}
-              <Button
-                variant="primary"
-                disabled={
-                  busy ||
-                  status !== 'ready' ||
-                  !chosen.length ||
-                  chosen.length > MAX_LOCATION_LABELS ||
-                  Boolean(queue && !same)
-                }
-                onClick={changeQueue}
-              >
-                {t(queue ? 'add' : 'create', { count: chosen.length })}
-              </Button>
-              {!queue ? (
-                <>
-                  <Button
-                    disabled={
-                      busy ||
-                      !chosen.length ||
-                      chosen.length > MAX_LOCATION_LABELS ||
-                      status !== 'ready'
-                    }
-                    onClick={() => void output('pdf', false)}
-                  >
-                    {t('pdf', { count: chosen.length })}
-                  </Button>
-                  <p className="rz-caption">{t('pdfHint')}</p>
-                </>
-              ) : null}
-            </div>
+            chosen.length > MAX_LOCATION_LABELS ||
+            (!queue && chosen.length > 0) ? (
+              <div className="grid gap-2">
+                {chosen.length > MAX_LOCATION_LABELS ? (
+                  <Notice tone="warn">
+                    {ts('limit', { max: MAX_LOCATION_LABELS })}
+                  </Notice>
+                ) : null}
+                {!queue && chosen.length > 0 ? (
+                  <>
+                    <Button
+                      disabled={
+                        busy ||
+                        !chosen.length ||
+                        chosen.length > MAX_LOCATION_LABELS ||
+                        status !== 'ready'
+                      }
+                      onClick={() => void output('pdf', false)}
+                    >
+                      {t('pdf', { count: chosen.length })}
+                    </Button>
+                    <p className="rz-caption">{t('pdfHint')}</p>
+                  </>
+                ) : null}
+              </div>
+            ) : null
           }
         />
       }
     >
+      <Sheet
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        title={ts('chooseCollection')}
+        footer={
+          sourceHref ? (
+            <Button asChild variant="quiet">
+              <Link to={sourceHref}>{ts('back')}</Link>
+            </Button>
+          ) : undefined
+        }
+      >
+        <LocationCollectionPicker
+          embedded
+          onChoose={(collection) => {
+            setPickerOpen(false)
+            void navigate(locationStickersHref(tenantSlug, collection, []))
+          }}
+        />
+      </Sheet>
       {editorValid ? (
         <LocationQueueEditor
           key={`${editorValid.expected.queueId}:${editorValid.expected.revision}:${editorValid.mode}`}
@@ -698,6 +749,6 @@ function ScopedLocationStickers({
             })
         }}
       />
-    </StickerWorkspace>
+    </StickerPageWorkspace>
   )
 }
