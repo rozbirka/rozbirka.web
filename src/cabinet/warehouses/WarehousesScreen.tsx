@@ -11,7 +11,6 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   Archive,
   ArrowRight,
-  Download,
   LayoutGrid,
   Pencil,
   Plus,
@@ -916,14 +915,6 @@ function WarehouseView({ id }: { id: string }) {
                           },
                         ]
                       : []),
-                    {
-                      key: 'export',
-                      label: t('exportStock'),
-                      icon: <Download aria-hidden />,
-                      disabled: true,
-                      title: t('exportUnavailable'),
-                      onSelect: () => undefined,
-                    },
                     ...(canManage && !warehouse.isSystemDefault
                       ? [
                           {

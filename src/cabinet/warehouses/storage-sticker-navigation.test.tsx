@@ -155,9 +155,10 @@ it('does not expose print for an archived warehouse', async () => {
     unassignedPartCount: 0,
   })
   mount('/app/yard/warehouses/w')
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Інші дії зі складом' }),
-  )
+  await screen.findByRole('heading', { level: 1, name: 'Склад' })
+  expect(
+    screen.queryByRole('button', { name: 'Інші дії зі складом' }),
+  ).toBeNull()
   expect(
     screen.queryByRole('menuitem', { name: 'Друк стікерів зон' }),
   ).toBeNull()
@@ -165,9 +166,10 @@ it('does not expose print for an archived warehouse', async () => {
 it('requires inventory viewing for print even when management is present', async () => {
   access.permissions = new Set(['inventory.zones.manage'])
   mount('/app/yard/warehouses/w')
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Інші дії зі складом' }),
-  )
+  await screen.findByRole('heading', { level: 1, name: 'Склад' })
+  expect(
+    screen.queryByRole('button', { name: 'Інші дії зі складом' }),
+  ).toBeNull()
   expect(
     screen.queryByRole('menuitem', { name: 'Друк стікерів зон' }),
   ).toBeNull()
