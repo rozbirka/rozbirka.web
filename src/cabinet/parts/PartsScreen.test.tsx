@@ -5077,3 +5077,53 @@ it.each([0, 1])(
     )
   },
 )
+
+it.each([
+  ['sold', 0, 0, false],
+  ['available', 0, 0, false],
+  ['reserved', 0, 2, true],
+  ['available', 2, 0, true],
+] as const)(
+  'gates part-card movement by physical stock: %s, available=%s reserved=%s',
+  async (status, available, reserved, enabled) => {
+    const user = userEvent.setup()
+    cabinetMock.snapshot.permissions.add('inventory.view')
+    partMocks.get.mockResolvedValue({
+      id: 'part-1',
+      name: 'Фара ліва',
+      condition: 'good',
+      source: 'free',
+      status,
+      quantityTotal: available + reserved,
+      quantityAvailable: available,
+      quantityReserved: reserved,
+      quantitySoldTotal: status === 'sold' ? 1 : 0,
+      effectiveSalePrice: 100,
+      desiredSalePrice: 100,
+      photos: [],
+      reservations: [],
+      soldOrders: [],
+      unit: 'шт',
+      createdAt: '2026-10-23T10:00:00Z',
+    })
+    renderInLocale('uk', '/app/yard/parts/part-1', '/app/:tenant/parts/:partId')
+    const card = await screen.findByRole('region', { name: 'Місце на складі' })
+    const action = within(card).getByRole('button', { name: 'Перемістити' })
+    if (enabled) expect(action).toBeEnabled()
+    else {
+      expect(action).toBeDisabled()
+      expect(action).toHaveAttribute(
+        'title',
+        'Немає залишку на складі. Розміщення недоступне.',
+      )
+      fireEvent.click(action)
+      expect(
+        screen.queryByRole('dialog', { name: 'Розміщення на складі' }),
+      ).toBeNull()
+    }
+    await user.click(screen.getByRole('button', { name: 'Інші дії з деталлю' }))
+    const move = screen.getByRole('menuitem', { name: 'Перемістити' })
+    if (enabled) expect(move).not.toHaveAttribute('aria-disabled', 'true')
+    else expect(move).toHaveAttribute('aria-disabled', 'true')
+  },
+)
