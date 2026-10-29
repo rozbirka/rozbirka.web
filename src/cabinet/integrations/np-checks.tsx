@@ -55,7 +55,10 @@ export function NpChecks({
           {item.value === '' ? null : (
             <span
               className={cn(
-                'ml-auto text-right font-mono text-caption',
+                // Real values (a full name, «Дубляни (Львів.обл.,Жовків.р-н)»)
+                // are longer than the mock's: cap the finding at half the row
+                // and let it wrap so the label keeps its width.
+                'ml-auto max-w-1/2 min-w-0 text-right font-mono text-caption wrap-anywhere',
                 item.state === 'ok'
                   ? 'text-state-ok'
                   : item.state === 'fail'
