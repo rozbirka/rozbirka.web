@@ -207,9 +207,9 @@ function ScopedLocationStickers({
               )
               .map((label) => label.id),
           )
-          const firstRequestedIndex = result.labels.findIndex((label) =>
-            requestedIds.has(label.id),
-          )
+          const firstRequestedIndex = result.labels
+            .filter((label) => !queuedIds.has(label.id))
+            .findIndex((label) => requestedIds.has(label.id))
           setPage(Math.floor(Math.max(0, firstRequestedIndex) / PAGE_SIZE) + 1)
           if (!seed) return
           setSelected(
@@ -268,16 +268,25 @@ function ScopedLocationStickers({
     () => new Set(same ? queue?.remainingIds : []),
     [same, queue],
   )
+  const [previousQueued, setPreviousQueued] = useState(queued)
+  if (previousQueued !== queued) {
+    setPreviousQueued(queued)
+    setSelected(
+      (current) => new Set([...current].filter((id) => !queued.has(id))),
+    )
+  }
   const chosen =
     data?.labels.filter(
       (label) => selected.has(label.id) && !queued.has(label.id),
     ) ?? []
   const needle = search.trim().toLocaleLowerCase()
   const filtered =
-    data?.labels.filter((label) =>
-      `${label.zoneName} ${label.zoneCode} ${label.path?.join(' ') ?? ''}`
-        .toLocaleLowerCase()
-        .includes(needle),
+    data?.labels.filter(
+      (label) =>
+        !queued.has(label.id) &&
+        `${label.zoneName} ${label.zoneCode} ${label.path?.join(' ') ?? ''}`
+          .toLocaleLowerCase()
+          .includes(needle),
     ) ?? []
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
     currentPage = Math.min(page, pageCount)
@@ -607,7 +616,7 @@ function ScopedLocationStickers({
               label={t('select', { name: label.zoneName })}
               checkboxLabel={t('select', { name: label.zoneName })}
               selected={selected.has(label.id)}
-              disabled={busy || status !== 'ready' || queued.has(label.id)}
+              disabled={busy || status !== 'ready'}
               onToggle={() =>
                 setSelected((current) => {
                   const next = new Set(current)
@@ -622,12 +631,8 @@ function ScopedLocationStickers({
                 <>
                   {label.path?.slice(0, -1).join(' · ') ??
                     data?.target.parentName}
-                  <span
-                    className={`rz-dot ${queued.has(label.id) ? 'rz-dot--warn' : 'rz-dot--ok'} ml-2`}
-                  >
-                    {queued.has(label.id)
-                      ? t('queued')
-                      : t(label.kind ?? 'zone')}
+                  <span className="rz-dot rz-dot--ok ml-2">
+                    {t(label.kind ?? 'zone')}
                   </span>
                 </>
               }

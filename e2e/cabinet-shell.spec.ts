@@ -4022,10 +4022,23 @@ for (const mode of ['parts', 'locations'] as const) {
                 photos: [],
                 order: null,
               },
+              {
+                id: 'sticker-part-2',
+                name: 'Інша деталь',
+                externalCode: 'F-2',
+                quantityAvailable: 2,
+                quantityTotal: 2,
+                quantityReserved: 0,
+                quantitySoldTotal: 0,
+                status: 'available',
+                car: null,
+                photos: [],
+                order: null,
+              },
             ],
             page: 1,
             pageSize: 10,
-            total: 1,
+            total: 2,
             totalPages: 1,
           })
         if (path === '/api/v1/parts/batch-sticker')
@@ -4036,6 +4049,18 @@ for (const mode of ['parts', 'locations'] as const) {
                 name: 'Деталь для стікерів',
                 qrCode: 'fixture-part:1',
                 quantity: 25,
+                carCode: null,
+                carBrand: null,
+                carModel: null,
+                carYear: null,
+                carId: null,
+                createdAt: '2026-10-01T00:00:00Z',
+              },
+              {
+                id: 'sticker-part-2',
+                name: 'Інша деталь',
+                qrCode: 'fixture-part:2',
+                quantity: 2,
                 carCode: null,
                 carBrand: null,
                 carModel: null,
@@ -4105,22 +4130,25 @@ for (const mode of ['parts', 'locations'] as const) {
     ).toBeVisible()
     expect(await downloadStickerCount(page, className)).toBe(20)
     if (mode === 'parts') {
+      await expect(
+        page.getByRole('checkbox', {
+          name: 'Деталь для стікерів',
+          exact: true,
+        }),
+      ).toHaveCount(0)
       await page
-        .getByRole('checkbox', { name: 'Деталь для стікерів', exact: true })
+        .getByRole('checkbox', { name: 'Інша деталь', exact: true })
         .check()
       await page
         .getByRole('button', {
-          name: 'Збільшити кількість Деталь для стікерів',
+          name: 'Збільшити кількість Інша деталь',
           exact: true,
         })
         .click()
     } else {
-      await page
-        .getByRole('button', { name: 'Наступна сторінка', exact: true })
-        .click()
-      await page
-        .getByRole('button', { name: 'Наступна сторінка', exact: true })
-        .click()
+      await expect(
+        page.getByRole('checkbox', { name: 'Обрати: Зона 01', exact: true }),
+      ).toHaveCount(0)
       await page
         .getByRole('checkbox', { name: 'Обрати: Секція 01', exact: true })
         .check()

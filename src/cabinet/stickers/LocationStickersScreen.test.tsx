@@ -283,11 +283,11 @@ it('appends only new selections to the existing collection and prevents selectin
   await user.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
   const queueId = locationQueueStore.getSnapshot().queue!.id
   expect(
-    screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
-  ).toBeDisabled()
+    screen.queryByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).not.toBeInTheDocument()
   expect(
-    screen.getByRole('checkbox', { name: 'Обрати: Section 2' }),
-  ).toBeDisabled()
+    screen.queryByRole('checkbox', { name: 'Обрати: Section 2' }),
+  ).not.toBeInTheDocument()
   await user.click(screen.getByRole('checkbox', { name: 'Обрати: Section 3' }))
   await user.click(screen.getByRole('button', { name: 'Додати до черги · 1' }))
   expect(locationQueueStore.getSnapshot().queue).toMatchObject({
@@ -540,8 +540,8 @@ it('continues a legacy queue from another warehouse and upgrades it without losi
     await screen.findByRole('button', { name: 'Друк наступних 1' }),
   ).toBeEnabled()
   expect(
-    screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
-  ).toBeDisabled()
+    screen.queryByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).not.toBeInTheDocument()
   expect(locationQueueStore.getSnapshot().queue).toEqual({
     ...initial,
     target: { kind: 'warehouse', parentId: 'w', parentName: 'w' },
@@ -729,7 +729,7 @@ it('opens the page containing the first shelf requested from a section menu, kee
   ).not.toBeInTheDocument()
 })
 
-it('opens the requested shelf page even when its label is already queued', async () => {
+it('does not select or display a requested shelf already queued', async () => {
   api.getSection.mockResolvedValue(records[0])
   api.getShelves.mockResolvedValue([
     {
@@ -746,9 +746,10 @@ it('opens the requested shelf page even when its label is already queued', async
     ['p0'],
   )
   mount('?type=locations&kind=shelf&parent=s0&select=all')
+  await screen.findByRole('region', { name: 'Активна черга' })
   expect(
-    await screen.findByRole('checkbox', { name: 'Обрати: Queued shelf' }),
-  ).toBeDisabled()
+    screen.queryByRole('checkbox', { name: 'Обрати: Queued shelf' }),
+  ).not.toBeInTheDocument()
   expect(
     screen.getByText('Вибрано 0 обʼєктів · 0 стікерів'),
   ).toBeInTheDocument()
@@ -900,4 +901,30 @@ it('does not download a prepared location selection after its owner is reset', a
   await screen.findByRole('button', { name: 'Підготувати 25' })
   expect(click).not.toHaveBeenCalled()
   expect(locationQueueStore.getSnapshot().queue).toBeNull()
+})
+
+it('hides queued locations from search and restores removed locations unchecked', async () => {
+  const user = userEvent.setup()
+  mount('?type=locations&kind=section&parent=z&label=s0')
+  await user.click(await screen.findByRole('button', { name: 'Підготувати 1' }))
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getAllByRole('checkbox')).toHaveLength(10)
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Назва або код' }),
+    'Section 1',
+  )
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Змінити чергу' }))
+  const editor = screen.getByRole('dialog')
+  await user.click(within(editor).getByRole('checkbox', { name: 'Section 1' }))
+  await user.click(
+    within(editor).getByRole('button', { name: 'Прибрати з черги · 1' }),
+  )
+  expect(
+    await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
+  ).not.toBeChecked()
 })

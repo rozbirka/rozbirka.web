@@ -54,9 +54,9 @@ const stickersDefinition = {
   allowedSubscriptionStates: ['trial', 'active', 'pastDue', 'cancelled'],
 }
 
-const renderScreen = () =>
+const renderScreen = (path = '/') =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <ToastProvider>
         <StickersScreen definition={stickersDefinition as never} />
       </ToastProvider>
@@ -277,16 +277,35 @@ it('does not confirm an output after the persisted queue changes in another tab'
   expect(partQueueStore.getSnapshot().queue?.remaining).toHaveLength(1)
 })
 
-it('adds copies, edits individual copies without counting them printed, and confirms cancellation', async () => {
+it('adds another part, edits individual copies without counting them printed, and confirms cancellation', async () => {
+  stickerMocks.getBatchData.mockResolvedValue({
+    items: [
+      { id: 'part-1', name: 'Bumper', qrCode: 'raw:1', quantity: 25 },
+      { id: 'part-2', name: 'Mirror', qrCode: 'raw:2', quantity: 2 },
+    ],
+  })
+  partsMocks.list.mockResolvedValue({
+    items: [
+      { id: 'part-1', name: 'Bumper', quantityAvailable: 25, car: null },
+      { id: 'part-2', name: 'Mirror', quantityAvailable: 2, car: null },
+    ],
+    page: 1,
+    pageSize: 10,
+    total: 2,
+    totalPages: 1,
+  })
   savedSelection(2)
   renderScreen()
   fireEvent.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
   await screen.findByText('0 з 2 надруковано · 2 залишилось')
   fireEvent.click(
-    await screen.findByRole('listitem', { name: 'Запчастина Bumper' }),
+    await screen.findByRole('listitem', { name: 'Запчастина Mirror' }),
   )
   fireEvent.click(screen.getByRole('button', { name: 'Додати до черги · 1' }))
   await screen.findByText('0 з 3 надруковано · 3 залишилось')
+  await vi.waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Змінити чергу' })).toBeEnabled(),
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Змінити чергу' }))
   fireEvent.click(screen.getByRole('checkbox', { name: 'Bumper · Копія 2' }))
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати з черги · 1' }))
@@ -405,4 +424,122 @@ it('does not download a part selection after signing out during data preparation
   await screen.findByRole('button', { name: 'Підготувати 0' })
   expect(click).not.toHaveBeenCalled()
   expect(partQueueStore.getSnapshot().queue).toBeNull()
+})
+
+it('hides queued parts from selection and search until their last copy is removed', async () => {
+  savedSelection(2)
+  renderScreen()
+  fireEvent.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
+  await screen.findByText('0 з 2 надруковано · 2 залишилось')
+  const list = screen.getByRole('list', { name: 'Список запчастин' })
+  expect(
+    within(list).queryByRole('checkbox', { name: 'Bumper' }),
+  ).not.toBeInTheDocument()
+  fireEvent.change(screen.getByRole('searchbox'), {
+    target: { value: 'Bumper' },
+  })
+  await vi.waitFor(() =>
+    expect(partsMocks.list).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'Bumper' }),
+    ),
+  )
+  expect(
+    within(list).queryByRole('checkbox', { name: 'Bumper' }),
+  ).not.toBeInTheDocument()
+  await vi.waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Змінити чергу' })).toBeEnabled(),
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Змінити чергу' }))
+  let editor = await screen.findByRole('dialog')
+  fireEvent.click(
+    within(editor).getByRole('checkbox', { name: 'Bumper · Копія 1' }),
+  )
+  fireEvent.click(
+    within(editor).getByRole('button', { name: 'Прибрати з черги · 1' }),
+  )
+  expect(
+    within(list).queryByRole('checkbox', { name: 'Bumper' }),
+  ).not.toBeInTheDocument()
+  await vi.waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Змінити чергу' })).toBeEnabled(),
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Змінити чергу' }))
+  editor = await screen.findByRole('dialog')
+  fireEvent.click(
+    within(editor).getByRole('checkbox', { name: 'Bumper · Копія 1' }),
+  )
+  fireEvent.click(
+    within(editor).getByRole('button', { name: 'Прибрати з черги · 1' }),
+  )
+  expect(
+    await within(list).findByRole('checkbox', { name: 'Bumper' }),
+  ).not.toBeChecked()
+})
+
+it('fills pages after hiding queued parts and restores them without reloading the catalogue', async () => {
+  const items = Array.from({ length: 205 }, (_, index) => ({
+    id: `part-${index + 1}`,
+    name: index === 0 ? 'Bumper' : `Part ${index + 1}`,
+    quantityAvailable: 25,
+    car: null,
+  }))
+  partsMocks.list.mockImplementation(
+    ({ page, pageSize }: { page: number; pageSize: number }) =>
+      Promise.resolve({
+        items: items.slice((page - 1) * pageSize, page * pageSize),
+        page,
+        pageSize,
+        total: items.length,
+        totalPages: Math.ceil(items.length / pageSize),
+      }),
+  )
+  savedSelection(2)
+  renderScreen()
+  fireEvent.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
+  await screen.findByRole('checkbox', { name: 'Part 11' })
+  expect(screen.getByText('1–10 з 204')).toBeVisible()
+  expect(screen.getAllByRole('checkbox')).toHaveLength(10)
+  expect(
+    screen.queryByRole('checkbox', { name: 'Bumper' }),
+  ).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+  expect(screen.getByRole('checkbox', { name: 'Part 12' })).toBeVisible()
+  const calls = partsMocks.list.mock.calls.length
+  fireEvent.click(screen.getByRole('button', { name: 'Скасувати чергу' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Скасувати чергу друку?',
+  })
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Скасувати чергу' }),
+  )
+  await vi.waitFor(() => expect(partQueueStore.getSnapshot().queue).toBeNull())
+  fireEvent.click(screen.getByRole('button', { name: 'Попередня сторінка' }))
+  expect(screen.getByRole('checkbox', { name: 'Bumper' })).not.toBeChecked()
+  expect(partsMocks.list).toHaveBeenCalledTimes(calls)
+})
+
+it('does not restore a queued part from a saved draft or deep link after cancelling its queue', async () => {
+  savedSelection(2)
+  const view = renderScreen()
+  fireEvent.click(await screen.findByRole('button', { name: 'Підготувати 2' }))
+  await screen.findByText('0 з 2 надруковано · 2 залишилось')
+  view.unmount()
+  savedSelection(1)
+  renderScreen('/?part=part-1')
+  await screen.findByText('Вибрано 0 обʼєктів · 0 стікерів')
+  await vi.waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Скасувати чергу' }),
+    ).toBeEnabled(),
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Скасувати чергу' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Скасувати чергу друку?',
+  })
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Скасувати чергу' }),
+  )
+  expect(
+    await screen.findByRole('checkbox', { name: 'Bumper' }),
+  ).not.toBeChecked()
 })

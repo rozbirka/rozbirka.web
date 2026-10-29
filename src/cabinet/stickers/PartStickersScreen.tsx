@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Minus, Plus, Printer } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { partsApi, type PartListItem } from '@/api/parts'
-import { Button, Notice, Pagination, SearchInput } from '@/components/app'
+import {
+  Button,
+  Notice,
+  Pagination,
+  SearchInput,
+  SkeletonRows,
+} from '@/components/app'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
@@ -14,7 +20,7 @@ import { usePartStickerPrinting } from './use-part-sticker-printing'
 import { PartPrintQueuePanel } from './PartPrintQueuePanel'
 import { PART_BATCH_SIZE, type PartStickerSelection } from './part-print-queue'
 import { locationLabelMessages } from '../inventory/location-label-messages'
-import { partQueueMessages } from './part-queue-messages'
+import { loadStickerParts } from './load-sticker-parts'
 import { stickersMessages } from './messages'
 import {
   StickerPageWorkspace,
@@ -159,8 +165,7 @@ function TenantStickerQueue({
   >['requireLatestMutation']
 }) {
   const t = useT(stickersMessages)
-  const tq = useT(locationLabelMessages),
-    tc = useT(partQueueMessages)
+  const tq = useT(locationLabelMessages)
   // Printed stickers follow the tenant document language, not the UI locale.
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const [searchParams, setSearchParams] = useSearchParams()
@@ -168,7 +173,7 @@ function TenantStickerQueue({
   // whole batch from an intake. The ids arrive in the URL and join the selection as
   // it is read, so a selection is never a render behind the address bar.
   const requested = useMemo(() => searchParams.getAll('part'), [searchParams])
-  const [selection, setSelection] = useState<QueueItem[]>(() => {
+  const [draftSelection, setSelection] = useState<QueueItem[]>(() => {
     const stored = scope ? readSelection(scope) : []
     const additions: QueueItem[] = []
     for (const id of requested)
@@ -194,10 +199,6 @@ function TenantStickerQueue({
   const [partsUnavailable, setPartsUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const canGenerate = generationDecision === 'allowed'
-  const total = useMemo(
-    () => selection.reduce((sum, item) => sum + item.quantity, 0),
-    [selection],
-  )
 
   const printing = usePartStickerPrinting({
     scope,
@@ -210,55 +211,106 @@ function TenantStickerQueue({
     PART_BATCH_SIZE,
     printing.queue?.remaining.length ?? 0,
   )
+  const queuedIds = useMemo(
+    () => new Set(printing.queue?.remaining.map((copy) => copy.partId)),
+    [printing.queue],
+  )
+  const selection = useMemo(
+    () => draftSelection.filter((item) => !queuedIds.has(item.id)),
+    [draftSelection, queuedIds],
+  )
+  const total = selection.reduce((sum, item) => sum + item.quantity, 0)
+  const [catalogue, setCatalogue] = useState<{
+    query: string
+    items: PartListItem[]
+  } | null>(null)
+  const fullListing = queuedIds.size > 0 || catalogue !== null
+  const query = search.trim()
+  const requestPage = fullListing ? 1 : partsPage
+  const catalogueReady = catalogue?.query === query
+  const sourceParts = fullListing
+    ? catalogueReady
+      ? catalogue.items
+      : []
+    : parts
+  const availableParts = sourceParts.filter(
+    (part) => part.quantityAvailable > 0 && !queuedIds.has(part.id),
+  )
+  const resultTotal = fullListing ? availableParts.length : partsTotal
+  const pageCount = fullListing
+    ? Math.max(1, Math.ceil(resultTotal / PARTS_PAGE_SIZE))
+    : partsTotalPages
+  const currentPage = Math.min(partsPage, pageCount)
+  const visibleParts = fullListing
+    ? availableParts.slice(
+        (currentPage - 1) * PARTS_PAGE_SIZE,
+        currentPage * PARTS_PAGE_SIZE,
+      )
+    : availableParts
   const exceedsQueueLimit =
     total + (printing.queue?.remaining.length ?? 0) > MAX_STICKERS
-  const queuedCounts = new Map<string, number>()
-  for (const copy of printing.queue?.remaining ?? [])
-    queuedCounts.set(copy.partId, (queuedCounts.get(copy.partId) ?? 0) + 1)
+  const loadingCatalogue = fullListing && !catalogueReady && !partsUnavailable
+  // Drop stale drafts as the queue changes, including updates from another tab.
+  const [previousQueuedIds, setPreviousQueuedIds] =
+    useState<ReadonlySet<string> | null>(null)
+  if (previousQueuedIds !== queuedIds) {
+    setPreviousQueuedIds(queuedIds)
+    setSelection((current) => current.filter((item) => !queuedIds.has(item.id)))
+  }
+  if (fullListing && catalogueReady && partsPage > pageCount)
+    setPartsPage(pageCount)
   useEffect(() => {
     if (scope) writeSelection(scope, selection)
   }, [selection, scope])
   useEffect(() => {
     const controller = new AbortController()
-    void partsApi
-      .list({
-        page: partsPage,
-        pageSize: PARTS_PAGE_SIZE,
-        status: 'available',
-        ...(search.trim() ? { q: search.trim() } : {}),
-        signal: controller.signal,
-      })
-      .then(
-        (page) => {
-          if (controller.signal.aborted) return
-          setParts(page.items.filter((part) => part.quantityAvailable > 0))
-          setPartsTotal(page.total)
-          setPartsTotalPages(Math.max(1, page.totalPages))
-          setPartsUnavailable(false)
-          const availability = new Map(
-            page.items.map((part) => [part.id, part.quantityAvailable]),
-          )
-          setSelection((current) =>
-            current.flatMap((item) => {
-              const available = availability.get(item.id)
-              if (available === undefined) return [item]
-              if (available <= 0) return []
-              return [
-                {
-                  ...item,
-                  availableQuantity: available,
-                  quantity: Math.min(item.quantity, available),
-                },
-              ]
-            }),
-          )
-        },
-        () => {
-          if (!controller.signal.aborted) setPartsUnavailable(true)
-        },
-      )
+    const request = fullListing
+      ? loadStickerParts(query, controller.signal).then((items) => ({ items }))
+      : partsApi
+          .list({
+            page: requestPage,
+            pageSize: PARTS_PAGE_SIZE,
+            status: 'available',
+            ...(query ? { q: query } : {}),
+            signal: controller.signal,
+          })
+          .then((page) => {
+            if (!controller.signal.aborted) {
+              setPartsTotal(page.total)
+              setPartsTotalPages(Math.max(1, page.totalPages))
+            }
+            return page
+          })
+    void request.then(
+      (page) => {
+        if (controller.signal.aborted) return
+        if (fullListing) setCatalogue({ query, items: page.items })
+        else setParts(page.items)
+        setPartsUnavailable(false)
+        const availability = new Map(
+          page.items.map((part) => [part.id, part.quantityAvailable]),
+        )
+        setSelection((current) =>
+          current.flatMap((item) => {
+            const available = availability.get(item.id)
+            if (available === undefined) return [item]
+            if (available <= 0) return []
+            return [
+              {
+                ...item,
+                availableQuantity: available,
+                quantity: Math.min(item.quantity, available),
+              },
+            ]
+          }),
+        )
+      },
+      () => {
+        if (!controller.signal.aborted) setPartsUnavailable(true)
+      },
+    )
     return () => controller.abort()
-  }, [partsPage, search])
+  }, [fullListing, requestPage, query])
   useEffect(() => {
     if (!scope) return
     const unregister = tenantResetRegistry.register((resetScope) => {
@@ -277,7 +329,8 @@ function TenantStickerQueue({
     return unregister
   }, [scope])
   const selectPart = (part: PartListItem) => {
-    if (!canGenerate || partsUnavailable) return
+    if (!canGenerate || partsUnavailable || loadingCatalogue) return
+    if (queuedIds.has(part.id)) return
     if (part.quantityAvailable <= 0) {
       setError(t('noStock'))
       return
@@ -365,13 +418,13 @@ function TenantStickerQueue({
           qrSvg: null,
         })) ?? [])
   const selectVisible = () => {
-    if (!canGenerate || partsUnavailable) return
+    if (!canGenerate || partsUnavailable || loadingCatalogue) return
     setSelection((current) => {
       const selected = new Set(current.map((item) => item.id))
       let remaining =
         MAX_STICKERS - current.reduce((sum, item) => sum + item.quantity, 0)
       const additions: QueueItem[] = []
-      for (const part of parts) {
+      for (const part of visibleParts) {
         if (
           selected.has(part.id) ||
           part.quantityAvailable <= 0 ||
@@ -454,7 +507,7 @@ function TenantStickerQueue({
                     !canGenerate ||
                     busy ||
                     partsUnavailable ||
-                    parts.length === 0
+                    visibleParts.length === 0
                   }
                   onClick={selectVisible}
                 >
@@ -469,10 +522,10 @@ function TenantStickerQueue({
               <Pagination
                 label={t('pagination')}
                 onPage={setPartsPage}
-                page={partsPage}
+                page={currentPage}
                 pageSize={PARTS_PAGE_SIZE}
-                total={partsTotal}
-                totalPages={partsTotalPages}
+                total={resultTotal}
+                totalPages={pageCount}
               />
             }
           >
@@ -481,11 +534,12 @@ function TenantStickerQueue({
                 <Notice tone="danger">{t('partsLoadFailed')}</Notice>
               </div>
             ) : null}
+            {loadingCatalogue ? <SkeletonRows rows={PARTS_PAGE_SIZE} /> : null}
             <ul
               className="divide-app-line m-0 grid list-none divide-y p-0"
               aria-label={t('partsList')}
             >
-              {parts.map((part) => {
+              {visibleParts.map((part) => {
                 const selected = selectedIds.has(part.id)
                 const queued = selection.find((item) => item.id === part.id)
                 const vehicle = part.car
@@ -513,13 +567,6 @@ function TenantStickerQueue({
                         >
                           {t('available', { count: part.quantityAvailable })}
                         </span>
-                        {queuedCounts.has(part.id) ? (
-                          <span className="rz-caption ml-2">
-                            {tc('queued', {
-                              count: queuedCounts.get(part.id)!,
-                            })}
-                          </span>
-                        ) : null}
                       </>
                     }
                     controls={
