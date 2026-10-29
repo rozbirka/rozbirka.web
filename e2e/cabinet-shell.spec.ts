@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import AxeBuilder from '@axe-core/playwright'
 import {
   upstreamOrigin,
@@ -3940,3 +3941,258 @@ test('storage stickers: inventory.view-only navigation opens locations and never
   ).toBeVisible()
   expect(fixture.partsRequests).toEqual([])
 })
+
+async function installStickerFileSharing(page: Page) {
+  await page.addInitScript(() => {
+    const state = window as unknown as Window & {
+      __stickerSharedFiles: string[]
+    }
+    state.__stickerSharedFiles = []
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: () => true,
+    })
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data: ShareData) => {
+        for (const file of data.files ?? [])
+          state.__stickerSharedFiles.push(await file.text())
+      },
+    })
+  })
+}
+async function emittedStickerCount(page: Page, selector: string) {
+  return page.evaluate((className) => {
+    const html =
+      (
+        window as unknown as Window & { __storagePrintHtml: string[] }
+      ).__storagePrintHtml.at(-1) ?? ''
+    return new DOMParser()
+      .parseFromString(html, 'text/html')
+      .querySelectorAll(className).length
+  }, selector)
+}
+async function downloadStickerCount(
+  page: Page,
+  className: 'label' | 'sticker',
+) {
+  const ready = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Завантажити', exact: true }).click()
+  const download = await ready
+  expect(download.suggestedFilename()).toBe('rozbirka-stickers.html')
+  const path = await download.path()
+  expect(path).not.toBeNull()
+  const html = await readFile(path, 'utf8')
+  return (html.match(new RegExp(`class="${className}"`, 'g')) ?? []).length
+}
+for (const mode of ['parts', 'locations'] as const) {
+  test(`unified sticker files: ${mode} selection, batch, partial confirmation and restore (fixture)`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000)
+    if (mode === 'locations') await installStorageStickerFixture(page, true)
+    else {
+      await installCabinetApiBoundary(page, { partsManage: true })
+      await page.route('**/api/v1/me/permissions', (route) =>
+        fulfillData(route, {
+          role: 'owner',
+          permissions: ['parts.view', 'stickers.manage'],
+          features: [],
+          entitlement: {
+            state: 'active',
+            usage: activeSubscription.usage,
+          },
+        }),
+      )
+      await page.route('**/api/v1/parts**', (route) => {
+        const path = new URL(route.request().url()).pathname
+        if (path === '/api/v1/parts')
+          return fulfillData(route, {
+            items: [
+              {
+                id: 'sticker-part-1',
+                name: 'Деталь для стікерів',
+                externalCode: 'F-1',
+                quantityAvailable: 25,
+                quantityTotal: 25,
+                quantityReserved: 0,
+                quantitySoldTotal: 0,
+                status: 'available',
+                car: null,
+                photos: [],
+                order: null,
+              },
+            ],
+            page: 1,
+            pageSize: 10,
+            total: 1,
+            totalPages: 1,
+          })
+        if (path === '/api/v1/parts/batch-sticker')
+          return fulfillData(route, {
+            items: [
+              {
+                id: 'sticker-part-1',
+                name: 'Деталь для стікерів',
+                qrCode: 'fixture-part:1',
+                quantity: 25,
+                carCode: null,
+                carBrand: null,
+                carModel: null,
+                carYear: null,
+                carId: null,
+                createdAt: '2026-10-01T00:00:00Z',
+              },
+            ],
+          })
+        return route.fallback()
+      })
+    }
+    await installStoragePrintPopup(page)
+    await installStickerFileSharing(page)
+    await loginFrom(page)
+    await page.goto(
+      mode === 'locations'
+        ? '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all'
+        : '/app/koval/stickers?part=sticker-part-1',
+    )
+    if (mode === 'parts') {
+      const increase = page.getByRole('button', {
+        name: 'Збільшити кількість Деталь для стікерів',
+        exact: true,
+      })
+      for (let i = 1; i < 25; i++) await increase.click()
+    }
+    const className = mode === 'parts' ? 'sticker' : 'label'
+    const selector = `.${className}`
+    await expect(
+      page.getByText(
+        'QR-стікери для запчастин і місць зберігання. Оберіть потрібні та підготуйте до друку.',
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await expect(
+      page.getByText('Вибрані стікери · 25', { exact: true }),
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'PDF · 25', exact: true }).click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(25)
+    expect(await downloadStickerCount(page, className)).toBe(25)
+    await page.getByRole('button', { name: 'Поділитися', exact: true }).click()
+    await expect
+      .poll(() =>
+        page.evaluate((className) => {
+          const html =
+            (
+              window as unknown as Window & { __stickerSharedFiles: string[] }
+            ).__stickerSharedFiles.at(-1) ?? ''
+          return new DOMParser()
+            .parseFromString(html, 'text/html')
+            .querySelectorAll(className).length
+        }, selector),
+      )
+      .toBe(25)
+    await expect(
+      page.getByRole('region', { name: 'Активна черга', exact: true }),
+    ).toHaveCount(0)
+    await page
+      .getByRole('button', { name: 'Підготувати 25', exact: true })
+      .click()
+    await expect(
+      page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText('Наступна партія черги · 20', { exact: true }),
+    ).toBeVisible()
+    expect(await downloadStickerCount(page, className)).toBe(20)
+    if (mode === 'parts') {
+      await page
+        .getByRole('checkbox', { name: 'Деталь для стікерів', exact: true })
+        .check()
+      await page
+        .getByRole('button', {
+          name: 'Збільшити кількість Деталь для стікерів',
+          exact: true,
+        })
+        .click()
+    } else {
+      await page
+        .getByRole('button', { name: 'Наступна сторінка', exact: true })
+        .click()
+      await page
+        .getByRole('button', { name: 'Наступна сторінка', exact: true })
+        .click()
+      await page
+        .getByRole('checkbox', { name: 'Обрати: Секція 01', exact: true })
+        .check()
+      await page
+        .getByRole('checkbox', { name: 'Обрати: Полиця 01', exact: true })
+        .check()
+    }
+    await page.getByRole('button', { name: 'PDF · 2', exact: true }).click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(2)
+    await expect(
+      page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Зняти', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Друк наступних 20', exact: true })
+      .click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(20)
+    const allPrinted = page.getByRole('button', {
+      name: 'Усі надруковано',
+      exact: true,
+    })
+    await expect(allPrinted).toBeVisible()
+    expect(await downloadStickerCount(page, className)).toBe(20)
+    await expect(allPrinted).toBeVisible()
+    await page.getByRole('button', { name: 'Частково', exact: true }).click()
+    const editor = page.getByRole('dialog', {
+      name: 'Що вдалося надрукувати?',
+      exact: true,
+    })
+    for (const number of [1, 3, 5, 8, 11, 14, 20])
+      await editor
+        .getByRole('checkbox', {
+          name:
+            mode === 'parts'
+              ? `Деталь для стікерів · Копія ${number}`
+              : `Зона ${String(number).padStart(2, '0')}`,
+          exact: true,
+        })
+        .check()
+    await editor
+      .getByRole('button', { name: 'Підтвердити · 7', exact: true })
+      .click()
+    await expect(
+      page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+    ).toBeVisible()
+    await page.reload()
+    await expect(
+      page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+    ).toBeVisible()
+    await page
+      .getByRole('button', { name: 'Друк наступних 18', exact: true })
+      .click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(18)
+    await page
+      .getByRole('button', { name: 'Усі надруковано', exact: true })
+      .click()
+    await expect(
+      page
+        .locator('.rz-toast')
+        .getByText('Чергу надруковано.', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Активна черга', exact: true }),
+    ).toHaveCount(0)
+    const overflow = await page.evaluate(() => ({
+      width: innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.width)
+    await page.screenshot({
+      path: testInfo.outputPath(`unified-stickers-${mode}-complete.png`),
+      fullPage: true,
+    })
+  })
+}
