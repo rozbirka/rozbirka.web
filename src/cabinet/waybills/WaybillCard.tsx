@@ -62,6 +62,7 @@ import {
   unresolvedState,
   type Signal,
 } from './waybill-presentation'
+import type { SwitchedOff } from './use-np-integration'
 import type { ListReturnState } from './WaybillList'
 import type { WaybillRights } from './WaybillsScreen'
 import { waybillsMessages } from './waybills-messages'
@@ -120,12 +121,15 @@ export function WaybillCard({
   rights,
   shipmentId,
   slug,
+  switchedOff = null,
 }: {
   fallback: ReactNode
   integrationId: string | null
   rights: WaybillRights
   shipmentId: string
   slug: string
+  /** When and by whom Nova Poshta was switched off, if it is. */
+  switchedOff?: SwitchedOff | null
 }) {
   const t = useT(waybillsMessages)
   const tw = useT(waybillMessages)
@@ -198,7 +202,11 @@ export function WaybillCard({
 
   const shipment = loaded?.shipment ?? null
   const stage = shipment === null ? null : stageOf(shipment)
-  const live = stage === 'created' || stage === 'sent' || stage === 'received'
+  // A switched-off integration (2.18) keeps the waybill readable, but nothing
+  // reaches the carrier: no refresh, recovery or any other action.
+  const off = shipment !== null && !shipment.trackingEnabled
+  const live =
+    !off && (stage === 'created' || stage === 'sent' || stage === 'received')
   const connections = useNpConnections(
     integrationId,
     rights.integrations && live && shipment?.connectionId != null,
@@ -347,8 +355,9 @@ export function WaybillCard({
     icon: <RefreshCw aria-hidden />,
     onSelect: () => void refresh(),
   }
-  const actions: CardAction[] =
-    lost !== null
+  const actions: CardAction[] = off
+    ? []
+    : lost !== null
       ? [
           {
             key: 'recover',
@@ -475,6 +484,7 @@ export function WaybillCard({
     ...(currentStage === 'unresolved'
       ? [unresolvedSignal(current.state, locale)]
       : []),
+    ...(off ? [{ label: t('notUpdating'), tone: 'neutral' as const }] : []),
     ...(lost !== null
       ? [{ label: tr('noAccess'), tone: 'danger' as const }]
       : []),
@@ -490,7 +500,38 @@ export function WaybillCard({
       ? null
       : (format.time(current.lastTrackedAt) ?? current.lastTrackedAt)
 
-  const notices = (
+  const lastKnownAt =
+    current.lastTrackedAt === null
+      ? null
+      : (format.dateTime(current.lastTrackedAt) ?? current.lastTrackedAt)
+  // What a live waybill would offer, shown switched off with the notice
+  // above as the reason (2.18).
+  const offActions =
+    current.number === null || draft || currentStage === 'cancelled' ? null : (
+      <div className="rz-btn-row">
+        <Button disabled>
+          <Printer aria-hidden />
+          {tm('printLabel')}
+        </Button>
+        <Button disabled>
+          <RefreshCw aria-hidden />
+          {tm('refreshStatus')}
+        </Button>
+        <Button disabled variant="ghost">
+          <Ban aria-hidden />
+          {tw('cancelWaybill')}
+        </Button>
+      </div>
+    )
+  const switchedOffDate =
+    switchedOff === null ? null : format.date(switchedOff.at)
+  const notices = off ? (
+    <Notice tone="info">
+      {switchedOffDate === null
+        ? t('switchedOffTextNoDate')
+        : t('switchedOffText', { date: switchedOffDate })}
+    </Notice>
+  ) : (
     <>
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
       {currentStage !== 'unresolved' ? null : waiting ? (
@@ -561,7 +602,10 @@ export function WaybillCard({
         </div>
         <div className="order-1 min-w-0 lg:order-none lg:col-start-1 lg:row-start-2">
           <WaybillDeliveryCard
-            actions={narrowActions}
+            actions={off ? (offActions ?? undefined) : narrowActions}
+            {...(off && lastKnownAt !== null
+              ? { hint: t('lastKnownStatus', { time: lastKnownAt }) }
+              : {})}
             notice={
               draft ? (
                 <Notice tone="info">{t('draftNotice')}</Notice>
@@ -578,7 +622,10 @@ export function WaybillCard({
           />
         </div>
         <div className="order-4 min-w-0 max-md:hidden lg:order-none lg:col-start-1 lg:row-start-3">
-          <WaybillHistoryCard events={current.events} />
+          <WaybillHistoryCard
+            events={current.events}
+            switchedOff={off ? switchedOff : null}
+          />
         </div>
         <div className="order-2 min-w-0 lg:order-none lg:col-start-2 lg:row-span-3 lg:row-start-1">
           <WaybillPaymentCard

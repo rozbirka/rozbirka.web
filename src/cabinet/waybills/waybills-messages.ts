@@ -130,6 +130,13 @@ export const waybillsMessages = defineMessages({
     lostText:
       'Ключ попереднього кабінету більше не діє. Показано останній відомий статус; дані й історія збережені.',
     notUpdating: 'Не оновлюється',
+    switchedOffText:
+      'Інтеграцію з Новою поштою відключено {date}. Статус ТТН не оновлюється — останній відомий показано нижче. Дії з накладною недоступні.',
+    switchedOffTextNoDate:
+      'Інтеграцію з Новою поштою відключено. Статус ТТН не оновлюється — останній відомий показано нижче. Дії з накладною недоступні.',
+    lastKnownStatus: 'Останній відомий статус · {time}',
+    historySwitchedOff: 'Інтеграцію відключено',
+    historySwitchedOffDetail: '{actor} · статуси не оновлюються',
     syncFailed:
       'Не вдалося оновити статус. Показано останній відомий — {time}.',
     syncFailedNever: 'Не вдалося оновити статус. Показано останній відомий.',
@@ -259,6 +266,13 @@ export const waybillsMessages = defineMessages({
     lostText:
       'The previous account’s key no longer works. Showing the last known status; the data and history are kept.',
     notUpdating: 'Not updating',
+    switchedOffText:
+      'The Nova Poshta integration was switched off on {date}. The waybill status is no longer updated — the last known one is shown below. Waybill actions are unavailable.',
+    switchedOffTextNoDate:
+      'The Nova Poshta integration was switched off. The waybill status is no longer updated — the last known one is shown below. Waybill actions are unavailable.',
+    lastKnownStatus: 'Last known status · {time}',
+    historySwitchedOff: 'Integration switched off',
+    historySwitchedOffDetail: '{actor} · statuses are not updated',
     syncFailed:
       'Couldn’t refresh the status. Showing the last known one — {time}.',
     syncFailedNever: 'Couldn’t refresh the status. Showing the last known one.',
@@ -393,6 +407,13 @@ export const waybillsMessages = defineMessages({
     lostText:
       'Klucz poprzedniego konta już nie działa. Pokazujemy ostatni znany status; dane i historia zostały zachowane.',
     notUpdating: 'Nie aktualizuje się',
+    switchedOffText:
+      'Integracja z Nova Poshta została wyłączona {date}. Status listu przewozowego nie jest aktualizowany — poniżej pokazujemy ostatni znany. Działania z listem są niedostępne.',
+    switchedOffTextNoDate:
+      'Integracja z Nova Poshta została wyłączona. Status listu przewozowego nie jest aktualizowany — poniżej pokazujemy ostatni znany. Działania z listem są niedostępne.',
+    lastKnownStatus: 'Ostatni znany status · {time}',
+    historySwitchedOff: 'Integracja wyłączona',
+    historySwitchedOffDetail: '{actor} · statusy nie są aktualizowane',
     syncFailed:
       'Nie udało się odświeżyć statusu. Pokazujemy ostatni znany — {time}.',
     syncFailedNever:

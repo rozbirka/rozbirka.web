@@ -74,6 +74,7 @@ export function WaybillsScreen({ definition }: CabinetModuleScreenProps) {
       rights={rights}
       shipmentId={shipmentId}
       slug={slug}
+      switchedOff={np.kind === 'ready' ? np.switchedOff : null}
     />
   )
 }

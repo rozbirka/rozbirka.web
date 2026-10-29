@@ -148,6 +148,32 @@ it('lists delivery, cash on delivery and sync as three columns (7.1)', async () 
   )
 })
 
+it('offers no refresh once Nova Poshta is switched off (2.18)', async () => {
+  vi.mocked(shippingApi.list).mockResolvedValue(
+    page([
+      row({ trackingEnabled: false }),
+      row({
+        id: 'ship-sync',
+        number: '20 4512 0091 4420',
+        syncProblem: 'tracking_refresh_failed',
+        trackingEnabled: false,
+      }),
+    ]),
+  )
+  renderList()
+
+  const table = await screen.findByRole('table', {
+    name: 'Накладні Нової пошти',
+  })
+  const rows = within(table).getAllByRole('row')
+  expect(within(rows[1]!).getByText('Не оновлюється')).toBeVisible()
+  expect(within(rows[2]!).getByText('Не оновлюється')).toBeVisible()
+  expect(within(rows[2]!).queryByText('Помилка')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Оновити статуси' })).toBeNull()
+  expect(screen.queryByText(/не оновлювал/)).toBeNull()
+  expect(shippingApi.refresh).not.toHaveBeenCalled()
+})
+
 it('keeps search, filters and page in the address and hands them to the card (7.2)', async () => {
   vi.mocked(shippingApi.list).mockResolvedValue(page([row()], 1))
   const user = userEvent.setup()
