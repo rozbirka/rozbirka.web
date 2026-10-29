@@ -94,6 +94,7 @@ export function DeliveryPaymentBlock({
 
   const standing = paymentStanding(delivery, locale)
   const pill: { label: string; tone: StatusTone } = {
+    unpriced: { label: standing.label, tone: 'neutral' as const },
     paid: { label: t('pillPaid'), tone: 'ok' as const },
     awaitingCod: { label: t('pillAwaitingCod'), tone: 'warn' as const },
     manual: { label: t('pillManual'), tone: 'warn' as const },
@@ -117,7 +118,9 @@ export function DeliveryPaymentBlock({
   const left = money(delivery.outstandingUah)
 
   let notice: ReactNode = null
-  if (state === 'paid' && autoCod !== null)
+  if (state === 'unpriced')
+    notice = <Notice tone="info">{t('noteTotalUnknown')}</Notice>
+  else if (state === 'paid' && autoCod !== null)
     notice = (
       <Notice tone="ok">
         {t('noteAutoBooked', {
@@ -232,7 +235,7 @@ export function DeliveryPaymentBlock({
     {
       key: 'due',
       label: t('factDue'),
-      value: money(delivery.agreedTotalUah),
+      value: delivery.agreedTotalUah > 0 ? money(delivery.agreedTotalUah) : '—',
     },
     {
       key: 'paid',
@@ -252,7 +255,12 @@ export function DeliveryPaymentBlock({
     {
       key: 'left',
       label: t('factLeft'),
-      value: state === 'late' ? '—' : orderClosingLeft(state) ? money(0) : left,
+      value:
+        state === 'late' || state === 'unpriced'
+          ? '—'
+          : orderClosingLeft(state)
+            ? money(0)
+            : left,
     },
   ]
 

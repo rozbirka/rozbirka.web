@@ -30,13 +30,33 @@ const payout = (paymentState: string | null) =>
 it('reads the money block apart from the parcel (9.1–9.7)', () => {
   expect(paymentState(delivery(), null)).toBe('due')
   expect(paymentState(delivery({ receivedAt: 'x' }), null)).toBe('awaitingCod')
-  expect(paymentState(delivery({ outstandingUah: 0 }), null)).toBe('paid')
+  expect(
+    paymentState(delivery({ appliedUah: 9600, outstandingUah: 0 }), null),
+  ).toBe('paid')
   expect(
     paymentState(delivery({ receivedAt: 'x' }), payout('CashRegisterRequired')),
   ).toBe('manual')
   expect(
     paymentState(delivery({ receivedAt: 'x' }), payout('NeedsReconciliation')),
   ).toBe('reconcile')
+})
+
+it('does not treat an unset hryvnia total as a received payment', () => {
+  expect(
+    paymentState(
+      delivery({ agreedTotalUah: 0, appliedUah: 0, outstandingUah: 0 }),
+      null,
+    ),
+  ).toBe('unpriced')
+})
+
+it('requires applied payment to cover the agreed total before saying paid', () => {
+  expect(
+    paymentState(delivery({ appliedUah: 0, outstandingUah: 0 }), null),
+  ).toBe('due')
+  expect(
+    paymentState(delivery({ appliedUah: 9600, outstandingUah: 0 }), null),
+  ).toBe('paid')
 })
 
 it('reads refunds and money that came after cancellation (10.6–10.16)', () => {

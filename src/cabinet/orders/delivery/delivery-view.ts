@@ -10,7 +10,7 @@ import {
   type MessageKey,
   type MessageParams,
 } from '@/i18n'
-import { deliveryStage, uah } from './delivery-money'
+import { deliveryStage, isFullyPaid, uah } from './delivery-money'
 import { orderChipKey } from './delivery-flow'
 import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
@@ -74,14 +74,13 @@ export function lifecycle(
   locale: Locale,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): LifecycleStep[] {
-  const paidAt =
-    delivery.outstandingUah > 0
-      ? null
-      : (delivery.payments
-          .filter((payment) => payment.refundedAt === null)
-          .map((payment) => payment.createdAt)
-          .sort()
-          .at(-1) ?? null)
+  const paidAt = isFullyPaid(delivery)
+    ? (delivery.payments
+        .filter((payment) => payment.refundedAt === null)
+        .map((payment) => payment.createdAt)
+        .sort()
+        .at(-1) ?? null)
+    : null
   const waybillAt =
     shipment?.events.find((event) => event.code === 'Created')?.recordedAt ??
     (hasWaybill(shipment) ? (shipment?.quoteAt ?? null) : null)
@@ -95,7 +94,7 @@ export function lifecycle(
     {
       key: 'paid',
       label: tr(locale, 'stepPaid'),
-      done: delivery.outstandingUah === 0,
+      done: isFullyPaid(delivery),
       at: paidAt,
     },
     {
@@ -178,7 +177,9 @@ export function paymentStanding(
   label: string
   tone: 'ok' | 'warn' | 'dim'
 } {
-  if (delivery.outstandingUah === 0)
+  if (delivery.agreedTotalUah <= 0)
+    return { label: tr(locale, 'standingUnknown'), tone: 'dim' }
+  if (isFullyPaid(delivery))
     return { label: tr(locale, 'standingFull'), tone: 'ok' }
   return delivery.appliedUah > 0
     ? { label: tr(locale, 'standingPartial'), tone: 'warn' }

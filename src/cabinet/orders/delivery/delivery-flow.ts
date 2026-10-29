@@ -1,6 +1,7 @@
 import type { StatusTone } from '@/components/app'
 import type { DeliveryOrder, DeliveryPayment } from '@/api/delivery'
 import type { Shipment } from '@/api/shipping'
+import { isFullyPaid } from './delivery-money'
 
 /**
  * Where the money and the return of a delivery order stand (module 46
@@ -85,6 +86,8 @@ export function orderChipKey(delivery: DeliveryOrder): {
  * frame group; the block draws its pill, notice and buttons from it.
  */
 export type PaymentState =
+  /** The delivery's agreed total has not been set yet. */
+  | 'unpriced'
   /** Nothing owed; the order also waits for the parcel when not received (9.7). */
   | 'paid'
   /** Received, the post-payment is on its way (9.2). */
@@ -121,7 +124,8 @@ export function paymentState(
   }
   if (delivery.workflowState === 'AwaitingRefund')
     return totals.refunded > 0 ? 'refundPartial' : 'refundDue'
-  if (delivery.outstandingUah <= 0) return 'paid'
+  if (delivery.agreedTotalUah <= 0) return 'unpriced'
+  if (isFullyPaid(delivery)) return 'paid'
   const payout = shipment?.paymentState ?? null
   if (payout === 'NeedsReconciliation') return 'reconcile'
   if (payout !== null && MANUAL.has(payout)) return 'manual'

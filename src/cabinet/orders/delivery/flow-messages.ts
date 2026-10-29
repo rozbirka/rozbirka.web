@@ -18,6 +18,8 @@ export const deliveryFlowMessages = defineMessages({
     factPaid: 'Сплачено',
     factLeft: 'Залишок',
     pillPaid: 'Оплачено',
+    noteTotalUnknown:
+      'Вкажіть погоджену суму замовлення у гривнях під час оформлення доставки.',
     pillAwaitingCod: 'Очікуємо післяплату',
     pillManual: 'Внесіть вручну',
     pillReconcile: 'Потрібна звірка',
@@ -217,6 +219,8 @@ export const deliveryFlowMessages = defineMessages({
     factPaid: 'Paid',
     factLeft: 'Balance',
     pillPaid: 'Paid',
+    noteTotalUnknown:
+      'Set the agreed order total in hryvnias when arranging delivery.',
     pillAwaitingCod: 'Awaiting cash on delivery',
     pillManual: 'Record manually',
     pillReconcile: 'Needs reconciling',
@@ -407,6 +411,8 @@ export const deliveryFlowMessages = defineMessages({
     factPaid: 'Zapłacono',
     factLeft: 'Pozostało',
     pillPaid: 'Opłacone',
+    noteTotalUnknown:
+      'Ustal uzgodnioną kwotę zamówienia w hrywnach podczas organizowania dostawy.',
     pillAwaitingCod: 'Czekamy na pobranie',
     pillManual: 'Wprowadź ręcznie',
     pillReconcile: 'Wymaga uzgodnienia',

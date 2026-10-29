@@ -299,6 +299,36 @@ it('offers the next step in the block that needs it (module 46 §9)', async () =
   expect(screen.queryByRole('button', { name: 'Створити ТТН' })).toBeNull()
 })
 
+it('does not claim payment was received before the hryvnia total is agreed', () => {
+  renderBody(
+    load({
+      money: delivery({
+        agreedTotalUah: 0,
+        appliedUah: 0,
+        outstandingUah: 0,
+        netReceivedUah: 0,
+        payments: [],
+      }),
+    }),
+  )
+
+  const payment = screen.getByRole('region', { name: 'Оплата' })
+  expect(within(payment).getByText('Суму не визначено')).toBeVisible()
+  expect(within(payment).queryByText('Оплачено')).toBeNull()
+  expect(screen.queryByText(/Оплату отримано/)).toBeNull()
+  expect(screen.getByRole('tab', { name: /Продаж/ })).toHaveTextContent(
+    'Суму не визначено',
+  )
+  const steps = screen.getByRole('list', { name: 'Етапи доставки' })
+  const paidStep = within(steps).getAllByRole('listitem')[0]!
+  expect(paidStep).not.toHaveAttribute('aria-current')
+  expect(paidStep).not.toHaveAttribute('data-state', 'done')
+  const facts = within(payment).getAllByRole('definition')
+  expect(facts[0]).toHaveTextContent('—')
+  expect(facts[1]).toHaveTextContent('0,00 UAH')
+  expect(facts[2]).toHaveTextContent('—')
+})
+
 it('offers payment without pretending it is required before a waybill', () => {
   renderBody(
     load({ money: delivery({ outstandingUah: 1200, appliedUah: 3400 }) }),

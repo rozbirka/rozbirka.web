@@ -3,7 +3,7 @@ import { Check } from 'lucide-react'
 import { Button, StatusPill, type StatusTone } from '@/components/app'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { uah } from './delivery-money'
+import { isFullyPaid, uah } from './delivery-money'
 import { deliveryMessages } from './messages'
 import { waybillMessages } from './waybill-messages'
 import {
@@ -73,9 +73,11 @@ export function DeliveryTabs({
       key: 'sales',
       label: t('tabSales'),
       meta:
-        delivery.outstandingUah === 0
-          ? t('tabPaid')
-          : t('tabBalance', { amount: uah(delivery.outstandingUah, locale) }),
+        delivery.agreedTotalUah <= 0
+          ? t('standingUnknown')
+          : isFullyPaid(delivery)
+            ? t('tabPaid')
+            : t('tabBalance', { amount: uah(delivery.outstandingUah, locale) }),
     },
     { key: 'shipping', label: t('tabShipping'), meta: parcel.label },
   ]

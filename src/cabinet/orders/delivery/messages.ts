@@ -55,6 +55,7 @@ export const deliveryMessages = defineMessages({
 
     // Payment standing
     standingFull: 'Оплачено повністю',
+    standingUnknown: 'Суму не визначено',
     standingPartial: 'Оплачено частково',
     standingNone: 'Не оплачено',
 
@@ -239,6 +240,7 @@ export const deliveryMessages = defineMessages({
     depositShort: '{amount} short',
 
     standingFull: 'Paid in full',
+    standingUnknown: 'Total not set',
     standingPartial: 'Partly paid',
     standingNone: 'Not paid',
 
@@ -418,6 +420,7 @@ export const deliveryMessages = defineMessages({
     depositShort: 'brakuje {amount}',
 
     standingFull: 'Opłacone w całości',
+    standingUnknown: 'Kwota nie została ustalona',
     standingPartial: 'Opłacone częściowo',
     standingNone: 'Nieopłacone',
 

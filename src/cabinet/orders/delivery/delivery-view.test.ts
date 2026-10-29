@@ -256,6 +256,24 @@ it('keeps a fresh order out only when the fix lives somewhere else', () => {
   ).toBe('Наступний крок — розрахувати доставку')
 })
 
+it('leaves the payment stage incomplete when the hryvnia total is unset', () => {
+  const unpriced = delivery({
+    agreedTotalUah: 0,
+    appliedUah: 0,
+    outstandingUah: 0,
+    payments: [],
+  })
+  expect(paymentStanding(unpriced, 'uk')).toEqual({
+    label: 'Суму не визначено',
+    tone: 'dim',
+  })
+  expect(lifecycle(unpriced, null, 'uk')[0]).toMatchObject({
+    done: false,
+    current: false,
+    meta: '',
+  })
+})
+
 it('does not call an untouched order partly paid', () => {
   // #284 in the yard's own data: agreed 4 000 ₴, not a hryvnia against it.
   expect(

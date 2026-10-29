@@ -14,6 +14,12 @@ export const uah = (value: number, locale: Locale): string =>
 export const wholeUah = (value: number, locale: Locale): string =>
   formatMoney(value, 'UAH', locale, { fractionDigits: 0 }) ?? '—'
 
+/** Core reports an unset agreed total as zero; that is not a settled order. */
+export const isFullyPaid = (delivery: DeliveryOrder): boolean =>
+  delivery.agreedTotalUah > 0 &&
+  delivery.appliedUah >= delivery.agreedTotalUah &&
+  delivery.outstandingUah <= 0
+
 /**
  * A hryvnia figure the way the cabinet is typed: a comma is a decimal
  * separator, and Core takes at most two decimals. Null when what was typed
