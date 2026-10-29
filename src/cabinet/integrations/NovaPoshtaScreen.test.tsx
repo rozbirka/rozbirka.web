@@ -341,7 +341,8 @@ it('opens the tab the link points at and counts what each one holds', async () =
     'aria-current',
     'page',
   )
-  expect(within(tabs).getByText('2 з помилкою')).toBeVisible()
+  // The counters arrive after the integration itself, which shows the tabs.
+  expect(await within(tabs).findByText('2 з помилкою')).toBeVisible()
   // Two separate questions on one tab: whether the carrier is asked to send
   // anything, and what happened to the events that arrived.
   expect(
