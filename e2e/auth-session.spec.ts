@@ -113,6 +113,7 @@ const accessByTenant = {
 interface RouteOptions {
   newUser?: boolean
   noTenants?: boolean
+  onlyOwnedTenant?: boolean
   parallel401?: boolean
 }
 
@@ -120,6 +121,7 @@ interface RouteState {
   protectedAttempts: Record<string, number>
   invitationAccepted: boolean
   tenantRequests: { path: string; tenantId: string | null }[]
+  unexpectedRequests: string[]
 }
 
 function containsRefreshCredential(value: unknown): boolean {
@@ -175,6 +177,7 @@ async function installApiBoundary(
     protectedAttempts: {},
     invitationAccepted: false,
     tenantRequests: [],
+    unexpectedRequests: [],
   }
 
   await page.route('**/*', async (route) => {
@@ -242,7 +245,14 @@ async function installApiBoundary(
         })
         return
       }
-      await fulfillData(route, options.noTenants ? [] : tenants)
+      await fulfillData(
+        route,
+        options.noTenants
+          ? []
+          : options.onlyOwnedTenant && !state.invitationAccepted
+            ? tenants.slice(0, 1)
+            : tenants,
+      )
       return
     }
     if (
@@ -267,6 +277,53 @@ async function installApiBoundary(
         permissions: ['cars.view'],
       })
       return
+    }
+
+    if (options.onlyOwnedTenant) {
+      if (
+        method === 'GET' &&
+        ['/api/v1/dashboard', '/api/v1/dashboard/analytics'].includes(path)
+      ) {
+        const response = await route.fetch({
+          url: `${upstreamOrigin()}${path}${url.search}`,
+        })
+        await route.fulfill({ response })
+        return
+      }
+      if (path === '/api/v1/me/feature-flags' && method === 'GET') {
+        await fulfillData(route, {})
+        return
+      }
+      if (path === '/api/v1/me/activity' && method === 'POST') {
+        await route.fulfill({ status: 204 })
+        return
+      }
+      if (path === '/api/v1/cars' && method === 'GET') {
+        await fulfillData(route, {
+          items: [],
+          page: 1,
+          pageSize: 5,
+          total: 0,
+          totalPages: 0,
+        })
+        return
+      }
+      if (
+        /^\/api\/v1\/tenants\/[^/]+\/onboarding$/.test(path) &&
+        method === 'GET'
+      ) {
+        await fulfillData(route, {
+          eligible: false,
+          deferred: false,
+          dismissed: false,
+          completed: true,
+          settingsCompleted: true,
+          currencySelected: true,
+          sourceCreated: true,
+          firstPartCreated: true,
+        })
+        return
+      }
     }
 
     const tenantId = request.headers()['x-tenant-id'] ?? null
@@ -320,6 +377,15 @@ async function installApiBoundary(
       return
     }
 
+    if (options.onlyOwnedTenant && path.startsWith('/api/v1/')) {
+      state.unexpectedRequests.push(`${method} ${path}`)
+      await fulfillData(
+        route,
+        { error: { code: 'UNEXPECTED_FIXTURE_REQUEST', message: path } },
+        500,
+      )
+      return
+    }
     await route.continue()
   })
 
@@ -762,6 +828,63 @@ test('logout expires the cookie and leaves the user as guest @auth-smoke', async
   await page.goto('/account')
   await expect(page).toHaveURL(/\/login$/)
 })
+
+for (const width of [1280, 390]) {
+  test(`owner joins another yard as manager from the tenant picker at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    const state = await installApiBoundary(page, { onlyOwnedTenant: true })
+    await loginFrom(page)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Олена')
+
+    if (width < 768) {
+      await page.getByRole('button', { name: 'Ще', exact: true }).click()
+    }
+    await page
+      .getByRole('combobox', { name: 'Перемкнути розбірку' })
+      .filter({ visible: true })
+      .selectOption('')
+    const dialog = page.getByRole('dialog', {
+      name: 'Приєднатися до іншої розбірки',
+    })
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.getByRole('button', { name: 'Переглянути запрошення' }),
+    ).toBeDisabled()
+    await dialog.getByLabel('Код запрошення').fill('  INVITE123  ')
+    await expect(dialog.getByLabel('Код запрошення')).toBeFocused()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    await dialog.getByRole('button', { name: 'Переглянути запрошення' }).click()
+    await expect(page).toHaveURL('/invite/INVITE123')
+    await expect(
+      page.getByRole('heading', { name: 'Розбірка Соболя' }),
+    ).toBeVisible()
+    await expect(page.getByText('Менеджер', { exact: true })).toBeVisible()
+    expect(state.invitationAccepted).toBe(false)
+    await page.getByRole('button', { name: 'Прийняти запрошення' }).click()
+    await expect(page).toHaveURL('/app/sobol/dashboard')
+    expect(state.invitationAccepted).toBe(true)
+    if (width < 768) {
+      await page.getByRole('button', { name: 'Ще', exact: true }).click()
+    }
+    const switcher = page
+      .getByRole('combobox', { name: 'Перемкнути розбірку' })
+      .filter({ visible: true })
+    await expect(switcher).toHaveValue('tenant-2')
+    await switcher.selectOption('tenant-1')
+    await expect(page).toHaveURL('/app/koval/dashboard')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Олена')
+    expect(errors).toEqual([])
+    expect(state.unexpectedRequests).toEqual([])
+  })
+}
 
 test('invitation resumes after explicit registration and name into the accepted tenant @registration-smoke', async ({
   page,

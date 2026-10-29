@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, useLocation } from 'react-router'
 import { expect, it, vi } from 'vitest'
 import type { Tenant } from '../api/types'
 import { TenantSwitcher } from './TenantSwitcher'
@@ -40,6 +42,7 @@ it('exposes tenant names and awaits one switch before accepting another', async 
       tenants={tenants}
       onSwitch={onSwitch}
     />,
+    { wrapper: MemoryRouter },
   )
 
   const switcher = screen.getByRole('combobox', {
@@ -79,6 +82,7 @@ it('settles the guard after a rejected switch without leaking the rejection', as
         tenants={tenants}
         onSwitch={onSwitch}
       />,
+      { wrapper: MemoryRouter },
     )
     const switcher = screen.getByRole('combobox', {
       name: 'Перемкнути розбірку',
@@ -98,4 +102,75 @@ it('settles the guard after a rejected switch without leaking the rejection', as
   } finally {
     window.removeEventListener('unhandledrejection', unhandledRejection)
   }
+})
+
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().pathname}</output>
+}
+
+it.each([{}, { compact: true }, { framed: true }])(
+  'lets an owner with one yard open an invitation in the %j switcher',
+  async (presentation) => {
+    const user = userEvent.setup()
+    const onSwitch = vi.fn()
+    render(
+      <MemoryRouter initialEntries={['/app/koval/dashboard']}>
+        <TenantSwitcher
+          tenant={activeTenant}
+          tenants={[activeTenant]}
+          onSwitch={onSwitch}
+          {...presentation}
+        />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+
+    const switcher = screen.getByRole('combobox', {
+      name: 'Перемкнути розбірку',
+    })
+    expect(switcher).toBeEnabled()
+    await user.selectOptions(switcher, '')
+    expect(
+      screen.getByRole('dialog', { name: 'Приєднатися до іншої розбірки' }),
+    ).toBeVisible()
+    const next = screen.getByRole('button', { name: 'Переглянути запрошення' })
+    expect(next).toBeDisabled()
+    const input = screen.getByRole('textbox', { name: 'Код запрошення' })
+    await user.type(input, '   ')
+    expect(next).toBeDisabled()
+    await user.clear(input)
+    await user.type(input, ' AB/CD ')
+    await user.click(next)
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/invite/AB%2FCD')
+    expect(onSwitch).not.toHaveBeenCalled()
+  },
+)
+
+it('cancels joining without switching yards and restores focus to the picker', async () => {
+  const user = userEvent.setup()
+  const onSwitch = vi.fn()
+  render(
+    <TenantSwitcher
+      tenant={activeTenant}
+      tenants={tenants}
+      onSwitch={onSwitch}
+    />,
+    { wrapper: MemoryRouter },
+  )
+  const switcher = screen.getByRole('combobox', { name: 'Перемкнути розбірку' })
+  await user.selectOptions(switcher, '')
+  await user.type(
+    screen.getByRole('textbox', { name: 'Код запрошення' }),
+    'OLD',
+  )
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(switcher).toHaveFocus()
+  expect(switcher).toHaveValue('koval')
+  await user.selectOptions(switcher, '')
+  expect(screen.getByRole('textbox', { name: 'Код запрошення' })).toHaveValue(
+    '',
+  )
+  expect(onSwitch).not.toHaveBeenCalled()
 })
