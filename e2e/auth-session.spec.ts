@@ -113,6 +113,7 @@ const accessByTenant = {
 interface RouteOptions {
   newUser?: boolean
   noTenants?: boolean
+  onlyOwnedTenant?: boolean
   parallel401?: boolean
 }
 
@@ -242,7 +243,14 @@ async function installApiBoundary(
         })
         return
       }
-      await fulfillData(route, options.noTenants ? [] : tenants)
+      await fulfillData(
+        route,
+        options.noTenants
+          ? []
+          : options.onlyOwnedTenant && !state.invitationAccepted
+            ? tenants.slice(0, 1)
+            : tenants,
+      )
       return
     }
     if (
@@ -762,6 +770,60 @@ test('logout expires the cookie and leaves the user as guest @auth-smoke', async
   await page.goto('/account')
   await expect(page).toHaveURL(/\/login$/)
 })
+
+for (const width of [1280, 390]) {
+  test(`owner joins another yard as manager from the tenant picker at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    const state = await installApiBoundary(page, { onlyOwnedTenant: true })
+    await loginFrom(page)
+
+    if (width < 768) {
+      await page.getByRole('button', { name: 'Ще', exact: true }).click()
+    }
+    await page
+      .getByRole('combobox', { name: 'Перемкнути розбірку' })
+      .filter({ visible: true })
+      .selectOption('')
+    const dialog = page.getByRole('dialog', {
+      name: 'Приєднатися до іншої розбірки',
+    })
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.getByRole('button', { name: 'Переглянути запрошення' }),
+    ).toBeDisabled()
+    await dialog.getByLabel('Код запрошення').fill('  INVITE123  ')
+    await expect(dialog.getByLabel('Код запрошення')).toBeFocused()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    await dialog.getByRole('button', { name: 'Переглянути запрошення' }).click()
+    await expect(page).toHaveURL('/invite/INVITE123')
+    await expect(
+      page.getByRole('heading', { name: 'Розбірка Соболя' }),
+    ).toBeVisible()
+    await expect(page.getByText('Менеджер', { exact: true })).toBeVisible()
+    expect(state.invitationAccepted).toBe(false)
+    await page.getByRole('button', { name: 'Прийняти запрошення' }).click()
+    await expect(page).toHaveURL('/app/sobol/dashboard')
+    expect(state.invitationAccepted).toBe(true)
+    if (width < 768) {
+      await page.getByRole('button', { name: 'Ще', exact: true }).click()
+    }
+    const switcher = page
+      .getByRole('combobox', { name: 'Перемкнути розбірку' })
+      .filter({ visible: true })
+    await expect(switcher).toHaveValue('tenant-2')
+    await switcher.selectOption('tenant-1')
+    await expect(page).toHaveURL('/app/koval/dashboard')
+    expect(errors).toEqual([])
+  })
+}
 
 test('invitation resumes after explicit registration and name into the accepted tenant @registration-smoke', async ({
   page,

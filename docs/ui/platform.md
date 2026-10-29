@@ -20,6 +20,10 @@ Field/input context зв’язує label, hint та error. Radix у FormDialog/
 
 [Routes](../../src/routes/routes.tsx), [AuthContext](../../src/auth/AuthContext.tsx) та [guards](../../src/auth/guards.tsx) задають навігацію й client gates. [Module registry](../../src/cabinet/module-registry.ts) — джерело складу модулів кабінету. Client visibility не замінює backend authorization.
 
+[TenantSwitcher](../../src/cabinet/TenantSwitcher.tsx) має пункт «Приєднатися до іншої розбірки» у звичайному, згорнутому та мобільному меню, навіть коли доступна лише одна розбірка. `FormDialog` приймає код запрошення та відкриває наявний `/invite/:code` для перегляду назви й ролі перед підтвердженням. Прийняття використовує поточну сесію користувача; власник однієї розбірки може приєднатися до іншої з роллю із запрошення. Скасування форми повертає фокус на перемикач.
+
+Фокус перемикача розбірки позначається нейтральним фоном без помаранчевої обводки.
+
 [Main entry](../../src/main.tsx) розрізняє hydrateRoot і createRoot; [server entry](../../src/entry-server.tsx) бере участь у prerender. Новий route перевіряти разом із SEO/prerender правилами з AGENTS.md, а не лише через client navigation.
 
 ## Повідомлення про помилки

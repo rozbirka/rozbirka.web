@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Link2Off, RefreshCw } from 'lucide-react'
 import { invitationsApi, type InvitationInfo } from '@/api/invitations'
 import { normalizeApiProblem } from '@/api/errors'
 import { tenantPreference } from '@/api/tenant-preference'
@@ -17,9 +17,9 @@ import {
   FactRows,
   Notice,
   SkeletonRows,
+  StateScreen,
   StatusPill,
   useOperation,
-  type NoticeTone,
   type StateTone,
 } from '@/components/app'
 
@@ -238,17 +238,19 @@ export function InviteScreen() {
   }
 
   return (
-    <div className="rz flex min-h-screen flex-col">
-      <header className="flex items-center justify-end px-4 pt-4">
+    <div className="rz relative flex min-h-dvh flex-col">
+      <header className="absolute inset-x-0 top-0 flex items-center justify-end px-4 pt-4">
         <Link className="rz-btn rz-btn--ghost" to="/">
           <ArrowLeft aria-hidden />
           {t('toHome')}
         </Link>
       </header>
 
-      <main className="grid flex-1 content-start justify-items-center px-4 pt-2 pb-6 sm:pt-4">
+      <main className="grid flex-1 content-center justify-items-center px-4 py-16">
         <div className="grid w-full max-w-[420px] min-w-0 gap-5">
-          <AuthBrand />
+          <div className="justify-self-center">
+            <AuthBrand />
+          </div>
           {loading && (
             <>
               <h1 className="sr-only">{t('heading')}</h1>
@@ -258,9 +260,7 @@ export function InviteScreen() {
 
           {!loading && errorState && (
             <>
-              {stateContent[errorState].resolution === 'retry' ? (
-                <h1 className="sr-only">{t('heading')}</h1>
-              ) : null}
+              <h1 className="sr-only">{t('heading')}</h1>
               <InvitationOutcome
                 loginHref={loginHref}
                 onRetry={reloadInvitation}
@@ -410,36 +410,27 @@ function InvitationOutcome({
     )
   }
 
-  // A dead end keeps the auth column's own layout: the heading names what
-  // happened, one notice says why, one action resolves it.
   const action =
     content.resolution === 'login' ? (
-      <Button asChild className="rz-btn--block" size="lg" variant="primary">
+      <Button asChild size="lg" variant="primary">
         <Link to={loginHref}>
           {state === 'wrong-account' ? t('signInOther') : t('signInPhone')}
         </Link>
       </Button>
     ) : (
-      <Button asChild className="rz-btn--block" size="lg" variant="primary">
+      <Button asChild size="lg" variant="primary">
         <Link to="/">{t('backHome')}</Link>
       </Button>
     )
 
   return (
-    <section aria-label={t('state')} className="grid gap-5">
-      <div className="grid gap-1.5">
-        <p className="rz-eyebrow m-0">{t('eyebrow')}</p>
-        <h1 className="rz-h-page break-words">{title}</h1>
-      </div>
-      <Notice tone={NOTICE_TONE[content.tone]}>{description}</Notice>
-      {action}
-    </section>
+    <StateScreen
+      actions={action}
+      description={description}
+      icon={<Link2Off aria-hidden />}
+      label={t('state')}
+      title={title}
+      tone={content.tone}
+    />
   )
 }
-
-const NOTICE_TONE = {
-  neutral: 'info',
-  brand: 'info',
-  warn: 'warn',
-  danger: 'danger',
-} as const satisfies Record<StateTone, NoticeTone>
