@@ -61,6 +61,9 @@ vi.mock('@/api/integrations', () => ({
     verify: vi.fn(),
     activate: vi.fn(),
     deactivate: vi.fn(),
+    deactivationImpact: vi.fn(() =>
+      Promise.resolve({ inTransitCount: 0, codCount: 0, expectedCodUah: 0 }),
+    ),
     diagnose: vi.fn(),
   },
 }))
@@ -144,6 +147,8 @@ const integration: Integration = {
   verifiedAt: '2026-09-21T09:31:00Z',
   lastErrorCode: null,
   settings: { configured: true, activeDispatchPoints: 3 },
+  deactivatedAt: null,
+  deactivatedBy: null,
 }
 
 beforeEach(() => {
@@ -180,46 +185,50 @@ const renderScreen = (tab = '') =>
     </MemoryRouter>,
   )
 
-it('never shows a stored key and sends only its replacement', async () => {
-  vi.mocked(integrationsApi.saveNovaPoshtaKey).mockResolvedValue(integration)
-  const user = userEvent.setup()
-
+it('leaves the key and the on/off switch out of the settings tab', async () => {
   renderScreen('/settings')
 
-  expect(await screen.findByText('••••••••••••••••')).toBeVisible()
-  await user.click(screen.getByRole('button', { name: 'Замінити ключ' }))
-  await user.type(
-    screen.getByLabelText('Новий ключ доступу'),
-    '  fixture-key  ',
-  )
-  await user.click(screen.getByRole('button', { name: 'Зберегти ключ' }))
-
-  expect(integrationsApi.saveNovaPoshtaKey).toHaveBeenCalledWith(
-    'integration-1',
-    'fixture-key',
-  )
-  expect(await screen.findByText('••••••••••••••••')).toBeVisible()
-})
-
-it('cannot be switched on before a key is stored', async () => {
-  vi.mocked(integrationsApi.getById).mockResolvedValue({
-    ...integration,
-    status: 'draft',
-    configured: false,
-    verifiedAt: null,
-  })
-
-  renderScreen('/settings')
-
-  const toggle = await screen.findByRole('button', {
-    name: 'Увімкнути інтеграцію',
-  })
-  expect(toggle).toBeDisabled()
   expect(
-    screen.getByRole('button', { name: 'Перевірити підключення' }),
-  ).toBeDisabled()
-  expect(screen.getByText('ключ не збережено')).toBeVisible()
+    await screen.findByRole('heading', { name: 'Депозит за доставку' }),
+  ).toBeVisible()
+  expect(screen.queryByText('••••••••••••••••')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Замінити ключ' })).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Вимкнути інтеграцію' }),
+  ).toBeNull()
+  expect(integrationsApi.saveNovaPoshtaKey).not.toHaveBeenCalled()
+  expect(integrationsApi.deactivate).not.toHaveBeenCalled()
 })
+
+it.each(['', '/dispatch-points', '/webhook', '/settings'])(
+  'offers only the connection before Nova Poshta is connected (%s)',
+  async (suffix) => {
+    vi.mocked(integrationsApi.getById).mockResolvedValue({
+      ...integration,
+      status: 'draft',
+      configured: false,
+      verifiedAt: null,
+    })
+
+    renderScreen(suffix)
+
+    expect(await screen.findByText(/Нову пошту ще не підключено/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Підключити' })).toHaveAttribute(
+      'href',
+      '/app/koval/settings/integrations/integration-1/connect',
+    )
+    expect(
+      screen.queryByRole('navigation', { name: 'Розділи інтеграції' }),
+    ).toBeNull()
+    expect(screen.queryByText('ключ не збережено')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Увімкнути інтеграцію' }),
+    ).toBeNull()
+    expect(integrationsApi.trackingSubscription).not.toHaveBeenCalled()
+    expect(integrationsApi.webhookStatus).not.toHaveBeenCalled()
+    expect(integrationsApi.dispatchPoints).not.toHaveBeenCalled()
+  },
+)
 
 it('names the step a failed verification stopped at', async () => {
   vi.mocked(integrationsApi.getById).mockResolvedValue({
@@ -268,12 +277,16 @@ it('keeps a failed verification visible and does not start diagnostics', async (
     message: 'Нова пошта не прийняла цей ключ API.',
     code: 'nova_poshta_unauthorized',
   })
+  vi.mocked(integrationsApi.getById).mockResolvedValue({
+    ...integration,
+    status: 'error',
+  })
   const user = userEvent.setup()
 
-  renderScreen('/settings')
+  renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Перевірити підключення' }),
+    await screen.findByRole('button', { name: 'Перевірити ще раз' }),
   )
 
   expect(
@@ -294,34 +307,19 @@ it('confirms a successful verification', async () => {
     lastErrorCode: null,
     checks: [],
   })
-  const user = userEvent.setup()
-
-  renderScreen('/settings')
-
-  await user.click(
-    await screen.findByRole('button', { name: 'Перевірити підключення' }),
-  )
-
-  expect(await screen.findByText('Підключення перевірено.')).toBeVisible()
-})
-
-it('turns a live integration off with the consequence spelled out', async () => {
-  vi.mocked(integrationsApi.deactivate).mockResolvedValue({
+  vi.mocked(integrationsApi.getById).mockResolvedValue({
     ...integration,
-    status: 'inactive',
+    status: 'error',
   })
   const user = userEvent.setup()
 
-  renderScreen('/settings')
+  renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути інтеграцію' }),
+    await screen.findByRole('button', { name: 'Перевірити ще раз' }),
   )
 
-  expect(integrationsApi.deactivate).toHaveBeenCalledWith('integration-1')
-  expect(
-    await screen.findByRole('button', { name: 'Увімкнути інтеграцію' }),
-  ).toBeVisible()
+  expect(await screen.findByText('Підключення перевірено.')).toBeVisible()
 })
 
 it('opens the tab the link points at and counts what each one holds', async () => {
@@ -343,7 +341,8 @@ it('opens the tab the link points at and counts what each one holds', async () =
     'aria-current',
     'page',
   )
-  expect(within(tabs).getByText('2 з помилкою')).toBeVisible()
+  // The counters arrive after the integration itself, which shows the tabs.
+  expect(await within(tabs).findByText('2 з помилкою')).toBeVisible()
   // Two separate questions on one tab: whether the carrier is asked to send
   // anything, and what happened to the events that arrived.
   expect(
@@ -691,12 +690,122 @@ it('explains who may change the settings instead of offering them', async () => 
 
   expect(
     await screen.findByText(
-      'Змінювати налаштування може власник або користувач із правом «Налаштування інтеграцій».',
+      'Змінювати налаштування й відключати інтеграцію може власник або користувач із правом «Налаштування інтеграцій».',
     ),
   ).toBeVisible()
   expect(
     screen.queryByRole('link', { name: 'Змінити налаштування' }),
   ).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Відключити' })).toBeNull()
+})
+
+const switchedOff: Integration = {
+  ...integration,
+  status: 'inactive',
+  deactivatedAt: '2026-10-28T08:14:00Z',
+  deactivatedBy: 'Олег К.',
+}
+
+it('names the waybills still on the road before disconnecting', async () => {
+  const user = userEvent.setup()
+  configuredDelivery()
+  vi.mocked(integrationsApi.deactivationImpact).mockResolvedValue({
+    inTransitCount: 3,
+    codCount: 2,
+    expectedCodUah: 8400,
+  })
+  vi.mocked(integrationsApi.deactivate).mockResolvedValue(switchedOff)
+  renderScreen()
+
+  await user.click(await screen.findByRole('button', { name: 'Відключити' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Відключити Нову пошту?',
+  })
+  expect(
+    await within(dialog).findByText(
+      /^3 ТТН у дорозі, 2 з них із післяплатою 8 400/,
+    ),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByText('Є відправлення, які ще в дорозі.'),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByText('Відправлення в Новій пошті не скасовуються.'),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByRole('button', { name: 'Скасувати' }),
+  ).toHaveFocus()
+
+  await user.click(within(dialog).getByRole('button', { name: 'Відключити' }))
+
+  expect(integrationsApi.deactivate).toHaveBeenCalledWith('integration-1')
+  expect(
+    await screen.findByText('Нову пошту відключено. Дані збережено.'),
+  ).toBeVisible()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByText('Інтеграцію відключено')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Підключити знову' })).toBeVisible()
+})
+
+it('leaves money out of the warning without the finance permission', async () => {
+  const user = userEvent.setup()
+  configuredDelivery()
+  vi.mocked(integrationsApi.deactivationImpact).mockResolvedValue({
+    inTransitCount: 1,
+    codCount: null,
+    expectedCodUah: null,
+  })
+  renderScreen()
+
+  await user.click(await screen.findByRole('button', { name: 'Відключити' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(
+    await within(dialog).findByText(
+      '1 ТТН у дорозі. Після відключення їхні статуси не оновлюватимуться — стежте за ними в кабінеті Нової пошти.',
+    ),
+  ).toBeVisible()
+  expect(within(dialog).queryByText(/післяплат/)).toBeNull()
+})
+
+it('says what is kept while switched off and connects again', async () => {
+  const user = userEvent.setup()
+  configuredDelivery()
+  vi.mocked(integrationsApi.getById).mockResolvedValue(switchedOff)
+  vi.mocked(integrationsApi.activate).mockResolvedValue(integration)
+  renderScreen()
+
+  expect(
+    await screen.findByText(
+      /^Відключено · Олег К\. · 28\.10\.2026, 10:14\. Ключ і налаштування збережено\.$/,
+    ),
+  ).toBeVisible()
+  expect(screen.getByText('Зупинено')).toBeVisible()
+  expect(screen.getByText('Відключена')).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Відключити' })).toBeNull()
+  expect(
+    screen.queryByRole('link', { name: 'Змінити налаштування' }),
+  ).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Підключити знову' }))
+
+  expect(integrationsApi.activate).toHaveBeenCalledWith('integration-1')
+  expect(
+    await screen.findByText(
+      'Нову пошту підключено. Доставку можна оформлювати із замовлень.',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText('Інтеграцію відключено')).toBeNull()
+})
+
+it('keeps a switched-off integration out of the settings editor', async () => {
+  configuredDelivery()
+  vi.mocked(integrationsApi.getById).mockResolvedValue(switchedOff)
+  renderScreen('/settings')
+
+  expect(
+    await screen.findByRole('heading', { name: 'Депозит за доставку' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Перевірити зміни' })).toBeNull()
 })
 
 it('changes only the till in place and marks the dispatch card updated', async () => {

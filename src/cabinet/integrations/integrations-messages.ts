@@ -33,8 +33,6 @@ export const integrationsMessages = defineMessages({
     connect: 'Підключити',
     connecting: 'Підключаємо…',
     // Nova Poshta screen
-    noRename:
-      'Перейменувати підключення не можна — назву задає каталог сервісів.',
     noShipmentTotals:
       'Скільки доставок за місяць і скільки їх у дорозі — сервіс не рахує: відправлення читаються по одному замовленню.',
     fact1:
@@ -48,9 +46,6 @@ export const integrationsMessages = defineMessages({
     openError: 'Не вдалося відкрити інтеграцію.',
     backToList: 'Повернутися до списку',
     verified: 'Підключення перевірено.',
-    keySaved: 'Ключ збережено й перевірено.',
-    turnedOff: 'Інтеграцію вимкнено.',
-    turnedOn: 'Інтеграцію увімкнено.',
     tabOverview: 'Огляд',
     tabPoints: 'Точки відправлення',
     tabStatuses: 'Статуси',
@@ -61,7 +56,6 @@ export const integrationsMessages = defineMessages({
     stateOn: 'Увімкнена',
     stateOff: 'Вимкнена',
     switchLabel: 'Інтеграція увімкнена',
-    saveKeyFirst: 'Спершу збережіть ключ доступу.',
     sectionsNav: 'Розділи інтеграції',
     statusCard: 'Стан підключення',
     rejected: 'Сервіс відхилив підключення',
@@ -74,11 +68,9 @@ export const integrationsMessages = defineMessages({
       'Ключ приймається сервісом. Довідники міст і відділень доступні.',
     addKeyHint:
       'Додайте ключ доступу в «Налаштуваннях», щоб перевірити підключення.',
-    nothingToVerify: 'Спершу збережіть ключ доступу — перевіряти поки нічого.',
     verifying: 'Перевіряємо…',
     verifyAgain: 'Перевірити ще раз',
     replaceKey: 'Замінити ключ',
-    addKey: 'Додати ключ',
     statPoints: 'Точок відправлення',
     statPointsNote: 'Звідки можна відправляти посилки',
     statFailures: 'Помилок обробки',
@@ -87,24 +79,6 @@ export const integrationsMessages = defineMessages({
     statDeliveries: 'Доставок за 30 днів',
     statDeliveriesNote: 'Сервіс не рахує відправлення по розбірці',
     factsTitle: 'Що робить інтеграція',
-    connectionCard: 'Підключення',
-    nameLabel: 'Назва підключення',
-    newKeyHint:
-      'Після збереження ключ буде приховано. Старий ключ перестане діяти одразу.',
-    newKeyLabel: 'Новий ключ доступу',
-    saveKey: 'Зберегти ключ',
-    keyNotSaved: 'ключ не збережено',
-    keyHiddenNote:
-      'Збережений ключ не показуємо відкритим текстом — його можна тільки замінити на новий.',
-    verifyConnection: 'Перевірити підключення',
-    disableCard: 'Вимкнення',
-    enableCard: 'Увімкнення',
-    disableText:
-      'Створені ТТН залишаться дійсними, але оформити нову доставку й отримати оновлення статусів буде неможливо.',
-    enableText:
-      'Після ввімкнення доставку можна буде оформити просто з картки замовлення. Спершу збережіть і перевірте ключ доступу.',
-    disableButton: 'Вимкнути інтеграцію',
-    enableButton: 'Увімкнути інтеграцію',
   },
   'en-GB': {
     loading: 'Loading…',
@@ -136,8 +110,6 @@ export const integrationsMessages = defineMessages({
     availableTitle: 'Available to connect',
     connect: 'Connect',
     connecting: 'Connecting…',
-    noRename:
-      'The connection can’t be renamed — the name comes from the service catalogue.',
     noShipmentTotals:
       'The service doesn’t count deliveries per month or parcels in transit: shipments are read one order at a time.',
     fact1:
@@ -151,9 +123,6 @@ export const integrationsMessages = defineMessages({
     openError: 'Couldn’t open the integration.',
     backToList: 'Back to the list',
     verified: 'Connection checked.',
-    keySaved: 'Key saved and checked.',
-    turnedOff: 'Integration turned off.',
-    turnedOn: 'Integration turned on.',
     tabOverview: 'Overview',
     tabPoints: 'Dispatch points',
     tabStatuses: 'Statuses',
@@ -164,7 +133,6 @@ export const integrationsMessages = defineMessages({
     stateOn: 'On',
     stateOff: 'Off',
     switchLabel: 'Integration on',
-    saveKeyFirst: 'Save an access key first.',
     sectionsNav: 'Integration sections',
     statusCard: 'Connection status',
     rejected: 'The service rejected the connection',
@@ -176,11 +144,9 @@ export const integrationsMessages = defineMessages({
     keyAccepted:
       'The service accepts the key. City and branch directories are available.',
     addKeyHint: 'Add an access key in “Settings” to check the connection.',
-    nothingToVerify: 'Save an access key first — there’s nothing to check yet.',
     verifying: 'Checking…',
     verifyAgain: 'Check again',
     replaceKey: 'Replace key',
-    addKey: 'Add key',
     statPoints: 'Dispatch points',
     statPointsNote: 'Where parcels can be sent from',
     statFailures: 'Processing errors',
@@ -189,24 +155,6 @@ export const integrationsMessages = defineMessages({
     statDeliveries: 'Deliveries in 30 days',
     statDeliveriesNote: 'The service doesn’t count shipments per business',
     factsTitle: 'What the integration does',
-    connectionCard: 'Connection',
-    nameLabel: 'Connection name',
-    newKeyHint:
-      'Once saved, the key will be hidden. The old key stops working immediately.',
-    newKeyLabel: 'New access key',
-    saveKey: 'Save key',
-    keyNotSaved: 'no key saved',
-    keyHiddenNote:
-      'We never show the saved key in plain text — you can only replace it with a new one.',
-    verifyConnection: 'Check connection',
-    disableCard: 'Turning off',
-    enableCard: 'Turning on',
-    disableText:
-      'Waybills already created stay valid, but you won’t be able to arrange new deliveries or receive status updates.',
-    enableText:
-      'Once it’s on, delivery can be arranged straight from the order card. Save and check an access key first.',
-    disableButton: 'Turn off integration',
-    enableButton: 'Turn on integration',
   },
   pl: {
     loading: 'Wczytywanie…',
@@ -237,8 +185,6 @@ export const integrationsMessages = defineMessages({
     availableTitle: 'Dostępne do połączenia',
     connect: 'Połącz',
     connecting: 'Łączenie…',
-    noRename:
-      'Nie można zmienić nazwy połączenia — nazwę nadaje katalog usług.',
     noShipmentTotals:
       'Usługa nie liczy dostaw w miesiącu ani przesyłek w drodze: przesyłki są odczytywane osobno dla każdego zamówienia.',
     fact1:
@@ -253,9 +199,6 @@ export const integrationsMessages = defineMessages({
     openError: 'Nie udało się otworzyć integracji.',
     backToList: 'Wróć do listy',
     verified: 'Połączenie sprawdzone.',
-    keySaved: 'Klucz zapisany i sprawdzony.',
-    turnedOff: 'Integracja wyłączona.',
-    turnedOn: 'Integracja włączona.',
     tabOverview: 'Przegląd',
     tabPoints: 'Punkty nadania',
     tabStatuses: 'Statusy',
@@ -266,7 +209,6 @@ export const integrationsMessages = defineMessages({
     stateOn: 'Włączona',
     stateOff: 'Wyłączona',
     switchLabel: 'Integracja włączona',
-    saveKeyFirst: 'Najpierw zapisz klucz dostępu.',
     sectionsNav: 'Sekcje integracji',
     statusCard: 'Stan połączenia',
     rejected: 'Usługa odrzuciła połączenie',
@@ -279,12 +221,9 @@ export const integrationsMessages = defineMessages({
       'Usługa akceptuje klucz. Katalogi miejscowości i oddziałów są dostępne.',
     addKeyHint:
       'Dodaj klucz dostępu w „Ustawieniach”, aby sprawdzić połączenie.',
-    nothingToVerify:
-      'Najpierw zapisz klucz dostępu — na razie nie ma czego sprawdzać.',
     verifying: 'Sprawdzanie…',
     verifyAgain: 'Sprawdź ponownie',
     replaceKey: 'Wymień klucz',
-    addKey: 'Dodaj klucz',
     statPoints: 'Punkty nadania',
     statPointsNote: 'Skąd można wysyłać paczki',
     statFailures: 'Błędy przetwarzania',
@@ -293,23 +232,5 @@ export const integrationsMessages = defineMessages({
     statDeliveries: 'Dostawy w 30 dni',
     statDeliveriesNote: 'Usługa nie liczy przesyłek dla firmy',
     factsTitle: 'Co robi integracja',
-    connectionCard: 'Połączenie',
-    nameLabel: 'Nazwa połączenia',
-    newKeyHint:
-      'Po zapisaniu klucz zostanie ukryty. Stary klucz przestanie działać od razu.',
-    newKeyLabel: 'Nowy klucz dostępu',
-    saveKey: 'Zapisz klucz',
-    keyNotSaved: 'klucz nie jest zapisany',
-    keyHiddenNote:
-      'Zapisanego klucza nie pokazujemy otwartym tekstem — można go tylko wymienić na nowy.',
-    verifyConnection: 'Sprawdź połączenie',
-    disableCard: 'Wyłączanie',
-    enableCard: 'Włączanie',
-    disableText:
-      'Utworzone listy przewozowe pozostaną ważne, ale nie będzie można zlecić nowej dostawy ani otrzymywać aktualizacji statusów.',
-    enableText:
-      'Po włączeniu dostawę będzie można zlecić prosto z karty zamówienia. Najpierw zapisz i sprawdź klucz dostępu.',
-    disableButton: 'Wyłącz integrację',
-    enableButton: 'Włącz integrację',
   },
 })

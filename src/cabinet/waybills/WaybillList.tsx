@@ -56,9 +56,15 @@ function query(filters: WaybillFilters) {
   }
 }
 
-/** A live waybill the carrier can still move: worth asking about. */
+/**
+ * A live waybill the carrier can still move: worth asking about. A switched-
+ * off integration asks nothing (2.18).
+ */
 const refreshable = (row: ShipmentListItem) =>
-  row.number !== null && row.state === 'Created' && row.receivedAt === null
+  row.trackingEnabled &&
+  row.number !== null &&
+  row.state === 'Created' &&
+  row.receivedAt === null
 
 /**
  * «Накладні Нової пошти» (module 46 §7): every waybill made or attached in
@@ -146,7 +152,11 @@ export function WaybillList({
   const loading = integrationId !== null && rows === null && !error
   const isFiltered = filtered(filters)
   const firstRun = rows !== null && rows.length === 0 && !isFiltered
-  const stale = (rows ?? []).filter((row) => row.syncProblem !== null)
+  const stale = (rows ?? []).filter(
+    (row) => row.trackingEnabled && row.syncProblem !== null,
+  )
+  // Tracking is the integration's, so one row tells for the whole page.
+  const switchedOff = rows?.some((row) => !row.trackingEnabled) === true
   const listState: ListReturnState = { listSearch: location.search }
   const cardPath = (row: ShipmentListItem) =>
     cabinetPath(slug, 'waybills', row.id)
@@ -283,7 +293,9 @@ export function WaybillList({
       label: t('columnSync'),
       hideNarrow: true,
       cell: (row) =>
-        row.syncProblem === null ? null : (
+        !row.trackingEnabled ? (
+          <StatusPill tone="neutral">{t('notUpdating')}</StatusPill>
+        ) : row.syncProblem === null ? null : (
           <span className="grid justify-items-start">
             <StatusPill tone="danger">{t('syncError')}</StatusPill>
             {row.lastSuccessAt === null ? null : (
@@ -307,7 +319,7 @@ export function WaybillList({
   return (
     <RedesignShell
       actions={
-        fallback === null ? (
+        fallback === null && !switchedOff ? (
           <span className="max-md:hidden">
             <Button
               aria-busy={refreshing}

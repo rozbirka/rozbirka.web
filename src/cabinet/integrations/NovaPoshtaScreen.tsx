@@ -1,18 +1,10 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, Link2Off } from 'lucide-react'
 import {
   Button,
-  Field,
   StateScreen,
   StatusPill,
-  TextInput,
   Notice,
   useOptionalToast,
 } from '@/components/app'
@@ -23,7 +15,7 @@ import {
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
 import { useTenantSettings } from '@/auth/useTenantSettings'
-import { commonMessages, useLocale, useT } from '@/i18n'
+import { useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { moduleLabel, navigationGroupLabel } from '../module-messages'
@@ -44,6 +36,9 @@ import {
 import { integrationsMessages } from './integrations-messages'
 import { IntegrationCrumbs } from './IntegrationsScreen'
 import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
+import { npConnectMessages } from './np-connect-messages'
+import { NpDisconnectDialog } from './np-disconnect-dialog'
+import { npDisconnectMessages } from './np-disconnect-messages'
 import { NpOverview, NpRightsCard } from './np-overview'
 import { useNpSettingsEditor } from './np-settings-editor'
 import { npSettingsMessages } from './np-settings-messages'
@@ -64,32 +59,10 @@ type LoadState =
   /** `unavailable`: Core refused NP for this business's country. */
   | { kind: 'error'; unavailable: boolean }
 
-function Card({
-  title,
-  tone,
-  children,
-}: {
-  title: ReactNode
-  tone?: 'plain' | 'danger' | 'ok'
-  children: ReactNode
-}) {
-  return (
-    <section className="rz-card">
-      <header className="rz-card__head">
-        <h2
-          className={`rz-h-card ${tone === 'danger' ? 'text-state-danger' : ''}`}
-        >
-          {title}
-        </h2>
-      </header>
-      <div className="rz-card__body grid gap-3">{children}</div>
-    </section>
-  )
-}
-
 /**
  * One carrier, four tabs: what it is doing, where parcels leave from, whether
- * its status feed arrives, and the key it all hangs on. Each tab is its own
+ * its status feed arrives, and what new waybills dispatch with. The key is
+ * replaced only through the setup wizard. Each tab is its own
  * route, so a link into the diagnostics still opens the diagnostics.
  */
 export function NovaPoshtaScreen() {
@@ -100,8 +73,9 @@ export function NovaPoshtaScreen() {
   const integrationId = params['integrationId'] ?? ''
   const { locale } = useLocale()
   const t = useT(integrationsMessages)
-  const tc = useT(commonMessages)
   const ts = useT(npSettingsMessages)
+  const td = useT(npDisconnectMessages)
+  const tn = useT(npConnectMessages)
   const { countryCode } = useTenantSettings()
   // Outside Ukraine nothing is read: Core would refuse every request anyway.
   const countryBlocked = !isNovaPoshtaAvailable(countryCode)
@@ -117,10 +91,13 @@ export function NovaPoshtaScreen() {
   )
   const [points, setPoints] = useState<number | null>(null)
   const [failures, setFailures] = useState<number | null>(null)
-  const [editingKey, setEditingKey] = useState(false)
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState<null | 'save' | 'verify' | 'toggle'>(null)
+  const [busy, setBusy] = useState<
+    null | 'verify' | 'reconnect' | 'disconnect'
+  >(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingOff, setConfirmingOff] = useState(false)
+  const [offOpenings, setOffOpenings] = useState(0)
+  const [offError, setOffError] = useState<string | null>(null)
   const toast = useOptionalToast()
   const mountedRef = useRef(true)
   const { requireLatestMutation } = useLatestMutationGuard(
@@ -129,7 +106,7 @@ export function NovaPoshtaScreen() {
 
   const state: LoadState =
     loaded?.key === scopeKey ? loaded.state : { kind: 'loading' }
-  const tab: Tab = location.pathname.endsWith('/dispatch-points')
+  const routeTab: Tab = location.pathname.endsWith('/dispatch-points')
     ? 'points'
     : location.pathname.endsWith('/webhook')
       ? 'statuses'
@@ -137,6 +114,9 @@ export function NovaPoshtaScreen() {
         ? 'settings'
         : 'overview'
   const configuredNow = state.kind === 'ready' && state.integration.configured
+  // Tabs exist only once Nova Poshta is connected (1.22): before that the
+  // page is the call to connect, whatever tab the address names.
+  const tab: Tab = configuredNow ? routeTab : 'overview'
   const delivery = useNpDeliverySettings(
     integrationId,
     !countryBlocked &&
@@ -209,7 +189,7 @@ export function NovaPoshtaScreen() {
   // Tab counters, read once for the header: a badge must not wait for its own
   // tab to be opened. Each panel reports its number back after a change.
   useEffect(() => {
-    if (integrationId === '' || countryBlocked) return
+    if (integrationId === '' || countryBlocked || !configuredNow) return
     const controller = new AbortController()
     void integrationsApi
       .dispatchPoints(integrationId, { signal: controller.signal })
@@ -228,7 +208,7 @@ export function NovaPoshtaScreen() {
         () => undefined,
       )
     return () => controller.abort()
-  }, [countryBlocked, integrationId, scopeKey])
+  }, [configuredNow, countryBlocked, integrationId, scopeKey])
 
   if (tenant === null) {
     return (
@@ -300,6 +280,7 @@ export function NovaPoshtaScreen() {
   const integration = state.integration
   const status = integrationStatusPresentation(integration.status, locale)
   const active = integration.status === 'active'
+  const off = integration.status === 'inactive'
   const configured = integration.configured
 
   const apply = (updated: Integration) => {
@@ -308,7 +289,7 @@ export function NovaPoshtaScreen() {
   }
 
   const run = async (
-    kind: 'save' | 'verify' | 'toggle',
+    kind: 'verify' | 'reconnect',
     action: () => Promise<Integration>,
     successMessage: string,
   ): Promise<boolean> => {
@@ -323,10 +304,6 @@ export function NovaPoshtaScreen() {
     setError(null)
     try {
       apply(await action())
-      if (kind === 'save' && mountedRef.current) {
-        setEditingKey(false)
-        setKey('')
-      }
       toast?.show({ tone: 'ok', message: successMessage })
       return true
     } catch (problem) {
@@ -356,26 +333,40 @@ export function NovaPoshtaScreen() {
     }
   }
 
-  const saveKey = async (event: FormEvent) => {
-    event.preventDefault()
-    const value = key.trim()
-    if (value === '') return
-    await run(
-      'save',
-      () => integrationsApi.saveNovaPoshtaKey(integration.id, value),
-      t('keySaved'),
-    )
-  }
-
-  const toggle = () =>
+  // Core checks the stored key with the carrier again before switching back
+  // on; a key that stopped working leaves the integration off and says why.
+  const reconnect = () =>
     void run(
-      'toggle',
-      () =>
-        active
-          ? integrationsApi.deactivate(integration.id)
-          : integrationsApi.activate(integration.id),
-      active ? t('turnedOff') : t('turnedOn'),
+      'reconnect',
+      () => integrationsApi.activate(integration.id),
+      tn('connected'),
     )
+
+  const disconnect = async () => {
+    if (busy !== null) return
+    try {
+      requireLatestMutation()
+    } catch {
+      setOffError(t('noAccess'))
+      return
+    }
+    setBusy('disconnect')
+    setOffError(null)
+    try {
+      apply(await integrationsApi.deactivate(integration.id))
+      if (!mountedRef.current) return
+      setConfirmingOff(false)
+      setDiagnostics(null)
+      toast?.show({ tone: 'info', message: td('done') })
+    } catch (problem) {
+      if (mountedRef.current)
+        setOffError(
+          integrationProblemMessage(normalizeApiProblem(problem), locale),
+        )
+    } finally {
+      if (mountedRef.current) setBusy(null)
+    }
+  }
 
   const tabs: {
     id: Tab
@@ -402,7 +393,7 @@ export function NovaPoshtaScreen() {
   return (
     <RedesignShell
       actions={
-        tab === 'settings' && configured && rights.integrations
+        tab === 'settings' && configured && !off && rights.integrations
           ? editor.actions
           : backToList
       }
@@ -419,33 +410,42 @@ export function NovaPoshtaScreen() {
           <span className="rz-muted">{ts('headSub')}</span>
         </div>
         <div>
-          <StatusPill tone={status.tone}>
-            {active ? t('stateOn') : status.label}
+          <StatusPill tone={off ? 'neutral' : status.tone}>
+            {active ? t('stateOn') : off ? td('headOff') : status.label}
           </StatusPill>
         </div>
       </div>
-      <nav aria-label={t('sectionsNav')} className="rz-tabs">
-        {tabs.map((item) => (
-          <Link
-            aria-current={tab === item.id ? 'page' : undefined}
-            key={item.id}
-            to={tabPath(item.id)}
-          >
-            {item.label}
-            {item.badge !== undefined && (
-              <span
-                className={
-                  item.danger === true
-                    ? 'rz-count rz-count--danger'
-                    : 'rz-count'
-                }
-              >
-                {item.badge}
-              </span>
-            )}
-          </Link>
-        ))}
-      </nav>
+      {configured && (
+        <nav aria-label={t('sectionsNav')} className="rz-tabs">
+          {tabs.map((item) => (
+            <Link
+              aria-current={tab === item.id ? 'page' : undefined}
+              key={item.id}
+              to={tabPath(item.id)}
+            >
+              {item.label}
+              {item.badge !== undefined && (
+                <span
+                  className={
+                    item.danger === true
+                      ? 'rz-count rz-count--danger'
+                      : 'rz-count'
+                  }
+                >
+                  {item.badge}
+                </span>
+              )}
+            </Link>
+          ))}
+        </nav>
+      )}
+
+      {off && (
+        <Notice block>
+          <p className="rz-strong m-0 font-semibold">{td('offTitle')}</p>
+          <p className="m-0 mt-1">{td('offText')}</p>
+        </Notice>
+      )}
 
       {error !== null && <Notice tone="danger">{error}</Notice>}
 
@@ -459,13 +459,30 @@ export function NovaPoshtaScreen() {
           diagnostics={diagnostics}
           editPath={tabPath('settings')}
           integration={integration}
+          onDisconnect={() => {
+            setOffError(null)
+            setOffOpenings((count) => count + 1)
+            setConfirmingOff(true)
+          }}
+          onReconnect={reconnect}
           onVerify={() => void verify()}
+          reconnecting={busy === 'reconnect'}
           rights={rights}
           settings={delivery.state}
           updated={updated}
           verifying={busy === 'verify'}
         />
       )}
+
+      <NpDisconnectDialog
+        error={offError}
+        integrationId={integration.id}
+        key={offOpenings}
+        onConfirm={() => void disconnect()}
+        onOpenChange={setConfirmingOff}
+        open={confirmingOff}
+        pending={busy === 'disconnect'}
+      />
 
       {tab === 'points' && (
         <DispatchPointsPanel
@@ -490,114 +507,11 @@ export function NovaPoshtaScreen() {
       {tab === 'settings' && (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="rz-form-page grid min-w-0 gap-4">
-            {configured && rights.integrations ? editor.body : null}
+            {/* A setup session would switch it back on behind the reader's
+                back, so a switched-off integration is changed only after
+                «Підключити знову». */}
+            {configured && !off && rights.integrations ? editor.body : null}
             <DeliveryDepositPanel key={scopeKey} />
-            <Card title={t('connectionCard')}>
-              <Field hint={t('noRename')} label={t('nameLabel')}>
-                <TextInput
-                  disabled
-                  readOnly
-                  title={t('noRename')}
-                  value={integration.displayName}
-                />
-              </Field>
-
-              {editingKey ? (
-                <form
-                  className="grid gap-3"
-                  noValidate
-                  onSubmit={(event) => void saveKey(event)}
-                >
-                  <Field
-                    hint={t('newKeyHint')}
-                    label={t('newKeyLabel')}
-                    required
-                  >
-                    <TextInput
-                      autoComplete="off"
-                      className="rz-mono"
-                      onChange={(event) => setKey(event.target.value)}
-                      placeholder={t('keyPlaceholder')}
-                      value={key}
-                    />
-                  </Field>
-                  <div className="rz-btn-row">
-                    <Button
-                      aria-busy={busy === 'save'}
-                      disabled={busy !== null || key.trim() === ''}
-                      type="submit"
-                      variant="primary"
-                    >
-                      {busy === 'save' ? tc('saving') : t('saveKey')}
-                    </Button>
-                    <Button
-                      disabled={busy !== null}
-                      onClick={() => {
-                        setEditingKey(false)
-                        setKey('')
-                      }}
-                    >
-                      {tc('cancel')}
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div className="rz-inset flex flex-wrap items-center gap-3">
-                    <span className="rz-mono text-app-muted min-w-0">
-                      {configured ? '••••••••••••••••' : t('keyNotSaved')}
-                    </span>
-                    {configured && (
-                      <StatusPill className="ml-auto" tone="ok">
-                        {tc('saved')}
-                      </StatusPill>
-                    )}
-                  </div>
-                  <p className="rz-caption m-0 text-pretty">
-                    {t('keyHiddenNote')}
-                  </p>
-                  <div className="rz-btn-row">
-                    <Button
-                      disabled={busy !== null}
-                      onClick={() => setEditingKey(true)}
-                      variant={configured ? 'ghost' : 'primary'}
-                    >
-                      {configured ? t('replaceKey') : t('addKey')}
-                    </Button>
-                    <Button
-                      aria-busy={busy === 'verify'}
-                      disabled={busy !== null || !configured}
-                      onClick={() => void verify()}
-                      title={configured ? undefined : t('nothingToVerify')}
-                    >
-                      {busy === 'verify'
-                        ? t('verifying')
-                        : t('verifyConnection')}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </Card>
-
-            <Card
-              title={active ? t('disableCard') : t('enableCard')}
-              tone={active ? 'danger' : 'plain'}
-            >
-              <p className="rz-muted m-0 text-pretty">
-                {active ? t('disableText') : t('enableText')}
-              </p>
-              <div>
-                <Button
-                  aria-busy={busy === 'toggle'}
-                  disabled={busy !== null || (!active && !configured)}
-                  onClick={toggle}
-                  title={!active && !configured ? t('saveKeyFirst') : undefined}
-                  variant={active ? 'danger' : 'primary'}
-                >
-                  {active ? t('disableButton') : t('enableButton')}
-                </Button>
-              </div>
-            </Card>
           </div>
           <NpRightsCard className="max-lg:hidden" {...rights} />
         </div>

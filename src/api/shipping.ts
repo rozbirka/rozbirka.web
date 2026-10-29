@@ -102,6 +102,11 @@ export interface Shipment {
   paymentState: string | null
   /** Why the last refresh did not land; the last known status still stands. */
   syncProblem: string | null
+  /**
+   * False while the integration is switched off: the status is the last one
+   * known and nothing that reaches the carrier is allowed.
+   */
+  trackingEnabled: boolean
 }
 
 /** One row of the waybill list: the order it serves and its three signals. */
@@ -121,6 +126,8 @@ export interface ShipmentListItem {
   codUah: number | null
   syncProblem: string | null
   lastSuccessAt: string | null
+  /** False while the integration is switched off. */
+  trackingEnabled: boolean
 }
 
 export interface ShipmentListQuery {
@@ -175,6 +182,7 @@ const withCollections = (shipment: Shipment): Shipment => ({
   receivedAt: shipment.receivedAt ?? null,
   paymentState: shipment.paymentState ?? null,
   syncProblem: shipment.syncProblem ?? null,
+  trackingEnabled: shipment.trackingEnabled ?? true,
   number: shipment.number ?? null,
   quoteUah: shipment.quoteUah ?? null,
   codUah: shipment.codUah ?? null,
@@ -199,6 +207,7 @@ const withListNulls = (item: ShipmentListItem): ShipmentListItem => ({
   codUah: item.codUah ?? null,
   syncProblem: item.syncProblem ?? null,
   lastSuccessAt: item.lastSuccessAt ?? null,
+  trackingEnabled: item.trackingEnabled ?? true,
 })
 
 const shipments = (integrationId: string) =>

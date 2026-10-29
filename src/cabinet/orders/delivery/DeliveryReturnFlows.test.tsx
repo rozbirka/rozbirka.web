@@ -152,6 +152,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   receivedAt: '2026-10-26T14:22:00Z',
   paymentState: null,
   syncProblem: null,
+  trackingEnabled: true,
   ...over,
 })
 
@@ -205,6 +206,7 @@ const load = (state: Partial<DeliveryOrderState>): DeliveryOrderLoad => ({
     money: delivery(),
     integrationId: 'int-1',
     carrier: null,
+    disconnected: null,
     points: [],
     shipment: shipment(),
     customerPhone: null,

@@ -15,6 +15,7 @@ import {
   Printer,
   RefreshCw,
   SearchCheck,
+  Settings,
   ShieldCheck,
   Truck,
 } from 'lucide-react'
@@ -68,6 +69,14 @@ export interface ShipmentBlockActions {
   receive: () => void
 }
 
+/** Nova Poshta switched off (2.16–2.17): read-only, with where to switch it on. */
+export interface DisconnectedBlock {
+  /** When it was switched off; null when Core did not record it. */
+  at: string | null
+  /** The integration's page; null without the right to open it. */
+  integrationPath: string | null
+}
+
 /**
  * The order's Nova Poshta block for each waybill stage, with the buttons the
  * state×action matrix of module 46 (section 11) allows. Without «Керування
@@ -84,6 +93,7 @@ export function DeliveryShipmentBlock({
   cancelled,
   carrierReady,
   delivery,
+  disconnected = null,
   lost,
   numberRef,
   points,
@@ -105,6 +115,8 @@ export function DeliveryShipmentBlock({
   /** False while Nova Poshta is not usable: nothing that calls it is offered. */
   carrierReady: boolean
   delivery: DeliveryOrder
+  /** Set while the integration is switched off; nothing reaches the carrier. */
+  disconnected?: DisconnectedBlock | null
   /** The waybill's carrier cabinet lost its key (3.2). */
   lost: boolean
   numberRef: Ref<HTMLSpanElement>
@@ -189,6 +201,33 @@ export function DeliveryShipmentBlock({
       {primary ? t('checkResult') : t('checkNow')}
     </Button>
   )
+
+  // Switched off before a waybill existed (2.17): the order can only wait
+  // until Nova Poshta is connected again.
+  if (disconnected !== null && (stage === 'none' || shipment?.number == null))
+    return (
+      <ShipmentCard
+        actions={
+          <>
+            <Button disabled variant="primary">
+              <Truck aria-hidden />
+              {tm('startDelivery')}
+            </Button>
+            {disconnected.integrationPath === null ? null : (
+              <Button asChild variant="quiet">
+                <Link to={disconnected.integrationPath}>
+                  <Settings aria-hidden />
+                  {tm('openIntegration')}
+                </Link>
+              </Button>
+            )}
+          </>
+        }
+        facts={null}
+        hint={tm('offNoWaybillHint')}
+        notices={<Notice tone="info">{tm('offNoWaybill')}</Notice>}
+      />
+    )
 
   // Cancelled here: the number stays on screen with what can come next.
   if (stage === 'none' && cancelled !== null)
@@ -421,6 +460,62 @@ export function DeliveryShipmentBlock({
             time: format.time(shipment.lastTrackedAt) ?? '',
           })
 
+  const livePill = (): { label: string; tone: StatusTone } =>
+    stage === 'received'
+      ? awaitingCod
+        ? { label: tf('deliveredAwaitingCod'), tone: 'warn' }
+        : { label: tm('shipReceived'), tone: 'ok' }
+      : stage === 'sent'
+        ? { label: t('pillSent'), tone: 'info' }
+        : stage === 'cancelling'
+          ? { label: tm('stateCancelling'), tone: 'warn' }
+          : stage === 'cancelUnknown'
+            ? { label: tm('stateCancelUnknown'), tone: 'warn' }
+            : attachedAt !== null
+              ? { label: t('pillAttached'), tone: 'ok' }
+              : { label: tm('stateCreated'), tone: 'ok' }
+
+  // Switched off with a waybill (2.16): its last known state stays readable,
+  // and the actions that would reach the carrier are shown, but disabled.
+  if (disconnected !== null && stage !== 'cancelled')
+    return (
+      <ShipmentCard
+        actions={
+          <>
+            <Button disabled>
+              <Printer aria-hidden />
+              {tm('printLabel')}
+            </Button>
+            <Button disabled>
+              <RefreshCw aria-hidden />
+              {tm('refreshStatus')}
+            </Button>
+            {waybillPath === null ? null : (
+              <Button asChild variant="quiet">
+                <Link to={waybillPath}>
+                  <ExternalLink aria-hidden />
+                  {tr('openWaybill')}
+                </Link>
+              </Button>
+            )}
+          </>
+        }
+        facts={facts(shipment, numberFact)}
+        hint={hint}
+        notices={
+          <Notice tone="info">
+            {disconnected.at === null
+              ? tm('offWaybillNoDate')
+              : tm('offWaybill', {
+                  date: format.date(disconnected.at) ?? disconnected.at,
+                })}
+          </Notice>
+        }
+        numberRef={numberRef}
+        pill={livePill()}
+      />
+    )
+
   if (stage === 'cancelling' || stage === 'cancelUnknown') {
     return (
       <ShipmentCard
@@ -513,16 +608,7 @@ export function DeliveryShipmentBlock({
       />
     )
 
-  const pill: { label: string; tone: StatusTone } =
-    stage === 'received'
-      ? awaitingCod
-        ? { label: tf('deliveredAwaitingCod'), tone: 'warn' }
-        : { label: tm('shipReceived'), tone: 'ok' }
-      : stage === 'sent'
-        ? { label: t('pillSent'), tone: 'info' }
-        : attachedAt !== null
-          ? { label: t('pillAttached'), tone: 'ok' }
-          : { label: tm('stateCreated'), tone: 'ok' }
+  const pill = livePill()
 
   return (
     <ShipmentCard

@@ -8,9 +8,20 @@ import {
 } from '../integrations/integration-labels'
 import { deliveryProblemMessage } from '../orders/delivery/nova-poshta-availability'
 
+/** When Nova Poshta was switched off and by whom, as Core recorded it. */
+export interface SwitchedOff {
+  at: string
+  by: string | null
+}
+
 export type NpIntegrationState =
   | { kind: 'loading' }
-  | { kind: 'ready'; integrationId: string }
+  | {
+      kind: 'ready'
+      integrationId: string
+      /** Set while the integration is switched off (module 46 §2.18). */
+      switchedOff: SwitchedOff | null
+    }
   /** Outside Ukraine, or a tenant that never connected Nova Poshta. */
   | { kind: 'unavailable'; reason: 'country' | 'missing' }
   | { kind: 'error'; message: string }
@@ -36,7 +47,14 @@ export function useNpIntegration(attempt = 0): NpIntegrationState {
         setState(
           nova === undefined || nova.status === 'draft'
             ? { kind: 'unavailable', reason: 'missing' }
-            : { kind: 'ready', integrationId: nova.id },
+            : {
+                kind: 'ready',
+                integrationId: nova.id,
+                switchedOff:
+                  nova.status === 'inactive' && nova.deactivatedAt !== null
+                    ? { at: nova.deactivatedAt, by: nova.deactivatedBy }
+                    : null,
+              },
         )
       },
       (problem: unknown) => {

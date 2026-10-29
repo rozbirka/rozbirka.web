@@ -73,6 +73,8 @@ const novaPoshta: Integration = {
   verifiedAt: '2026-09-21T09:31:00Z',
   lastErrorCode: null,
   settings: { configured: true, activeDispatchPoints: 3 },
+  deactivatedAt: null,
+  deactivatedBy: null,
 }
 
 beforeEach(() => {

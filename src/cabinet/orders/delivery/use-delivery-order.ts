@@ -17,6 +17,12 @@ export interface CarrierState {
   errorCode: string | null
 }
 
+export interface DisconnectedCarrier {
+  integrationId: string
+  /** Null for an integration switched off before Core recorded the time. */
+  at: string | null
+}
+
 export interface DeliveryOrderState {
   /** Null when Core does not run this order as a delivery order. */
   money: DeliveryOrder | null
@@ -27,6 +33,11 @@ export interface DeliveryOrderState {
    */
   integrationId: string | null
   carrier: CarrierState | null
+  /**
+   * Set while Nova Poshta is switched off (module 46, 2.16–2.17): the
+   * waybill is still loaded, read-only, and the block says since when.
+   */
+  disconnected: DisconnectedCarrier | null
   points: NovaPoshtaDispatchPoint[]
   shipment: Shipment | null
   customerPhone: string | null
@@ -86,11 +97,33 @@ export function useDeliveryOrder(
           shipment: null,
           integrationId: null,
           carrier: null,
+          disconnected: null,
           points: [],
           customerPhone: null,
         }
       const nova = integrations.find((item) => item.code === NOVA_POSHTA)
       const usable = nova?.status === 'active' ? nova : undefined
+
+      // Switched off, the integration still holds its waybills: Core reads
+      // them without the carrier, so the block can show the last known state.
+      if (nova?.status === 'inactive' && nova.configured) {
+        const shipment = await shippingApi
+          .get(nova.id, orderId, { signal: controller.signal })
+          .catch((problem: unknown) => {
+            if (!isProblemCode(problem, 'delivery_not_configured'))
+              throw problem
+            return null
+          })
+        return {
+          money,
+          shipment,
+          integrationId: null,
+          carrier: { status: nova.status, errorCode: null },
+          disconnected: { integrationId: nova.id, at: nova.deactivatedAt },
+          points: [],
+          customerPhone: null,
+        }
+      }
 
       if (usable === undefined)
         return {
@@ -101,6 +134,7 @@ export function useDeliveryOrder(
             status: nova?.status ?? 'missing',
             errorCode: nova?.lastErrorCode ?? null,
           },
+          disconnected: null,
           points: [],
           customerPhone: null,
         }
@@ -127,6 +161,7 @@ export function useDeliveryOrder(
         shipment,
         integrationId: usable.id,
         carrier: null,
+        disconnected: null,
         points: points.filter((point) => point.isActive),
         customerPhone: customer?.phone ?? null,
       }

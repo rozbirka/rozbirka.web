@@ -173,6 +173,14 @@ export const deliveryMessages = defineMessages({
     npDownNote:
       'Замовлення лишається доставковим: гроші й етапи працюють, а накладну не створити й не оновити, доки інтеграцію не відновлять.',
     openIntegrations: 'Відкрити інтеграції',
+    openIntegration: 'Відкрити інтеграцію',
+    offWaybill:
+      'Інтеграцію з Новою поштою відключено {date}. Статус ТТН не оновлюється — останній відомий показано нижче. Дії з накладною недоступні.',
+    offWaybillNoDate:
+      'Інтеграцію з Новою поштою відключено. Статус ТТН не оновлюється — останній відомий показано нижче. Дії з накладною недоступні.',
+    offNoWaybill:
+      'Інтеграцію з Новою поштою відключено. Щоб оформити доставку, підключіть її знову в налаштуваннях.',
+    offNoWaybillHint: 'Замовлення поки не їде поштою.',
     waybillData: 'Дані ТТН',
     printLabel: 'Друк етикетки',
     copyNumber: 'Копіювати номер',
@@ -343,6 +351,14 @@ export const deliveryMessages = defineMessages({
     npDownNote:
       'The order is still a delivery order: money and stages work, but the waybill can’t be created or updated until the integration is restored.',
     openIntegrations: 'Open integrations',
+    openIntegration: 'Open integration',
+    offWaybill:
+      'The Nova Poshta integration was switched off on {date}. The waybill status is no longer updated — the last known one is shown below. Waybill actions are unavailable.',
+    offWaybillNoDate:
+      'The Nova Poshta integration was switched off. The waybill status is no longer updated — the last known one is shown below. Waybill actions are unavailable.',
+    offNoWaybill:
+      'The Nova Poshta integration is switched off. To arrange delivery, connect it again in settings.',
+    offNoWaybillHint: 'This order is not being sent by post yet.',
     waybillData: 'Waybill details',
     printLabel: 'Print label',
     copyNumber: 'Copy number',
@@ -515,6 +531,14 @@ export const deliveryMessages = defineMessages({
     npDownNote:
       'Zamówienie nadal jest zamówieniem z dostawą: płatności i etapy działają, ale listu przewozowego nie da się utworzyć ani zaktualizować, dopóki integracja nie zostanie przywrócona.',
     openIntegrations: 'Otwórz integracje',
+    openIntegration: 'Otwórz integrację',
+    offWaybill:
+      'Integracja z Nową Pocztą została wyłączona {date}. Status listu przewozowego nie jest aktualizowany — poniżej pokazano ostatni znany. Działania na liście przewozowym są niedostępne.',
+    offWaybillNoDate:
+      'Integracja z Nową Pocztą została wyłączona. Status listu przewozowego nie jest aktualizowany — poniżej pokazano ostatni znany. Działania na liście przewozowym są niedostępne.',
+    offNoWaybill:
+      'Integracja z Nową Pocztą jest wyłączona. Aby zorganizować dostawę, połącz ją ponownie w ustawieniach.',
+    offNoWaybillHint: 'To zamówienie nie jest jeszcze wysyłane pocztą.',
     waybillData: 'Dane listu przewozowego',
     printLabel: 'Drukuj etykietę',
     copyNumber: 'Kopiuj numer',

@@ -24,7 +24,7 @@ export const npSettingsMessages = defineMessages({
     noTill: 'Без каси · вручну',
     changeSettings: 'Змінити налаштування',
     readOnly:
-      'Змінювати налаштування може власник або користувач із правом «Налаштування інтеграцій».',
+      'Змінювати налаштування й відключати інтеграцію може власник або користувач із правом «Налаштування інтеграцій».',
     shippingLoadError: 'Не вдалося завантажити налаштування відправлення.',
     // «Ваші права»
     rightsTitle: 'Ваші права',
@@ -90,7 +90,7 @@ export const npSettingsMessages = defineMessages({
     noTill: 'No till · manual',
     changeSettings: 'Change settings',
     readOnly:
-      'Settings can be changed by the owner or a user with the “Integration settings” permission.',
+      'Settings can be changed, and the integration disconnected, by the owner or a user with the “Integration settings” permission.',
     shippingLoadError: 'Could not load the dispatch settings.',
     rightsTitle: 'Your permissions',
     rightsHint: 'Permissions are granted by the owner in “Team”.',
@@ -152,7 +152,7 @@ export const npSettingsMessages = defineMessages({
     noTill: 'Bez kasy · ręcznie',
     changeSettings: 'Zmień ustawienia',
     readOnly:
-      'Ustawienia może zmieniać właściciel lub użytkownik z uprawnieniem „Ustawienia integracji”.',
+      'Zmieniać ustawienia i odłączać integrację może właściciel lub użytkownik z uprawnieniem „Ustawienia integracji”.',
     shippingLoadError: 'Nie udało się wczytać ustawień nadawania.',
     rightsTitle: 'Twoje uprawnienia',
     rightsHint: 'Uprawnienia nadaje właściciel w sekcji „Zespół”.',

@@ -8,6 +8,7 @@ import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { novaPoshtaSetupApi } from '@/api/nova-poshta-setup'
 import { ordersApi, type OrderDetail } from '@/api/orders'
 import { shippingApi, type Shipment } from '@/api/shipping'
+import type { SwitchedOff } from './use-np-integration'
 import { WaybillCard } from './WaybillCard'
 import type { WaybillRights } from './WaybillsScreen'
 
@@ -73,6 +74,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   receivedAt: null,
   paymentState: null,
   syncProblem: null,
+  trackingEnabled: true,
   events: [
     {
       code: 'Created',
@@ -94,7 +96,10 @@ const allRights: WaybillRights = {
   integrations: true,
 }
 
-const renderCard = (rights: WaybillRights = allRights) =>
+const renderCard = (
+  rights: WaybillRights = allRights,
+  switchedOff: SwitchedOff | null = null,
+) =>
   render(
     <MemoryRouter
       initialEntries={[
@@ -114,6 +119,7 @@ const renderCard = (rights: WaybillRights = allRights) =>
                 rights={rights}
                 shipmentId="ship-1"
                 slug="koval"
+                switchedOff={switchedOff}
               />
             }
             path="/app/koval/sales/waybills/:shipmentId"
@@ -377,6 +383,63 @@ it('cancels through the confirm dialog and shows the cancelled waybill', async (
   expect(await within(header()).findByText('Скасовано')).toBeVisible()
   expect(
     await screen.findByText('ТТН скасовано. Замовлення залишилося відкритим.'),
+  ).toBeVisible()
+})
+
+it('keeps a waybill read-only after Nova Poshta is switched off (2.18)', async () => {
+  vi.mocked(novaPoshtaSetupApi.connections).mockClear()
+  vi.mocked(shippingApi.byId).mockResolvedValue(
+    shipment({
+      trackingCode: '5',
+      trackingStatus: 'Прямує до міста одержувача',
+      dispatchedAt: '2026-10-26T09:00:00Z',
+      lastTrackedAt: '2026-10-28T09:50:00Z',
+      syncProblem: 'tracking_refresh_failed',
+      connectionId: 'conn-old',
+      trackingEnabled: false,
+      events: [
+        {
+          code: 'Created',
+          name: 'ТТН створено',
+          occurredAt: '2026-10-25T10:00:00Z',
+          recordedAt: '2026-10-25T10:00:00Z',
+        },
+        {
+          code: '5',
+          name: 'Передано перевізнику',
+          occurredAt: '2026-10-26T09:00:00Z',
+          recordedAt: '2026-10-26T09:00:00Z',
+        },
+      ],
+    }),
+  )
+  renderCard(allRights, { at: '2026-10-28T10:14:00Z', by: 'Олег К.' })
+
+  await screen.findByRole('heading', { name: `ТТН ${TTN}` })
+  expect(within(header()).getByText('Не оновлюється')).toBeVisible()
+  expect(
+    screen.getByText(
+      /^Інтеграцію з Новою поштою відключено 28\.10\.2026\. Статус ТТН не оновлюється/,
+    ),
+  ).toBeVisible()
+  expect(screen.getByText(/^Останній відомий статус · /)).toBeVisible()
+  for (const name of ['Друк етикетки', 'Оновити статус', 'Скасувати ТТН'])
+    expect(screen.getByRole('button', { name })).toBeDisabled()
+  // Nothing in the header, no sync warning with a refresh, no recovery check.
+  expect(screen.queryByRole('button', { name: 'Друк' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Редагувати' })).toBeNull()
+  expect(screen.queryByText(/Не вдалося оновити статус/)).toBeNull()
+  expect(novaPoshtaSetupApi.connections).not.toHaveBeenCalled()
+
+  const history = screen.getByRole('list', { name: 'Події накладної' })
+  const items = within(history).getAllByRole('listitem')
+  expect(items.map((item) => item.textContent)).toEqual([
+    expect.stringContaining('Інтеграцію відключено'),
+    expect.stringContaining('Передано перевізнику'),
+    expect.stringContaining('ТТН створено'),
+  ])
+  expect(
+    within(items[0]!).getByText('Олег К. · статуси не оновлюються'),
   ).toBeVisible()
 })
 

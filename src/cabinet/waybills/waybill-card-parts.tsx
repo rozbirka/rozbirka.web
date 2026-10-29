@@ -7,6 +7,7 @@ import {
   FilePlus,
   PackageCheck,
   Truck,
+  Unplug,
 } from 'lucide-react'
 import { Button, StatusPill } from '@/components/app'
 import type { DeliveryOrder } from '@/api/delivery'
@@ -66,23 +67,43 @@ function Facts({ rows }: { rows: readonly Fact[] }) {
 function TitledCard({
   title,
   pill: status,
+  hint,
   padded = false,
   children,
 }: {
   title: string
   pill?: ReactNode
+  /** A muted line under the title. */
+  hint?: string
   padded?: boolean
   children: ReactNode
 }) {
   const titleId = useId()
+  const heading = (
+    <div className="flex flex-wrap items-center gap-2">
+      <h2 className="rz-h-card" id={titleId}>
+        {title}
+      </h2>
+      {status}
+    </div>
+  )
   return (
     <section aria-labelledby={titleId} className="rz-card">
-      <div className="rz-card__head justify-start gap-2 py-2">
-        <h2 className="rz-h-card" id={titleId}>
-          {title}
-        </h2>
-        {status}
-      </div>
+      {hint === undefined ? (
+        <div className="rz-card__head justify-start gap-2 py-2">
+          <h2 className="rz-h-card" id={titleId}>
+            {title}
+          </h2>
+          {status}
+        </div>
+      ) : (
+        <div className="rz-card__head justify-start py-2">
+          <div className="grid min-w-0 gap-0.5">
+            {heading}
+            <p className="rz-caption m-0 text-pretty">{hint}</p>
+          </div>
+        </div>
+      )}
       {padded ? <div className="rz-card__body">{children}</div> : children}
     </section>
   )
@@ -168,12 +189,15 @@ export function WaybillInfoCard({
  */
 export function WaybillDeliveryCard({
   actions,
+  hint,
   notice,
   shipment,
   signal,
   stale,
 }: {
   actions?: ReactNode
+  /** «Останній відомий статус · …» once nothing refreshes it (2.18). */
+  hint?: string
   notice?: ReactNode
   shipment: Shipment
   signal: Signal | null
@@ -184,7 +208,11 @@ export function WaybillDeliveryCard({
   const format = useFormat()
   const draft = shipment.state === 'Draft'
   return (
-    <TitledCard pill={pill(signal)} title={t('cardDelivery')}>
+    <TitledCard
+      pill={pill(signal)}
+      title={t('cardDelivery')}
+      {...(hint === undefined ? {} : { hint })}
+    >
       <Facts
         rows={[
           {
@@ -305,37 +333,72 @@ const eventIcon = (event: ShipmentEvent) =>
     <Circle />
   )
 
-/** «Історія»: what Nova Poshta reported, newest first. */
-export function WaybillHistoryCard({ events }: { events: ShipmentEvent[] }) {
+interface HistoryRow {
+  key: string
+  at: string
+  icon: ReactNode
+  title: string
+  detail: string | null
+}
+
+/**
+ * «Історія»: what Nova Poshta reported, newest first. A switched-off
+ * integration adds its own line among them (2.18), since from then on the
+ * carrier's word stops arriving.
+ */
+export function WaybillHistoryCard({
+  events,
+  switchedOff = null,
+}: {
+  events: ShipmentEvent[]
+  switchedOff?: { at: string; by: string | null } | null
+}) {
   const t = useT(waybillsMessages)
   const format = useFormat()
-  const ordered = [...events].sort((left, right) =>
-    (right.occurredAt ?? right.recordedAt).localeCompare(
-      left.occurredAt ?? left.recordedAt,
-    ),
-  )
+  const rows: HistoryRow[] = events.map((event, index) => {
+    const at = event.occurredAt ?? event.recordedAt
+    return {
+      key: `${at}-${event.code}-${String(index)}`,
+      at,
+      icon: eventIcon(event),
+      title: event.name || event.code,
+      detail: null,
+    }
+  })
+  if (switchedOff !== null)
+    rows.push({
+      key: 'switched-off',
+      at: switchedOff.at,
+      icon: <Unplug />,
+      title: t('historySwitchedOff'),
+      detail:
+        switchedOff.by === null
+          ? null
+          : t('historySwitchedOffDetail', { actor: switchedOff.by }),
+    })
+  const ordered = rows.sort((left, right) => right.at.localeCompare(left.at))
   return (
     <TitledCard padded={ordered.length === 0} title={t('cardHistory')}>
       {ordered.length === 0 ? (
         <p className="text-app-muted m-0">{t('historyEmpty')}</p>
       ) : (
         <ol aria-label={t('historyLabel')} className="rz-timeline">
-          {ordered.map((event, index) => {
-            const at = event.occurredAt ?? event.recordedAt
-            return (
-              <li key={`${at}-${event.code}-${String(index)}`}>
-                <span aria-hidden className="rz-timeline__icon">
-                  {eventIcon(event)}
-                </span>
-                <span className="rz-strong min-w-0 font-medium">
-                  {event.name || event.code}
-                </span>
-                <time className="rz-timeline__date" dateTime={at}>
-                  {format.dateTime(at) ?? at}
-                </time>
-              </li>
-            )
-          })}
+          {ordered.map(({ at, detail, icon, key, title }) => (
+            <li key={key}>
+              <span aria-hidden className="rz-timeline__icon">
+                {icon}
+              </span>
+              <span className="min-w-0">
+                <span className="rz-strong block font-medium">{title}</span>
+                {detail === null ? null : (
+                  <span className="rz-caption block">{detail}</span>
+                )}
+              </span>
+              <time className="rz-timeline__date" dateTime={at}>
+                {format.dateTime(at) ?? at}
+              </time>
+            </li>
+          ))}
         </ol>
       )}
     </TitledCard>
