@@ -550,8 +550,12 @@ it('aborts detail, create, and download work on tenant change and suppresses the
 
   await user.click(await screen.findByRole('button', { name: 'Створити звіт' }))
   await user.click(screen.getByRole('button', { name: 'Завантажити PDF' }))
-  await waitFor(() => expect(reportsApi.get).toHaveBeenCalledTimes(1))
-  const detailSignal = vi.mocked(reportsApi.get).mock.calls[0]?.[1]?.signal
+  // The queued report's poller may start more than once before the switch
+  // (each effect run polls at once), so every detail request must be aborted.
+  await waitFor(() => expect(reportsApi.get).toHaveBeenCalled())
+  const detailSignals = vi
+    .mocked(reportsApi.get)
+    .mock.calls.map((call) => call[1]?.signal)
   const createSignal = vi.mocked(reportsApi.create).mock.calls[0]?.[1]?.signal
   const downloadSignal = vi.mocked(reportsApi.download).mock.calls[0]?.[1]
     ?.signal
@@ -562,7 +566,7 @@ it('aborts detail, create, and download work on tenant change and suppresses the
   view.rerender(<ReportsScreen {...screenProps} />)
 
   await waitFor(() => expect(reportsApi.list).toHaveBeenCalledTimes(2))
-  expect(detailSignal?.aborted).toBe(true)
+  expect(detailSignals.every((signal) => signal?.aborted)).toBe(true)
   expect(createSignal?.aborted).toBe(true)
   expect(downloadSignal?.aborted).toBe(true)
   act(() => {
