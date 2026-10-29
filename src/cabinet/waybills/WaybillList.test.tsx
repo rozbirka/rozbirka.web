@@ -32,6 +32,7 @@ const row = (over: Partial<ShipmentListItem> = {}): ShipmentListItem => ({
   paymentState: 'AwaitingTransfer',
   codUah: 4200,
   syncProblem: null,
+  trackingEnabled: true,
   lastSuccessAt: '2026-10-25T16:54:00Z',
   ...over,
 })

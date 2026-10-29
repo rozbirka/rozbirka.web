@@ -81,6 +81,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   receivedAt: null,
   paymentState: null,
   syncProblem: null,
+  trackingEnabled: true,
   ...over,
 })
 
