@@ -9,7 +9,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { ToastProvider } from '@/components/app'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { LocationStickersScreen } from './LocationStickersScreen'
 import { locationQueueStore } from './location-queue-store'
 import { tenantResetRegistry } from '../tenant-reset-registry'
@@ -135,7 +135,7 @@ it('uses the same sticker header, list selection and ten-row pagination as parts
   ).toBeInTheDocument()
   expect(
     screen.getByText(
-      'QR-стікери для запчастин. Сканер відкриває запчастину за її кодом.',
+      'QR-стікери для запчастин і місць зберігання. Оберіть потрібні та підготуйте до друку.',
     ),
   ).toBeInTheDocument()
   expect(
@@ -802,4 +802,102 @@ it('restores the shelf context page on a direct revisit without selecting labels
   expect(
     screen.queryByRole('checkbox', { name: 'Обрати: Context shelf' }),
   ).not.toBeInTheDocument()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+it('exports the full location selection as HTML and shared HTML before creating a queue', async () => {
+  const createObjectURL = vi.fn().mockReturnValue('blob:locations'),
+    revokeObjectURL = vi.fn()
+  class TestURL extends URL {
+    static override createObjectURL = createObjectURL
+    static override revokeObjectURL = revokeObjectURL
+  }
+  vi.stubGlobal('URL', TestURL)
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation(() => undefined)
+  const share = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { ...navigator, canShare: () => true, share })
+  const user = userEvent.setup()
+  mount()
+  await user.click(await screen.findByRole('button', { name: 'Завантажити' }))
+  await waitFor(() => expect(click).toHaveBeenCalledOnce())
+  expect(output.buildZoneLabelHtml.mock.calls.at(-1)?.[0]).toHaveLength(25)
+  expect(revokeObjectURL).toHaveBeenCalledWith('blob:locations')
+  await user.click(screen.getByRole('button', { name: 'Поділитися' }))
+  await waitFor(() => expect(share).toHaveBeenCalledOnce())
+  expect(share.mock.calls[0]?.[0]).toMatchObject({
+    files: [expect.any(File)],
+    title: 'Стікери Rozbirka',
+  })
+  expect(locationQueueStore.getSnapshot().queue).toBeNull()
+  expect(print).not.toHaveBeenCalled()
+})
+it('exports only the next location batch when the selection is empty without changing progress', async () => {
+  class TestURL extends URL {
+    static override createObjectURL = vi.fn().mockReturnValue('blob:locations')
+    static override revokeObjectURL = vi.fn()
+  }
+  vi.stubGlobal('URL', TestURL)
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation(() => undefined)
+  const user = userEvent.setup()
+  mount()
+  await user.click(
+    await screen.findByRole('button', { name: 'Підготувати 25' }),
+  )
+  const initial = locationQueueStore.getSnapshot().queue
+  await user.click(screen.getByRole('button', { name: 'Друк наступних 20' }))
+  await screen.findByRole('button', { name: 'Усі надруковано' })
+  await user.click(screen.getByRole('button', { name: 'Завантажити' }))
+  await waitFor(() => expect(click).toHaveBeenCalledOnce())
+  expect(output.buildZoneLabelHtml.mock.calls.at(-1)?.[0]).toHaveLength(20)
+  expect(locationQueueStore.getSnapshot().queue).toBe(initial)
+  expect(
+    screen.getByRole('button', { name: 'Усі надруковано' }),
+  ).toBeInTheDocument()
+  vi.stubGlobal('navigator', {
+    ...navigator,
+    canShare: () => false,
+    share: vi.fn(),
+  })
+  await user.click(screen.getByRole('button', { name: 'Поділитися' }))
+  expect(
+    await screen.findByText('Обмін файлами не підтримується цим браузером.'),
+  ).toBeInTheDocument()
+  expect(locationQueueStore.getSnapshot().queue).toBe(initial)
+})
+
+it('does not download a prepared location selection after its owner is reset', async () => {
+  class TestURL extends URL {
+    static override createObjectURL = vi.fn().mockReturnValue('blob:locations')
+    static override revokeObjectURL = vi.fn()
+  }
+  vi.stubGlobal('URL', TestURL)
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation(() => undefined)
+  let finish: ((html: string) => void) | undefined
+  output.buildZoneLabelHtml.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  const user = userEvent.setup()
+  mount()
+  await user.click(await screen.findByRole('button', { name: 'Завантажити' }))
+  await waitFor(() => expect(finish).toBeDefined())
+  await act(() => tenantResetRegistry.clear({ userId: 'u', tenantId: 't' }))
+  await act(async () => {
+    finish?.('<html>labels</html>')
+    await Promise.resolve()
+  })
+  await screen.findByRole('button', { name: 'Підготувати 25' })
+  expect(click).not.toHaveBeenCalled()
+  expect(locationQueueStore.getSnapshot().queue).toBeNull()
 })

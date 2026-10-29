@@ -330,6 +330,13 @@ it('downloads, prints, and shares the same printable QR artifact with URL cleanu
   )
   const shared = share.mock.calls[0]?.[0] as ShareData | undefined
   expect(shared?.files?.[0]?.name).toBe('rozbirka-stickers.html')
+  expect(partQueueStore.getSnapshot().queue).toMatchObject({
+    printedCount: 0,
+    totalCount: 1,
+  })
+  expect(
+    screen.getByRole('button', { name: 'Усі надруковано' }),
+  ).toBeInTheDocument()
 })
 
 it('fails closed on generation when stickers.manage is absent', () => {

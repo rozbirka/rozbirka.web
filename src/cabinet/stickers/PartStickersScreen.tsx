@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Download, Minus, Plus, Printer, Share2 } from 'lucide-react'
+import { Minus, Plus, Printer } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { partsApi, type PartListItem } from '@/api/parts'
 import { Button, Notice, Pagination, SearchInput } from '@/components/app'
@@ -22,6 +22,7 @@ import {
   StickerListPanel,
   StickerSelectionRow,
 } from './StickerWorkspace'
+import { StickerFileActions } from './StickerFileActions'
 import { StickerSheetPreview } from './StickerSheetPreview'
 
 type QueueItem = PartStickerSelection
@@ -573,28 +574,17 @@ function TenantStickerQueue({
           }
           total={total || batchCount}
           actions={
-            <>
-              {preview.length && !selection.length ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    className="min-w-0"
-                    disabled={busy}
-                    onClick={() => void printing.output('download')}
-                  >
-                    <Download aria-hidden />
-                    {t('download')}
-                  </Button>
-                  <Button
-                    className="min-w-0"
-                    disabled={busy}
-                    onClick={() => void printing.output('share')}
-                  >
-                    <Share2 aria-hidden />
-                    {t('share')}
-                  </Button>
-                </div>
-              ) : null}
-            </>
+            <StickerFileActions
+              count={total || batchCount}
+              source={selection.length ? 'selection' : 'batch'}
+              disabled={busy || !canGenerate || total > MAX_STICKERS}
+              onOutput={(format) =>
+                void printing.output(
+                  format,
+                  selection.length ? selection : undefined,
+                )
+              }
+            />
           }
         />
       }

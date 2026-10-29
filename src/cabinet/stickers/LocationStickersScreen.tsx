@@ -49,6 +49,13 @@ import { LocationQueueEditor } from './LocationQueueEditor'
 import { LocationBatchConfirmation } from './LocationBatchConfirmation'
 import { locationStickersMessages } from './location-stickers-messages'
 import { locationStickersHref, parseStickerRoute } from './sticker-route'
+import { StickerFileActions } from './StickerFileActions'
+import {
+  downloadStickerHtml,
+  shareStickerHtml,
+  StickerSharingUnsupported,
+  type StickerFileFormat,
+} from './sticker-file-output'
 import { useStickerFeedback } from './use-sticker-feedback'
 import { useLocationPrintQueue } from './use-location-print-queue'
 import {
@@ -383,7 +390,10 @@ function ScopedLocationStickers({
       setMessage(null)
     })
   }
-  const output = async (format: 'print' | 'pdf', fromQueue = true) => {
+  const output = async (
+    format: 'print' | StickerFileFormat,
+    fromQueue = true,
+  ) => {
     if (outputBusy.current || !data || status !== 'ready') return
     const original = fromQueue ? queue : null
     if (fromQueue && (!original || !same)) return
@@ -397,26 +407,34 @@ function ScopedLocationStickers({
     let popup: Window | null = null
     try {
       const mutation = guard()
-      popup = window.open('', '_blank')
-      if (!popup) {
-        setError(t('blocked'))
-        return
+      if (format === 'print' || format === 'pdf') {
+        popup = window.open('', '_blank')
+        if (!popup) {
+          setError(t('blocked'))
+          return
+        }
+        popup.opener = null
       }
-      popup.opener = null
       outputBusy.current = true
       setBusy(true)
       setError(null)
-      setPending(null)
-      const current = () =>
-        mounted.current &&
-        !mutation.signal.aborted &&
-        (!token || isCurrent(token))
+      if (format === 'print') setPending(null)
+      const current = () => {
+        const owner = locationQueueStore.getSnapshot().scope
+        return (
+          mounted.current &&
+          !mutation.signal.aborted &&
+          owner?.userId === scope.userId &&
+          owner.tenantId === scope.tenantId &&
+          (!token || isCurrent(token))
+        )
+      }
       const fresh = await loadLocationLabelCollection(
         data.target,
         mutation.signal,
       )
       if (!current()) {
-        popup.close()
+        popup?.close()
         return
       }
       setData(fresh)
@@ -429,18 +447,31 @@ function ScopedLocationStickers({
           })
       const html = await buildZoneLabelHtml(labels, documentLocale)
       if (!current()) {
-        popup.close()
+        popup?.close()
         return
       }
-      popup.document.write(html)
-      popup.document.close()
-      popup.focus()
-      popup.print()
-      if (format === 'print' && token && current())
-        setPending({ expected: token, ids: [...ids], signal: mutation.signal })
-    } catch {
+      guard()
+      if (popup) {
+        popup.document.write(html)
+        popup.document.close()
+        popup.focus()
+        popup.print()
+        if (format === 'print' && token && current())
+          setPending({
+            expected: token,
+            ids: [...ids],
+            signal: mutation.signal,
+          })
+      } else if (format === 'download') downloadStickerHtml(html)
+      else await shareStickerHtml(html, tp('shareTitle'))
+    } catch (error) {
       popup?.close()
-      if (mounted.current) setError(t('failed'))
+      if (mounted.current)
+        setError(
+          error instanceof StickerSharingUnsupported
+            ? tp('shareUnsupported')
+            : t('failed'),
+        )
     } finally {
       outputBusy.current = false
       if (mounted.current) setBusy(false)
@@ -667,30 +698,25 @@ function ScopedLocationStickers({
           objects={previewCount}
           total={previewCount}
           actions={
-            chosen.length > MAX_LOCATION_LABELS ||
-            (!queue && chosen.length > 0) ? (
+            previewCount > 0 ? (
               <div className="grid gap-2">
                 {chosen.length > MAX_LOCATION_LABELS ? (
                   <Notice tone="warn">
                     {ts('limit', { max: MAX_LOCATION_LABELS })}
                   </Notice>
                 ) : null}
-                {!queue && chosen.length > 0 ? (
-                  <>
-                    <Button
-                      disabled={
-                        busy ||
-                        !chosen.length ||
-                        chosen.length > MAX_LOCATION_LABELS ||
-                        status !== 'ready'
-                      }
-                      onClick={() => void output('pdf', false)}
-                    >
-                      {t('pdf', { count: chosen.length })}
-                    </Button>
-                    <p className="rz-caption">{t('pdfHint')}</p>
-                  </>
-                ) : null}
+                <StickerFileActions
+                  count={previewCount}
+                  source={chosen.length ? 'selection' : 'batch'}
+                  disabled={
+                    busy ||
+                    status !== 'ready' ||
+                    chosen.length > MAX_LOCATION_LABELS
+                  }
+                  onOutput={(format) =>
+                    void output(format, chosen.length === 0)
+                  }
+                />
               </div>
             ) : null
           }

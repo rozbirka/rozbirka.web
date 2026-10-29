@@ -4,7 +4,7 @@ export const stickersMessages = defineMessages({
   uk: {
     title: 'Стікери',
     subtitle:
-      'QR-стікери для запчастин. Сканер відкриває запчастину за її кодом.',
+      'QR-стікери для запчастин і місць зберігання. Оберіть потрібні та підготуйте до друку.',
     noScope:
       'Відновлення черги заблоковано без стабільної ідентичності користувача та розбірки.',
     searchLabel: 'Пошук запчастини',
@@ -31,6 +31,11 @@ export const stickersMessages = defineMessages({
     preparing: 'Готуємо макет…',
     print: 'Друкувати {count}',
     prepare: 'Підготувати {count}',
+    pdf: 'PDF · {count}',
+    filesSelection: 'Вибрані стікери · {count}',
+    filesBatch: 'Наступна партія черги · {count}',
+    pdfHint:
+      'Щоб зберегти PDF, у вікні друку браузера оберіть «Зберегти як PDF».',
     download: 'Завантажити',
     share: 'Поділитися',
     subscriptionBlocked: 'Поточна підписка не дозволяє генерацію стікерів.',
@@ -49,7 +54,8 @@ export const stickersMessages = defineMessages({
   },
   'en-GB': {
     title: 'Stickers',
-    subtitle: 'QR stickers for parts. The scanner opens a part by its code.',
+    subtitle:
+      'QR stickers for parts and storage locations. Select items and prepare them for printing.',
     noScope:
       'The queue can’t be restored without a stable user and business identity.',
     searchLabel: 'Search parts',
@@ -76,6 +82,10 @@ export const stickersMessages = defineMessages({
     preparing: 'Preparing layout…',
     print: 'Print {count}',
     prepare: 'Prepare {count}',
+    pdf: 'PDF · {count}',
+    filesSelection: 'Selected stickers · {count}',
+    filesBatch: 'Next queued batch · {count}',
+    pdfHint: 'Choose “Save as PDF” in the browser print dialog to save a PDF.',
     download: 'Download',
     share: 'Share',
     subscriptionBlocked:
@@ -95,7 +105,8 @@ export const stickersMessages = defineMessages({
   },
   pl: {
     title: 'Naklejki',
-    subtitle: 'Naklejki QR dla części. Skaner otwiera część po jej kodzie.',
+    subtitle:
+      'Naklejki QR dla części i miejsc przechowywania. Wybierz pozycje i przygotuj je do druku.',
     noScope:
       'Przywrócenie kolejki jest zablokowane bez stałej tożsamości użytkownika i firmy.',
     searchLabel: 'Szukaj części',
@@ -122,6 +133,11 @@ export const stickersMessages = defineMessages({
     preparing: 'Przygotowujemy układ…',
     print: 'Drukuj {count}',
     prepare: 'Przygotuj {count}',
+    pdf: 'PDF · {count}',
+    filesSelection: 'Wybrane naklejki · {count}',
+    filesBatch: 'Następna partia kolejki · {count}',
+    pdfHint:
+      'Aby zapisać PDF, wybierz „Zapisz jako PDF” w oknie drukowania przeglądarki.',
     download: 'Pobierz',
     share: 'Udostępnij',
     subscriptionBlocked:

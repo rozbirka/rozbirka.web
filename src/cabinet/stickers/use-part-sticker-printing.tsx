@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { stickersApi, type StickerData } from '@/api/stickers'
 import { useT, type Locale } from '@/i18n'
+import {
+  downloadStickerHtml,
+  shareStickerHtml,
+  StickerSharingUnsupported,
+  type StickerFileFormat,
+} from './sticker-file-output'
 import { useStickerFeedback } from './use-sticker-feedback'
 import { usePartPrintQueue } from './use-part-print-queue'
 import { partQueueStore, withPartQueueLock } from './part-queue-store'
 import {
   nextPartBatch,
+  PART_QUEUE_LIMIT,
   type PartQueueCopy,
   type PartStickerSelection,
 } from './part-print-queue'
@@ -191,13 +198,34 @@ export function usePartStickerPrinting({
         })),
       )
     }, onQueued)
-  const output = async (format: 'print' | 'pdf' | 'download' | 'share') => {
-    if (!queue || !expected || !canGenerate || busyRef.current) return
+  const output = async (
+    format: 'print' | StickerFileFormat,
+    selection?: readonly PartStickerSelection[],
+  ) => {
+    const draft = selection?.length ? selection : null
+    if (
+      !scope ||
+      (!draft && (!queue || !expected)) ||
+      !canGenerate ||
+      busyRef.current
+    )
+      return
+    if (
+      draft &&
+      (draft.some(
+        (item) => !Number.isSafeInteger(item.quantity) || item.quantity <= 0,
+      ) ||
+        draft.reduce((sum, item) => sum + item.quantity, 0) > PART_QUEUE_LIMIT)
+    ) {
+      setError(tp('limit', { max: PART_QUEUE_LIMIT }))
+      return
+    }
+    const token = draft ? null : expected
     let popup: Window | null = null
     busyRef.current = true
     setBusy(true)
     setError(null)
-    setPending(null)
+    if (format === 'print') setPending(null)
     try {
       const mutation = requireLatestMutation({ quota: false })
       if (format === 'print' || format === 'pdf') {
@@ -208,7 +236,24 @@ export function usePartStickerPrinting({
         }
         popup.opener = null
       }
-      const copies = nextPartBatch(queue)
+      const copies = draft
+        ? draft.flatMap((item) =>
+            Array.from({ length: item.quantity }, (_, index) => ({
+              id: `${item.id}:${index}`,
+              partId: item.id,
+            })),
+          )
+        : nextPartBatch(queue!)
+      const current = () => {
+        const owner = partQueueStore.getSnapshot().scope
+        return (
+          mounted.current &&
+          !mutation.signal.aborted &&
+          owner?.userId === scope.userId &&
+          owner.tenantId === scope.tenantId &&
+          (!token || currentOutput(token, mutation.signal))
+        )
+      }
       const response = await stickersApi.getBatchData(
         [...new Set(copies.map((copy) => copy.partId))],
         { signal: mutation.signal },
@@ -219,7 +264,7 @@ export function usePartStickerPrinting({
         window.location.origin,
         documentLocale,
       )
-      if (!currentOutput(expected, mutation.signal)) {
+      if (!current()) {
         popup?.close()
         return
       }
@@ -229,35 +274,25 @@ export function usePartStickerPrinting({
         popup.document.close()
         popup.focus()
         popup.print()
-        if (format === 'print' && currentOutput(expected, mutation.signal))
+        if (format === 'print' && token && current())
           setPending({
-            expected,
+            expected: token,
             ids: copies.map((copy) => copy.id),
             signal: mutation.signal,
           })
       } else if (format === 'download') {
-        const url = URL.createObjectURL(
-          new Blob([html], { type: 'text/html;charset=utf-8' }),
-        )
-        try {
-          const link = document.createElement('a')
-          link.href = url
-          link.download = 'rozbirka-stickers.html'
-          link.click()
-        } finally {
-          URL.revokeObjectURL(url)
-        }
+        downloadStickerHtml(html)
       } else {
-        const file = new File([html], 'rozbirka-stickers.html', {
-          type: 'text/html',
-        })
-        if (!navigator.share || !navigator.canShare?.({ files: [file] }))
-          throw new Error('share-unavailable')
-        await navigator.share({ files: [file], title: tp('shareTitle') })
+        await shareStickerHtml(html, tp('shareTitle'))
       }
-    } catch {
+    } catch (error) {
       popup?.close()
-      if (mounted.current) setError(t('failed'))
+      if (mounted.current)
+        setError(
+          error instanceof StickerSharingUnsupported
+            ? tp('shareUnsupported')
+            : t('failed'),
+        )
     } finally {
       busyRef.current = false
       if (mounted.current) setBusy(false)

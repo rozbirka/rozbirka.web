@@ -335,3 +335,74 @@ it('closes delayed output and clears both namespaces when the owner signs out', 
     screen.queryByRole('button', { name: 'Усі надруковано' }),
   ).not.toBeInTheDocument()
 })
+
+it('exports the selected part copies through PDF, download and share without creating a queue', async () => {
+  savedSelection(25)
+  const createObjectURL = vi.fn().mockReturnValue('blob:parts'),
+    revokeObjectURL = vi.fn()
+  class TestURL extends URL {
+    static override createObjectURL = createObjectURL
+    static override revokeObjectURL = revokeObjectURL
+  }
+  vi.stubGlobal('URL', TestURL)
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation(() => undefined)
+  const share = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { ...navigator, canShare: () => true, share })
+  renderScreen()
+  fireEvent.click(await screen.findByRole('button', { name: 'PDF · 25' }))
+  await vi.waitFor(() => expect(print).toHaveBeenCalledOnce())
+  expect(
+    (write.mock.calls[0]?.[0] as string).match(/class="sticker"/g),
+  ).toHaveLength(25)
+  expect(partQueueStore.getSnapshot().queue).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Завантажити' }))
+  await vi.waitFor(() => expect(click).toHaveBeenCalledOnce())
+  expect(revokeObjectURL).toHaveBeenCalledWith('blob:parts')
+  fireEvent.click(screen.getByRole('button', { name: 'Поділитися' }))
+  await vi.waitFor(() => expect(share).toHaveBeenCalledOnce())
+  expect(share.mock.calls[0]?.[0]).toMatchObject({
+    files: [expect.any(File)],
+    title: 'Стікери Rozbirka',
+  })
+  expect(partQueueStore.getSnapshot().queue).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Усі надруковано' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('checkbox', { name: 'Bumper' })).toBeChecked()
+})
+
+it('does not download a part selection after signing out during data preparation', async () => {
+  savedSelection(2)
+  class TestURL extends URL {
+    static override createObjectURL = vi.fn().mockReturnValue('blob:parts')
+    static override revokeObjectURL = vi.fn()
+  }
+  vi.stubGlobal('URL', TestURL)
+  const click = vi
+    .spyOn(HTMLAnchorElement.prototype, 'click')
+    .mockImplementation(() => undefined)
+  let finish: ((value: { items: object[] }) => void) | undefined
+  stickerMocks.getBatchData.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  renderScreen()
+  fireEvent.click(await screen.findByRole('button', { name: 'Завантажити' }))
+  await vi.waitFor(() => expect(finish).toBeDefined())
+  await act(() =>
+    tenantResetRegistry.clear({ userId: 'user-1', tenantId: 'tenant-1' }),
+  )
+  await act(async () => {
+    finish?.({
+      items: [{ id: 'part-1', name: 'Bumper', qrCode: 'raw:1', quantity: 25 }],
+    })
+    await Promise.resolve()
+  })
+  await screen.findByRole('button', { name: 'Підготувати 0' })
+  expect(click).not.toHaveBeenCalled()
+  expect(partQueueStore.getSnapshot().queue).toBeNull()
+})
