@@ -36,6 +36,9 @@ import {
 import { integrationsMessages } from './integrations-messages'
 import { IntegrationCrumbs } from './IntegrationsScreen'
 import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
+import { npConnectMessages } from './np-connect-messages'
+import { NpDisconnectDialog } from './np-disconnect-dialog'
+import { npDisconnectMessages } from './np-disconnect-messages'
 import { NpOverview, NpRightsCard } from './np-overview'
 import { useNpSettingsEditor } from './np-settings-editor'
 import { npSettingsMessages } from './np-settings-messages'
@@ -71,6 +74,8 @@ export function NovaPoshtaScreen() {
   const { locale } = useLocale()
   const t = useT(integrationsMessages)
   const ts = useT(npSettingsMessages)
+  const td = useT(npDisconnectMessages)
+  const tn = useT(npConnectMessages)
   const { countryCode } = useTenantSettings()
   // Outside Ukraine nothing is read: Core would refuse every request anyway.
   const countryBlocked = !isNovaPoshtaAvailable(countryCode)
@@ -86,8 +91,12 @@ export function NovaPoshtaScreen() {
   )
   const [points, setPoints] = useState<number | null>(null)
   const [failures, setFailures] = useState<number | null>(null)
-  const [busy, setBusy] = useState<null | 'verify'>(null)
+  const [busy, setBusy] = useState<
+    null | 'verify' | 'reconnect' | 'disconnect'
+  >(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingOff, setConfirmingOff] = useState(false)
+  const [offError, setOffError] = useState<string | null>(null)
   const toast = useOptionalToast()
   const mountedRef = useRef(true)
   const { requireLatestMutation } = useLatestMutationGuard(
@@ -270,6 +279,7 @@ export function NovaPoshtaScreen() {
   const integration = state.integration
   const status = integrationStatusPresentation(integration.status, locale)
   const active = integration.status === 'active'
+  const off = integration.status === 'inactive'
   const configured = integration.configured
 
   const apply = (updated: Integration) => {
@@ -278,7 +288,7 @@ export function NovaPoshtaScreen() {
   }
 
   const run = async (
-    kind: 'verify',
+    kind: 'verify' | 'reconnect',
     action: () => Promise<Integration>,
     successMessage: string,
   ): Promise<boolean> => {
@@ -322,6 +332,41 @@ export function NovaPoshtaScreen() {
     }
   }
 
+  // Core checks the stored key with the carrier again before switching back
+  // on; a key that stopped working leaves the integration off and says why.
+  const reconnect = () =>
+    void run(
+      'reconnect',
+      () => integrationsApi.activate(integration.id),
+      tn('connected'),
+    )
+
+  const disconnect = async () => {
+    if (busy !== null) return
+    try {
+      requireLatestMutation()
+    } catch {
+      setOffError(t('noAccess'))
+      return
+    }
+    setBusy('disconnect')
+    setOffError(null)
+    try {
+      apply(await integrationsApi.deactivate(integration.id))
+      if (!mountedRef.current) return
+      setConfirmingOff(false)
+      setDiagnostics(null)
+      toast?.show({ tone: 'info', message: td('done') })
+    } catch (problem) {
+      if (mountedRef.current)
+        setOffError(
+          integrationProblemMessage(normalizeApiProblem(problem), locale),
+        )
+    } finally {
+      if (mountedRef.current) setBusy(null)
+    }
+  }
+
   const tabs: {
     id: Tab
     label: string
@@ -347,7 +392,7 @@ export function NovaPoshtaScreen() {
   return (
     <RedesignShell
       actions={
-        tab === 'settings' && configured && rights.integrations
+        tab === 'settings' && configured && !off && rights.integrations
           ? editor.actions
           : backToList
       }
@@ -364,8 +409,8 @@ export function NovaPoshtaScreen() {
           <span className="rz-muted">{ts('headSub')}</span>
         </div>
         <div>
-          <StatusPill tone={status.tone}>
-            {active ? t('stateOn') : status.label}
+          <StatusPill tone={off ? 'neutral' : status.tone}>
+            {active ? t('stateOn') : off ? td('headOff') : status.label}
           </StatusPill>
         </div>
       </div>
@@ -394,6 +439,13 @@ export function NovaPoshtaScreen() {
         </nav>
       )}
 
+      {off && (
+        <Notice block>
+          <p className="rz-strong m-0 font-semibold">{td('offTitle')}</p>
+          <p className="m-0 mt-1">{td('offText')}</p>
+        </Notice>
+      )}
+
       {error !== null && <Notice tone="danger">{error}</Notice>}
 
       {tab === 'overview' && (
@@ -406,13 +458,28 @@ export function NovaPoshtaScreen() {
           diagnostics={diagnostics}
           editPath={tabPath('settings')}
           integration={integration}
+          onDisconnect={() => {
+            setOffError(null)
+            setConfirmingOff(true)
+          }}
+          onReconnect={reconnect}
           onVerify={() => void verify()}
+          reconnecting={busy === 'reconnect'}
           rights={rights}
           settings={delivery.state}
           updated={updated}
           verifying={busy === 'verify'}
         />
       )}
+
+      <NpDisconnectDialog
+        error={offError}
+        integrationId={integration.id}
+        onConfirm={() => void disconnect()}
+        onOpenChange={setConfirmingOff}
+        open={confirmingOff}
+        pending={busy === 'disconnect'}
+      />
 
       {tab === 'points' && (
         <DispatchPointsPanel
@@ -437,7 +504,10 @@ export function NovaPoshtaScreen() {
       {tab === 'settings' && (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="rz-form-page grid min-w-0 gap-4">
-            {configured && rights.integrations ? editor.body : null}
+            {/* A setup session would switch it back on behind the reader's
+                back, so a switched-off integration is changed only after
+                «Підключити знову». */}
+            {configured && !off && rights.integrations ? editor.body : null}
             <DeliveryDepositPanel key={scopeKey} />
           </div>
           <NpRightsCard className="max-lg:hidden" {...rights} />

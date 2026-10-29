@@ -61,6 +61,9 @@ vi.mock('@/api/integrations', () => ({
     verify: vi.fn(),
     activate: vi.fn(),
     deactivate: vi.fn(),
+    deactivationImpact: vi.fn(() =>
+      Promise.resolve({ inTransitCount: 0, codCount: 0, expectedCodUah: 0 }),
+    ),
     diagnose: vi.fn(),
   },
 }))
@@ -686,12 +689,122 @@ it('explains who may change the settings instead of offering them', async () => 
 
   expect(
     await screen.findByText(
-      'Змінювати налаштування може власник або користувач із правом «Налаштування інтеграцій».',
+      'Змінювати налаштування й відключати інтеграцію може власник або користувач із правом «Налаштування інтеграцій».',
     ),
   ).toBeVisible()
   expect(
     screen.queryByRole('link', { name: 'Змінити налаштування' }),
   ).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Відключити' })).toBeNull()
+})
+
+const switchedOff: Integration = {
+  ...integration,
+  status: 'inactive',
+  deactivatedAt: '2026-10-28T08:14:00Z',
+  deactivatedBy: 'Олег К.',
+}
+
+it('names the waybills still on the road before disconnecting', async () => {
+  const user = userEvent.setup()
+  configuredDelivery()
+  vi.mocked(integrationsApi.deactivationImpact).mockResolvedValue({
+    inTransitCount: 3,
+    codCount: 2,
+    expectedCodUah: 8400,
+  })
+  vi.mocked(integrationsApi.deactivate).mockResolvedValue(switchedOff)
+  renderScreen()
+
+  await user.click(await screen.findByRole('button', { name: 'Відключити' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Відключити Нову пошту?',
+  })
+  expect(
+    await within(dialog).findByText(
+      /^3 ТТН у дорозі, 2 з них із післяплатою 8 400/,
+    ),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByText('Є відправлення, які ще в дорозі.'),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByText('Відправлення в Новій пошті не скасовуються.'),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByRole('button', { name: 'Скасувати' }),
+  ).toHaveFocus()
+
+  await user.click(within(dialog).getByRole('button', { name: 'Відключити' }))
+
+  expect(integrationsApi.deactivate).toHaveBeenCalledWith('integration-1')
+  expect(
+    await screen.findByText('Нову пошту відключено. Дані збережено.'),
+  ).toBeVisible()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(screen.getByText('Інтеграцію відключено')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Підключити знову' })).toBeVisible()
+})
+
+it('leaves money out of the warning without the finance permission', async () => {
+  const user = userEvent.setup()
+  configuredDelivery()
+  vi.mocked(integrationsApi.deactivationImpact).mockResolvedValue({
+    inTransitCount: 1,
+    codCount: null,
+    expectedCodUah: null,
+  })
+  renderScreen()
+
+  await user.click(await screen.findByRole('button', { name: 'Відключити' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(
+    await within(dialog).findByText(
+      '1 ТТН у дорозі. Після відключення їхні статуси не оновлюватимуться — стежте за ними в кабінеті Нової пошти.',
+    ),
+  ).toBeVisible()
+  expect(within(dialog).queryByText(/післяплат/)).toBeNull()
+})
+
+it('says what is kept while switched off and connects again', async () => {
+  const user = userEvent.setup()
+  configuredDelivery()
+  vi.mocked(integrationsApi.getById).mockResolvedValue(switchedOff)
+  vi.mocked(integrationsApi.activate).mockResolvedValue(integration)
+  renderScreen()
+
+  expect(
+    await screen.findByText(
+      /^Відключено · Олег К\. · 28\.10\.2026, 10:14\. Ключ і налаштування збережено\.$/,
+    ),
+  ).toBeVisible()
+  expect(screen.getByText('Зупинено')).toBeVisible()
+  expect(screen.getByText('Відключена')).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Відключити' })).toBeNull()
+  expect(
+    screen.queryByRole('link', { name: 'Змінити налаштування' }),
+  ).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Підключити знову' }))
+
+  expect(integrationsApi.activate).toHaveBeenCalledWith('integration-1')
+  expect(
+    await screen.findByText(
+      'Нову пошту підключено. Доставку можна оформлювати із замовлень.',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText('Інтеграцію відключено')).toBeNull()
+})
+
+it('keeps a switched-off integration out of the settings editor', async () => {
+  configuredDelivery()
+  vi.mocked(integrationsApi.getById).mockResolvedValue(switchedOff)
+  renderScreen('/settings')
+
+  expect(
+    await screen.findByRole('heading', { name: 'Депозит за доставку' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Перевірити зміни' })).toBeNull()
 })
 
 it('changes only the till in place and marks the dispatch card updated', async () => {

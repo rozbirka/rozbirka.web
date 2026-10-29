@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { Pencil, Plug } from 'lucide-react'
+import { Pencil, Plug, Unplug } from 'lucide-react'
 import {
   Button,
   DateValue,
@@ -10,13 +10,14 @@ import {
   type StatusTone,
 } from '@/components/app'
 import type { Integration, IntegrationDiagnostics } from '@/api/integrations'
-import { useLocale, useT } from '@/i18n'
+import { useFormat, useLocale, useT } from '@/i18n'
 import {
   diagnosticCheckLabel,
   integrationErrorMessage,
 } from './integration-labels'
 import { integrationsMessages } from './integrations-messages'
 import { NpChecks } from './np-checks'
+import { npDisconnectMessages } from './np-disconnect-messages'
 import { npSettingsMessages } from './np-settings-messages'
 import { KEY_MASK, pointFromDispatchPoint, pointLine } from './np-setup-model'
 import {
@@ -78,6 +79,20 @@ function FactRow({
   )
 }
 
+/** Who switched Nova Poshta off and when, and that nothing was lost. */
+function OffLine({ integration }: { integration: Integration }) {
+  const td = useT(npDisconnectMessages)
+  const format = useFormat()
+  const { deactivatedAt, deactivatedBy } = integration
+  const date = format.dateTime(deactivatedAt)
+  if (date === null) return td('offKept')
+  const when =
+    deactivatedBy === null
+      ? td('offAt', { date })
+      : td('offBy', { name: deactivatedBy, date })
+  return `${when} ${td('offKept')}`
+}
+
 /** «Ваші права»: the three rights module 46 depends on, each said in words. */
 export function NpRightsCard({
   className,
@@ -126,13 +141,17 @@ export function NpRightsCard({
  * The overview of a connected Nova Poshta (module 46 §1.22, §2.1): whether
  * the key still works, what new waybills are dispatched with, and the
  * reader's own rights. The key itself is never shown — only its mask.
+ * Switched off (2.14), the same cards say what is kept and lead back on.
  */
 export function NpOverview({
   connectPath,
   diagnostics,
   editPath,
   integration,
+  onDisconnect,
+  onReconnect,
   onVerify,
+  reconnecting,
   rights,
   settings,
   updated,
@@ -142,7 +161,10 @@ export function NpOverview({
   diagnostics: IntegrationDiagnostics | null
   editPath: string
   integration: Integration
+  onDisconnect: () => void
+  onReconnect: () => void
   onVerify: () => void
+  reconnecting: boolean
   rights: { integrations: boolean; orders: boolean; finance: boolean }
   settings: NpDeliverySettingsState
   /** Set right after a save, for the «Оновлено» pill (2.5). */
@@ -152,7 +174,9 @@ export function NpOverview({
   const { locale } = useLocale()
   const t = useT(npSettingsMessages)
   const ti = useT(integrationsMessages)
+  const td = useT(npDisconnectMessages)
   const active = integration.status === 'active'
+  const off = integration.status === 'inactive'
   const failing = integration.status === 'error'
   const data = settings.kind === 'ready' ? settings.data : null
   const senderRef = data?.preferences.senderCounterpartyRef ?? null
@@ -178,11 +202,13 @@ export function NpOverview({
       </div>
     )
 
-  const statusPill: { label: string; tone: StatusTone } = failing
-    ? { label: ti('rejected'), tone: 'danger' }
-    : active
-      ? { label: ti('working'), tone: 'ok' }
-      : { label: ti('integrationOff'), tone: 'neutral' }
+  const statusPill: { label: string; tone: StatusTone } = off
+    ? { label: td('statusOff'), tone: 'neutral' }
+    : failing
+      ? { label: ti('rejected'), tone: 'danger' }
+      : active
+        ? { label: ti('working'), tone: 'ok' }
+        : { label: ti('integrationOff'), tone: 'neutral' }
 
   const sender = data?.senders?.find((item) => item.ref === senderRef) ?? null
   const contact =
@@ -208,9 +234,13 @@ export function NpOverview({
                 </StatusPill>
               </div>
               <p className="rz-caption m-0 text-pretty">
-                {integration.lastErrorCode === null
-                  ? ti('keyAccepted')
-                  : integrationErrorMessage(integration.lastErrorCode, locale)}
+                {off ? (
+                  <OffLine integration={integration} />
+                ) : integration.lastErrorCode === null ? (
+                  ti('keyAccepted')
+                ) : (
+                  integrationErrorMessage(integration.lastErrorCode, locale)
+                )}
               </p>
             </div>
           </header>
@@ -219,7 +249,9 @@ export function NpOverview({
               label={t('keyLabel')}
               mono
               sub={
-                integration.verifiedAt === null ? (
+                off ? (
+                  td('keyKept')
+                ) : integration.verifiedAt === null ? (
                   ti('notCheckedYet')
                 ) : (
                   <>
@@ -233,11 +265,13 @@ export function NpOverview({
             <FactRow
               label={t('access')}
               value={
-                failing
-                  ? t('accessBroken')
-                  : active
-                    ? t('accessWorking')
-                    : t('accessOff')
+                off
+                  ? td('accessStopped')
+                  : failing
+                    ? t('accessBroken')
+                    : active
+                      ? t('accessWorking')
+                      : t('accessOff')
               }
             />
           </dl>
@@ -326,13 +360,29 @@ export function NpOverview({
             </dl>
           )}
           <div className="border-app-line border-t px-(--rz-card-p) py-2.5">
-            {rights.integrations ? (
-              <Button asChild>
-                <Link to={editPath}>
-                  <Pencil aria-hidden />
-                  {t('changeSettings')}
-                </Link>
+            {rights.integrations && off ? (
+              <Button
+                aria-busy={reconnecting}
+                disabled={reconnecting}
+                onClick={onReconnect}
+                variant="primary"
+              >
+                <Plug aria-hidden />
+                {reconnecting ? td('reconnecting') : td('reconnect')}
               </Button>
+            ) : rights.integrations ? (
+              <div className="rz-btn-row">
+                <Button asChild>
+                  <Link to={editPath}>
+                    <Pencil aria-hidden />
+                    {t('changeSettings')}
+                  </Link>
+                </Button>
+                <Button onClick={onDisconnect} variant="ghost">
+                  <Unplug aria-hidden />
+                  {td('disconnect')}
+                </Button>
+              </div>
             ) : (
               <p className="rz-caption m-0 text-pretty">{t('readOnly')}</p>
             )}
