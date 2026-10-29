@@ -96,6 +96,7 @@ export function NovaPoshtaScreen() {
   >(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmingOff, setConfirmingOff] = useState(false)
+  const [offOpenings, setOffOpenings] = useState(0)
   const [offError, setOffError] = useState<string | null>(null)
   const toast = useOptionalToast()
   const mountedRef = useRef(true)
@@ -460,6 +461,7 @@ export function NovaPoshtaScreen() {
           integration={integration}
           onDisconnect={() => {
             setOffError(null)
+            setOffOpenings((count) => count + 1)
             setConfirmingOff(true)
           }}
           onReconnect={reconnect}
@@ -475,6 +477,7 @@ export function NovaPoshtaScreen() {
       <NpDisconnectDialog
         error={offError}
         integrationId={integration.id}
+        key={offOpenings}
         onConfirm={() => void disconnect()}
         onOpenChange={setConfirmingOff}
         open={confirmingOff}

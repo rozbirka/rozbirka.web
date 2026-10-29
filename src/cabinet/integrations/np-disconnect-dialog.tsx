@@ -17,6 +17,7 @@ type ImpactState =
  * «Відключити Нову пошту?» (2.12–2.13). Waybills still on the road are named
  * first, with their post-payment when the reader may see money, because
  * nobody will be told when they arrive. Focus starts on «Скасувати».
+ * The caller remounts it for every opening, so the count is never stale.
  */
 export function NpDisconnectDialog({
   error,
@@ -40,7 +41,6 @@ export function NpDisconnectDialog({
   useEffect(() => {
     if (!open) return
     const controller = new AbortController()
-    setImpact({ kind: 'loading' })
     void integrationsApi
       .deactivationImpact(integrationId, { signal: controller.signal })
       .then(
