@@ -182,46 +182,50 @@ const renderScreen = (tab = '') =>
     </MemoryRouter>,
   )
 
-it('never shows a stored key and sends only its replacement', async () => {
-  vi.mocked(integrationsApi.saveNovaPoshtaKey).mockResolvedValue(integration)
-  const user = userEvent.setup()
-
+it('leaves the key and the on/off switch out of the settings tab', async () => {
   renderScreen('/settings')
 
-  expect(await screen.findByText('••••••••••••••••')).toBeVisible()
-  await user.click(screen.getByRole('button', { name: 'Замінити ключ' }))
-  await user.type(
-    screen.getByLabelText('Новий ключ доступу'),
-    '  fixture-key  ',
-  )
-  await user.click(screen.getByRole('button', { name: 'Зберегти ключ' }))
-
-  expect(integrationsApi.saveNovaPoshtaKey).toHaveBeenCalledWith(
-    'integration-1',
-    'fixture-key',
-  )
-  expect(await screen.findByText('••••••••••••••••')).toBeVisible()
-})
-
-it('cannot be switched on before a key is stored', async () => {
-  vi.mocked(integrationsApi.getById).mockResolvedValue({
-    ...integration,
-    status: 'draft',
-    configured: false,
-    verifiedAt: null,
-  })
-
-  renderScreen('/settings')
-
-  const toggle = await screen.findByRole('button', {
-    name: 'Увімкнути інтеграцію',
-  })
-  expect(toggle).toBeDisabled()
   expect(
-    screen.getByRole('button', { name: 'Перевірити підключення' }),
-  ).toBeDisabled()
-  expect(screen.getByText('ключ не збережено')).toBeVisible()
+    await screen.findByRole('heading', { name: 'Депозит за доставку' }),
+  ).toBeVisible()
+  expect(screen.queryByText('••••••••••••••••')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Замінити ключ' })).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Вимкнути інтеграцію' }),
+  ).toBeNull()
+  expect(integrationsApi.saveNovaPoshtaKey).not.toHaveBeenCalled()
+  expect(integrationsApi.deactivate).not.toHaveBeenCalled()
 })
+
+it.each(['', '/dispatch-points', '/webhook', '/settings'])(
+  'offers only the connection before Nova Poshta is connected (%s)',
+  async (suffix) => {
+    vi.mocked(integrationsApi.getById).mockResolvedValue({
+      ...integration,
+      status: 'draft',
+      configured: false,
+      verifiedAt: null,
+    })
+
+    renderScreen(suffix)
+
+    expect(await screen.findByText(/Нову пошту ще не підключено/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Підключити' })).toHaveAttribute(
+      'href',
+      '/app/koval/settings/integrations/integration-1/connect',
+    )
+    expect(
+      screen.queryByRole('navigation', { name: 'Розділи інтеграції' }),
+    ).toBeNull()
+    expect(screen.queryByText('ключ не збережено')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Увімкнути інтеграцію' }),
+    ).toBeNull()
+    expect(integrationsApi.trackingSubscription).not.toHaveBeenCalled()
+    expect(integrationsApi.webhookStatus).not.toHaveBeenCalled()
+    expect(integrationsApi.dispatchPoints).not.toHaveBeenCalled()
+  },
+)
 
 it('names the step a failed verification stopped at', async () => {
   vi.mocked(integrationsApi.getById).mockResolvedValue({
@@ -270,12 +274,16 @@ it('keeps a failed verification visible and does not start diagnostics', async (
     message: 'Нова пошта не прийняла цей ключ API.',
     code: 'nova_poshta_unauthorized',
   })
+  vi.mocked(integrationsApi.getById).mockResolvedValue({
+    ...integration,
+    status: 'error',
+  })
   const user = userEvent.setup()
 
-  renderScreen('/settings')
+  renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Перевірити підключення' }),
+    await screen.findByRole('button', { name: 'Перевірити ще раз' }),
   )
 
   expect(
@@ -296,34 +304,19 @@ it('confirms a successful verification', async () => {
     lastErrorCode: null,
     checks: [],
   })
-  const user = userEvent.setup()
-
-  renderScreen('/settings')
-
-  await user.click(
-    await screen.findByRole('button', { name: 'Перевірити підключення' }),
-  )
-
-  expect(await screen.findByText('Підключення перевірено.')).toBeVisible()
-})
-
-it('turns a live integration off with the consequence spelled out', async () => {
-  vi.mocked(integrationsApi.deactivate).mockResolvedValue({
+  vi.mocked(integrationsApi.getById).mockResolvedValue({
     ...integration,
-    status: 'inactive',
+    status: 'error',
   })
   const user = userEvent.setup()
 
-  renderScreen('/settings')
+  renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути інтеграцію' }),
+    await screen.findByRole('button', { name: 'Перевірити ще раз' }),
   )
 
-  expect(integrationsApi.deactivate).toHaveBeenCalledWith('integration-1')
-  expect(
-    await screen.findByRole('button', { name: 'Увімкнути інтеграцію' }),
-  ).toBeVisible()
+  expect(await screen.findByText('Підключення перевірено.')).toBeVisible()
 })
 
 it('opens the tab the link points at and counts what each one holds', async () => {
