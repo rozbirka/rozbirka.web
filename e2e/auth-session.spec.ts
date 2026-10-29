@@ -121,6 +121,7 @@ interface RouteState {
   protectedAttempts: Record<string, number>
   invitationAccepted: boolean
   tenantRequests: { path: string; tenantId: string | null }[]
+  unexpectedRequests: string[]
 }
 
 function containsRefreshCredential(value: unknown): boolean {
@@ -176,6 +177,7 @@ async function installApiBoundary(
     protectedAttempts: {},
     invitationAccepted: false,
     tenantRequests: [],
+    unexpectedRequests: [],
   }
 
   await page.route('**/*', async (route) => {
@@ -277,6 +279,53 @@ async function installApiBoundary(
       return
     }
 
+    if (options.onlyOwnedTenant) {
+      if (
+        method === 'GET' &&
+        ['/api/v1/dashboard', '/api/v1/dashboard/analytics'].includes(path)
+      ) {
+        const response = await route.fetch({
+          url: `${upstreamOrigin()}${path}${url.search}`,
+        })
+        await route.fulfill({ response })
+        return
+      }
+      if (path === '/api/v1/me/feature-flags' && method === 'GET') {
+        await fulfillData(route, {})
+        return
+      }
+      if (path === '/api/v1/me/activity' && method === 'POST') {
+        await route.fulfill({ status: 204 })
+        return
+      }
+      if (path === '/api/v1/cars' && method === 'GET') {
+        await fulfillData(route, {
+          items: [],
+          page: 1,
+          pageSize: 5,
+          total: 0,
+          totalPages: 0,
+        })
+        return
+      }
+      if (
+        /^\/api\/v1\/tenants\/[^/]+\/onboarding$/.test(path) &&
+        method === 'GET'
+      ) {
+        await fulfillData(route, {
+          eligible: false,
+          deferred: false,
+          dismissed: false,
+          completed: true,
+          settingsCompleted: true,
+          currencySelected: true,
+          sourceCreated: true,
+          firstPartCreated: true,
+        })
+        return
+      }
+    }
+
     const tenantId = request.headers()['x-tenant-id'] ?? null
     const tenantScopedPaths = new Set([
       '/api/v1/me/permissions',
@@ -328,6 +377,15 @@ async function installApiBoundary(
       return
     }
 
+    if (options.onlyOwnedTenant && path.startsWith('/api/v1/')) {
+      state.unexpectedRequests.push(`${method} ${path}`)
+      await fulfillData(
+        route,
+        { error: { code: 'UNEXPECTED_FIXTURE_REQUEST', message: path } },
+        500,
+      )
+      return
+    }
     await route.continue()
   })
 
@@ -780,6 +838,7 @@ for (const width of [1280, 390]) {
     page.on('pageerror', (error) => errors.push(error.message))
     const state = await installApiBoundary(page, { onlyOwnedTenant: true })
     await loginFrom(page)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Олена')
 
     if (width < 768) {
       await page.getByRole('button', { name: 'Ще', exact: true }).click()
@@ -821,7 +880,9 @@ for (const width of [1280, 390]) {
     await expect(switcher).toHaveValue('tenant-2')
     await switcher.selectOption('tenant-1')
     await expect(page).toHaveURL('/app/koval/dashboard')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Олена')
     expect(errors).toEqual([])
+    expect(state.unexpectedRequests).toEqual([])
   })
 }
 
