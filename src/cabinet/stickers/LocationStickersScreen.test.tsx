@@ -142,7 +142,7 @@ it('uses the same sticker header, list selection and ten-row pagination as parts
     await screen.findByRole('listitem', { name: 'Обрати: Section 9' }),
   ).toBeInTheDocument()
   expect(
-    screen.queryByRole('listitem', { name: 'Обрати: Section 10' }),
+    screen.queryByRole('listitem', { name: 'Обрати: Section 11' }),
   ).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Вибрати всі' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Зняти' })).toBeDisabled()
@@ -169,7 +169,9 @@ it('opens a storage list directly without a blocking collection form', async () 
   expect(
     await screen.findByRole('listitem', { name: 'Обрати: Zone' }),
   ).toBeInTheDocument()
-  expect(screen.getByRole('searchbox', { name: 'Назва або код' })).toBeEnabled()
+  expect(
+    screen.getByRole('searchbox', { name: 'Назва місця зберігання' }),
+  ).toBeEnabled()
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: 'Показати стікери' }),
@@ -253,9 +255,12 @@ it('keeps manually deselected rows across search changes and blocks oversized qu
     ).toBeDisabled(),
   )
   fireEvent.click(screen.getByRole('checkbox', { name: 'Обрати: Section 1' }))
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Назва або код' }), {
-    target: { value: 'Section 1' },
-  })
+  fireEvent.change(
+    screen.getByRole('searchbox', { name: 'Назва місця зберігання' }),
+    {
+      target: { value: 'Section 1' },
+    },
+  )
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).not.toBeChecked()
@@ -549,7 +554,7 @@ it('continues a legacy queue from another warehouse and upgrades it without losi
   expect(print).not.toHaveBeenCalled()
 })
 
-it('shows all levels immediately, removes the filter and prints a mixed selection', async () => {
+it('keeps all levels available in the general warehouse catalogue and prints a mixed selection', async () => {
   api.getSections.mockResolvedValue(records.slice(0, 1))
   api.getShelves.mockResolvedValue([
     {
@@ -561,7 +566,7 @@ it('shows all levels immediately, removes the filter and prints a mixed selectio
     },
   ])
   const user = userEvent.setup()
-  mount('?type=locations&kind=zone&parent=w&select=all')
+  mount('?type=locations&kind=warehouse&parent=w&label=z')
   await screen.findByRole('checkbox', { name: 'Обрати: Shelf' })
   expect(
     screen.getAllByRole('listitem').map((x) => x.getAttribute('aria-label')),
@@ -656,7 +661,7 @@ it('allows removing an unavailable queued ID so it cannot trap the queue', async
   expect(screen.getByRole('button', { name: 'Друк наступних 1' })).toBeEnabled()
 })
 
-it('keeps a shelf deep link selection limited to that section while showing siblings', async () => {
+it('limits the shelf deep link list and selection to that section', async () => {
   api.getSections.mockResolvedValue(records.slice(0, 2))
   api.getSection.mockResolvedValue(records[0])
   api.getShelves.mockResolvedValue([
@@ -682,11 +687,11 @@ it('keeps a shelf deep link selection limited to that section while showing sibl
     ).toBeChecked(),
   )
   expect(
-    screen.getByRole('checkbox', { name: 'Обрати: Other shelf' }),
-  ).not.toBeChecked()
+    screen.queryByRole('checkbox', { name: 'Обрати: Other shelf' }),
+  ).not.toBeInTheDocument()
   expect(
-    screen.getByRole('checkbox', { name: 'Обрати: Zone' }),
-  ).not.toBeChecked()
+    screen.queryByRole('checkbox', { name: 'Обрати: Zone' }),
+  ).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Підготувати 1' })).toBeEnabled()
 })
 
@@ -719,7 +724,7 @@ it('opens the page containing the first shelf requested from a section menu, kee
   expect(screen.getByRole('button', { name: 'Підготувати 11' })).toBeEnabled()
   expect(
     screen.getByRole('button', { name: 'Попередня сторінка' }),
-  ).toBeEnabled()
+  ).toBeDisabled()
   await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Requested shelf 11' }),
@@ -755,31 +760,40 @@ it('does not select or display a requested shelf already queued', async () => {
   ).toBeInTheDocument()
 })
 
-it('opens a later section page from a zone menu and does not force that page again after manual pagination', async () => {
+it('paginates only sections of the requested zone and preserves their selection', async () => {
   api.getZone.mockResolvedValue(zoneRecord('other-zone'))
   api.getZones.mockResolvedValue([zoneRecord(), zoneRecord('other-zone')])
-  api.getSections.mockResolvedValue([
-    ...records,
-    {
-      ...records[0],
-      id: 'requested-section',
-      name: 'Requested section',
-      zoneId: 'other-zone',
-    },
-  ])
+  const requested = Array.from({ length: 11 }, (_, index) => ({
+    ...records[0],
+    id: `requested-${index}`,
+    name: `Requested section ${index + 1}`,
+    zoneId: 'other-zone',
+  }))
+  api.getSections.mockResolvedValue([...records, ...requested])
   const user = userEvent.setup()
   mount('?type=locations&kind=section&parent=other-zone&select=all')
   expect(
-    await screen.findByRole('checkbox', { name: 'Обрати: Requested section' }),
+    await screen.findByRole('checkbox', {
+      name: 'Обрати: Requested section 1',
+    }),
   ).toBeChecked()
+  expect(screen.getByText('1–10 з 11')).toBeVisible()
   expect(
-    screen.queryByRole('checkbox', { name: 'Обрати: Zone' }),
+    screen.getByRole('button', { name: 'Попередня сторінка' }),
+  ).toBeDisabled()
+  expect(
+    screen.queryByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Requested section 11' }),
+  ).toBeChecked()
+  expect(screen.getByText('11–11 з 11')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Попередня сторінка' }))
   expect(
-    screen.queryByRole('checkbox', { name: 'Обрати: Requested section' }),
-  ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Підготувати 1' })).toBeEnabled()
+    screen.getByRole('checkbox', { name: 'Обрати: Requested section 1' }),
+  ).toBeChecked()
+  expect(screen.getByRole('button', { name: 'Підготувати 11' })).toBeEnabled()
 })
 
 it('restores the shelf context page on a direct revisit without selecting labels again', async () => {
@@ -793,16 +807,15 @@ it('restores the shelf context page on a direct revisit without selecting labels
       sectionName: 'Section 1',
     },
   ])
-  const user = userEvent.setup()
   mount('?type=locations&kind=shelf&parent=s0')
   expect(
     await screen.findByRole('checkbox', { name: 'Обрати: Context shelf' }),
   ).not.toBeChecked()
   expect(screen.getByRole('button', { name: 'Підготувати 0' })).toBeDisabled()
-  await user.click(screen.getByRole('button', { name: 'Попередня сторінка' }))
   expect(
-    screen.queryByRole('checkbox', { name: 'Обрати: Context shelf' }),
-  ).not.toBeInTheDocument()
+    screen.getByRole('button', { name: 'Попередня сторінка' }),
+  ).toBeDisabled()
+  expect(screen.getByText('1–1 з 1')).toBeVisible()
 })
 
 afterEach(() => {
@@ -912,7 +925,7 @@ it('hides queued locations from search and restores removed locations unchecked'
   ).not.toBeInTheDocument()
   expect(screen.getAllByRole('checkbox')).toHaveLength(10)
   await user.type(
-    screen.getByRole('searchbox', { name: 'Назва або код' }),
+    screen.getByRole('searchbox', { name: 'Назва місця зберігання' }),
     'Section 1',
   )
   expect(
@@ -928,3 +941,127 @@ it('hides queued locations from search and restores removed locations unchecked'
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).not.toBeChecked()
 })
+
+it.each([
+  {
+    kind: 'zone',
+    parent: 'w',
+    names: ['Zone', 'Other zone'],
+    ids: ['z', 'other-zone'],
+    irrelevant: 'Section',
+  },
+  {
+    kind: 'section',
+    parent: 'z',
+    names: ['Section 1'],
+    ids: ['s0'],
+    irrelevant: 'Other',
+  },
+  {
+    kind: 'shelf',
+    parent: 's0',
+    names: ['Chosen shelf'],
+    ids: ['p0'],
+    irrelevant: 'Other',
+  },
+])(
+  'limits the $kind print hand-off, search and selection to its parent',
+  async ({ kind, parent, names, ids, irrelevant }) => {
+    const otherSection = {
+      ...records[1],
+      zoneId: 'other-zone',
+      zoneName: 'Other zone',
+    }
+    api.getZones.mockResolvedValue([
+      zoneRecord(),
+      zoneRecord('other-zone', 'Other zone'),
+    ])
+    api.getZone.mockImplementation((id: string) =>
+      Promise.resolve(zoneRecord(id, id === 'z' ? 'Zone' : 'Other zone')),
+    )
+    api.getSections.mockResolvedValue([records[0], otherSection])
+    api.getSection.mockResolvedValue(records[0])
+    api.getShelves.mockResolvedValue([
+      {
+        ...records[0],
+        id: 'p0',
+        name: 'Chosen shelf',
+        sectionId: 's0',
+        sectionName: 'Section 1',
+      },
+      {
+        ...otherSection,
+        id: 'p1',
+        name: 'Other shelf',
+        sectionId: 's1',
+        sectionName: 'Section 2',
+      },
+    ])
+    const user = userEvent.setup()
+    mount(`?type=locations&kind=${kind}&parent=${parent}&select=all`)
+    await screen.findByRole('button', { name: `Підготувати ${ids.length}` })
+    const list = screen.getByRole('list', { name: 'Місця зберігання' })
+    expect(
+      within(list)
+        .getAllByRole('checkbox')
+        .map((row) => row.getAttribute('aria-label')),
+    ).toEqual(names.map((name) => `Обрати: ${name}`))
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Назва місця зберігання' }),
+      irrelevant,
+    )
+    expect(within(list).queryAllByRole('checkbox')).toHaveLength(0)
+    await user.clear(
+      screen.getByRole('searchbox', { name: 'Назва місця зберігання' }),
+    )
+    await user.click(
+      screen.getByRole('button', { name: `Підготувати ${ids.length}` }),
+    )
+    expect(locationQueueStore.getSnapshot().queue?.remainingIds).toEqual(ids)
+  },
+)
+
+it.each([
+  { query: '  хОдОвА  ', names: ['Секція А02 · Ходова'] },
+  { query: 'Кузовні деталі', names: ['Кузовні деталі'] },
+  { query: 'unique-code-only', names: [] },
+])(
+  'searches only primary location names for "$query"',
+  async ({ query, names }) => {
+    api.getZones.mockResolvedValue([zoneRecord('z', 'Кузовні деталі')])
+    const section = {
+      ...records[0],
+      name: 'Секція А02 · Ходова',
+      zoneName: 'Кузовні деталі',
+      code: 'unique-code-only',
+    }
+    api.getSections.mockResolvedValue([section])
+    api.getShelves.mockResolvedValue([
+      {
+        ...section,
+        id: 'p0',
+        name: 'Полиця А02-01',
+        sectionId: 's0',
+        sectionName: section.name,
+      },
+    ])
+    mount('?type=locations&kind=warehouse&parent=w')
+    await screen.findByRole('checkbox', { name: 'Обрати: Полиця А02-01' })
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: query },
+    })
+    const list = screen.getByRole('list', { name: 'Місця зберігання' })
+    expect(
+      within(list)
+        .queryAllByRole('checkbox')
+        .map((row) => row.getAttribute('aria-label')),
+    ).toEqual(names.map((name) => `Обрати: ${name}`))
+    if (names.length) {
+      expect(screen.getByText('1–1 з 1')).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: 'Вибрати всі' }))
+      expect(screen.getByText('Вибрано 1 обʼєктів · 1 стікерів')).toBeVisible()
+    } else {
+      expect(screen.getByRole('button', { name: 'Вибрати всі' })).toBeDisabled()
+    }
+  },
+)

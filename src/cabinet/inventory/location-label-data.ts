@@ -111,7 +111,7 @@ export async function loadLocationLabels(
     }))
 }
 
-/** A warehouse catalogue, ordered by physical level; scoped links only seed selection. */
+/** Full warehouse catalogue for queue resolution; screens scope their selection lists. */
 export async function loadStorageStickerCatalogue(
   collection: Pick<LocationLabelTarget, 'kind' | 'parentId'>,
   signal: AbortSignal,

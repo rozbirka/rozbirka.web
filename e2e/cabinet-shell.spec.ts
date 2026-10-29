@@ -3755,6 +3755,22 @@ for (const target of [
     await expect(
       page.getByRole('region', { name: 'Активна черга', exact: true }),
     ).toHaveCount(0)
+    const list = page.getByRole('list', {
+      name: 'Місця зберігання',
+      exact: true,
+    })
+    await expect(list.getByRole('checkbox')).toHaveCount(
+      Math.min(target.count, 10),
+    )
+    const prefixes = { zone: 'Зона', section: 'Секція', shelf: 'Полиця' }
+    for (const [kind, prefix] of Object.entries(prefixes)) {
+      if (kind !== target.kind)
+        await expect(
+          list.getByRole('checkbox', {
+            name: new RegExp(`^Обрати: ${prefix}`),
+          }),
+        ).toHaveCount(0)
+    }
   })
 }
 
@@ -4149,6 +4165,14 @@ for (const mode of ['parts', 'locations'] as const) {
       await expect(
         page.getByRole('checkbox', { name: 'Обрати: Зона 01', exact: true }),
       ).toHaveCount(0)
+      await expect(
+        page
+          .getByRole('list', { name: 'Місця зберігання', exact: true })
+          .getByRole('checkbox'),
+      ).toHaveCount(0)
+      await page.goto(
+        '/app/koval/stickers?type=locations&kind=warehouse&parent=warehouse-1',
+      )
       await page
         .getByRole('checkbox', { name: 'Обрати: Секція 01', exact: true })
         .check()

@@ -5,6 +5,7 @@ export const locationStickersMessages = defineMessages({
     mode: 'Тип стікерів',
     parts: 'Запчастини',
     locations: 'Місця зберігання',
+    searchName: 'Назва місця зберігання',
     chooseCollection: 'Оберіть місця зберігання',
     changeCollection: 'Змінити список',
     kind: 'Що друкуємо',
@@ -14,6 +15,7 @@ export const locationStickersMessages = defineMessages({
     warehouse: 'Склад',
     zone: 'Зона',
     section: 'Секція',
+    shelf: 'Полиця',
     choose: 'Оберіть…',
     open: 'Показати стікери',
     invalid:
@@ -40,6 +42,7 @@ export const locationStickersMessages = defineMessages({
     mode: 'Sticker type',
     parts: 'Parts',
     locations: 'Storage locations',
+    searchName: 'Storage location name',
     chooseCollection: 'Choose storage locations',
     changeCollection: 'Change list',
     kind: 'What to print',
@@ -49,6 +52,7 @@ export const locationStickersMessages = defineMessages({
     warehouse: 'Warehouse',
     zone: 'Zone',
     section: 'Section',
+    shelf: 'Shelf',
     choose: 'Choose…',
     open: 'Show stickers',
     invalid:
@@ -76,6 +80,7 @@ export const locationStickersMessages = defineMessages({
     mode: 'Typ naklejek',
     parts: 'Części',
     locations: 'Miejsca przechowywania',
+    searchName: 'Nazwa miejsca przechowywania',
     chooseCollection: 'Wybierz miejsca przechowywania',
     changeCollection: 'Zmień listę',
     kind: 'Co drukujemy',
@@ -85,6 +90,7 @@ export const locationStickersMessages = defineMessages({
     warehouse: 'Magazyn',
     zone: 'Strefa',
     section: 'Sekcja',
+    shelf: 'Półka',
     choose: 'Wybierz…',
     open: 'Pokaż naklejki',
     invalid:

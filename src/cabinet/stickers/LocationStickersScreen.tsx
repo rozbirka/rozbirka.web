@@ -48,7 +48,11 @@ import { LocationPrintQueueCard } from './LocationPrintQueueCard'
 import { LocationQueueEditor } from './LocationQueueEditor'
 import { LocationBatchConfirmation } from './LocationBatchConfirmation'
 import { locationStickersMessages } from './location-stickers-messages'
-import { locationStickersHref, parseStickerRoute } from './sticker-route'
+import {
+  locationStickersHref,
+  parseStickerRoute,
+  type LocationCollection,
+} from './sticker-route'
 import { StickerFileActions } from './StickerFileActions'
 import {
   downloadStickerHtml,
@@ -75,6 +79,18 @@ interface QueueEditorState {
   expected: LocationQueueExpected
   ids: string[]
   mode: 'remove' | 'confirm'
+}
+
+function belongsToCollection(
+  label: PrintableZoneLabel,
+  collection: LocationCollection | null,
+) {
+  return (
+    collection !== null &&
+    (collection.kind === 'warehouse' ||
+      (label.kind === collection.kind &&
+        label.parentId === collection.parentId))
+  )
 }
 
 export function LocationStickersScreen({
@@ -159,7 +175,8 @@ function ScopedLocationStickers({
     const requestKey = `${kind}:${parentId}:${reload}`
     if (!seed && loadedRequest.current === requestKey) return
     const controller = new AbortController()
-    void loadStorageStickerCatalogue({ kind, parentId }, controller.signal)
+    const collection = { kind, parentId }
+    void loadStorageStickerCatalogue(collection, controller.signal)
       .then(async (result) => {
         if (controller.signal.aborted) return
         // Upgrade only the resolved legacy collection, under the same owner lock.
@@ -197,17 +214,15 @@ function ScopedLocationStickers({
               ? activeQueue.remainingIds
               : [],
           )
+          const collectionLabels = result.labels.filter((label) =>
+            belongsToCollection(label, collection),
+          )
           const requestedIds = new Set(
-            result.labels
-              .filter(
-                (label) =>
-                  (kind === 'warehouse' ||
-                    (label.kind === kind && label.parentId === parentId)) &&
-                  (!requested || requested.has(label.id)),
-              )
+            collectionLabels
+              .filter((label) => !requested || requested.has(label.id))
               .map((label) => label.id),
           )
-          const firstRequestedIndex = result.labels
+          const firstRequestedIndex = collectionLabels
             .filter((label) => !queuedIds.has(label.id))
             .findIndex((label) => requestedIds.has(label.id))
           setPage(Math.floor(Math.max(0, firstRequestedIndex) / PAGE_SIZE) + 1)
@@ -275,19 +290,19 @@ function ScopedLocationStickers({
       (current) => new Set([...current].filter((id) => !queued.has(id))),
     )
   }
-  const chosen =
-    data?.labels.filter(
-      (label) => selected.has(label.id) && !queued.has(label.id),
+  const collectionLabels =
+    data?.labels.filter((label) =>
+      belongsToCollection(label, route.collection),
     ) ?? []
+  const chosen = collectionLabels.filter(
+    (label) => selected.has(label.id) && !queued.has(label.id),
+  )
   const needle = search.trim().toLocaleLowerCase()
-  const filtered =
-    data?.labels.filter(
-      (label) =>
-        !queued.has(label.id) &&
-        `${label.zoneName} ${label.zoneCode} ${label.path?.join(' ') ?? ''}`
-          .toLocaleLowerCase()
-          .includes(needle),
-    ) ?? []
+  const filtered = collectionLabels.filter(
+    (label) =>
+      !queued.has(label.id) &&
+      label.zoneName.toLocaleLowerCase().includes(needle),
+  )
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)),
     currentPage = Math.min(page, pageCount)
   const visible = filtered.slice(
@@ -542,8 +557,8 @@ function ScopedLocationStickers({
       <StickerListPanel
         search={
           <SearchInput
-            aria-label={t('search')}
-            placeholder={t('search')}
+            aria-label={ts('searchName')}
+            placeholder={ts('searchName')}
             value={search}
             disabled={busy}
             onChange={(event) => {
@@ -629,10 +644,11 @@ function ScopedLocationStickers({
               code={label.zoneCode}
               detail={
                 <>
-                  {label.path?.slice(0, -1).join(' · ') ??
+                  {ts('warehouse')}:{' '}
+                  {label.path?.slice(0, -1).join(' → ') ??
                     data?.target.parentName}
                   <span className="rz-dot rz-dot--ok ml-2">
-                    {t(label.kind ?? 'zone')}
+                    {ts(label.kind ?? 'zone')}
                   </span>
                 </>
               }
