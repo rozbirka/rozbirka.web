@@ -210,6 +210,7 @@ const load = (state: Partial<DeliveryOrderState>): DeliveryOrderLoad => ({
     money: delivery(),
     integrationId: 'int-1',
     carrier: null,
+    disconnected: null,
     points: [],
     shipment: null,
     customerPhone: null,
@@ -397,6 +398,62 @@ it('keeps the money half working while the carrier is out of reach', async () =>
   expect(
     screen.queryByRole('button', { name: 'Оформити доставку' }),
   ).not.toBeInTheDocument()
+})
+
+it('keeps a waybill readable once Nova Poshta is switched off (2.16)', async () => {
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      integrationId: null,
+      carrier: { status: 'inactive', errorCode: null },
+      disconnected: { integrationId: 'int-1', at: '2026-10-28T08:14:00Z' },
+      shipment: shipment({ trackingEnabled: false }),
+    }),
+  )
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(
+    screen.getByText(
+      /Інтеграцію з Новою поштою відключено 28\.10\.2026\. Статус ТТН не оновлюється/,
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText(/Нова пошта недоступна/)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Друк етикетки' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Оновити статус' })).toBeDisabled()
+  expect(screen.getByRole('link', { name: 'Відкрити ТТН' })).toHaveAttribute(
+    'href',
+    '/app/koval/sales/waybills/ship-1',
+  )
+  for (const name of ['Редагувати', 'Скасувати ТТН', 'Копіювати номер'])
+    expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+})
+
+it('says how to arrange delivery once Nova Poshta is switched off (2.17)', async () => {
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      integrationId: null,
+      carrier: { status: 'inactive', errorCode: null },
+      disconnected: { integrationId: 'int-1', at: '2026-10-28T08:14:00Z' },
+      shipment: null,
+    }),
+  )
+
+  // The money half is Core's and stays as it was.
+  expect(screen.getByRole('region', { name: 'Платежі' })).toBeVisible()
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(screen.getByText('Замовлення поки не їде поштою.')).toBeVisible()
+  expect(
+    screen.getByText(
+      'Інтеграцію з Новою поштою відключено. Щоб оформити доставку, підключіть її знову в налаштуваннях.',
+    ),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Оформити доставку' }),
+  ).toBeDisabled()
+  expect(
+    screen.getByRole('link', { name: 'Відкрити інтеграцію' }),
+  ).toHaveAttribute('href', '/app/koval/settings/integrations/int-1')
 })
 
 it('lets an unpaid, uncalculated order reach the booking drawer', async () => {

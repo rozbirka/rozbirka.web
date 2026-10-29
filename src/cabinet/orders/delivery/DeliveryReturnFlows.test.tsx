@@ -206,6 +206,7 @@ const load = (state: Partial<DeliveryOrderState>): DeliveryOrderLoad => ({
     money: delivery(),
     integrationId: 'int-1',
     carrier: null,
+    disconnected: null,
     points: [],
     shipment: shipment(),
     customerPhone: null,

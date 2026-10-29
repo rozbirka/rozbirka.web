@@ -202,7 +202,7 @@ export function DeliveryOrderBody({
   // The body is only mounted once the money record exists, so the load has
   // certainly settled by now.
   const state = load.state!
-  const { carrier, integrationId, points, shipment } = state
+  const { carrier, disconnected, integrationId, points, shipment } = state
 
   const [tab, setTab] = useState<DeliveryTab>('sales')
   const [drawer, setDrawer] = useState<Drawer | null>(null)
@@ -711,9 +711,11 @@ export function DeliveryOrderBody({
               {novaPoshtaAvailable ? null : (
                 <Notice tone="info">{t('countryUnavailable')}</Notice>
               )}
+              {/* Switched off, the block itself says so (2.16–2.17). */}
               {novaPoshtaAvailable &&
               integrationId === null &&
-              carrier !== null ? (
+              carrier !== null &&
+              disconnected === null ? (
                 <Notice block tone="warn">
                   <p className="rz-strong m-0 font-semibold">
                     {carrier.status === 'missing'
@@ -751,6 +753,17 @@ export function DeliveryOrderBody({
                 cancelled={cancelled}
                 carrierReady={novaPoshtaAvailable && integrationId !== null}
                 delivery={delivery}
+                disconnected={
+                  disconnected === null
+                    ? null
+                    : {
+                        at: disconnected.at,
+                        integrationPath:
+                          integrationsPath === null
+                            ? null
+                            : `${integrationsPath}/${encodeURIComponent(disconnected.integrationId)}`,
+                      }
+                }
                 lost={lost !== null}
                 numberRef={numberRef}
                 points={points}

@@ -187,6 +187,7 @@ function Harness({
     money: delivery,
     integrationId: 'int-1',
     carrier: null,
+    disconnected: null,
     points,
     shipment: initial,
     customerPhone: null,
