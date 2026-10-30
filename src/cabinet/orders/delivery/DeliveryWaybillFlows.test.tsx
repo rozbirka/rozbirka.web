@@ -8,6 +8,8 @@ import type { DeliveryOrder } from '@/api/delivery'
 import type { ApiProblem } from '@/api/contracts'
 import type { OrderDetail } from '@/api/orders'
 import { shippingApi, type Shipment } from '@/api/shipping'
+import { deliveryApi } from '@/api/delivery'
+import { integrationsApi } from '@/api/integrations'
 import { ToastProvider } from '@/components/app'
 import { DeliveryOrderBody } from './DeliveryOrderBody'
 import type { DeliveryOrderState } from './use-delivery-order'
@@ -29,7 +31,10 @@ vi.mock('@/api/nova-poshta-setup', () => ({
   novaPoshtaSetupApi: { connections: vi.fn().mockResolvedValue([]) },
 }))
 vi.mock('@/api/delivery', () => ({
-  deliveryApi: { get: vi.fn().mockReturnValue(new Promise(() => undefined)) },
+  deliveryApi: {
+    get: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    configure: vi.fn(),
+  },
 }))
 vi.mock('@/api/shipping', () => ({
   shippingApi: {
@@ -42,6 +47,9 @@ vi.mock('@/api/shipping', () => ({
     label: vi.fn(),
     update: vi.fn(),
     reconcile: vi.fn(),
+    searchRecoveryCandidates: vi.fn(),
+    previewRecoveryCandidate: vi.fn(),
+    confirmRecoveryCandidate: vi.fn(),
     previewExternal: vi.fn(),
     confirmExternal: vi.fn(),
   },
@@ -285,7 +293,7 @@ it('creates a waybill from a quoted draft and lands on its number (4.4–4.12)',
   )
   const sheet = await screen.findByRole('dialog', { name: 'Створити ТТН' })
   expect(sheet).toHaveTextContent('Розрахунок отримано')
-  expect(sheet).toHaveTextContent('224 UAH · внесено')
+  expect(sheet).toHaveTextContent('Додаткова передоплата не потрібна')
   expect(shippingApi.estimate).not.toHaveBeenCalled()
 
   await user.click(within(sheet).getByRole('button', { name: 'Створити ТТН' }))
@@ -296,6 +304,94 @@ it('creates a waybill from a quoted draft and lands on its number (4.4–4.12)',
   expect(
     within(block()).getByRole('button', { name: 'Скасувати ТТН' }),
   ).toBeVisible()
+})
+
+it.each([
+  {
+    scenario: 'fully paid goods',
+    appliedUah: 4500,
+    outstandingUah: 0,
+    expected: 'Додаткова передоплата не потрібна',
+  },
+  {
+    scenario: 'a partial payment covering the minimum',
+    appliedUah: 300,
+    outstandingUah: 4200,
+    expected: 'Додаткова передоплата не потрібна',
+  },
+])(
+  'describes deposit coverage without inventing a separate payment: $scenario',
+  async ({ appliedUah, outstandingUah, expected }) => {
+    const { user, block } = await renderFlow({
+      initial: shipment(),
+      delivery: money({
+        agreedTotalUah: 4500,
+        appliedUah,
+        outstandingUah,
+        netReceivedUah: appliedUah,
+        requiredDepositUah: 185,
+      }),
+    })
+    await user.click(
+      within(block()).getByRole('button', {
+        name: 'Перевірити й створити ТТН',
+      }),
+    )
+    const checks = await screen.findByRole('dialog', {
+      name: 'Перевірка перед створенням ТТН',
+    })
+    expect(checks).toHaveTextContent('Вимога передоплати')
+    expect(checks).not.toHaveTextContent('Депозит за доставку внесено')
+    if (outstandingUah === 0) expect(checks).toHaveTextContent(expected)
+    await user.click(
+      within(checks).getByRole('button', { name: 'Продовжити оформлення' }),
+    )
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Створити ТТН',
+    })
+    expect(confirmation).toHaveTextContent('Мінімальна передоплата')
+    expect(confirmation).toHaveTextContent(expected)
+    expect(confirmation).not.toHaveTextContent('185 UAH · внесено')
+    expect(
+      within(confirmation).getByRole('button', { name: 'Створити ТТН' }),
+    ).toBeEnabled()
+    expect(shippingApi.create).not.toHaveBeenCalled()
+  },
+)
+
+it('shows a failed estimate instead of a received quote and lets it be retried', async () => {
+  vi.mocked(shippingApi.estimate).mockRejectedValueOnce(
+    problem('shipment_sender_revalidation_required'),
+  )
+  const { user, block } = await renderFlow({
+    initial: shipment({ quoteAt: null, quoteUah: null }),
+  })
+  await user.click(
+    within(block()).getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Продовжити оформлення' }),
+  )
+  const sheet = await screen.findByRole('dialog', { name: 'Створити ТТН' })
+  expect(
+    await within(sheet).findByText(
+      /Відправника в налаштуваннях Нової пошти змінено/,
+    ),
+  ).toBeVisible()
+  expect(within(sheet).getByText('Помилка розрахунку')).toBeVisible()
+  expect(within(sheet).queryByText('Розрахунок отримано')).toBeNull()
+  expect(
+    within(sheet).getByRole('button', { name: 'Створити ТТН' }),
+  ).toBeDisabled()
+
+  vi.mocked(shippingApi.estimate).mockResolvedValue(shipment())
+  await user.click(
+    within(sheet).getByRole('button', { name: 'Повторити розрахунок' }),
+  )
+  expect(await within(sheet).findByText('Розрахунок отримано')).toBeVisible()
+  expect(
+    within(sheet).getByRole('button', { name: 'Створити ТТН' }),
+  ).toBeEnabled()
 })
 
 it('blocks creation on a stale quote until it is taken again (4.8)', async () => {
@@ -351,9 +447,27 @@ it('turns an unanswered create into a result check with a candidate (4.11, 5.14)
     problem('nova_poshta_outcomeunknown'),
   )
   vi.mocked(shippingApi.get).mockResolvedValue(shipment({ state: 'Unknown' }))
-  vi.mocked(shippingApi.reconcile)
-    .mockRejectedValueOnce(problem('shipment_candidate_required'))
-    .mockResolvedValueOnce(created())
+  vi.mocked(shippingApi.searchRecoveryCandidates).mockResolvedValue({
+    shipmentVersion: 'v1',
+    status: 'NotFound',
+    candidates: [],
+  })
+  vi.mocked(shippingApi.previewRecoveryCandidate).mockResolvedValue({
+    shipmentVersion: 'v1',
+    status: 'Found',
+    candidates: [
+      {
+        number: TTN,
+        createdAt: null,
+        sender: shipment().sender,
+        recipient: shipment().draft.recipient,
+        codUah: 4200,
+        fingerprint: 'fp',
+        canConfirm: true,
+      },
+    ],
+  })
+  vi.mocked(shippingApi.confirmRecoveryCandidate).mockResolvedValue(created())
   const { user, block } = await renderFlow({ initial: shipment() })
   await user.click(
     within(block()).getByRole('button', { name: 'Перевірити й створити ТТН' }),
@@ -376,25 +490,30 @@ it('turns an unanswered create into a result check with a candidate (4.11, 5.14)
     within(sheet).getByRole('button', { name: 'Перевірити результат' }),
   )
   const check = await screen.findByRole('dialog', {
-    name: 'Перевірка результату',
+    name: 'Перевірити створення ТТН',
   })
   const input = await within(check).findByLabelText(/Номер/)
-  expect(check).toHaveTextContent('Ірина Коваль · +380 67 214 55 08')
   await user.type(input, '2045 1200 9877 31')
   await user.click(
-    within(check).getByRole('button', { name: 'Так, це накладна замовлення' }),
+    within(check).getByRole('button', { name: 'Перевірити номер' }),
+  )
+  expect(
+    await within(check).findByText('Ірина Коваль · +380 67 214 55 08'),
+  ).toBeVisible()
+  await user.click(
+    within(check).getByRole('button', { name: 'Підтвердити цю ТТН' }),
   )
 
   expect(await screen.findByText(`ТТН ${TTN} створено.`)).toBeVisible()
-  expect(shippingApi.reconcile).toHaveBeenLastCalledWith(
+  expect(shippingApi.confirmRecoveryCandidate).toHaveBeenLastCalledWith(
     'int-1',
     'order-1',
-    TTN,
+    { number: TTN, shipmentVersion: 'v1', fingerprint: 'fp' },
   )
 })
 
 it('waits instead of claiming success when the check finds no proof (5.15)', async () => {
-  vi.mocked(shippingApi.reconcile).mockRejectedValue(
+  vi.mocked(shippingApi.searchRecoveryCandidates).mockRejectedValue(
     problem('shipment_operation_in_progress'),
   )
   const { user, block } = await renderFlow({
@@ -731,14 +850,25 @@ it('checks an external waybill again when it changed meanwhile (6.11)', async ()
 it('explains a missing deposit in words and keeps creation out of reach (4.13)', async () => {
   const { user, block } = await renderFlow({
     initial: shipment(),
-    delivery: money({ depositSatisfied: false, depositShortfallUah: 224 }),
+    delivery: money({
+      appliedUah: 0,
+      netReceivedUah: 0,
+      outstandingUah: 9600,
+      depositSatisfied: false,
+      depositShortfallUah: 224,
+    }),
   })
-  expect(block()).toHaveTextContent('Депозит ще не внесено')
+  expect(
+    within(screen.getByRole('region', { name: 'Оплата' })).getByText(
+      'Мінімальна передоплата',
+    ),
+  ).toBeVisible()
+  expect(block()).toHaveTextContent('Потрібна мінімальна передоплата')
   expect(block()).toHaveTextContent(
-    'Розбірка вимагає депозит 224,00 UAH перед відправленням. Внесено 0,00 UAH.',
+    'Мінімальна передоплата: 224,00 UAH. Отримано від клієнта: 0,00 UAH.',
   )
   expect(
-    within(block()).getByRole('button', { name: 'Внести депозит' }),
+    within(block()).getByRole('button', { name: 'Внести передоплату' }),
   ).toBeVisible()
 
   await user.click(
@@ -748,8 +878,172 @@ it('explains a missing deposit in words and keeps creation out of reach (4.13)',
     await screen.findByRole('button', { name: 'Продовжити оформлення' }),
   )
   const sheet = await screen.findByRole('dialog', { name: 'Створити ТТН' })
-  expect(sheet).toHaveTextContent('бракує 224 UAH')
+  expect(sheet).toHaveTextContent('Залишилось внести: 224 UAH')
   expect(
     within(sheet).getByRole('button', { name: 'Створити ТТН' }),
   ).toBeDisabled()
+})
+
+it('keeps editing reachable to waive prepayment for a newly trusted customer on an existing draft', async () => {
+  const current = shipment()
+  vi.mocked(integrationsApi.divisions).mockResolvedValueOnce({
+    items: [
+      {
+        ref: current.draft.recipient.warehouseRef,
+        name: 'Відділення №5',
+        receivingAllowed: true,
+      },
+    ],
+    page: 1,
+    lastPage: 1,
+  } as never)
+  vi.mocked(deliveryApi.configure).mockResolvedValueOnce(
+    money({
+      customerTrusted: true,
+      depositWaived: true,
+      appliedUah: 0,
+      netReceivedUah: 0,
+      outstandingUah: 9600,
+      depositSatisfied: true,
+      depositShortfallUah: 0,
+    }),
+  )
+  vi.mocked(shippingApi.saveDraft).mockResolvedValueOnce(current)
+  const { user, block } = await renderFlow({
+    initial: current,
+    delivery: money({
+      customerTrusted: true,
+      depositWaived: false,
+      appliedUah: 0,
+      netReceivedUah: 0,
+      outstandingUah: 9600,
+      depositSatisfied: false,
+      depositShortfallUah: 224,
+    }),
+  })
+  expect(block()).toHaveTextContent(
+    'Довірений клієнт: можна вимкнути передоплату в «Редагувати».',
+  )
+  expect(
+    within(block()).getByRole('button', { name: 'Внести передоплату' }),
+  ).toBeVisible()
+  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Оформлення доставки',
+  })
+  const requirePrepayment = within(drawer).getByRole('switch', {
+    name: 'Вимагати мінімальну передоплату',
+  })
+  expect(requirePrepayment).toBeChecked()
+  await user.click(requirePrepayment)
+  expect(requirePrepayment).not.toBeChecked()
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Зберегти чернетку' }),
+  )
+  await waitFor(() =>
+    expect(deliveryApi.configure).toHaveBeenCalledWith(
+      'order-1',
+      undefined,
+      true,
+    ),
+  )
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: 'Оформлення доставки' }),
+    ).not.toBeInTheDocument(),
+  )
+  expect(block()).not.toHaveTextContent('Потрібна мінімальна передоплата')
+  expect(shippingApi.create).not.toHaveBeenCalled()
+})
+
+it('edits recipient surname and given name separately before the parcel is dispatched', async () => {
+  const original = created()
+  vi.mocked(shippingApi.update).mockResolvedValue(original)
+  const { user, block } = await renderFlow({
+    initial: {
+      ...original,
+      draft: {
+        ...original.draft,
+        recipient: { ...original.draft.recipient, name: 'Соболь Владислав' },
+      },
+    },
+  })
+  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
+  const surname = within(sheet).getByLabelText('Прізвище')
+  expect(surname).toHaveValue('Соболь')
+  expect(within(sheet).getByLabelText('Ім’я')).toHaveValue('Владислав')
+  await user.clear(surname)
+  expect(
+    within(sheet).getByRole('button', { name: 'Зберегти зміни' }),
+  ).toBeDisabled()
+  await user.type(surname, 'Коваль')
+  await user.click(
+    within(sheet).getByRole('button', { name: 'Зберегти зміни' }),
+  )
+  expect(shippingApi.update).toHaveBeenCalledWith(
+    'int-1',
+    'order-1',
+    'v1',
+    expect.objectContaining({
+      recipient: expect.objectContaining({
+        name: 'Коваль Владислав',
+      }) as unknown,
+    }),
+  )
+})
+
+it('blocks recreation with a missing given name instead of promoting the patronymic into it', async () => {
+  const original = created()
+  const { user, block } = await renderFlow({
+    initial: {
+      ...original,
+      draft: {
+        ...original.draft,
+        recipient: {
+          ...original.draft.recipient,
+          name: 'Соболь Владислав Ігорович',
+        },
+      },
+    },
+  })
+  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
+  const given = within(sheet).getByLabelText('Ім’я')
+  await user.clear(given)
+  expect(
+    within(sheet).getByRole('button', { name: 'Потрібна нова ТТН' }),
+  ).toBeDisabled()
+  expect(within(sheet).getByLabelText('По батькові')).toHaveValue('Ігорович')
+  expect(shippingApi.cancel).not.toHaveBeenCalled()
+  await user.type(given, 'Владислав')
+  expect(
+    within(sheet).getByRole('button', { name: 'Потрібна нова ТТН' }),
+  ).toBeEnabled()
+})
+
+it('locks every close control while Nova Poshta creates the waybill (4.9)', async () => {
+  let finish!: (value: Shipment) => void
+  vi.mocked(shippingApi.create).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  const { user, block } = await renderFlow({ initial: shipment() })
+  await user.click(
+    within(block()).getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Продовжити оформлення' }),
+  )
+  const sheet = await screen.findByRole('dialog', { name: 'Створити ТТН' })
+  await user.click(within(sheet).getByRole('button', { name: 'Створити ТТН' }))
+  expect(sheet).toHaveAttribute('aria-busy', 'true')
+  expect(within(sheet).getByRole('button', { name: 'Закрити' })).toBeDisabled()
+  expect(within(sheet).getByRole('button', { name: 'Назад' })).toBeDisabled()
+  await user.keyboard('{Escape}')
+  expect(sheet).toBeVisible()
+  finish(created())
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 })

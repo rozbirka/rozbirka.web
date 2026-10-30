@@ -262,8 +262,9 @@ export function WaybillList({
       align: 'end',
       hideNarrow: true,
       cell: (row) => {
+        const retained = row.paymentState === 'DeliveryCostsRetained'
         const note =
-          row.state === 'Cancelled'
+          row.state === 'Cancelled' && !retained
             ? null
             : listCodNote(row.state, row.paymentState, locale)
         const amount =
@@ -281,7 +282,7 @@ export function WaybillList({
             >
               {amount === null ? '—' : uah(amount, locale)}
             </span>
-            {note === null || amount === null ? null : (
+            {note === null || (amount === null && !retained) ? null : (
               <span className="rz-caption rz-mono">{note.text}</span>
             )}
           </span>

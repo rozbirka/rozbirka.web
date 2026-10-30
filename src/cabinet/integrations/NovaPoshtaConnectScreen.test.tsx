@@ -163,10 +163,10 @@ beforeEach(() => {
   })
 })
 
-const renderWizard = () =>
+const renderWizard = (query = '') =>
   render(
     <MemoryRouter
-      initialEntries={['/app/koval/settings/integrations/np-1/connect']}
+      initialEntries={[`/app/koval/settings/integrations/np-1/connect${query}`]}
     >
       <ToastProvider>
         <Routes>
@@ -402,4 +402,49 @@ it('keeps every choice when completing fails', async () => {
   expect(
     screen.getByRole('button', { name: 'Завершити підключення' }),
   ).toBeEnabled()
+})
+
+it('starts replacement at the key step instead of resuming an earlier verified key', async () => {
+  const user = userEvent.setup()
+  const first = renderWizard()
+  await user.type(screen.getByLabelText('API-ключ'), 'old-candidate')
+  await user.click(
+    screen.getByRole('button', { name: 'Перевірити й продовжити' }),
+  )
+  await screen.findByText('Крок 2 з 5 · Відправник і контакт')
+  first.unmount()
+  vi.mocked(novaPoshtaSetupApi.get).mockClear()
+  renderWizard('?newKey=1')
+  expect(screen.getByLabelText('API-ключ')).toHaveValue('')
+  expect(screen.getByText('Крок 1 з 5 · API-ключ')).toBeVisible()
+  expect(
+    screen.getByText(
+      /Чинне підключення залишиться без змін до завершення майстра/,
+    ),
+  ).toBeVisible()
+  expect(novaPoshtaSetupApi.get).not.toHaveBeenCalled()
+})
+
+it('replacement exit returns to the integration and explains that the next attempt needs a key', async () => {
+  const user = userEvent.setup()
+  renderWizard('?newKey=1')
+  await user.type(screen.getByLabelText('API-ключ'), 'replacement-key')
+  await user.click(
+    screen.getByRole('button', { name: 'Перевірити й продовжити' }),
+  )
+  await screen.findByText('Крок 2 з 5 · Відправник і контакт')
+  await user.click(screen.getByRole('button', { name: 'Вийти з підключення' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(
+    within(dialog).getByText('Чинне підключення залишиться без змін.'),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByText('Наступного разу введіть новий ключ знову.'),
+  ).toBeVisible()
+  expect(
+    within(dialog).queryByText(/наступного разу почнете з кроку 2/),
+  ).not.toBeInTheDocument()
+  await user.click(within(dialog).getByRole('button', { name: 'Вийти' }))
+  expect(await screen.findByText('overview')).toBeVisible()
+  expect(novaPoshtaSetupApi.complete).not.toHaveBeenCalled()
 })

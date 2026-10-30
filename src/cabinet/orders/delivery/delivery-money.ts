@@ -14,6 +14,16 @@ export const uah = (value: number, locale: Locale): string =>
 export const wholeUah = (value: number, locale: Locale): string =>
   formatMoney(value, 'UAH', locale, { fractionDigits: 0 }) ?? '—'
 
+/** A saved exception stops applying as soon as the customer loses trust. */
+export const hasDepositWaiver = (delivery: DeliveryOrder): boolean =>
+  delivery.depositWaived && delivery.customerTrusted
+
+/** Match Core's threshold: an agreed goods total caps the required minimum. */
+export const minimumPrepayment = (delivery: DeliveryOrder): number =>
+  delivery.agreedTotalUah > 0
+    ? Math.min(delivery.agreedTotalUah, delivery.requiredDepositUah)
+    : delivery.requiredDepositUah
+
 /** Core reports an unset agreed total as zero; that is not a settled order. */
 export const isFullyPaid = (delivery: DeliveryOrder): boolean =>
   delivery.agreedTotalUah > 0 &&

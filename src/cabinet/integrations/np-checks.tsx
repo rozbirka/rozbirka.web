@@ -18,16 +18,28 @@ export interface NpCheck {
 export function NpChecks({
   items,
   label,
+  variant = 'plain',
 }: {
   items: readonly NpCheck[]
   label?: string
+  variant?: 'plain' | 'inset'
 }) {
   return (
-    <ul aria-label={label} className="m-0 grid list-none p-0">
+    <ul
+      aria-label={label}
+      className={cn(
+        'm-0 grid list-none p-0',
+        variant === 'inset' &&
+          'border-app-line overflow-hidden rounded-rz-sm border bg-(--rz-sheet-field)',
+      )}
+    >
       {items.map((item) => (
         <li
           aria-current={item.state === 'pending' ? 'step' : undefined}
-          className="border-app-line flex min-h-10 items-center gap-2.5 border-t py-2 first:border-t-0"
+          className={cn(
+            'border-app-line flex min-h-10 items-center gap-2.5 border-t py-2 first:border-t-0',
+            variant === 'inset' && 'px-3',
+          )}
           key={item.label}
         >
           <span

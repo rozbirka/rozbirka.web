@@ -102,6 +102,8 @@ export function listCodNote(
     case 'LatePaymentNeedsRefund':
     case 'LateRefundRequired':
       return { text: tr(locale, 'codRefund'), tone: 'warn' }
+    case 'DeliveryCostsRetained':
+      return { text: tr(locale, 'payRetained') }
     case 'LateRefunded':
     case 'Refunded':
       return { text: tr(locale, 'codRefunded') }
@@ -121,6 +123,8 @@ export function cardPaymentSignal(
 ): Signal {
   if (shipment.state === 'Draft')
     return { label: tr(locale, 'payUnpaid'), tone: 'neutral' }
+  if (shipment.paymentState === 'DeliveryCostsRetained')
+    return { label: tr(locale, 'payRetained'), tone: 'neutral' }
   if (shipment.state === 'Cancelled')
     return { label: tr(locale, 'payNotApplicable'), tone: 'neutral' }
   switch (shipment.paymentState) {

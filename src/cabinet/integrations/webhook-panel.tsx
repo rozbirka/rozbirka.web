@@ -1,19 +1,9 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Button,
   DateValue,
-  Field,
   Notice,
   SkeletonRows,
-  StatusPill,
-  TextInput,
   useToast,
 } from '@/components/app'
 import {
@@ -35,17 +25,6 @@ type LoadState =
   | { kind: 'ready'; status: NovaPoshtaWebhookStatus }
   | { kind: 'error' }
 
-function Card({ title, children }: { title: ReactNode; children: ReactNode }) {
-  return (
-    <section className="rz-card min-w-0">
-      <header className="rz-card__head">
-        <h2 className="rz-h-card">{title}</h2>
-      </header>
-      <div className="rz-card__body grid gap-3">{children}</div>
-    </section>
-  )
-}
-
 /**
  * The carrier's status feed as a tab: whether events arrive at all, and what
  * happened to the ones that could not be processed.
@@ -63,7 +42,6 @@ export function WebhookPanel({
   const t = useT(npFeedMessages)
   const tc = useT(commonMessages)
   const tenant = cabinet.targetTenant
-  const tenantId = cabinet.snapshot?.tenantId ?? null
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}:${integrationId}`
   const report = onFailuresChange
@@ -72,9 +50,7 @@ export function WebhookPanel({
     state: LoadState
   } | null>(null)
   const [reloads, setReloads] = useState(0)
-  const [editingSecret, setEditingSecret] = useState(false)
-  const [secret, setSecret] = useState('')
-  const [busy, setBusy] = useState<null | 'secret' | 'retry'>(null)
+  const [busy, setBusy] = useState<null | 'retry'>(null)
   const [retrying, setRetrying] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
@@ -95,22 +71,38 @@ export function WebhookPanel({
   useEffect(() => {
     if (integrationId === '') return
     const controller = new AbortController()
-    void integrationsApi
-      .webhookStatus(integrationId, { signal: controller.signal })
-      .then(
-        (status) => {
-          if (!controller.signal.aborted) {
-            setLoaded({ key: scopeKey, state: { kind: 'ready', status } })
-            report?.(status.deadLetters)
-          }
-        },
-        () => {
-          if (!controller.signal.aborted) {
-            setLoaded({ key: scopeKey, state: { kind: 'error' } })
-          }
-        },
-      )
-    return () => controller.abort()
+    let reading = false
+    const read = async () => {
+      if (reading || controller.signal.aborted) return
+      reading = true
+      try {
+        await integrationsApi
+          .webhookStatus(integrationId, { signal: controller.signal })
+          .then(
+            (status) => {
+              if (!controller.signal.aborted) {
+                setLoaded({ key: scopeKey, state: { kind: 'ready', status } })
+                report?.(status.deadLetters)
+              }
+            },
+            () => {
+              if (!controller.signal.aborted) {
+                setLoaded({ key: scopeKey, state: { kind: 'error' } })
+              }
+            },
+          )
+      } finally {
+        reading = false
+      }
+    }
+    void read()
+    const interval = window.setInterval(() => {
+      void read()
+    }, 10_000)
+    return () => {
+      window.clearInterval(interval)
+      controller.abort()
+    }
   }, [integrationId, reloads, report, scopeKey])
 
   const reload = useCallback(() => setReloads((value) => value + 1), [])
@@ -120,11 +112,6 @@ export function WebhookPanel({
   }
 
   const status = state.kind === 'ready' ? state.status : null
-  const receiveUrl =
-    tenantId === null
-      ? null
-      : `${(import.meta.env['VITE_API_URL'] as string | undefined) ?? window.location.origin}/api/v1/webhooks/nova-poshta/${tenantId}/${integrationId}`
-
   const guard = (): boolean => {
     try {
       requireLatestMutation()
@@ -132,28 +119,6 @@ export function WebhookPanel({
     } catch {
       setError(t('noAccess'))
       return false
-    }
-  }
-
-  const saveSecret = async (event: FormEvent) => {
-    event.preventDefault()
-    const value = secret.trim()
-    if (value === '' || busy !== null || !guard()) return
-    setBusy('secret')
-    setError(null)
-    try {
-      await integrationsApi.configureWebhook(integrationId, value)
-      if (!mountedRef.current) return
-      setEditingSecret(false)
-      setSecret('')
-      reload()
-    } catch (problem) {
-      if (mountedRef.current)
-        setError(
-          integrationProblemMessage(normalizeApiProblem(problem), locale),
-        )
-    } finally {
-      if (mountedRef.current) setBusy(null)
     }
   }
 
@@ -209,18 +174,6 @@ export function WebhookPanel({
     reload()
   }
 
-  const copyUrl = async () => {
-    if (receiveUrl === null) return
-    try {
-      if (!navigator.clipboard?.writeText)
-        throw new Error('Clipboard unavailable')
-      await navigator.clipboard.writeText(receiveUrl)
-      toast.show({ tone: 'ok', message: t('urlCopied') })
-    } catch {
-      toast.show({ tone: 'danger', message: t('copyFailed') })
-    }
-  }
-
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -263,7 +216,7 @@ export function WebhookPanel({
               <Notice tone="ok">{t('queueClean')}</Notice>
             )
           ) : (
-            <Notice tone="danger">{t('notConfigured')}</Notice>
+            <Notice tone="warn">{t('notConfigured')}</Notice>
           )}
 
           <KpiStrip>
@@ -313,7 +266,7 @@ export function WebhookPanel({
             />
           </KpiStrip>
 
-          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+          <div className="grid min-w-0 gap-4">
             <section
               aria-label={t('exhaustedTitle')}
               className="rz-card min-w-0"
@@ -372,81 +325,6 @@ export function WebhookPanel({
                 </>
               )}
             </section>
-
-            <Card title={t('secretCard')}>
-              {editingSecret ? (
-                <form
-                  className="grid gap-3"
-                  noValidate
-                  onSubmit={(event) => void saveSecret(event)}
-                >
-                  <Field hint={t('secretHint')} label={t('newSecret')} required>
-                    <TextInput
-                      autoComplete="off"
-                      className="rz-mono"
-                      onChange={(event) => setSecret(event.target.value)}
-                      value={secret}
-                    />
-                  </Field>
-                  <div className="rz-btn-row">
-                    <Button
-                      aria-busy={busy === 'secret'}
-                      disabled={busy !== null || secret.trim() === ''}
-                      type="submit"
-                      variant="primary"
-                    >
-                      {t('saveSecret')}
-                    </Button>
-                    <Button
-                      disabled={busy !== null}
-                      onClick={() => {
-                        setEditingSecret(false)
-                        setSecret('')
-                      }}
-                    >
-                      {tc('cancel')}
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div className="rz-inset flex flex-wrap items-center gap-3">
-                    <span className="rz-mono text-app-muted min-w-0">
-                      {status.enabled
-                        ? '••••••••••••••••'
-                        : t('secretNotSaved')}
-                    </span>
-                    {status.enabled && (
-                      <StatusPill className="ml-auto" tone="ok">
-                        {tc('saved')}
-                      </StatusPill>
-                    )}
-                  </div>
-                  <div className="rz-btn-row">
-                    <Button
-                      disabled={busy !== null}
-                      onClick={() => setEditingSecret(true)}
-                      variant={status.enabled ? 'ghost' : 'primary'}
-                    >
-                      {status.enabled ? t('replaceSecret') : t('addSecret')}
-                    </Button>
-                    <Button
-                      disabled={busy !== null || receiveUrl === null}
-                      onClick={() => void copyUrl()}
-                    >
-                      {t('copyUrl')}
-                    </Button>
-                  </div>
-                </>
-              )}
-              <Notice tone="warn">{t('secretWarn')}</Notice>
-              <p
-                className="rz-caption m-0 text-pretty"
-                title={t('noFeedStats')}
-              >
-                {t('feedStatsNote')}
-              </p>
-            </Card>
           </div>
         </>
       )}

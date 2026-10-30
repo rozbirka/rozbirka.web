@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
-import { Pencil, Plug, Unplug } from 'lucide-react'
+import { KeyRound, Pencil, Plug, Unplug } from 'lucide-react'
 import {
   Button,
   DateValue,
@@ -297,22 +297,28 @@ export function NpOverview({
               ))}
             </ul>
           )}
-          {/* A working connection has nothing to do here; a failing one is
-              checked again, or its key replaced, without leaving the card. */}
-          {failing ? (
-            <div className="rz-btn-row border-app-line border-t px-(--rz-card-p) py-2.5">
-              <Button
-                aria-busy={verifying}
-                disabled={verifying}
-                onClick={onVerify}
-              >
-                {verifying ? ti('verifying') : ti('verifyAgain')}
-              </Button>
-              {rights.integrations ? (
-                <Button asChild variant="primary">
-                  <Link to={connectPath}>{ti('replaceKey')}</Link>
+          {rights.integrations ? (
+            <div className="border-app-line grid gap-2 border-t px-(--rz-card-p) py-2.5">
+              <div className="rz-btn-row">
+                {failing && (
+                  <Button
+                    aria-busy={verifying}
+                    disabled={verifying}
+                    onClick={onVerify}
+                  >
+                    {verifying ? ti('verifying') : ti('verifyAgain')}
+                  </Button>
+                )}
+                <Button asChild variant={off || failing ? 'primary' : 'ghost'}>
+                  <Link to={`${connectPath}?newKey=1`}>
+                    <KeyRound aria-hidden />
+                    {off ? t('connectNewKey') : t('replaceApiKey')}
+                  </Link>
                 </Button>
-              ) : null}
+              </div>
+              <p className="rz-caption m-0 text-pretty">
+                {t('replaceKeyHint')}
+              </p>
             </div>
           ) : null}
         </section>

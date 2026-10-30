@@ -1,21 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Eye, EyeOff, PlugZap } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { PlugZap } from 'lucide-react'
 import {
   Button,
+  appButtonVariants,
   ConfirmDialog,
   DateValue,
-  Field,
   Notice,
   SkeletonRows,
   StatusPill,
-  TextInput,
 } from '@/components/app'
 import {
   integrationsApi,
   type NovaPoshtaTrackingSubscription,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
-import { commonMessages, useLocale, useT } from '@/i18n'
+import { useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { tenantRequestScope } from '../tenant-request-scope'
@@ -49,21 +48,16 @@ const CAN_DISCONNECT = new Set([
 ])
 
 /**
- * Everything the operator typed or was last told, and the yard it belongs to.
+ * The current command and its feedback, scoped to the selected yard.
  *
  * Carrying the scope inside the state is what makes switching yards safe: a
- * key, a failure or an open form belongs to one tenant and one integration, and
+ * failure or an open dialog belongs to one tenant and one integration, and
  * is simply never read again under another.
  */
 interface Session {
   key: string
   busy: Busy | null
   error: string | null
-  keyForm: boolean
-  keyPrompt: string | null
-  keyError: string | null
-  apiKey: string
-  revealed: boolean
   confirming: boolean
   confirmError: string | null
 }
@@ -72,11 +66,6 @@ const blank = (key: string): Session => ({
   key,
   busy: null,
   error: null,
-  keyForm: false,
-  keyPrompt: null,
-  keyError: null,
-  apiKey: '',
-  revealed: false,
   confirming: false,
   confirmError: null,
 })
@@ -99,7 +88,6 @@ export function TrackingSubscriptionPanel({
   const cabinet = useCabinet()
   const { locale } = useLocale()
   const t = useT(npFeedMessages)
-  const tc = useT(commonMessages)
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}:${integrationId}`
@@ -198,7 +186,7 @@ export function TrackingSubscriptionPanel({
   }, [])
 
   const run = useCallback(
-    async (kind: Busy, action: () => Promise<void>, carriedKey: boolean) => {
+    async (kind: Busy, action: () => Promise<void>) => {
       // The ref, not the rendered state: two clicks inside one frame would both
       // see `busy === null` and ask the server for the same work twice.
       if (runningRef.current) return
@@ -209,36 +197,23 @@ export function TrackingSubscriptionPanel({
         return
       }
       runningRef.current = true
-      patch({ busy: kind, error: null, keyError: null, confirmError: null })
+      patch({ busy: kind, error: null, confirmError: null })
       try {
         await action()
         if (!mountedRef.current) return
-        // The key has done its job; nothing keeps it in memory afterwards.
         patch({
           busy: null,
-          keyForm: false,
-          keyPrompt: null,
-          apiKey: '',
-          revealed: false,
           confirming: false,
         })
       } catch (problem) {
         if (!mountedRef.current) return
         const normalized = normalizeApiProblem(problem)
         const message = trackingProblemMessage(normalized, locale)
-        const needsKey =
-          normalized.code?.toLowerCase() === 'tracking_credentials_required'
         patch({
           busy: null,
-          ...(needsKey
-            ? { keyForm: true, keyPrompt: message }
-            : carriedKey
-              ? { keyError: message }
-              : kind === 'disconnect'
-                ? // The question is still on screen: the answer belongs beside
-                  // the button that failed, not behind the dialog.
-                  { confirmError: message }
-                : { error: message }),
+          ...(kind === 'disconnect'
+            ? { confirmError: message }
+            : { error: message }),
         })
       } finally {
         runningRef.current = false
@@ -250,22 +225,10 @@ export function TrackingSubscriptionPanel({
     [locale, patch, refresh, requireLatestMutation, t],
   )
 
-  const connect = (key: string | null) =>
-    void run(
-      'connect',
-      () => integrationsApi.connectTracking(integrationId, key),
-      key !== null,
+  const connect = () =>
+    void run('connect', () =>
+      integrationsApi.connectTracking(integrationId, null),
     )
-
-  const submitKey = (event: FormEvent) => {
-    event.preventDefault()
-    const value = session.apiKey.trim()
-    if (value === '') {
-      patch({ keyError: t('pasteKey') })
-      return
-    }
-    connect(value)
-  }
 
   if (tenant === null) {
     return <p className="rz-muted m-0">{t('pickBusinessTracking')}</p>
@@ -361,128 +324,56 @@ export function TrackingSubscriptionPanel({
               </Notice>
             )}
 
-            {session.keyForm ? (
-              <form className="grid gap-3" noValidate onSubmit={submitKey}>
-                {session.keyPrompt !== null && (
-                  <Notice tone="warn">{session.keyPrompt}</Notice>
-                )}
-                <Field
-                  error={session.keyError}
-                  hint={t('keyHint')}
-                  label={t('keyLabel')}
-                  required
+            <div className="rz-btn-row">
+              {subscription.state === 'Disabled' && callbackReady && (
+                <Button
+                  aria-busy={busy === 'connect'}
+                  disabled={busy !== null || !callbackReady}
+                  onClick={connect}
+                  title={callbackReady ? undefined : t('callbackUnavailable')}
+                  variant="primary"
                 >
-                  <div className="flex items-start gap-2">
-                    <TextInput
-                      autoComplete="off"
-                      className="rz-mono"
-                      onChange={(event) =>
-                        patch({ apiKey: event.target.value, keyError: null })
-                      }
-                      placeholder={t('keyPlaceholder')}
-                      spellCheck={false}
-                      type={session.revealed ? 'text' : 'password'}
-                      value={session.apiKey}
-                    />
-                    <Button
-                      aria-label={
-                        session.revealed ? t('hideKey') : t('showKey')
-                      }
-                      aria-pressed={session.revealed}
-                      onClick={() => patch({ revealed: !session.revealed })}
-                      className="shrink-0"
-                      size="icon"
-                      title={session.revealed ? t('hideKey') : t('showKey')}
-                    >
-                      {session.revealed ? (
-                        <EyeOff aria-hidden />
-                      ) : (
-                        <Eye aria-hidden />
-                      )}
-                    </Button>
-                  </div>
-                </Field>
-                <div className="rz-btn-row">
-                  <Button
-                    aria-busy={busy === 'connect'}
-                    disabled={busy !== null || !callbackReady}
-                    title={callbackReady ? undefined : t('callbackUnavailable')}
-                    type="submit"
-                    variant="primary"
-                  >
-                    {busy === 'connect' ? t('connecting') : t('connect')}
-                  </Button>
-                  <Button
-                    disabled={busy !== null}
-                    onClick={() =>
-                      patch({
-                        keyForm: false,
-                        keyPrompt: null,
-                        keyError: null,
-                        apiKey: '',
-                        revealed: false,
-                      })
-                    }
-                  >
-                    {tc('cancel')}
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <div className="rz-btn-row">
-                {subscription.state === 'Disabled' && (
-                  <Button
-                    aria-busy={busy === 'connect'}
-                    disabled={busy !== null || !callbackReady}
-                    onClick={() => connect(null)}
-                    title={callbackReady ? undefined : t('callbackUnavailable')}
-                    variant="primary"
-                  >
-                    {busy === 'connect' ? t('connecting') : t('connect')}
-                  </Button>
-                )}
-
-                {subscription.state === 'NeedsCredentials' && (
-                  <Button
-                    disabled={busy !== null}
-                    onClick={() => patch({ keyForm: true, keyPrompt: null })}
-                    variant="primary"
-                  >
-                    {t('enterKey')}
-                  </Button>
-                )}
-
-                {subscription.canRetry && (
-                  <Button
-                    aria-busy={busy === 'retry'}
-                    disabled={busy !== null}
-                    onClick={() =>
-                      void run(
-                        'retry',
-                        () => integrationsApi.retryTracking(integrationId),
-                        false,
-                      )
-                    }
-                  >
-                    {busy === 'retry' ? t('retrying') : t('retryNow')}
-                  </Button>
-                )}
-
-                {CAN_DISCONNECT.has(subscription.state) && (
-                  <Button
-                    disabled={busy !== null}
-                    onClick={() => patch({ confirming: true })}
-                    variant="ghost"
-                  >
-                    {t('disconnect')}
-                  </Button>
-                )}
-
-                <Button disabled={busy !== null} onClick={refresh}>
-                  {t('refreshState')}
+                  {busy === 'connect' ? t('connecting') : t('connect')}
                 </Button>
-              </div>
-            )}
+              )}
+
+              {subscription.state === 'NeedsCredentials' && (
+                <a
+                  className={appButtonVariants()}
+                  href={`/app/${tenant.slug}/settings/integrations/${integrationId}/connect`}
+                >
+                  {t('checkConnection')}
+                </a>
+              )}
+
+              {subscription.canRetry && (
+                <Button
+                  aria-busy={busy === 'retry'}
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void run('retry', () =>
+                      integrationsApi.retryTracking(integrationId),
+                    )
+                  }
+                >
+                  {busy === 'retry' ? t('retrying') : t('retryNow')}
+                </Button>
+              )}
+
+              {CAN_DISCONNECT.has(subscription.state) && (
+                <Button
+                  disabled={busy !== null}
+                  onClick={() => patch({ confirming: true })}
+                  variant="ghost"
+                >
+                  {t('disconnect')}
+                </Button>
+              )}
+
+              <Button disabled={busy !== null} onClick={refresh}>
+                {t('refreshState')}
+              </Button>
+            </div>
           </>
         )}
       </div>
@@ -493,10 +384,8 @@ export function TrackingSubscriptionPanel({
         error={session.confirmError}
         icon={PlugZap}
         onConfirm={() =>
-          void run(
-            'disconnect',
-            () => integrationsApi.disconnectTracking(integrationId),
-            false,
+          void run('disconnect', () =>
+            integrationsApi.disconnectTracking(integrationId),
           )
         }
         onOpenChange={(open) =>

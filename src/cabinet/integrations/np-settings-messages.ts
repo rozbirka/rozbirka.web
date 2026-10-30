@@ -8,6 +8,10 @@ export const npSettingsMessages = defineMessages({
   uk: {
     headSub: 'Доставка Україною між відділеннями.',
     keyLabel: 'API-ключ',
+    replaceApiKey: 'Змінити API-ключ',
+    connectNewKey: 'Підключити новий API-ключ',
+    replaceKeyHint:
+      'Новий ключ перевіряється в майстрі й застосовується після завершення налаштування. Попередній ключ зберігається для раніше створених ТТН.',
     access: 'Доступ',
     accessWorking: 'Працює',
     accessBroken: 'Не працює',
@@ -75,6 +79,10 @@ export const npSettingsMessages = defineMessages({
   'en-GB': {
     headSub: 'Branch-to-branch delivery within Ukraine.',
     keyLabel: 'API key',
+    replaceApiKey: 'Change API key',
+    connectNewKey: 'Connect a new API key',
+    replaceKeyHint:
+      'The wizard verifies the new key and applies it after setup is completed. The previous key is kept for existing waybills.',
     access: 'Access',
     accessWorking: 'Working',
     accessBroken: 'Not working',
@@ -137,6 +145,10 @@ export const npSettingsMessages = defineMessages({
   pl: {
     headSub: 'Dostawa po Ukrainie między oddziałami.',
     keyLabel: 'Klucz API',
+    replaceApiKey: 'Zmień klucz API',
+    connectNewKey: 'Podłącz nowy klucz API',
+    replaceKeyHint:
+      'Kreator sprawdza nowy klucz i stosuje go po zakończeniu konfiguracji. Poprzedni klucz pozostaje dostępny dla istniejących listów przewozowych.',
     access: 'Dostęp',
     accessWorking: 'Działa',
     accessBroken: 'Nie działa',

@@ -300,3 +300,21 @@ it('refreshes the live waybills on the page with «Оновити статуси
   expect(shippingApi.refresh).toHaveBeenCalledTimes(1)
   expect(shippingApi.refresh).toHaveBeenCalledWith('int-1', 'order-361')
 })
+
+it('shows delivery retention when a cancelled order has no COD amount', async () => {
+  vi.mocked(shippingApi.list).mockResolvedValue(
+    page([
+      row({
+        state: 'Cancelled',
+        paymentState: 'DeliveryCostsRetained',
+        codUah: 0,
+      }),
+    ]),
+  )
+  renderList()
+  const table = await screen.findByRole('table', {
+    name: 'Накладні Нової пошти',
+  })
+  expect(within(table).getByText('Утримано за доставку')).toBeVisible()
+  expect(within(table).queryByText('повернено')).not.toBeInTheDocument()
+})

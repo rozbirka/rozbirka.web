@@ -10,7 +10,14 @@ import {
   type MessageKey,
   type MessageParams,
 } from '@/i18n'
-import { deliveryStage, isFullyPaid, uah } from './delivery-money'
+import { orderStatusPresentation } from '../order-labels'
+import {
+  hasDepositWaiver,
+  minimumPrepayment,
+  deliveryStage,
+  isFullyPaid,
+  uah,
+} from './delivery-money'
 import { orderChipKey } from './delivery-flow'
 import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
@@ -39,6 +46,8 @@ export interface LifecycleStep {
   /** When it happened; empty for a step still ahead. */
   meta: string
   done: boolean
+  /** This milestone is cleared by an exception, not by money received. */
+  prepaymentNotRequired?: boolean
   /** The furthest step reached — the one the eye should land on. */
   current: boolean
 }
@@ -63,10 +72,8 @@ const stamp = (
 }
 
 /**
- * The four moments a delivery order passes through. Payment sits first because
- * that is the order a prepaid sale runs in, not because it gates anything: an
- * unpaid order reaches every later step just the same, and settles when the
- * carrier hands the post-payment back.
+ * The first milestone can be cleared by payment or by an active prepayment
+ * exception. An exception never settles the outstanding goods balance.
  */
 export function lifecycle(
   delivery: DeliveryOrder,
@@ -74,6 +81,10 @@ export function lifecycle(
   locale: Locale,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): LifecycleStep[] {
+  const prepaymentNotRequired =
+    delivery.workflowState === 'Open' &&
+    !isFullyPaid(delivery) &&
+    (!delivery.depositRequired || hasDepositWaiver(delivery))
   const paidAt = isFullyPaid(delivery)
     ? (delivery.payments
         .filter((payment) => payment.refundedAt === null)
@@ -93,8 +104,11 @@ export function lifecycle(
   }[] = [
     {
       key: 'paid',
-      label: tr(locale, 'stepPaid'),
-      done: isFullyPaid(delivery),
+      label: tr(
+        locale,
+        prepaymentNotRequired ? 'stepNoPrepayment' : 'stepPaid',
+      ),
+      done: isFullyPaid(delivery) || prepaymentNotRequired,
       at: paidAt,
     },
     {
@@ -122,13 +136,16 @@ export function lifecycle(
     label: step.label,
     meta: step.done ? stamp(step.at, locale, timeZone) : '',
     done: step.done,
+    ...(step.key === 'paid' && prepaymentNotRequired
+      ? { prepaymentNotRequired: true }
+      : {}),
     current: step.done && steps[index + 1]?.done !== true,
   }))
 }
 
 /**
- * The order's own pill, in module 46's words: «Відкрите», «Завершене»,
- * «Повернення» or «Скасоване», from Core's workflow state.
+ * Share ordinary order status labels and colours; the return workflow keeps
+ * its delivery-specific presentation.
  */
 export function orderChip(
   delivery: DeliveryOrder,
@@ -138,10 +155,17 @@ export function orderChip(
   tone: StatusTone
 } {
   const chip = orderChipKey(delivery)
-  return {
-    label: translate(deliveryFlowMessages, locale, chip.key),
-    tone: chip.tone,
-  }
+  if (chip.key === 'chipReturn')
+    return {
+      label: translate(deliveryFlowMessages, locale, 'chipReturn'),
+      tone: chip.tone,
+    }
+  const statuses = {
+    chipOpen: 'pending',
+    chipCompleted: 'confirmed',
+    chipCancelled: 'cancelled',
+  } as const
+  return orderStatusPresentation(statuses[chip.key], locale)
 }
 
 /** Where the parcel is, as the carrier record shows it. */
@@ -240,27 +264,31 @@ export function readiness(
       // Said as a shortfall it reads «бракує 0,00 ₴», which is not a fact.
       state: !delivery.depositRequired
         ? tr(locale, 'depositStateNotRequired')
-        : delivery.depositWaived
+        : hasDepositWaiver(delivery)
           ? tr(locale, 'depositStateWaived')
-          : delivery.requiredDepositUah <= 0
+          : minimumPrepayment(delivery) <= 0
             ? tr(locale, 'depositAfterQuote')
             : delivery.depositSatisfied
-              ? uah(delivery.requiredDepositUah, locale)
+              ? isFullyPaid(delivery)
+                ? tr(locale, 'depositNoAdditional')
+                : tr(locale, 'depositCovered', {
+                    amount: uah(minimumPrepayment(delivery), locale),
+                  })
               : tr(locale, 'depositShort', {
                   amount: uah(delivery.depositShortfallUah, locale),
                 }),
       ok:
         !delivery.depositRequired ||
-        delivery.depositWaived ||
-        (delivery.requiredDepositUah > 0 && delivery.depositSatisfied),
+        hasDepositWaiver(delivery) ||
+        (minimumPrepayment(delivery) > 0 && delivery.depositSatisfied),
       // Before the quote there is no figure to pay at all, and a deposit
       // still owed is paid in the order, not in the integration's settings:
       // neither keeps the order off the confirmation, which says why it
       // cannot create the waybill yet.
       pending:
         delivery.depositRequired &&
-        !delivery.depositWaived &&
-        (delivery.requiredDepositUah <= 0 || !delivery.depositSatisfied),
+        !hasDepositWaiver(delivery) &&
+        (minimumPrepayment(delivery) <= 0 || !delivery.depositSatisfied),
     },
     {
       key: 'quote',

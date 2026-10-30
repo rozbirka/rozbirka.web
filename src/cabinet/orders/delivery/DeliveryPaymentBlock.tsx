@@ -6,7 +6,7 @@ import type { DeliveryOrder, DeliveryPayment } from '@/api/delivery'
 import type { Shipment } from '@/api/shipping'
 import { useFormat, useLocale, useT, type MessageKey } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { uah } from './delivery-money'
+import { hasDepositWaiver, minimumPrepayment, uah } from './delivery-money'
 import { paymentStanding } from './delivery-view'
 import {
   livePayments,
@@ -106,6 +106,7 @@ export function DeliveryPaymentBlock({
     refundDue: { label: t('pillAwaitingRefund'), tone: 'warn' as const },
     refundPartial: { label: t('pillRefundedPart'), tone: 'warn' as const },
     refunded: { label: t('pillRefunded'), tone: 'neutral' as const },
+    retained: { label: t('pillRetained'), tone: 'neutral' as const },
     notApplicable: { label: t('pillNotApplicable'), tone: 'neutral' as const },
     late: { label: t('pillLate'), tone: 'danger' as const },
   }[state]
@@ -243,7 +244,9 @@ export function DeliveryPaymentBlock({
       value: money(
         state === 'late'
           ? (shipment?.codUah ?? 0)
-          : state === 'refundPartial' || state === 'refunded'
+          : state === 'refundPartial' ||
+              state === 'refunded' ||
+              state === 'retained'
             ? totals.booked
             : delivery.appliedUah,
       ),
@@ -264,9 +267,47 @@ export function DeliveryPaymentBlock({
     },
   ]
 
+  // Keep the required minimum separate from the actual customer payment above.
+  if (open && delivery.dispatchedAt === null && shipment?.quoteAt != null) {
+    const required = delivery.depositRequired && !hasDepositWaiver(delivery)
+    facts.push({
+      key: 'deposit',
+      label: tm('factDeposit'),
+      value: !delivery.depositRequired
+        ? tm('depositStateNotRequired')
+        : hasDepositWaiver(delivery)
+          ? tm('depositStateWaived')
+          : minimumPrepayment(delivery) <= 0
+            ? tm('depositAfterQuote')
+            : money(minimumPrepayment(delivery)),
+      ...(required && minimumPrepayment(delivery) > 0
+        ? {
+            sub: delivery.depositSatisfied
+              ? tm('depositNoAdditional')
+              : tm('depositShort', {
+                  amount: money(delivery.depositShortfallUah),
+                }),
+          }
+        : {}),
+    })
+  }
+
+  if (totals.retained > 0) {
+    facts.push({
+      key: 'retained',
+      label: t('refundRetained'),
+      value: money(totals.retained),
+    })
+    facts.push({
+      key: 'refunded',
+      label: t('factRefunded'),
+      value: money(totals.refunded),
+    })
+  }
+
   return (
     <section aria-labelledby="np-payment-block" className="rz-card">
-      <header className="rz-card__head py-2.5">
+      <header className="rz-card__head min-h-0 border-b-0 px-4 pt-3.5 pb-0">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="rz-h-card" id="np-payment-block">
             {t('paymentTitle')}
@@ -274,7 +315,7 @@ export function DeliveryPaymentBlock({
           <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
         </div>
       </header>
-      <dl className="rz-facts">
+      <dl className="rz-facts [&_dt]:text-app-muted">
         {facts.map((fact) => (
           <div key={fact.key}>
             <dt>{fact.label}</dt>
@@ -295,7 +336,7 @@ export function DeliveryPaymentBlock({
         ))}
       </dl>
       {notice === null && buttons === null && hint === null ? null : (
-        <div className="border-app-line grid gap-2.5 border-t px-(--rz-card-p) py-2.5">
+        <div className="grid gap-3 px-4 pt-3.5 pb-4">
           {notice}
           {hint === null ? null : (
             <p className="rz-caption m-0 text-pretty">{hint}</p>
@@ -314,4 +355,5 @@ const orderClosingLeft = (state: ReturnType<typeof paymentState>) =>
   state === 'refundDue' ||
   state === 'refundPartial' ||
   state === 'refunded' ||
-  state === 'notApplicable'
+  state === 'notApplicable' ||
+  state === 'retained'

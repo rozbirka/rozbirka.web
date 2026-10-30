@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { apiClient } from './client'
-import { deliveryApi } from './delivery'
+import { deliveryApi, normalizeDeliveryOrder } from './delivery'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -12,13 +12,27 @@ it('fills in the payment list Core omits when the order has none', async () => {
   expect((await deliveryApi.get('order-1')).payments).toEqual([])
 })
 
-it('sends the agreed total and never waives the deposit on its own', async () => {
+it('omits the waiver when preserving the server default or saved choice', async () => {
   const put = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: summary })
 
   await deliveryApi.configure('order-1', 4280.5)
 
   expect(put).toHaveBeenCalledWith('/orders/order-1/delivery', {
     agreedTotalUah: 4280.5,
+  })
+})
+
+it('sends an explicit prepayment choice independently of the order total', async () => {
+  const put = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: summary })
+
+  await deliveryApi.configure('order-1', undefined, true)
+  await deliveryApi.configure('order-1', 500, false)
+
+  expect(put).toHaveBeenNthCalledWith(1, '/orders/order-1/delivery', {
+    waiveDeposit: true,
+  })
+  expect(put).toHaveBeenNthCalledWith(2, '/orders/order-1/delivery', {
+    agreedTotalUah: 500,
     waiveDeposit: false,
   })
 })
@@ -120,3 +134,46 @@ it('restores the nulls Core omits when it serialises', async () => {
   expect(delivery.returnedAt).toBeNull()
   expect(delivery.payments).toEqual([])
 })
+
+it('normalizes additive retention fields for old summaries and payments', async () => {
+  vi.spyOn(apiClient, 'get').mockResolvedValue({
+    data: { ...summary, payments: [{ id: 'p1', amountUah: 186 }] },
+  })
+  const result = await deliveryApi.get('order-1')
+  expect(result.retainedDeliveryCostUah).toBe(0)
+  expect(result.deliveryRetentionNote).toBeNull()
+  expect(result.payments[0]?.retainedDeliveryCostUah).toBe(0)
+})
+
+it('sends a no-cash retention settlement without inventing a cash source', async () => {
+  const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: summary })
+  const replay = { idempotencyKey: 'retention-1' }
+  await deliveryApi.confirmFullRefund(
+    'order-1',
+    { retainedDeliveryCostUah: 186, retentionNote: 'Actual receipts' },
+    replay,
+  )
+  expect(post).toHaveBeenCalledWith(
+    '/orders/order-1/delivery/full-refund',
+    { retainedDeliveryCostUah: 186, retentionNote: 'Actual receipts' },
+    { idempotency: replay },
+  )
+})
+
+it.each([false, true])(
+  'detects retention support from the raw server field (present=%s) before adding defaults',
+  async (supported) => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: {
+        ...summary,
+        ...(supported ? { retainedDeliveryCostUah: 0 } : {}),
+      },
+    })
+    const result = await deliveryApi.get('order-1')
+    expect(result.supportsDeliveryCostRetention).toBe(supported)
+    expect(result.retainedDeliveryCostUah).toBe(0)
+    expect(normalizeDeliveryOrder(result).supportsDeliveryCostRetention).toBe(
+      supported,
+    )
+  },
+)

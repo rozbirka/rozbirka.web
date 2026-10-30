@@ -125,3 +125,9 @@ describe('integration labels', () => {
     expect(waitedFor('2026-10-04T12:00:00Z', 'pl', now)).toBe('3 dn.')
   })
 })
+
+it('shows a dash for missing or invalid event timestamps', () => {
+  expect(waitedFor(undefined, 'uk')).toBe('—')
+  expect(waitedFor(null, 'uk')).toBe('—')
+  expect(waitedFor('invalid', 'uk')).toBe('—')
+})

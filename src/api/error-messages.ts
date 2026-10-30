@@ -109,7 +109,7 @@ export const errorMessages = defineMessages({
     SHIPMENT_SENDER_REVALIDATION_REQUIRED:
       'Відправника в налаштуваннях Нової пошти змінено. Перевірте відправника в чернетці й розрахуйте доставку заново.',
     SHIPMENT_NUMBER_INVALID: 'Вкажіть номер накладної цифрами.',
-    DELIVERY_DEPOSIT_REQUIRED: 'Спершу внесіть депозит за доставку.',
+    DELIVERY_DEPOSIT_REQUIRED: 'Спершу отримайте мінімальну передоплату.',
     DELIVERY_OPERATION_IN_PROGRESS:
       'Інша дія вже змінює це замовлення. Зачекайте й спробуйте ще раз.',
     REFUND_TRANSACTION_ALREADY_ALLOCATED:
@@ -340,7 +340,7 @@ export const errorMessages = defineMessages({
     SHIPMENT_SENDER_REVALIDATION_REQUIRED:
       'The sender in the Nova Poshta settings has changed. Check the sender in the draft and recalculate delivery.',
     SHIPMENT_NUMBER_INVALID: 'Enter the waybill number in digits.',
-    DELIVERY_DEPOSIT_REQUIRED: 'Pay the delivery deposit first.',
+    DELIVERY_DEPOSIT_REQUIRED: 'Receive the minimum prepayment first.',
     DELIVERY_OPERATION_IN_PROGRESS:
       'Another action is already changing this order. Wait and try again.',
     REFUND_TRANSACTION_ALREADY_ALLOCATED:
@@ -576,7 +576,7 @@ export const errorMessages = defineMessages({
     SHIPMENT_SENDER_REVALIDATION_REQUIRED:
       'Nadawca w ustawieniach Nowej Poczty się zmienił. Sprawdź nadawcę w szkicu i przelicz dostawę od nowa.',
     SHIPMENT_NUMBER_INVALID: 'Podaj numer listu cyframi.',
-    DELIVERY_DEPOSIT_REQUIRED: 'Najpierw wpłać depozyt za dostawę.',
+    DELIVERY_DEPOSIT_REQUIRED: 'Najpierw przyjmij minimalną przedpłatę.',
     DELIVERY_OPERATION_IN_PROGRESS:
       'Inna operacja już zmienia to zamówienie. Poczekaj i spróbuj ponownie.',
     REFUND_TRANSACTION_ALREADY_ALLOCATED:

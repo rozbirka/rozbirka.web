@@ -144,6 +144,8 @@ export function Sheet({
   footer,
   size = 'md',
   bodyClassName,
+  className,
+  pending = false,
   onEscapeKeyDown,
   onCloseAutoFocus,
 }: {
@@ -160,6 +162,10 @@ export function Sheet({
   size?: 'md' | 'lg' | 'workspace'
   /** Optional bounded layout for a list with its own fixed search and pager. */
   bodyClassName?: string
+  /** A reference-specific width or chrome, without changing other sheets. */
+  className?: string
+  /** Keep all dismissal controls locked while a mutation is running. */
+  pending?: boolean
   /** Let a nested editor consume Escape before the sheet dismisses. */
   onEscapeKeyDown?: (event: KeyboardEvent) => void
   /** Restore focus to a caller-owned trigger when the sheet closes. */
@@ -167,10 +173,17 @@ export function Sheet({
 }) {
   const tc = useT(commonMessages)
   return (
-    <Dialog.Root onOpenChange={onOpenChange} open={open}>
+    <Dialog.Root
+      onOpenChange={(next) => {
+        if (!next && pending) return
+        onOpenChange(next)
+      }}
+      open={open}
+    >
       <Dialog.Portal>
         <Dialog.Overlay className="bg-app-scrim fixed inset-0 z-50" />
         <Dialog.Content
+          aria-busy={pending || undefined}
           onCloseAutoFocus={onCloseAutoFocus}
           // Land on the sheet itself, not its close button: the reference
           // opens without a focus ring, and Tab still reaches every control.
@@ -179,6 +192,7 @@ export function Sheet({
             ;(event.currentTarget as HTMLElement | null)?.focus()
           }}
           onEscapeKeyDown={(event) => {
+            if (pending) event.preventDefault()
             onEscapeKeyDown?.(event)
             // Radix handles Escape during document capture, before the nested
             // search picker can close its results. Let it consume Escape first.
@@ -197,6 +211,7 @@ export function Sheet({
               : size === 'lg'
                 ? 'sm:w-[min(640px,100vw)]'
                 : '',
+            className,
           )}
         >
           {/* Scheme 1b: header band with a 16px title and one muted line
@@ -225,6 +240,7 @@ export function Sheet({
               <button
                 aria-label={tc('close')}
                 className="rz-btn rz-btn--ghost rz-btn--icon relative after:absolute after:-inset-2 after:content-['']"
+                disabled={pending}
                 type="button"
               >
                 <X aria-hidden />

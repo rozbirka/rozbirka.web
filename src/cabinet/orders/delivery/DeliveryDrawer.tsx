@@ -18,13 +18,16 @@ import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { shippingApi, type Shipment, type ShipmentDraft } from '@/api/shipping'
 import { commonMessages, useLocale, useT } from '@/i18n'
 import { isValidContactPhone, normalizePhone } from '@/lib/phone'
-import { cn } from '@/lib/utils'
 import { SettlementPicker } from '../../integrations/settlement-picker'
 import { SheetGroup } from '../sheet-group'
+import { Switch } from '../../integrations/dispatch-point-form'
+import { deliveryTrustMessages } from '../../customers/delivery-trust-messages'
 import { hryvnia, uah } from './delivery-money'
 import { deliveryDrawerMessages } from './drawer-messages'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 import { waybillMessages } from './waybill-messages'
+import { recipientFullName, splitRecipientName } from './recipient-name'
+import { SummaryList } from './WaybillCreateSheet'
 import {
   dimensionsLine,
   parcelsFrom,
@@ -33,7 +36,8 @@ import {
 } from './waybill-view'
 
 type FieldKey =
-  | 'name'
+  | 'lastName'
+  | 'firstName'
   | 'phone'
   | 'settlement'
   | 'division'
@@ -44,7 +48,8 @@ type FieldKey =
   | 'goods'
 
 const ORDER: readonly FieldKey[] = [
-  'name',
+  'lastName',
+  'firstName',
   'phone',
   'settlement',
   'division',
@@ -56,7 +61,8 @@ const ORDER: readonly FieldKey[] = [
 ]
 
 const MISSING = {
-  name: 'missingName',
+  lastName: 'missingLastName',
+  firstName: 'missingFirstName',
   phone: 'missingPhone',
   settlement: 'missingSettlement',
   division: 'missingDivision',
@@ -68,7 +74,8 @@ const MISSING = {
 } as const
 
 const ERROR = {
-  name: 'errorName',
+  lastName: 'errorLastName',
+  firstName: 'errorFirstName',
   phone: 'errorPhone',
   settlement: 'errorSettlement',
   division: 'errorDivision',
@@ -99,7 +106,6 @@ const formatNumber = (value: number) => String(value).replace('.', ',')
  */
 export function DeliveryDrawer({
   customerSearchAllowed = false,
-  customerName,
   customerPhone,
   delivery,
   dispatchPoints,
@@ -137,6 +143,8 @@ export function DeliveryDrawer({
   const t = useT(waybillMessages)
   const td = useT(deliveryDrawerMessages)
   const tc = useT(commonMessages)
+  const tt = useT(deliveryTrustMessages)
+  const [waiveDeposit, setWaiveDeposit] = useState(delivery.depositWaived)
   const saved =
     (shipment?.state === 'Draft' ? shipment.draft : null) ?? prefill ?? null
   const activePoint = (id: string | null | undefined) =>
@@ -151,7 +159,11 @@ export function DeliveryDrawer({
       defaultPoint?.id ??
       '',
   )
-  const [name, setName] = useState(saved?.recipient.name ?? customerName ?? '')
+  // Customer labels may be nicknames; only saved postal details can prefill a recipient name.
+  const [recipientName, setRecipientName] = useState(() =>
+    splitRecipientName(saved?.recipient.name ?? ''),
+  )
+  const [recipientQuery, setRecipientQuery] = useState('')
   const [recipientCustomerId, setRecipientCustomerId] = useState<string | null>(
     null,
   )
@@ -247,8 +259,10 @@ export function DeliveryDrawer({
   const problems = (): FieldKey[] =>
     ORDER.filter((key) => {
       switch (key) {
-        case 'name':
-          return name.trim() === ''
+        case 'lastName':
+          return recipientName.lastName.trim() === ''
+        case 'firstName':
+          return recipientName.firstName.trim() === ''
         case 'phone':
           return !isValidContactPhone(e164)
         case 'settlement':
@@ -271,7 +285,7 @@ export function DeliveryDrawer({
   // Focus lands on the first required field still empty (section 11).
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      const first = problems()[0] ?? 'name'
+      const first = problems()[0] ?? 'lastName'
       focusField(first)
     })
     return () => window.cancelAnimationFrame(frame)
@@ -285,13 +299,13 @@ export function DeliveryDrawer({
     if (missing.length > 0) {
       setErrors(Object.fromEntries(missing.map((key) => [key, true])))
       setError(null)
-      window.requestAnimationFrame(() => focusField(missing[0]!))
+      window.requestAnimationFrame(() => alertRef.current?.focus())
       return
     }
     setErrors({})
     const draft: ShipmentDraft = {
       recipient: {
-        name: name.trim(),
+        name: recipientFullName(recipientName),
         phone: e164,
         settlementRef: settlementRef!,
         warehouseRef: division!.ref,
@@ -310,8 +324,18 @@ export function DeliveryDrawer({
     setBusy(true)
     setError(null)
     try {
-      if (askGoods && goodsValue !== null)
+      const waiver = delivery.customerTrusted && waiveDeposit
+      if (waiver !== delivery.depositWaived) {
+        onMoneyChanged(
+          await deliveryApi.configure(
+            orderId,
+            askGoods ? goodsValue! : undefined,
+            waiver,
+          ),
+        )
+      } else if (askGoods && goodsValue !== null) {
         onMoneyChanged(await deliveryApi.configure(orderId, goodsValue))
+      }
       onSaved(await shippingApi.saveDraft(integrationId, orderId, draft))
     } catch (problem) {
       setError(deliveryProblemMessage(problem, locale))
@@ -334,6 +358,9 @@ export function DeliveryDrawer({
 
   return (
     <Sheet
+      bodyClassName="gap-4"
+      className="sm:w-[min(600px,100vw)] [&>header_p]:text-caption [&>div:last-child_p]:text-caption [&>div:last-child]:pb-[calc(10px+env(safe-area-inset-bottom))]"
+      pending={busy}
       description={t('formDescription', { number: String(orderNumber) })}
       footer={
         <>
@@ -358,15 +385,31 @@ export function DeliveryDrawer({
         if (!open && !busy) onClose()
       }}
       open
-      size="lg"
       title={t('formTitle')}
     >
       {missing.length === 0 ? null : (
-        <Notice tone="danger">
-          {t('missing', {
-            list: missing.map((key) => t(MISSING[key])).join(', '),
-          })}
-        </Notice>
+        <div ref={alertRef} tabIndex={-1}>
+          <Notice block tone="danger">
+            <p className="m-0">
+              {t('missing', {
+                list: missing.map((key) => t(MISSING[key])).join(', '),
+              })}
+            </p>
+            <ul className="m-0 mt-1 grid list-none gap-1 p-0">
+              {missing.map((key) => (
+                <li key={key}>
+                  <button
+                    className="cursor-pointer text-left underline underline-offset-2"
+                    onClick={() => focusField(key)}
+                    type="button"
+                  >
+                    {t(MISSING[key])}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Notice>
+        </div>
       )}
       {error === null ? null : (
         <div ref={alertRef} tabIndex={-1}>
@@ -377,49 +420,80 @@ export function DeliveryDrawer({
 
       <SheetGroup n="1" title={t('groupRecipient')}>
         <div className="grid gap-3 sm:grid-cols-2">
-          {customerSearchAllowed ? (
-            <div
-              ref={(element) => {
-                boxes.current.name = element
-              }}
-            >
+          {customerSearchAllowed && (
+            <div className="sm:col-span-2">
               <CustomerSearchPicker
                 disabled={busy}
-                label={t('fullName')}
+                label={t('recipientSearch')}
                 onQueryChange={(next) => {
-                  setName(next)
+                  setRecipientQuery(next)
                   setRecipientCustomerId(null)
-                  clear('name')
                 }}
                 onSelect={(customer) => {
-                  setName(customer.name)
+                  setRecipientQuery(customer.name)
                   setPhone(customer.phone ?? '')
                   setRecipientCustomerId(customer.id)
-                  clear('name')
+                  clear('phone')
                 }}
-                query={name}
-                required
+                query={recipientQuery}
                 selectedId={recipientCustomerId}
                 showLabel
               />
             </div>
-          ) : (
+          )}
+          {(['lastName', 'firstName'] as const).map((key) => (
             <div
+              key={key}
               ref={(element) => {
-                boxes.current.name = element
+                boxes.current[key] = element
               }}
             >
-              <Field error={fieldError('name')} label={t('fullName')} required>
+              <Field
+                error={fieldError(key)}
+                label={t(
+                  key === 'lastName'
+                    ? 'recipientLastName'
+                    : 'recipientFirstName',
+                )}
+                hint={key === 'lastName' ? t('recipientNameReview') : undefined}
+                required
+              >
                 <TextInput
+                  aria-required
+                  autoComplete={
+                    key === 'lastName' ? 'family-name' : 'given-name'
+                  }
                   onChange={(event) => {
-                    setName(event.target.value)
-                    clear('name')
+                    setRecipientName((current) => ({
+                      ...current,
+                      [key]: event.target.value,
+                    }))
+                    setRecipientCustomerId(null)
+                    clear(key)
                   }}
-                  value={name}
+                  readOnly={busy}
+                  value={recipientName[key]}
                 />
               </Field>
             </div>
-          )}
+          ))}
+          <Field
+            hint={t('optionalPatronymic')}
+            label={t('recipientMiddleName')}
+          >
+            <TextInput
+              autoComplete="additional-name"
+              onChange={(event) => {
+                setRecipientName((current) => ({
+                  ...current,
+                  middleName: event.target.value,
+                }))
+                setRecipientCustomerId(null)
+              }}
+              readOnly={busy}
+              value={recipientName.middleName}
+            />
+          </Field>
           <div
             ref={(element) => {
               boxes.current.phone = element
@@ -561,7 +635,7 @@ export function DeliveryDrawer({
             }}
           >
             <Field error={fieldError('weight')} label={t('weight')} required>
-              <div className="flex items-center gap-1.5">
+              <div className="rz-input-group">
                 <TextInput
                   inputMode="decimal"
                   numeric
@@ -571,7 +645,7 @@ export function DeliveryDrawer({
                   }}
                   value={weight}
                 />
-                <span aria-hidden className="rz-dim font-mono text-caption">
+                <span aria-hidden className="rz-input-group__addon font-mono">
                   {t('kg')}
                 </span>
               </div>
@@ -588,7 +662,7 @@ export function DeliveryDrawer({
               label={t('dimensions')}
               required
             >
-              <div className="flex items-center gap-1.5">
+              <div className="rz-input-group">
                 <TextInput
                   className="font-mono"
                   onChange={(event) => {
@@ -598,7 +672,7 @@ export function DeliveryDrawer({
                   placeholder="60×40×30"
                   value={dims}
                 />
-                <span aria-hidden className="rz-dim font-mono text-caption">
+                <span aria-hidden className="rz-input-group__addon font-mono">
                   {t('cm')}
                 </span>
               </div>
@@ -608,6 +682,26 @@ export function DeliveryDrawer({
       </SheetGroup>
 
       <SheetGroup hint={t('codRule')} n="5" title={t('groupCod')}>
+        {delivery.depositRequired && delivery.customerTrusted ? (
+          <div className="rz-inset grid gap-2">
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={!waiveDeposit}
+                disabled={busy}
+                label={tt('require')}
+                onChange={(required) => setWaiveDeposit(!required)}
+              />
+              <span className="rz-strong">{tt('require')}</span>
+            </div>
+            <p className="rz-caption m-0">
+              {tt(waiveDeposit ? 'waived' : 'required')}
+            </p>
+          </div>
+        ) : (
+          <p className="rz-caption m-0">
+            {tt(delivery.depositRequired ? 'required' : 'policyOff')}
+          </p>
+        )}
         {askGoods ? (
           <div
             ref={(element) => {
@@ -621,8 +715,9 @@ export function DeliveryDrawer({
               required
             >
               <TextInput
+                className="font-mono text-left"
+                dir="ltr"
                 inputMode="decimal"
-                numeric
                 onChange={(event) => {
                   setGoods(event.target.value)
                   clear('goods')
@@ -632,36 +727,13 @@ export function DeliveryDrawer({
             </Field>
           </div>
         ) : null}
-        <dl className="border-app-line m-0 grid rounded-rz-md border bg-(--rz-sheet-field) px-3 py-1">
-          {(
-            [
-              [t('codBalance'), uah(balance, locale), false],
-              [t('codDeclared'), uah(declared, locale), false],
-              [t('codOnWaybill'), uah(balance, locale), true],
-            ] as const
-          ).map(([label, value, strong]) => (
-            <div
-              className="border-app-line flex items-baseline justify-between gap-4 border-t py-1.5 first:border-t-0"
-              key={label}
-            >
-              <dt
-                className={cn(
-                  strong ? 'rz-strong font-semibold' : 'text-app-muted',
-                )}
-              >
-                {label}
-              </dt>
-              <dd
-                className={cn(
-                  'm-0 font-mono',
-                  strong ? 'text-app-strong font-bold' : 'text-app-ink',
-                )}
-              >
-                {value}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <SummaryList
+          rows={[
+            { label: t('codBalance'), value: uah(balance, locale) },
+            { label: t('codDeclared'), value: uah(declared, locale) },
+          ]}
+          total={{ label: t('codOnWaybill'), value: uah(balance, locale) }}
+        />
       </SheetGroup>
     </Sheet>
   )

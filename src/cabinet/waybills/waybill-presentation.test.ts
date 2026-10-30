@@ -69,3 +69,27 @@ it('writes a branch the way the list does', () => {
     }),
   ).toBe('Харків · №61')
 })
+
+it.each([
+  ['uk', 'Утримано за доставку'],
+  ['en-GB', 'Retained for delivery'],
+  ['pl', 'Zatrzymano na dostawę'],
+] as const)(
+  'shows retained delivery costs separately from refunded COD in %s',
+  (locale, label) => {
+    expect(listCodNote('Created', 'DeliveryCostsRetained', locale)).toEqual({
+      text: label,
+    })
+    expect(
+      cardPaymentSignal(
+        {
+          state: 'Cancelled',
+          paymentState: 'DeliveryCostsRetained',
+          codUah: 0,
+        },
+        0,
+        locale,
+      ),
+    ).toEqual({ label, tone: 'neutral' })
+  },
+)

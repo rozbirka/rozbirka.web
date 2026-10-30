@@ -125,13 +125,59 @@ it('does not call an order paid while anything is still owed', () => {
   expect(steps[0]?.current).toBe(false)
 })
 
+it.each([
+  { depositRequired: true, customerTrusted: true, depositWaived: true },
+  { depositRequired: false, customerTrusted: false, depositWaived: false },
+])(
+  'completes the first milestone without inventing payment when no prepayment is required: %j',
+  (policy) => {
+    const unpaid = delivery({
+      ...policy,
+      appliedUah: 0,
+      outstandingUah: 4600,
+      netReceivedUah: 0,
+      payments: [],
+    })
+    expect(lifecycle(unpaid, shipment(), 'uk')[0]).toMatchObject({
+      label: 'Без передоплати',
+      done: true,
+      meta: '',
+      prepaymentNotRequired: true,
+    })
+    expect(paymentStanding(unpaid, 'uk').label).toBe('Не оплачено')
+    expect(unpaid.outstandingUah).toBe(4600)
+    expect(unpaid.payments).toEqual([])
+  },
+)
+
+it.each([
+  { customerTrusted: false, depositWaived: true },
+  { customerTrusted: true, depositWaived: false },
+])(
+  'does not complete the first milestone for an inactive exception: %j',
+  (policy) => {
+    const unpaid = delivery({
+      ...policy,
+      appliedUah: 0,
+      outstandingUah: 4600,
+      netReceivedUah: 0,
+      payments: [],
+    })
+    expect(lifecycle(unpaid, shipment(), 'uk')[0]).toMatchObject({
+      label: 'Оплачено',
+      done: false,
+      meta: '',
+    })
+  },
+)
+
 it('names the order and the parcel separately', () => {
   // Module 46: the order's pill follows Core's workflow state.
   expect(orderChip(delivery({ outstandingUah: 1200 }), 'uk').label).toBe(
-    'Відкрите',
+    'Очікує',
   )
   expect(orderChip(delivery({ workflowState: 'Completed' }), 'uk')).toEqual({
-    label: 'Завершене',
+    label: 'Підтверджено',
     tone: 'ok',
   })
   expect(
@@ -143,9 +189,9 @@ it('names the order and the parcel separately', () => {
   // Cancelling an order that never left is not a return (10.13).
   expect(
     orderChip(delivery({ workflowState: 'AwaitingRefund' }), 'uk').label,
-  ).toBe('Відкрите')
+  ).toBe('Очікує')
   expect(orderChip(delivery({ workflowState: 'Cancelled' }), 'uk').label).toBe(
-    'Скасоване',
+    'Скасовано',
   )
 
   expect(shipmentChip(delivery(), null, 'uk').label).toBe('ТТН не створена')
@@ -214,7 +260,7 @@ it('lets a yard that asks for no deposit ship without one', () => {
   )
 
   expect(checks.find((check) => check.key === 'deposit')).toMatchObject({
-    state: 'розбірка не вимагає',
+    state: 'Розбірка відправляє без обов’язкової передоплати',
     ok: true,
   })
   expect(readinessBlocks(checks)).toHaveLength(0)

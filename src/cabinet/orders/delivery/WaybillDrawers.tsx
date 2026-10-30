@@ -53,6 +53,9 @@ export function WaybillReadinessDrawer({
 
   return (
     <Sheet
+      bodyClassName="gap-4"
+      className="sm:w-[min(480px,100vw)] [&>header_p]:text-caption [&>div:last-child_p]:text-caption [&>div:last-child]:pb-[calc(10px+env(safe-area-inset-bottom))]"
+      pending={busy}
       description={tw('readinessDescription', { number: String(orderNumber) })}
       footer={
         <>
@@ -104,6 +107,7 @@ export function WaybillReadinessDrawer({
 
       <SheetGroup title={t('readinessChecks')}>
         <NpChecks
+          variant="inset"
           items={checks.map((check) => ({
             label: check.label,
             value: check.state,

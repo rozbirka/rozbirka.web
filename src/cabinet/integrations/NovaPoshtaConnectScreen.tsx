@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { X } from 'lucide-react'
-import { Button, ConfirmDialog, useOptionalToast } from '@/components/app'
+import {
+  Button,
+  ConfirmDialog,
+  Notice,
+  useOptionalToast,
+} from '@/components/app'
 import type { CashRegister } from '@/api/cash'
 import type {
   NovaPoshtaContact,
@@ -72,6 +77,8 @@ export function NovaPoshtaConnectScreen() {
   const cabinet = useCabinet()
   const params = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const replacingKey = searchParams.get('newKey') === '1'
   const integrationId = params['integrationId'] ?? ''
   const { locale } = useLocale()
   const t = useT(npConnectMessages)
@@ -110,6 +117,10 @@ export function NovaPoshtaConnectScreen() {
   // the exit dialog promises the next visit starts from step 2.
   useEffect(() => {
     if (tenantId === '' || integrationId === '') return
+    if (replacingKey) {
+      pendingSetup.clear(tenantId, integrationId)
+      return
+    }
     const stored = pendingSetup.read(tenantId, integrationId)
     if (stored === null) return
     const controller = new AbortController()
@@ -133,7 +144,7 @@ export function NovaPoshtaConnectScreen() {
         },
       )
     return () => controller.abort()
-  }, [integrationId, tenantId])
+  }, [integrationId, replacingKey, tenantId])
 
   // Section 11: a new step puts focus on its heading.
   useEffect(() => {
@@ -266,7 +277,11 @@ export function NovaPoshtaConnectScreen() {
 
   const leave = () => {
     if (step === 0 && session === null && key.trim() === '') {
-      void navigate(listPath)
+      void navigate(
+        replacingKey
+          ? cabinetPath(tenant.slug, 'integrations', integrationId)
+          : listPath,
+      )
       return
     }
     setExitOpen(true)
@@ -297,7 +312,9 @@ export function NovaPoshtaConnectScreen() {
   })
 
   const exitEffects = [
-    ...(session === null ? [] : [t('exitKeyKept')]),
+    ...(session === null
+      ? []
+      : [t(replacingKey ? 'replacementKeyAgain' : 'exitKeyKept')]),
     ...(sender === null ? [] : [t('exitSelectionLost')]),
   ]
 
@@ -317,6 +334,8 @@ export function NovaPoshtaConnectScreen() {
         </p>
         <h1 className="rz-h-page">{t('title')}</h1>
       </div>
+
+      {replacingKey && <Notice tone="info">{t('replacementNote')}</Notice>}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="grid min-w-0 gap-3.5">
@@ -414,7 +433,7 @@ export function NovaPoshtaConnectScreen() {
 
       <ConfirmDialog
         confirmLabel={t('exitConfirm')}
-        consequence={t('exitConsequence')}
+        consequence={t(replacingKey ? 'replacementExit' : 'exitConsequence')}
         effects={exitEffects}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
@@ -422,7 +441,11 @@ export function NovaPoshtaConnectScreen() {
         }}
         onConfirm={() => {
           setExitOpen(false)
-          void navigate(listPath)
+          void navigate(
+            replacingKey
+              ? cabinetPath(tenant.slug, 'integrations', integrationId)
+              : listPath,
+          )
         }}
         onOpenChange={setExitOpen}
         open={exitOpen}

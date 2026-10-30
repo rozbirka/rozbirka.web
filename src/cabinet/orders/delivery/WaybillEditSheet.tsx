@@ -7,6 +7,7 @@ import { isValidContactPhone, normalizePhone } from '@/lib/phone'
 import { SheetGroup } from '../sheet-group'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 import { waybillMessages } from './waybill-messages'
+import { recipientFullName, splitRecipientName } from './recipient-name'
 import {
   dimensionsLine,
   parcelsFrom,
@@ -56,7 +57,10 @@ export function WaybillEditSheet({
   const t = useT(waybillMessages)
   const tc = useT(commonMessages)
   const original = shipment.draft
-  const [name, setName] = useState(original.recipient.name)
+  const [recipientName, setRecipientName] = useState(() =>
+    splitRecipientName(original.recipient.name),
+  )
+  const name = recipientFullName(recipientName)
   const [phone, setPhone] = useState(original.recipient.phone)
   const [places, setPlaces] = useState(String(original.parcels.length || 1))
   const [weight, setWeight] = useState(formatNumber(weightOf(original.parcels)))
@@ -76,7 +80,8 @@ export function WaybillEditSheet({
   const weightValue = decimal(weight)
   const dimsValue = parseDimensions(dims)
   const invalid = {
-    name: name.trim() === '',
+    lastName: recipientName.lastName.trim() === '',
+    firstName: recipientName.firstName.trim() === '',
     phone: !isValidContactPhone(e164),
     places: placesValue === null || placesValue < 1,
     weight: weightValue === null,
@@ -145,7 +150,10 @@ export function WaybillEditSheet({
           <Button disabled={busy} onClick={onClose}>
             {tc('cancel')}
           </Button>
-          <Button disabled={busy} onClick={() => onRecreate(draft(), 'branch')}>
+          <Button
+            disabled={busy || invalid.lastName || invalid.firstName}
+            onClick={() => onRecreate(draft(), 'branch')}
+          >
             {t('needNewWaybill')}
           </Button>
           <Button
@@ -173,15 +181,49 @@ export function WaybillEditSheet({
 
       <SheetGroup title={t('groupRecipient')}>
         <div className="grid gap-3 sm:grid-cols-2">
+          {(['lastName', 'firstName'] as const).map((key) => (
+            <Field
+              key={key}
+              error={
+                invalid[key]
+                  ? t(key === 'lastName' ? 'errorLastName' : 'errorFirstName')
+                  : undefined
+              }
+              label={t(
+                key === 'lastName' ? 'recipientLastName' : 'recipientFirstName',
+              )}
+              hint={key === 'lastName' ? t('recipientNameReview') : undefined}
+              required
+            >
+              <TextInput
+                aria-required
+                autoComplete={key === 'lastName' ? 'family-name' : 'given-name'}
+                onChange={(event) =>
+                  setRecipientName((current) => ({
+                    ...current,
+                    [key]: event.target.value,
+                  }))
+                }
+                readOnly={busy}
+                ref={key === 'lastName' ? nameRef : undefined}
+                value={recipientName[key]}
+              />
+            </Field>
+          ))}
           <Field
-            error={invalid.name ? t('errorName') : undefined}
-            label={t('fullName')}
+            hint={t('optionalPatronymic')}
+            label={t('recipientMiddleName')}
           >
             <TextInput
-              onChange={(event) => setName(event.target.value)}
+              autoComplete="additional-name"
+              onChange={(event) =>
+                setRecipientName((current) => ({
+                  ...current,
+                  middleName: event.target.value,
+                }))
+              }
               readOnly={busy}
-              ref={nameRef}
-              value={name}
+              value={recipientName.middleName}
             />
           </Field>
           <Field

@@ -12,21 +12,31 @@ import { isFullyPaid } from './delivery-money'
 
 /** Payments not yet given back; what a full refund would return. */
 export const livePayments = (delivery: DeliveryOrder): DeliveryPayment[] =>
-  delivery.payments.filter((payment) => payment.refundedAt === null)
+  delivery.payments.filter(
+    (payment) =>
+      payment.refundedAt === null &&
+      (payment.retainedDeliveryCostUah ?? 0) < payment.amountUah,
+  )
 
 /** Everything booked against the order, refunded or not. */
 export interface RefundTotals {
   booked: number
   refunded: number
+  retained: number
   due: number
 }
 
 export function refundTotals(delivery: DeliveryOrder): RefundTotals {
   const refunded = delivery.payments
     .filter((payment) => payment.refundedAt !== null)
-    .reduce((sum, payment) => sum + payment.amountUah, 0)
+    .reduce(
+      (sum, payment) =>
+        sum + payment.amountUah - (payment.retainedDeliveryCostUah ?? 0),
+      0,
+    )
   const due = delivery.refundDueUah
-  return { booked: refunded + due, refunded, due }
+  const retained = delivery.retainedDeliveryCostUah ?? 0
+  return { booked: refunded + retained + due, refunded, retained, due }
 }
 
 const LATE_PAYOUT = new Set(['LatePaymentNeedsRefund', 'NeedsReconciliation'])
@@ -104,6 +114,8 @@ export type PaymentState =
   | 'refundPartial'
   /** Cancelled with everything given back (10.12). */
   | 'refunded'
+  /** Cancelled with all held money retained against actual delivery costs. */
+  | 'retained'
   /** Cancelled, nothing was ever paid. */
   | 'notApplicable'
   /** Cancelled, and the carrier paid out afterwards (10.16). */
@@ -120,7 +132,11 @@ export function paymentState(
     if (latePayout(delivery, shipment)) return 'late'
     if (totals.due > 0)
       return totals.refunded > 0 ? 'refundPartial' : 'refundDue'
-    return totals.refunded > 0 ? 'refunded' : 'notApplicable'
+    return totals.refunded > 0
+      ? 'refunded'
+      : totals.retained > 0
+        ? 'retained'
+        : 'notApplicable'
   }
   if (delivery.workflowState === 'AwaitingRefund')
     return totals.refunded > 0 ? 'refundPartial' : 'refundDue'

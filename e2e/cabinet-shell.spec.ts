@@ -2842,17 +2842,16 @@ test('reuses the browser payment key after a network failure and reports one err
   await expect(page.getByText('Клієнта не вказано')).toBeVisible()
   const pay = page.getByRole('button', { name: 'Внести оплату' }).first()
   await pay.click()
-  const drawer = page.getByRole('dialog', { name: 'Внести оплату' })
-  await drawer.getByRole('button', { name: 'Зберегти платіж' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Додати платіж' })
+  await drawer.getByLabel('Сума', { exact: true }).fill('1200')
+  await drawer.getByRole('button', { name: 'Записати оплату' }).click()
   await expect(drawer.getByRole('alert')).toHaveCount(1)
 
-  await drawer.getByRole('button', { name: 'Зберегти платіж' }).click()
+  await drawer.getByRole('button', { name: 'Записати оплату' }).click()
   await expect(drawer).toHaveCount(0)
   await pay.click()
-  await page
-    .getByRole('dialog', { name: 'Внести оплату' })
-    .getByRole('button', { name: 'Зберегти платіж' })
-    .click()
+  await drawer.getByLabel('Сума', { exact: true }).fill('1200')
+  await drawer.getByRole('button', { name: 'Записати оплату' }).click()
 
   await expect.poll(() => paymentKeys.length).toBe(3)
   expect(paymentKeys[0]).toBe(paymentKeys[1])

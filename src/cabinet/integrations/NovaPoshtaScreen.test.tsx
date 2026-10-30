@@ -189,7 +189,7 @@ it('leaves the key and the on/off switch out of the settings tab', async () => {
   renderScreen('/settings')
 
   expect(
-    await screen.findByRole('heading', { name: 'Депозит за доставку' }),
+    await screen.findByRole('heading', { name: 'Мінімальна передоплата' }),
   ).toBeVisible()
   expect(screen.queryByText('••••••••••••••••')).toBeNull()
   expect(screen.queryByRole('button', { name: 'Замінити ключ' })).toBeNull()
@@ -450,7 +450,7 @@ it('saves the real delivery deposit policy from Nova Poshta settings without rew
   const user = userEvent.setup()
   renderScreen('/settings')
   const toggle = await screen.findByRole('switch', {
-    name: 'Вимагати депозит за доставку',
+    name: 'Вимагати мінімальну передоплату',
   })
   expect(toggle).toHaveAttribute('aria-checked', 'true')
   const panel = within(toggle.closest('section')!)
@@ -467,7 +467,7 @@ it('saves the real delivery deposit policy from Nova Poshta settings without rew
     vi.mocked(businessApi.update).mock.calls[0]?.[2]?.signal,
   ).toBeInstanceOf(AbortSignal)
   expect(
-    await screen.findByText('Налаштування депозиту збережено.'),
+    await screen.findByText('Налаштування передоплати збережено.'),
   ).toBeVisible()
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith(tenant.id)
   expect(integrationsApi.savePreferences).not.toHaveBeenCalled()
@@ -477,7 +477,7 @@ it('does not put the delivery deposit control on other Nova Poshta tabs', async 
   renderScreen()
   await screen.findByRole('heading', { name: 'Нова пошта' })
   expect(
-    screen.queryByRole('switch', { name: 'Вимагати депозит за доставку' }),
+    screen.queryByRole('switch', { name: 'Вимагати мінімальну передоплату' }),
   ).toBeNull()
 })
 
@@ -486,17 +486,17 @@ it('keeps the deposit draft and offers retry when saving fails', async () => {
   const user = userEvent.setup()
   renderScreen('/settings')
   const toggle = await screen.findByRole('switch', {
-    name: 'Вимагати депозит за доставку',
+    name: 'Вимагати мінімальну передоплату',
   })
   const panel = within(toggle.closest('section')!)
   await user.click(toggle)
   await user.click(panel.getByRole('button', { name: 'Зберегти' }))
   expect(await panel.findByRole('alert')).toHaveTextContent(
-    'Не вдалося зберегти налаштування депозиту.',
+    'Не вдалося зберегти налаштування передоплати.',
   )
   expect(toggle).toHaveAttribute('aria-checked', 'false')
   expect(panel.getByRole('button', { name: 'Зберегти' })).toBeEnabled()
-  expect(screen.queryByText('Налаштування депозиту збережено.')).toBeNull()
+  expect(screen.queryByText('Налаштування передоплати збережено.')).toBeNull()
 })
 
 it('reads the persisted deposit setting back after a lost response', async () => {
@@ -506,7 +506,7 @@ it('reads the persisted deposit setting back after a lost response', async () =>
   const user = userEvent.setup()
   renderScreen('/settings')
   const toggle = await screen.findByRole('switch', {
-    name: 'Вимагати депозит за доставку',
+    name: 'Вимагати мінімальну передоплату',
   })
   await user.click(toggle)
   await user.click(
@@ -515,7 +515,7 @@ it('reads the persisted deposit setting back after a lost response', async () =>
     }),
   )
   expect(
-    await screen.findByText('Налаштування депозиту збережено.'),
+    await screen.findByText('Налаштування передоплати збережено.'),
   ).toBeVisible()
   expect(tenantsApi.list).toHaveBeenCalledTimes(1)
   expect(businessApi.update).toHaveBeenCalledTimes(1)
@@ -527,11 +527,11 @@ it('allows only the owner to change the tenant-wide deposit policy', async () =>
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   renderScreen('/settings')
   const toggle = await screen.findByRole('switch', {
-    name: 'Вимагати депозит за доставку',
+    name: 'Вимагати мінімальну передоплату',
   })
   expect(toggle).toBeDisabled()
   expect(
-    screen.getByText('Змінити вимогу депозиту може лише власник бізнесу.'),
+    screen.getByText('Змінити вимогу передоплати може лише власник бізнесу.'),
   ).toBeVisible()
   expect(businessApi.update).not.toHaveBeenCalled()
 })
@@ -544,7 +544,7 @@ it.each(['permission', 'role', 'subscription'])(
     const user = userEvent.setup()
     renderScreen('/settings')
     const toggle = await screen.findByRole('switch', {
-      name: 'Вимагати депозит за доставку',
+      name: 'Вимагати мінімальну передоплату',
     })
     await user.click(toggle)
     if (revoked === 'permission')
@@ -560,7 +560,7 @@ it.each(['permission', 'role', 'subscription'])(
     )
     expect(
       await screen.findByText(
-        'Ви більше не маєте права змінювати налаштування депозиту.',
+        'Ви більше не маєте права змінювати налаштування передоплати.',
       ),
     ).toBeVisible()
     expect(businessApi.update).not.toHaveBeenCalled()
@@ -579,7 +579,7 @@ it('ignores a deposit response after leaving the integration settings', async ()
   const user = userEvent.setup()
   const view = renderScreen('/settings')
   const toggle = await screen.findByRole('switch', {
-    name: 'Вимагати депозит за доставку',
+    name: 'Вимагати мінімальну передоплату',
   })
   await user.click(toggle)
   const panel = within(toggle.closest('section')!)
@@ -677,6 +677,26 @@ it('names what new waybills are dispatched with, never the key', async () => {
   expect(within(rights).getAllByText('є')).toHaveLength(1)
 })
 
+it.each(['active', 'inactive'] as const)(
+  'offers a fresh API-key wizard for a configured %s integration',
+  async (status) => {
+    configuredDelivery()
+    vi.mocked(integrationsApi.getById).mockResolvedValue({
+      ...integration,
+      status,
+    })
+    renderScreen()
+    const label =
+      status === 'inactive' ? 'Підключити новий API-ключ' : 'Змінити API-ключ'
+    expect(await screen.findByRole('link', { name: label })).toHaveAttribute(
+      'href',
+      '/app/koval/settings/integrations/integration-1/connect?newKey=1',
+    )
+    expect(integrationsApi.deactivate).not.toHaveBeenCalled()
+    expect(integrationsApi.activate).not.toHaveBeenCalled()
+  },
+)
+
 it('explains who may change the settings instead of offering them', async () => {
   configuredDelivery()
   vi.mocked(useCabinet).mockReturnValue({
@@ -697,6 +717,7 @@ it('explains who may change the settings instead of offering them', async () => 
     screen.queryByRole('link', { name: 'Змінити налаштування' }),
   ).toBeNull()
   expect(screen.queryByRole('button', { name: 'Відключити' })).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Змінити API-ключ' })).toBeNull()
 })
 
 const switchedOff: Integration = {
@@ -803,7 +824,7 @@ it('keeps a switched-off integration out of the settings editor', async () => {
   renderScreen('/settings')
 
   expect(
-    await screen.findByRole('heading', { name: 'Депозит за доставку' }),
+    await screen.findByRole('heading', { name: 'Мінімальна передоплата' }),
   ).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Перевірити зміни' })).toBeNull()
 })

@@ -168,6 +168,37 @@ export interface ExternalShipmentPreview {
   recordsReceipt: boolean
 }
 
+/** Provider facts reviewed before an unknown creation can be resolved. */
+export interface ShipmentRecoveryCandidate {
+  number: string
+  createdAt: string | null
+  sender: ShippingContact | null
+  recipient: ShippingContact | null
+  codUah: number | null
+  fingerprint: string
+  canConfirm: boolean
+}
+
+export interface ShipmentRecoveryCandidates {
+  shipmentVersion: string
+  status: 'Found' | 'NotFound' | 'Incomplete' | 'Limited'
+  candidates: ShipmentRecoveryCandidate[]
+}
+
+const withRecoveryNulls = (
+  data: ShipmentRecoveryCandidates,
+): ShipmentRecoveryCandidates => ({
+  ...data,
+  candidates: (data.candidates ?? []).map((candidate) => ({
+    ...candidate,
+    createdAt: candidate.createdAt ?? null,
+    sender: candidate.sender ?? null,
+    recipient: candidate.recipient ?? null,
+    codUah: candidate.codUah ?? null,
+    canConfirm: candidate.canConfirm === true,
+  })),
+})
+
 /** Core omits empty collections; a shipment without events must still render. */
 /**
  * Core serialises with `JsonIgnoreCondition.WhenWritingNull`: a null field is
@@ -347,6 +378,56 @@ export const shippingApi = {
         await apiClient.post<Shipment>(
           `${orders(integrationId, orderId)}/reconcile`,
           number === null ? {} : { number },
+        )
+      ).data,
+    )
+  },
+  /** Read-only search in the carrier account used by the original creation. */
+  async searchRecoveryCandidates(
+    integrationId: string,
+    orderId: string,
+    options: RequestOptions = {},
+  ): Promise<ShipmentRecoveryCandidates> {
+    return withRecoveryNulls(
+      (
+        await apiClient.get<ShipmentRecoveryCandidates>(
+          `${orders(integrationId, orderId)}/recovery-candidates`,
+          requestConfig(options),
+        )
+      ).data,
+    )
+  },
+  /** Checking a manually entered number does not attach it. */
+  async previewRecoveryCandidate(
+    integrationId: string,
+    orderId: string,
+    number: string,
+  ): Promise<ShipmentRecoveryCandidates> {
+    return withRecoveryNulls(
+      (
+        await apiClient.post<ShipmentRecoveryCandidates>(
+          `${orders(integrationId, orderId)}/recovery-candidates/preview`,
+          { number },
+        )
+      ).data,
+    )
+  },
+  async confirmRecoveryCandidate(
+    integrationId: string,
+    orderId: string,
+    candidate: Pick<ShipmentRecoveryCandidate, 'number' | 'fingerprint'> & {
+      shipmentVersion: string
+    },
+  ): Promise<Shipment> {
+    return withCollections(
+      (
+        await apiClient.post<Shipment>(
+          `${orders(integrationId, orderId)}/recovery-candidates/confirm`,
+          {
+            number: candidate.number,
+            shipmentVersion: candidate.shipmentVersion,
+            fingerprint: candidate.fingerprint,
+          },
         )
       ).data,
     )

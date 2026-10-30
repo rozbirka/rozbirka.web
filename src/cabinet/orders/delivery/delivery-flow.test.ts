@@ -86,6 +86,7 @@ it('reads refunds and money that came after cancellation (10.6–10.16)', () => 
   expect(refundTotals(partial)).toEqual({
     booked: 9600,
     refunded: 5400,
+    retained: 0,
     due: 4200,
   })
   const cancelled = delivery({
@@ -139,4 +140,45 @@ it('places a return on its step and leaves an unsent cancellation out', () => {
   expect(
     returnProgress(delivery({ dispatchedAt: 'x', workflowState: 'Cancelled' })),
   ).toBe(5)
+})
+
+it('separates retained actual delivery costs from actual refunded amounts', () => {
+  const settled = delivery({
+    workflowState: 'Cancelled',
+    refundDueUah: 0,
+    retainedDeliveryCostUah: 186,
+    payments: [
+      {
+        amountUah: 500,
+        retainedDeliveryCostUah: 186,
+        refundedAt: 'x',
+      } as DeliveryOrder['payments'][number],
+    ],
+  })
+  expect(refundTotals(settled)).toEqual({
+    booked: 500,
+    refunded: 314,
+    retained: 186,
+    due: 0,
+  })
+  expect(paymentState(settled, null)).toBe('refunded')
+  const whollyRetained = delivery({
+    workflowState: 'Cancelled',
+    refundDueUah: 0,
+    retainedDeliveryCostUah: 186,
+    payments: [
+      {
+        amountUah: 186,
+        retainedDeliveryCostUah: 186,
+        refundedAt: null,
+      } as DeliveryOrder['payments'][number],
+    ],
+  })
+  expect(refundTotals(whollyRetained)).toEqual({
+    booked: 186,
+    refunded: 0,
+    retained: 186,
+    due: 0,
+  })
+  expect(paymentState(whollyRetained, null)).toBe('retained')
 })

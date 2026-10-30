@@ -9,6 +9,10 @@ export const npConnectMessages = defineMessages({
   uk: {
     exit: 'Вийти з підключення',
     title: 'Підключення Нової пошти',
+    replacementNote:
+      'Чинне підключення залишиться без змін до завершення майстра. Новий ключ застосовуватиметься до нових ТТН, доступ до попередніх накладних збережеться.',
+    replacementExit: 'Чинне підключення залишиться без змін.',
+    replacementKeyAgain: 'Наступного разу введіть новий ключ знову.',
     stepOf: 'Крок {step} з 5 · {name}',
     stepKey: 'API-ключ',
     stepSender: 'Відправник і контакт',
@@ -98,6 +102,10 @@ export const npConnectMessages = defineMessages({
   'en-GB': {
     exit: 'Leave setup',
     title: 'Connect Nova Poshta',
+    replacementNote:
+      'The current connection stays unchanged until the wizard is completed. The new key will be used for new waybills; access to existing waybills is preserved.',
+    replacementExit: 'The current connection will stay unchanged.',
+    replacementKeyAgain: 'Enter the new key again on your next attempt.',
     stepOf: 'Step {step} of 5 · {name}',
     stepKey: 'API key',
     stepSender: 'Sender and contact',
@@ -182,6 +190,10 @@ export const npConnectMessages = defineMessages({
   pl: {
     exit: 'Wyjdź z konfiguracji',
     title: 'Podłączenie Nowej Poczty',
+    replacementNote:
+      'Obecne połączenie pozostanie bez zmian do zakończenia kreatora. Nowy klucz będzie używany dla nowych listów przewozowych; dostęp do wcześniejszych zostanie zachowany.',
+    replacementExit: 'Obecne połączenie pozostanie bez zmian.',
+    replacementKeyAgain: 'Przy następnej próbie ponownie wprowadź nowy klucz.',
     stepOf: 'Krok {step} z 5 · {name}',
     stepKey: 'Klucz API',
     stepSender: 'Nadawca i kontakt',

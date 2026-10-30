@@ -7,12 +7,29 @@ import { defineMessages } from '@/i18n'
  */
 export const deliveryMessages = defineMessages({
   uk: {
+    factReceived: 'Отримано від клієнта',
+    prepaymentExplained:
+      'Отримані кошти зараховуються в оплату замовлення. Розрахунок Нової пошти не підтверджує оплату її послуг.',
+    lifecycleTitle: 'Стан оплати та доставки',
+    lifecycleHint:
+      'Оплата й доставка оновлюються окремо. За післяплати гроші можуть надійти вже після отримання посилки.',
+    milestonePayment: 'Оплата',
+    milestoneWaybill: 'Накладна',
+    milestoneDispatch: 'Відправлення',
+    milestoneReceipt: 'Отримання',
+    milestoneAwaitPayment: 'Очікуємо оплату',
+    milestonePaymentStopped: 'Оплату не очікуємо',
+    milestoneNotSent: 'Ще не передано',
+    milestoneNotReceived: 'Ще не отримано',
     countryUnavailable:
       'Доставка Новою поштою доступна лише для бізнесів в Україні.',
     noRight: 'Немає права на цю дію. Зверніться до власника.',
 
     // Lifecycle
     stepPaid: 'Оплачено',
+    stepNoPrepayment: 'Без передоплати',
+    noteNoPrepayment:
+      'Передоплата не потрібна. Несплачена сума замовлення залишається післяплатою.',
     stepWaybill: 'ТТН',
     stepDispatched: 'Передано перевізнику',
     stepReceived: 'Отримано',
@@ -46,12 +63,13 @@ export const deliveryMessages = defineMessages({
       other: '{count} місця · {weight} кг',
     },
     factDimensions: '{length} × {width} × {height} см',
-    factDeposit: 'Депозит',
-    depositNotRequired: 'розбірка не вимагає депозиту',
-    depositWaivedTrusted: 'знято для довіреного клієнта',
+    factDeposit: 'Мінімальна передоплата',
+    depositNotRequired: 'Розбірка відправляє без обов’язкової передоплати',
+    depositWaivedTrusted: 'Без передоплати для довіреного клієнта',
     depositAfterQuote: 'зʼявиться після розрахунку',
-    depositPaid: 'внесено',
-    depositShort: 'бракує {amount}',
+    depositCovered: '{amount} · вимогу передоплати виконано',
+    depositNoAdditional: 'Додаткова передоплата не потрібна',
+    depositShort: 'Залишилось внести: {amount}',
 
     // Payment standing
     standingFull: 'Оплачено повністю',
@@ -61,7 +79,7 @@ export const deliveryMessages = defineMessages({
 
     // Primary action
     returnedHint:
-      'Замовлення повернене. Кошти повертаються окремо по кожному платежу.',
+      'Замовлення повернене. Поверніть весь залишок однією виплатою після погодженого утримання доставки.',
     actionCreate: 'Створити ТТН',
     createHintCod: 'Післяплата буде {amount} — рівно залишок.',
     createHintPaid: 'Замовлення оплачене, тож накладна піде без післяплати.',
@@ -69,14 +87,15 @@ export const deliveryMessages = defineMessages({
     dispatchHint: 'Після передачі статус лишається «Очікує».',
     receiveHint: 'Замовлення стане «Підтверджене».',
     actionReturn: 'Оформити повернення',
-    returnHint: 'Кошти повертаються окремо по кожному платежу.',
+    returnHint:
+      'Поверніть весь залишок однією виплатою після погодженого утримання доставки.',
 
     // Readiness
     checkOutstandingCod: 'Залишок поїде післяплатою',
     checkOutstandingNone: 'Залишку немає — післяплати не буде',
-    checkDeposit: 'Депозит за доставку внесено',
-    depositStateNotRequired: 'розбірка не вимагає',
-    depositStateWaived: 'знято',
+    checkDeposit: 'Вимога передоплати',
+    depositStateNotRequired: 'Розбірка відправляє без обов’язкової передоплати',
+    depositStateWaived: 'Без передоплати для довіреного клієнта',
     checkQuote: 'Розрахунок доставки свіжий',
     quoteNextStep: 'зробимо на наступному кроці',
     quoteUpdated: 'оновлено',
@@ -91,16 +110,16 @@ export const deliveryMessages = defineMessages({
       '{label}: {state}. На наступному кроці це не змінюється — відкрийте налаштування інтеграції.',
     nextQuoteTitle: 'Наступний крок — розрахувати доставку',
     nextQuoteNote:
-      'Далі заповнюєте отримувача й посилку та натискаєте «Розрахувати». Звідти ж стане відомий депозит.',
-    nextDepositTitle: 'Депозит ще не внесено',
+      'Заповніть отримувача й посилку та натисніть «Розрахувати», щоб визначити мінімальну передоплату.',
+    nextDepositTitle: 'Потрібна мінімальна передоплата',
     nextDepositNote:
-      'Накладну створити можна, але передати посилку перевізнику — лише після депозиту.',
+      'Спершу отримайте мінімальну передоплату. До цього створення ТТН і передача перевізнику недоступні.',
     nextClearTitle: 'Перешкод не знайдено',
     nextClearNote:
       'Маршрут і габарити Нова пошта перевірить під час створення — відмова можлива вже там.',
 
     // Payment kinds
-    kindPrepayment: 'Завдаток',
+    kindPrepayment: 'Передоплата',
     kindOther: 'Оплата',
 
     // Shipment states (delivery-labels)
@@ -148,13 +167,14 @@ export const deliveryMessages = defineMessages({
     till: 'каса',
     fee: ' · комісія {amount}',
     due: 'До сплати',
-    agreed: 'Погоджено за доставку',
-    paid: 'Сплачено',
+    agreed: 'Погоджена сума замовлення, грн',
+    paid: 'Отримано від клієнта',
     recordPayment: 'Внести оплату',
     stepsTitle: 'Порядок дій',
     stepsShort: 'Коротко',
-    stepsExplain: 'Що це означає',
-    notePaid: 'ТТН не створюється, поки є будь-який залишок.',
+    stepsExplain: 'Докладніше',
+    notePaid:
+      'Отримана оплата зменшує залишок; решта може поїхати післяплатою.',
     noteWaybill: 'Післяплата в накладній має дорівнювати залишку.',
     noteDispatched:
       'Фіксується дата передачі. Статус замовлення лишається «Очікує».',
@@ -197,12 +217,29 @@ export const deliveryMessages = defineMessages({
       'Замовлення поки не їде поштою. Оформіть доставку — отримувача, посилку й післяплату вкажете на наступному кроці.',
   },
   'en-GB': {
+    factReceived: 'Received from customer',
+    prepaymentExplained:
+      'Money received counts towards the order payment. A Nova Poshta quote does not confirm payment for its services.',
+    lifecycleTitle: 'Payment and delivery status',
+    lifecycleHint:
+      'Payment and delivery update separately. With cash on delivery, the money may arrive after the parcel is collected.',
+    milestonePayment: 'Payment',
+    milestoneWaybill: 'Waybill',
+    milestoneDispatch: 'Dispatch',
+    milestoneReceipt: 'Collection',
+    milestoneAwaitPayment: 'Awaiting payment',
+    milestonePaymentStopped: 'No payment expected',
+    milestoneNotSent: 'Not handed over yet',
+    milestoneNotReceived: 'Not collected yet',
     countryUnavailable:
       'Nova Poshta delivery is only available for businesses in Ukraine.',
     noRight:
       'You no longer have permission for this action. Contact the owner.',
 
     stepPaid: 'Paid',
+    stepNoPrepayment: 'No prepayment required',
+    noteNoPrepayment:
+      'No prepayment is required. The unpaid order balance remains cash on delivery.',
     stepWaybill: 'Waybill',
     stepDispatched: 'Handed to carrier',
     stepReceived: 'Received',
@@ -232,12 +269,13 @@ export const deliveryMessages = defineMessages({
       other: '{count} pieces · {weight} kg',
     },
     factDimensions: '{length} × {width} × {height} cm',
-    factDeposit: 'Deposit',
-    depositNotRequired: 'the business does not require a deposit',
-    depositWaivedTrusted: 'waived for a trusted customer',
+    factDeposit: 'Minimum prepayment',
+    depositNotRequired: 'The business ships without mandatory prepayment',
+    depositWaivedTrusted: 'No prepayment for a trusted customer',
     depositAfterQuote: 'available after the quote',
-    depositPaid: 'paid',
-    depositShort: '{amount} short',
+    depositCovered: '{amount} · prepayment requirement met',
+    depositNoAdditional: 'No additional prepayment needed',
+    depositShort: 'Still to pay: {amount}',
 
     standingFull: 'Paid in full',
     standingUnknown: 'Total not set',
@@ -245,7 +283,7 @@ export const deliveryMessages = defineMessages({
     standingNone: 'Not paid',
 
     returnedHint:
-      'The order has been returned. Money is refunded separately for each payment.',
+      'The order has been returned. Refund the full remaining amount in one payment after the agreed delivery deduction.',
     actionCreate: 'Create waybill',
     createHintCod: 'Cash on delivery will be {amount} — exactly the balance.',
     createHintPaid:
@@ -254,13 +292,14 @@ export const deliveryMessages = defineMessages({
     dispatchHint: 'After handover the status stays “Pending”.',
     receiveHint: 'The order will become “Confirmed”.',
     actionReturn: 'Process return',
-    returnHint: 'Money is refunded separately for each payment.',
+    returnHint:
+      'Refund the full remaining amount in one payment after the agreed delivery deduction.',
 
     checkOutstandingCod: 'The balance goes as cash on delivery',
     checkOutstandingNone: 'No balance — no cash on delivery',
-    checkDeposit: 'Delivery deposit paid',
-    depositStateNotRequired: 'not required by the business',
-    depositStateWaived: 'waived',
+    checkDeposit: 'Prepayment requirement',
+    depositStateNotRequired: 'The business ships without mandatory prepayment',
+    depositStateWaived: 'No prepayment for a trusted customer',
     checkQuote: 'Delivery quote is up to date',
     quoteNextStep: 'done at the next step',
     quoteUpdated: 'up to date',
@@ -275,10 +314,10 @@ export const deliveryMessages = defineMessages({
       '{label}: {state}. This can’t be changed at the next step — open the integration settings.',
     nextQuoteTitle: 'Next step: get a delivery quote',
     nextQuoteNote:
-      'Next, fill in the recipient and parcel and press “Get quote”. The deposit is worked out there too.',
-    nextDepositTitle: 'Deposit not paid yet',
+      'Enter the recipient and parcel and select “Get quote” to calculate the minimum prepayment.',
+    nextDepositTitle: 'Minimum prepayment needed',
     nextDepositNote:
-      'You can create the waybill, but the parcel can only be handed to the carrier once the deposit is paid.',
+      'Receive the minimum prepayment first. Creating a waybill and handing over to the carrier are unavailable until then.',
     nextClearTitle: 'No obstacles found',
     nextClearNote:
       'Nova Poshta checks the route and dimensions on creation — it may still refuse at that point.',
@@ -328,13 +367,14 @@ export const deliveryMessages = defineMessages({
     till: 'till',
     fee: ' · fee {amount}',
     due: 'To pay',
-    agreed: 'Agreed for delivery',
-    paid: 'Paid',
+    agreed: 'Agreed order total, UAH',
+    paid: 'Received from customer',
     recordPayment: 'Record payment',
     stepsTitle: 'Order of steps',
     stepsShort: 'Less',
-    stepsExplain: 'What this means',
-    notePaid: 'No waybill is created while any balance remains.',
+    stepsExplain: 'More details',
+    notePaid:
+      'Payments received reduce the balance; the rest can be collected as cash on delivery.',
     noteWaybill: 'Cash on delivery on the waybill must equal the balance.',
     noteDispatched:
       'The handover date is recorded. The order status stays “Pending”.',
@@ -375,12 +415,29 @@ export const deliveryMessages = defineMessages({
       'This order isn’t being shipped yet. Arrange delivery — you’ll add the recipient, parcel and cash on delivery at the next step.',
   },
   pl: {
+    factReceived: 'Otrzymano od klienta',
+    prepaymentExplained:
+      'Otrzymane środki zaliczamy na poczet zamówienia. Wycena Nova Poshta nie potwierdza zapłaty za jej usługi.',
+    lifecycleTitle: 'Stan płatności i dostawy',
+    lifecycleHint:
+      'Płatność i dostawa aktualizują się osobno. Przy pobraniu pieniądze mogą wpłynąć już po odbiorze paczki.',
+    milestonePayment: 'Płatność',
+    milestoneWaybill: 'List przewozowy',
+    milestoneDispatch: 'Wysyłka',
+    milestoneReceipt: 'Odbiór',
+    milestoneAwaitPayment: 'Oczekujemy płatności',
+    milestonePaymentStopped: 'Nie oczekujemy płatności',
+    milestoneNotSent: 'Jeszcze nie przekazano',
+    milestoneNotReceived: 'Jeszcze nie odebrano',
     countryUnavailable:
       'Dostawa Nova Poshta jest dostępna tylko dla firm na Ukrainie.',
     noRight:
       'Nie masz uprawnień do tej operacji. Skontaktuj się z właścicielem.',
 
     stepPaid: 'Opłacone',
+    stepNoPrepayment: 'Bez wymaganej przedpłaty',
+    noteNoPrepayment:
+      'Przedpłata nie jest wymagana. Nieopłacona kwota zamówienia pozostaje do pobrania przy odbiorze.',
     stepWaybill: 'List przewozowy',
     stepDispatched: 'Przekazano przewoźnikowi',
     stepReceived: 'Odebrano',
@@ -412,12 +469,13 @@ export const deliveryMessages = defineMessages({
       other: '{count} paczki · {weight} kg',
     },
     factDimensions: '{length} × {width} × {height} cm',
-    factDeposit: 'Kaucja',
-    depositNotRequired: 'firma nie wymaga kaucji',
-    depositWaivedTrusted: 'zniesiona dla zaufanego klienta',
+    factDeposit: 'Minimalna przedpłata',
+    depositNotRequired: 'Firma wysyła bez obowiązkowej przedpłaty',
+    depositWaivedTrusted: 'Bez przedpłaty dla zaufanego klienta',
     depositAfterQuote: 'pojawi się po wycenie',
-    depositPaid: 'wpłacona',
-    depositShort: 'brakuje {amount}',
+    depositCovered: '{amount} · wymóg przedpłaty spełniony',
+    depositNoAdditional: 'Dodatkowa przedpłata nie jest potrzebna',
+    depositShort: 'Pozostało do wpłaty: {amount}',
 
     standingFull: 'Opłacone w całości',
     standingUnknown: 'Kwota nie została ustalona',
@@ -425,7 +483,7 @@ export const deliveryMessages = defineMessages({
     standingNone: 'Nieopłacone',
 
     returnedHint:
-      'Zamówienie zostało zwrócone. Pieniądze zwraca się osobno dla każdej płatności.',
+      'Zamówienie zostało zwrócone. Zwróć całą pozostałą kwotę jedną wypłatą po uzgodnionym potrąceniu za dostawę.',
     actionCreate: 'Utwórz list przewozowy',
     createHintCod: 'Pobranie wyniesie {amount} — dokładnie tyle, ile saldo.',
     createHintPaid:
@@ -434,13 +492,14 @@ export const deliveryMessages = defineMessages({
     dispatchHint: 'Po przekazaniu status pozostaje „Oczekuje”.',
     receiveHint: 'Zamówienie otrzyma status „Potwierdzone”.',
     actionReturn: 'Przyjmij zwrot',
-    returnHint: 'Pieniądze zwraca się osobno dla każdej płatności.',
+    returnHint:
+      'Zwróć całą pozostałą kwotę jedną wypłatą po uzgodnionym potrąceniu za dostawę.',
 
     checkOutstandingCod: 'Saldo zostanie pobrane przy odbiorze',
     checkOutstandingNone: 'Brak salda — bez pobrania',
-    checkDeposit: 'Kaucja za dostawę wpłacona',
-    depositStateNotRequired: 'firma nie wymaga',
-    depositStateWaived: 'zniesiona',
+    checkDeposit: 'Wymóg przedpłaty',
+    depositStateNotRequired: 'Firma wysyła bez obowiązkowej przedpłaty',
+    depositStateWaived: 'Bez przedpłaty dla zaufanego klienta',
     checkQuote: 'Wycena dostawy jest aktualna',
     quoteNextStep: 'zrobimy w następnym kroku',
     quoteUpdated: 'aktualna',
@@ -455,10 +514,10 @@ export const deliveryMessages = defineMessages({
       '{label}: {state}. W następnym kroku tego się nie zmieni — otwórz ustawienia integracji.',
     nextQuoteTitle: 'Następny krok — wycena dostawy',
     nextQuoteNote:
-      'Dalej uzupełniasz odbiorcę i przesyłkę i klikasz „Wyceń”. Tam też poznasz kaucję.',
-    nextDepositTitle: 'Kaucja nie została jeszcze wpłacona',
+      'Uzupełnij odbiorcę i paczkę i wybierz „Wyceń”, aby obliczyć minimalną przedpłatę.',
+    nextDepositTitle: 'Potrzebna minimalna przedpłata',
     nextDepositNote:
-      'List przewozowy można utworzyć, ale przesyłkę można przekazać przewoźnikowi dopiero po wpłacie kaucji.',
+      'Najpierw przyjmij minimalną przedpłatę. Do tego czasu nie można utworzyć listu ani przekazać paczki przewoźnikowi.',
     nextClearTitle: 'Nie znaleziono przeszkód',
     nextClearNote:
       'Trasę i wymiary Nova Poshta sprawdzi przy tworzeniu — odmowa jest możliwa dopiero wtedy.',
@@ -508,14 +567,14 @@ export const deliveryMessages = defineMessages({
     till: 'kasa',
     fee: ' · prowizja {amount}',
     due: 'Do zapłaty',
-    agreed: 'Uzgodniono za dostawę',
-    paid: 'Zapłacono',
+    agreed: 'Uzgodniona kwota zamówienia, UAH',
+    paid: 'Otrzymano od klienta',
     recordPayment: 'Dodaj płatność',
     stepsTitle: 'Kolejność działań',
     stepsShort: 'Krócej',
-    stepsExplain: 'Co to oznacza',
+    stepsExplain: 'Więcej informacji',
     notePaid:
-      'List przewozowy nie powstaje, dopóki zostaje jakiekolwiek saldo.',
+      'Otrzymane płatności zmniejszają pozostałą kwotę; reszta może zostać pobrana przy odbiorze.',
     noteWaybill: 'Pobranie w liście przewozowym musi być równe saldu.',
     noteDispatched:
       'Zapisywana jest data przekazania. Status zamówienia pozostaje „Oczekuje”.',

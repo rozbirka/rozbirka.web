@@ -1,5 +1,6 @@
 import { useRowNavigation } from '@/components/app/use-row-navigation'
 import { CabinetLoadingContent } from '../loading-screen'
+import { CustomerDeliveryTrust } from './customer-delivery-trust'
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
@@ -542,6 +543,7 @@ function CustomerDetailScreen({
   const deleteTriggerRef = useRef<HTMLButtonElement>(null)
   const toast = useOptionalToast()
   const ordersTitleId = useId()
+  const deliveryAvailable = (useTenantSettings().countryCode ?? 'UA') === 'UA'
   const navigate = useNavigate()
   const navigateRow = useRowNavigation()
   const directoryPath = `/app/${cabinet.targetTenant?.slug ?? ''}/customers`
@@ -940,6 +942,28 @@ function CustomerDetailScreen({
         </div>
 
         <aside className="grid min-w-0 gap-3.5">
+          {deliveryAvailable ? (
+            <CustomerDeliveryTrust
+              key={customer.id}
+              customer={customer}
+              canManage={mutationsAllowed && ordersViewAllowed}
+              onSave={async (isTrusted, reason) => {
+                const scope = requireLatestMutation({ quota: false })
+                requireLatestMutation({
+                  permission: 'orders.view',
+                  quota: false,
+                })
+                const updated = await customersApi.setDeliveryTrust(
+                  customer.id,
+                  { isTrusted, reason },
+                  { signal: scope.signal },
+                )
+                if (scope.signal.aborted)
+                  throw new DOMException('Aborted', 'AbortError')
+                setCustomer(updated)
+              }}
+            />
+          ) : null}
           <Card bodyClassName="p-0" headerClassName="py-2" title={t('details')}>
             <dl className="rz-facts">
               <div className="grid-cols-[minmax(0,1fr)_auto]!">

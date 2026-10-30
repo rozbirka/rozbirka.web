@@ -95,11 +95,17 @@ export function OrderCard({
  * date are drawn, so the row is two steps for an open order and three for one
  * that ended in a refund — never a greyed-out stage the server cannot reach.
  */
-export function OrderSteps({ steps }: { steps: readonly OrderStep[] }) {
+export function OrderSteps({
+  steps,
+  label,
+}: {
+  steps: readonly OrderStep[]
+  label?: string
+}) {
   const t = useT(orderCardMessages)
   return (
     <ol
-      aria-label={t('stepsLabel')}
+      aria-label={label ?? t('stepsLabel')}
       className="text-app-muted m-0 flex list-none flex-wrap items-center gap-x-1.5 gap-y-0.5 p-0 text-caption"
     >
       {steps.map((step, index) => (

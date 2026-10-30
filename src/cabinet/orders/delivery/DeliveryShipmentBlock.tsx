@@ -25,8 +25,14 @@ import type { DeliveryOrder } from '@/api/delivery'
 import type { Shipment } from '@/api/shipping'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { npRecoveryMessages } from '../../integrations/np-recovery-messages'
+import { deliveryTrustMessages } from '../../customers/delivery-trust-messages'
 import { ShipmentCard, type ShipmentFactRow } from './DeliveryOrderCard'
-import { uah } from './delivery-money'
+import {
+  hasDepositWaiver,
+  minimumPrepayment,
+  isFullyPaid,
+  uah,
+} from './delivery-money'
 import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
 import { TitledNotice } from './WaybillCreateSheet'
@@ -135,6 +141,7 @@ export function DeliveryShipmentBlock({
   const tm = useT(deliveryMessages)
   const tr = useT(npRecoveryMessages)
   const tf = useT(deliveryFlowMessages)
+  const tt = useT(deliveryTrustMessages)
   const when = (value: string | null) =>
     value === null ? '' : (format.dateTime(value) ?? value)
   const manage = canManage && carrierReady
@@ -145,6 +152,10 @@ export function DeliveryShipmentBlock({
   ): ShipmentFactRow[] => {
     const created = number !== null
     const cod = created ? source.codUah : delivery.outstandingUah
+    // After receipt and settlement, the waybill keeps its historical COD;
+    // comparing it to the now-zero order balance would report a false mismatch.
+    const settled =
+      created && delivery.receivedAt !== null && isFullyPaid(delivery)
     return [
       {
         key: 'number',
@@ -175,7 +186,7 @@ export function DeliveryShipmentBlock({
         label: tm('factCod'),
         value: cod === null ? '—' : uah(cod, locale),
         sub:
-          cod === null
+          cod === null || settled
             ? ''
             : cod === delivery.outstandingUah
               ? tm('factCodMatches')
@@ -354,8 +365,8 @@ export function DeliveryShipmentBlock({
   if (stage === 'draft') {
     const depositShort =
       delivery.depositRequired &&
-      !delivery.depositWaived &&
-      delivery.requiredDepositUah > 0 &&
+      !hasDepositWaiver(delivery) &&
+      minimumPrepayment(delivery) > 0 &&
       !delivery.depositSatisfied
     return (
       <ShipmentCard
@@ -371,12 +382,11 @@ export function DeliveryShipmentBlock({
                   <Plus aria-hidden />
                   {t('payDeposit')}
                 </Button>
-              ) : (
-                <Button disabled={busy} onClick={actions.edit}>
-                  <Pencil aria-hidden />
-                  {t('edit')}
-                </Button>
-              )}
+              ) : null}
+              <Button disabled={busy} onClick={actions.edit}>
+                <Pencil aria-hidden />
+                {t('edit')}
+              </Button>
               <Button disabled={busy} onClick={actions.attach} variant="quiet">
                 <Link2 aria-hidden />
                 {tm('attachWaybill')}
@@ -390,15 +400,12 @@ export function DeliveryShipmentBlock({
           depositShort ? (
             <TitledNotice title={tm('nextDepositTitle')} tone="warn">
               {t('depositNotice', {
-                required: uah(delivery.requiredDepositUah, locale),
-                paid: uah(
-                  Math.max(
-                    0,
-                    delivery.requiredDepositUah - delivery.depositShortfallUah,
-                  ),
-                  locale,
-                ),
+                required: uah(minimumPrepayment(delivery), locale),
+                paid: uah(delivery.appliedUah, locale),
               })}
+              {delivery.customerTrusted ? (
+                <span className="mt-1 block">{tt('editException')}</span>
+              ) : null}
             </TitledNotice>
           ) : null
         }

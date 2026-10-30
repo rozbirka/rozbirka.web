@@ -11,13 +11,13 @@ export const npFeedMessages = defineMessages({
     keyPlaceholder: 'Вставте ключ з кабінету Нової пошти',
     // Tracking subscription
     callbackUnavailable:
-      'У цьому середовищі автоматичні оновлення ще не налаштовані. Адресу прийому задає адміністратор сервісу — вводити її вручну не потрібно.',
+      'У цьому середовищі автоматичні оновлення ще не налаштовані: потрібна публічна HTTPS-адреса прийому подій. Її задає адміністратор сервісу. Періодична перевірка статусів продовжується.',
     pasteKey: 'Вставте ключ із кабінету Нової пошти.',
     pickBusinessTracking:
       'Оберіть розбірку, щоб побачити автоматичні оновлення.',
     trackingTitle: 'Автоматичне оновлення доставки',
     trackingIntro:
-      'Отримуйте оновлення статусів доставки від Нової пошти. Нові накладні підключатимуться автоматично.',
+      'Підключається автоматично після завершення налаштування НП, з тим самим API-ключем. Нові накладні додаються автоматично.',
     readingState: 'Читаємо стан підписки…',
     denied:
       'Немає доступу до автоматичних оновлень: потрібні права на налаштування команди.',
@@ -38,7 +38,7 @@ export const npFeedMessages = defineMessages({
     keyLabel: 'API-ключ Нової пошти',
     hideKey: 'Приховати ключ',
     showKey: 'Показати ключ',
-    enterKey: 'Ввести ключ',
+    checkConnection: 'Перевірити підключення НП',
     retryNow: 'Повторити зараз',
     disconnect: 'Відключити',
     refreshState: 'Оновити стан',
@@ -66,16 +66,16 @@ export const npFeedMessages = defineMessages({
       'Не вдалося прочитати стан черги подій. На вже створені накладні це не впливає —',
     queueLoading: 'Збираємо дані про черги подій…',
     deadLettersWarn: {
-      one: 'Прийом подій налаштований, але {count} подію не вдалося обробити після всіх спроб. Статуси цих відправлень оновлюються лише вручну.',
-      few: 'Прийом подій налаштований, але {count} події не вдалося обробити після всіх спроб. Статуси цих відправлень оновлюються лише вручну.',
-      many: 'Прийом подій налаштований, але {count} подій не вдалося обробити після всіх спроб. Статуси цих відправлень оновлюються лише вручну.',
+      one: 'Прийом подій налаштований, але {count} подію не вдалося обробити після всіх спроб. Періодична перевірка статусів продовжується.',
+      few: 'Прийом подій налаштований, але {count} події не вдалося обробити після всіх спроб. Періодична перевірка статусів продовжується.',
+      many: 'Прийом подій налаштований, але {count} подій не вдалося обробити після всіх спроб. Періодична перевірка статусів продовжується.',
       other:
-        'Прийом подій налаштований, але {count} події не вдалося обробити після всіх спроб. Статуси цих відправлень оновлюються лише вручну.',
+        'Прийом подій налаштований, але {count} події не вдалося обробити після всіх спроб. Періодична перевірка статусів продовжується.',
     },
     queueClean:
       'Прийом подій налаштований, черга чиста. Статуси відправлень оновлюються самі.',
     notConfigured:
-      'Прийом подій не налаштований. Rozbirka не отримує події Нової пошти — статуси відправлень оновлюються тільки вручну, з картки замовлення.',
+      'Прийом подій ще не налаштований. Періодична перевірка статусів продовжується; також можна оновити статус із картки замовлення.',
     kpiReceiving: 'Прийом подій',
     secretSavedMeta: 'Секрет збережено, підпис перевіряється',
     secretMissingMeta: 'Секрет не збережено',
@@ -124,7 +124,7 @@ export const npFeedMessages = defineMessages({
     pickBusinessTracking: 'Choose a business to see automatic updates.',
     trackingTitle: 'Automatic delivery updates',
     trackingIntro:
-      'Get delivery status updates from Nova Poshta. New waybills will be connected automatically.',
+      'Connects automatically after Nova Poshta setup using the same API key. New waybills are added automatically.',
     readingState: 'Reading the subscription state…',
     denied:
       'No access to automatic updates: you need permission to manage team settings.',
@@ -142,7 +142,7 @@ export const npFeedMessages = defineMessages({
     keyLabel: 'Nova Poshta API key',
     hideKey: 'Hide key',
     showKey: 'Show key',
-    enterKey: 'Enter key',
+    checkConnection: 'Check Nova Poshta connection',
     retryNow: 'Retry now',
     disconnect: 'Disconnect',
     refreshState: 'Refresh state',
@@ -169,14 +169,14 @@ export const npFeedMessages = defineMessages({
       'Couldn’t read the event queue state. Waybills already created aren’t affected —',
     queueLoading: 'Gathering event queue data…',
     deadLettersWarn: {
-      one: 'Event receiving is set up, but {count} event couldn’t be processed after all attempts. Statuses of these shipments are only updated by hand.',
+      one: 'Event receiving is set up, but {count} event couldn’t be processed after all attempts. Periodic status checks continue.',
       other:
-        'Event receiving is set up, but {count} events couldn’t be processed after all attempts. Statuses of these shipments are only updated by hand.',
+        'Event receiving is set up, but {count} events couldn’t be processed after all attempts. Periodic status checks continue.',
     },
     queueClean:
       'Event receiving is set up and the queue is clear. Shipment statuses update on their own.',
     notConfigured:
-      'Event receiving isn’t set up. Rozbirka doesn’t receive Nova Poshta events — shipment statuses are only updated by hand, from the order card.',
+      'Event receiving is not set up yet. Periodic status checks continue; you can also refresh a status from the order card.',
     kpiReceiving: 'Event receiving',
     secretSavedMeta: 'Secret saved, signature is checked',
     secretMissingMeta: 'No secret saved',
@@ -225,7 +225,7 @@ export const npFeedMessages = defineMessages({
       'Wybierz firmę, aby zobaczyć automatyczne aktualizacje.',
     trackingTitle: 'Automatyczne aktualizacje dostaw',
     trackingIntro:
-      'Otrzymuj aktualizacje statusów dostaw od Nova Poshta. Nowe listy przewozowe będą podłączane automatycznie.',
+      'Łączy się automatycznie po konfiguracji Nova Poshta, z tym samym kluczem API. Nowe listy przewozowe są dodawane automatycznie.',
     readingState: 'Odczytywanie stanu subskrypcji…',
     denied:
       'Brak dostępu do automatycznych aktualizacji: potrzebne są uprawnienia do ustawień zespołu.',
@@ -246,7 +246,7 @@ export const npFeedMessages = defineMessages({
     keyLabel: 'Klucz API Nova Poshta',
     hideKey: 'Ukryj klucz',
     showKey: 'Pokaż klucz',
-    enterKey: 'Wpisz klucz',
+    checkConnection: 'Sprawdź połączenie Nova Poshta',
     retryNow: 'Ponów teraz',
     disconnect: 'Odłącz',
     refreshState: 'Odśwież stan',
@@ -278,16 +278,16 @@ export const npFeedMessages = defineMessages({
       'Nie udało się odczytać stanu kolejki zdarzeń. Nie wpływa to na utworzone listy przewozowe —',
     queueLoading: 'Zbieranie danych o kolejkach zdarzeń…',
     deadLettersWarn: {
-      one: 'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzenia nie udało się przetworzyć mimo wszystkich prób. Statusy tych przesyłek są aktualizowane tylko ręcznie.',
-      few: 'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzeń nie udało się przetworzyć mimo wszystkich prób. Statusy tych przesyłek są aktualizowane tylko ręcznie.',
-      many: 'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzeń nie udało się przetworzyć mimo wszystkich prób. Statusy tych przesyłek są aktualizowane tylko ręcznie.',
+      one: 'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzenia nie udało się przetworzyć mimo wszystkich prób. Okresowe sprawdzanie statusów trwa nadal.',
+      few: 'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzeń nie udało się przetworzyć mimo wszystkich prób. Okresowe sprawdzanie statusów trwa nadal.',
+      many: 'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzeń nie udało się przetworzyć mimo wszystkich prób. Okresowe sprawdzanie statusów trwa nadal.',
       other:
-        'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzenia nie udało się przetworzyć mimo wszystkich prób. Statusy tych przesyłek są aktualizowane tylko ręcznie.',
+        'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzenia nie udało się przetworzyć mimo wszystkich prób. Okresowe sprawdzanie statusów trwa nadal.',
     },
     queueClean:
       'Odbiór zdarzeń jest skonfigurowany, kolejka jest pusta. Statusy przesyłek aktualizują się same.',
     notConfigured:
-      'Odbiór zdarzeń nie jest skonfigurowany. Rozbirka nie otrzymuje zdarzeń Nova Poshta — statusy przesyłek są aktualizowane tylko ręcznie, z karty zamówienia.',
+      'Odbiór zdarzeń nie jest jeszcze skonfigurowany. Okresowe sprawdzanie statusów trwa nadal; status można też odświeżyć z karty zamówienia.',
     kpiReceiving: 'Odbiór zdarzeń',
     secretSavedMeta: 'Sekret zapisany, podpis jest sprawdzany',
     secretMissingMeta: 'Sekret nie jest zapisany',

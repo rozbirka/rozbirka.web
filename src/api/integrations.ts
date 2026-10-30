@@ -491,12 +491,11 @@ export const integrationsApi = {
     id: string,
     options: RequestOptions = {},
   ): Promise<NovaPoshtaWebhookStatus> {
-    return (
-      await apiClient.get<NovaPoshtaWebhookStatus>(
-        `${endpoint(id)}/webhook`,
-        requestConfig(options),
-      )
-    ).data
+    const { data } = await apiClient.get<NovaPoshtaWebhookStatus>(
+      `${endpoint(id)}/webhook`,
+      requestConfig(options),
+    )
+    return { ...data, oldestPendingAt: data.oldestPendingAt ?? null }
   },
   /** A null secret turns the feed off; Core never returns a stored one. */
   async configureWebhook(id: string, secret: string | null): Promise<void> {

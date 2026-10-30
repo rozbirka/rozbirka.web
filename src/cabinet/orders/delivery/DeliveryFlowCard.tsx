@@ -94,14 +94,25 @@ export function DeliveryFlowCard({
         ? null
         : t('stepSince', { date: format.date(cancelledAt) ?? cancelledAt })
     const items: NpCheck[] = RETURN_STEPS.map((step, index) => ({
-      label: t(STEP_KEY[step]),
+      label:
+        step === 'refunded'
+          ? index >= progress
+            ? t('settlementStep')
+            : totals.retained > 0
+              ? t('stepSettled')
+              : t(STEP_KEY[step])
+          : t(STEP_KEY[step]),
       value:
         index < progress
-          ? step === 'accepted'
-            ? t('inStock', { count: units })
-            : step === 'cancelled' && late && since !== null
-              ? since
-              : t('stepDone')
+          ? step === 'refunded' && totals.retained > 0
+            ? totals.refunded > 0
+              ? t('subRefunded', { amount: money(totals.refunded) })
+              : t('noCashRefund')
+            : step === 'accepted'
+              ? t('inStock', { count: units })
+              : step === 'cancelled' && late && since !== null
+                ? since
+                : t('stepDone')
           : index === progress
             ? t('stepNow')
             : '',
@@ -165,12 +176,26 @@ export function DeliveryFlowCard({
         </>
       )
 
+    if (totals.retained > 0)
+      form = (
+        <>
+          {form}
+          <Notice tone="info">
+            {t('retainedNote', { amount: money(totals.retained) })}
+            {delivery.deliveryRetentionNote ? (
+              <> {delivery.deliveryRetentionNote}</>
+            ) : null}
+          </Notice>
+        </>
+      )
+
     return (
       <FlowCard
         form={form}
         items={items}
         pill={{
-          label: t(STEP_KEY[current]),
+          label:
+            current === 'refunded' ? t('settlementStep') : t(STEP_KEY[current]),
           done: progress >= RETURN_STEPS.length,
         }}
         title={t('returnTitle')}

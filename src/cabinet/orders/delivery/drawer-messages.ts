@@ -80,19 +80,19 @@ export const deliveryDrawerMessages = defineMessages({
       '. Врахуйте це в післяплаті, щоб клієнт не заплатив удруге.',
     goodsError: 'Вкажіть суму в гривнях або лишіть поле порожнім.',
     goodsHint:
-      'Скільки клієнт має за це замовлення в гривні. Ціни позицій живуть окремо, у валюті замовлення.',
-    goodsLabel: 'Погоджено за доставку, UAH',
-    alreadyPaid: 'Уже сплачено',
+      'Погоджена вартість товарів у гривнях. Послуги Нової пошти розраховуються окремо.',
+    goodsLabel: 'Погоджена сума замовлення, грн',
+    alreadyPaid: 'Отримано від клієнта',
     codOnWaybill: 'Післяплата в накладній',
     codNothing: 'Нічого утримувати — посилка їде як оплачена.',
     codNote:
       'Нова пошта утримає цю суму з отримувача й перекаже вам. Комісію переказу платить отримувач.',
     deliveryThere: 'Доставка туди',
     deliveryBack: 'Зворотна доставка',
-    prepaymentNeeded: 'Необхідна передоплата',
+    prepaymentNeeded: 'Мінімальна передоплата',
     fillForm: 'Заповніть отримувача, посилки й суми.',
     quoteExplained:
-      'Обидві суми порахувала Нова пошта. Депозит покриває ризик розбірки: якщо посилку не заберуть, ви заплатите за обидві дороги.',
+      'Мінімальна передоплата враховує розрахунок доставки та оцінку повернення. Отримані кошти зараховуються в оплату замовлення; розрахунок не підтверджує оплату послуг Нової пошти.',
 
     // Waybill drawers
     partCheck: 'перевірка перед ТТН',
@@ -127,6 +127,8 @@ export const deliveryDrawerMessages = defineMessages({
     partPayment: 'оплата',
     feeError: 'Комісія має бути числом у гривнях, не більше двох знаків.',
     amountError: 'Вкажіть суму в гривнях, не більше двох знаків після коми.',
+    recordOverLimit: 'Сума оплати не може перевищувати {amount}.',
+    recordNoUahTills: 'Для доставки потрібна активна каса з валютою UAH.',
     feeTooHigh: 'Комісія не може дорівнювати сумі платежу або перевищувати її.',
     pickReceipt: 'Виберіть надходження зі списку каси.',
     pickTill: 'Виберіть касу.',
@@ -162,7 +164,7 @@ export const deliveryDrawerMessages = defineMessages({
       'Замовленню зараховується сума транзакції плюс комісія — тут формула протилежна до внесення платежу.',
     linkCredited: 'Замовленню зарахується {amount}.',
     transactionFee: 'Комісія транзакції',
-    agreed: 'Погоджено за доставку',
+    agreed: 'Погоджена сума замовлення, грн',
     due: 'До сплати',
     thisPayment: 'Цей платіж',
     outcomeOverTitle: 'Переплата — запис відмовить',
@@ -250,19 +252,19 @@ export const deliveryDrawerMessages = defineMessages({
       '. Take it into account in the cash on delivery so the customer doesn’t pay twice.',
     goodsError: 'Enter an amount in hryvnia or leave the field empty.',
     goodsHint:
-      'What the customer owes for this order in hryvnia. Item prices are kept separately, in the order currency.',
-    goodsLabel: 'Agreed for delivery, UAH',
-    alreadyPaid: 'Already paid',
+      'Agreed price of the goods in hryvnias. Nova Poshta services are quoted separately.',
+    goodsLabel: 'Agreed order total, UAH',
+    alreadyPaid: 'Received from customer',
     codOnWaybill: 'Cash on delivery on the waybill',
     codNothing: 'Nothing to collect — the parcel travels as paid.',
     codNote:
       'Nova Poshta will collect this amount from the recipient and transfer it to you. The recipient pays the transfer fee.',
     deliveryThere: 'Delivery out',
     deliveryBack: 'Return delivery',
-    prepaymentNeeded: 'Prepayment required',
+    prepaymentNeeded: 'Minimum prepayment',
     fillForm: 'Fill in the recipient, parcels and amounts.',
     quoteExplained:
-      'Both amounts come from Nova Poshta. The deposit covers the business’s risk: if the parcel isn’t collected, you pay for both ways.',
+      'The minimum prepayment accounts for the delivery quote and return estimate. Money received counts towards the order; the quote does not confirm payment for Nova Poshta services.',
 
     partCheck: 'pre-waybill check',
     partLabel: 'label',
@@ -298,6 +300,9 @@ export const deliveryDrawerMessages = defineMessages({
     partPayment: 'payment',
     feeError: 'The fee must be an amount in hryvnia with up to two decimals.',
     amountError: 'Enter an amount in hryvnia with up to two decimals.',
+    recordOverLimit: 'The payment cannot exceed {amount}.',
+    recordNoUahTills:
+      'Delivery payments require an active till that supports UAH.',
     feeTooHigh: 'The fee can’t equal or exceed the payment amount.',
     pickReceipt: 'Choose a receipt from the till list.',
     pickTill: 'Choose a till.',
@@ -332,7 +337,7 @@ export const deliveryDrawerMessages = defineMessages({
       'The order is credited with the transaction amount plus the fee — the opposite of recording a payment.',
     linkCredited: 'The order will be credited with {amount}.',
     transactionFee: 'Transaction fee',
-    agreed: 'Agreed for delivery',
+    agreed: 'Agreed order total, UAH',
     due: 'To pay',
     thisPayment: 'This payment',
     outcomeOverTitle: 'Overpayment — the record will be refused',
@@ -426,19 +431,19 @@ export const deliveryDrawerMessages = defineMessages({
       '. Uwzględnij to w pobraniu, aby klient nie zapłacił dwa razy.',
     goodsError: 'Podaj kwotę w hrywnach lub zostaw pole puste.',
     goodsHint:
-      'Ile klient płaci za to zamówienie w hrywnach. Ceny pozycji są osobno, w walucie zamówienia.',
-    goodsLabel: 'Uzgodniono za dostawę, UAH',
-    alreadyPaid: 'Już zapłacono',
+      'Uzgodniona wartość towarów w hrywnach. Usługi Nova Poshta są wyceniane osobno.',
+    goodsLabel: 'Uzgodniona kwota zamówienia, UAH',
+    alreadyPaid: 'Otrzymano od klienta',
     codOnWaybill: 'Pobranie w liście przewozowym',
     codNothing: 'Nie ma czego pobierać — przesyłka jedzie jako opłacona.',
     codNote:
       'Nova Poshta pobierze tę kwotę od odbiorcy i przekaże ją firmie. Prowizję za przekaz płaci odbiorca.',
     deliveryThere: 'Dostawa w jedną stronę',
     deliveryBack: 'Dostawa zwrotna',
-    prepaymentNeeded: 'Wymagana przedpłata',
+    prepaymentNeeded: 'Minimalna przedpłata',
     fillForm: 'Uzupełnij odbiorcę, paczki i kwoty.',
     quoteExplained:
-      'Obie kwoty wyliczyła Nova Poshta. Kaucja pokrywa ryzyko firmy: jeśli przesyłka nie zostanie odebrana, płacisz za obie drogi.',
+      'Minimalna przedpłata uwzględnia wycenę dostawy i szacunek zwrotu. Otrzymane środki zaliczamy na poczet zamówienia; wycena nie potwierdza opłacenia usług Nova Poshta.',
 
     partCheck: 'kontrola przed listem przewozowym',
     partLabel: 'etykieta',
@@ -471,6 +476,9 @@ export const deliveryDrawerMessages = defineMessages({
     partPayment: 'płatność',
     feeError:
       'Prowizja musi być kwotą w hrywnach, maksymalnie z dwoma miejscami po przecinku.',
+    recordOverLimit: 'Płatność nie może przekraczać {amount}.',
+    recordNoUahTills:
+      'Płatności za dostawę wymagają aktywnej kasy obsługującej UAH.',
     amountError:
       'Podaj kwotę w hrywnach, maksymalnie z dwoma miejscami po przecinku.',
     feeTooHigh:
@@ -509,7 +517,7 @@ export const deliveryDrawerMessages = defineMessages({
       'Zamówieniu zalicza się kwotę transakcji plus prowizję — odwrotnie niż przy dodawaniu płatności.',
     linkCredited: 'Zamówieniu zostanie zaliczone {amount}.',
     transactionFee: 'Prowizja transakcji',
-    agreed: 'Uzgodniono za dostawę',
+    agreed: 'Uzgodniona kwota zamówienia, UAH',
     due: 'Do zapłaty',
     thisPayment: 'Ta płatność',
     outcomeOverTitle: 'Nadpłata — zapis zostanie odrzucony',

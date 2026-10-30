@@ -39,7 +39,7 @@ const point = {
 
 const draft = {
   recipient: {
-    name: 'Ірина Олійник',
+    name: 'Олійник Ірина',
     phone: '+380503381172',
     warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
     settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
@@ -151,18 +151,20 @@ const renderDrawer = (
     onSaved = vi.fn(),
     onMoneyChanged = vi.fn(),
     customerPhone = '+380503381172',
+    customerName = 'Олійник Ірина',
   }: {
     customerSearchAllowed?: boolean
     delivery?: DeliveryOrder
     onSaved?: (shipment: Shipment) => void
     onMoneyChanged?: (delivery: DeliveryOrder) => void
     customerPhone?: string | null
+    customerName?: string | null
   } = {},
 ) =>
   render(
     <LocaleProvider locale="uk" syncDocumentLang={false}>
       <DeliveryDrawer
-        customerName="Ірина Олійник"
+        customerName={customerName}
         customerPhone={customerPhone}
         customerSearchAllowed={customerSearchAllowed}
         delivery={delivery}
@@ -190,7 +192,8 @@ it('opens with the saved draft filled in and saves only a draft (4.2)', async ()
   expect(sheet).toHaveTextContent(
     'Замовлення #361 · Нова пошта. Дані замовлення підставлено — перевірте їх.',
   )
-  expect(screen.getByLabelText(/Ім’я та прізвище/)).toHaveValue('Ірина Олійник')
+  expect(screen.getByLabelText('Прізвище')).toHaveValue('Олійник')
+  expect(screen.getByLabelText('Ім’я')).toHaveValue('Ірина')
   expect(screen.getByLabelText(/Габарити/)).toHaveValue('40×30×22')
   expect(screen.getByLabelText(/Вага/)).toHaveValue('4,2')
   await waitFor(() =>
@@ -213,7 +216,7 @@ it('opens with the saved draft filled in and saves only a draft (4.2)', async ()
     'order-1',
     expect.objectContaining({
       recipient: expect.objectContaining({
-        name: 'Ірина Олійник',
+        name: 'Олійник Ірина',
         phone: '+380503381172',
         warehouseRef: draft.recipient.warehouseRef,
       }) as unknown,
@@ -228,6 +231,8 @@ it('names the missing details, marks the fields and keeps what was typed (4.3)',
   const user = userEvent.setup()
   renderDrawer(null, { customerPhone: '+380 67 214 55' })
   await screen.findByRole('dialog', { name: 'Оформлення доставки' })
+  await user.type(screen.getByLabelText('Прізвище'), 'Олійник')
+  await user.type(screen.getByLabelText('Ім’я'), 'Ірина')
 
   await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
 
@@ -241,7 +246,10 @@ it('names the missing details, marks the fields and keeps what was typed (4.3)',
   expect(phone).toHaveAccessibleDescription(
     'Телефон у форматі +380 XX XXX XX XX',
   )
-  await waitFor(() => expect(phone).toHaveFocus())
+  const summary = screen.getByRole('alert')
+  await waitFor(() => expect(summary.parentElement).toHaveFocus())
+  await user.click(screen.getByRole('button', { name: 'телефон отримувача' }))
+  expect(phone).toHaveFocus()
   expect(shippingApi.saveDraft).not.toHaveBeenCalled()
 })
 
@@ -266,7 +274,7 @@ it('asks what the goods cost when Core has no agreed total yet', async () => {
     ),
   )
 
-  await user.type(screen.getByLabelText(/Погоджено за доставку/), '9600')
+  await user.type(screen.getByLabelText(/Погоджена сума замовлення/), '9600')
   await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
 
   await waitFor(() => expect(onMoneyChanged).toHaveBeenCalledWith(configured))
@@ -278,11 +286,51 @@ it('asks what the goods cost when Core has no agreed total yet', async () => {
   )
 })
 
-it('fills the recipient from customer search', async () => {
+it('lets a trusted customer require prepayment for this order without inventing a payment', async () => {
+  const user = userEvent.setup()
+  const configured = money({ customerTrusted: true, depositWaived: false })
+  vi.mocked(deliveryApi.configure).mockResolvedValue(configured)
+  vi.mocked(shippingApi.saveDraft).mockResolvedValue(shipment())
+  renderDrawer(shipment(), {
+    delivery: money({ customerTrusted: true, depositWaived: true }),
+  })
+  await waitFor(() =>
+    expect(screen.getByLabelText(/Відділення/)).toHaveValue(
+      draft.recipient.warehouseRef,
+    ),
+  )
+  const toggle = screen.getByRole('switch', {
+    name: 'Вимагати мінімальну передоплату',
+  })
+  expect(toggle).not.toBeChecked()
+  await user.click(toggle)
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  await waitFor(() =>
+    expect(deliveryApi.configure).toHaveBeenCalledWith(
+      'order-1',
+      undefined,
+      false,
+    ),
+  )
+  expect(shippingApi.saveDraft).toHaveBeenCalledOnce()
+})
+
+it('preserves an explicit prepayment requirement for an already configured trusted customer', async () => {
+  renderDrawer(shipment(), {
+    delivery: money({ customerTrusted: true, depositWaived: false }),
+  })
+  expect(
+    await screen.findByRole('switch', {
+      name: 'Вимагати мінімальну передоплату',
+    }),
+  ).toBeChecked()
+})
+
+it('fills only the phone from customer search', async () => {
   vi.mocked(customersApi.search).mockResolvedValue([
     {
       id: 'customer-2',
-      name: 'Олена Коваль',
+      name: 'Коваль Олена',
       phone: '+380671234567',
       ordersCount: 2,
     },
@@ -291,13 +339,124 @@ it('fills the recipient from customer search', async () => {
   renderDrawer(null, { customerSearchAllowed: true })
   await screen.findByRole('dialog', { name: 'Оформлення доставки' })
 
-  const name = screen.getByLabelText('Ім’я та прізвище')
+  const name = screen.getByLabelText('Знайти клієнта')
   await user.clear(name)
-  await user.type(name, 'Оле')
+  await user.type(name, 'Ковал')
   await user.click(
-    await screen.findByRole('option', { name: 'Обрати клієнта Олена Коваль' }),
+    await screen.findByRole('option', { name: 'Обрати клієнта Коваль Олена' }),
   )
 
-  expect(name).toHaveValue('Олена Коваль')
+  expect(name).toHaveValue('Коваль Олена')
+  expect(screen.getByLabelText('Прізвище')).toHaveValue('')
+  expect(screen.getByLabelText('Ім’я')).toHaveValue('')
   expect(screen.getByLabelText('Телефон')).toHaveValue('+380671234567')
+})
+
+it('requires a separate surname when the recipient only has a given name and sends surname first', async () => {
+  const user = userEvent.setup()
+  const current = shipment()
+  renderDrawer({
+    ...current,
+    draft: {
+      ...current.draft,
+      recipient: { ...current.draft.recipient, name: 'Владислав' },
+    },
+  })
+  expect(screen.getByLabelText('Ім’я')).toHaveValue('Владислав')
+  const surname = screen.getByLabelText('Прізвище')
+  expect(surname).toHaveValue('')
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  expect(shippingApi.saveDraft).not.toHaveBeenCalled()
+  expect(screen.getByText('Вкажіть прізвище отримувача')).toBeVisible()
+  await waitFor(() =>
+    expect(screen.getByRole('alert').parentElement).toHaveFocus(),
+  )
+  await user.click(screen.getByRole('button', { name: 'прізвище отримувача' }))
+  expect(surname).toHaveFocus()
+  await user.type(surname, 'Соболь')
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  expect(shippingApi.saveDraft).toHaveBeenCalledWith(
+    'integration-1',
+    'order-1',
+    expect.objectContaining({
+      recipient: expect.objectContaining({
+        name: 'Соболь Владислав',
+      }) as unknown,
+    }),
+  )
+})
+
+it('preserves an optional patronymic and validates the given name separately', async () => {
+  const user = userEvent.setup()
+  const current = shipment()
+  renderDrawer({
+    ...current,
+    draft: {
+      ...current.draft,
+      recipient: {
+        ...current.draft.recipient,
+        name: 'Соболь Владислав Ігорович',
+      },
+    },
+  })
+  expect(screen.getByLabelText('Прізвище')).toHaveValue('Соболь')
+  const given = screen.getByLabelText('Ім’я')
+  expect(given).toHaveValue('Владислав')
+  expect(screen.getByLabelText('По батькові')).toHaveValue('Ігорович')
+  await user.clear(given)
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  expect(screen.getByText('Вкажіть ім’я отримувача')).toBeVisible()
+  expect(shippingApi.saveDraft).not.toHaveBeenCalled()
+  await waitFor(() =>
+    expect(screen.getByRole('alert').parentElement).toHaveFocus(),
+  )
+  await user.click(screen.getByRole('button', { name: 'ім’я отримувача' }))
+  await user.type(given, 'Владислав')
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  expect(shippingApi.saveDraft).toHaveBeenCalledWith(
+    'integration-1',
+    'order-1',
+    expect.objectContaining({
+      recipient: expect.objectContaining({
+        name: 'Соболь Владислав Ігорович',
+      }) as unknown,
+    }),
+  )
+})
+
+it('never derives postal recipient names from an arbitrary customer label', () => {
+  renderDrawer(null, { customerName: 'Перекуп на білому Джуніпері' })
+  expect(screen.getByLabelText('Прізвище')).toHaveValue('')
+  expect(screen.getByLabelText('Ім’я')).toHaveValue('')
+  expect(screen.getByLabelText('По батькові')).toHaveValue('')
+  expect(screen.getByLabelText('Телефон')).toHaveValue('+380503381172')
+})
+
+it('preserves manually entered recipient names when a customer is selected', async () => {
+  vi.mocked(customersApi.search).mockResolvedValue([
+    {
+      id: 'customer-nickname',
+      name: 'Перекуп на білому Джуніпері',
+      phone: '+380634181690',
+      ordersCount: 1,
+    },
+  ])
+  const user = userEvent.setup()
+  renderDrawer(null, { customerSearchAllowed: true })
+  await user.clear(screen.getByLabelText('Прізвище'))
+  await user.type(screen.getByLabelText('Прізвище'), 'Соболь')
+  await user.clear(screen.getByLabelText('Ім’я'))
+  await user.type(screen.getByLabelText('Ім’я'), 'Владислав')
+  await user.clear(screen.getByLabelText('По батькові'))
+  await user.type(screen.getByLabelText('По батькові'), 'Ігорович')
+  await user.type(screen.getByLabelText('Знайти клієнта'), 'Перекуп')
+  await user.click(
+    await screen.findByRole('option', {
+      name: 'Обрати клієнта Перекуп на білому Джуніпері',
+    }),
+  )
+  expect(screen.getByLabelText('Прізвище')).toHaveValue('Соболь')
+  expect(screen.getByLabelText('Ім’я')).toHaveValue('Владислав')
+  expect(screen.getByLabelText('По батькові')).toHaveValue('Ігорович')
+  expect(screen.getByLabelText('Телефон')).toHaveValue('+380634181690')
 })

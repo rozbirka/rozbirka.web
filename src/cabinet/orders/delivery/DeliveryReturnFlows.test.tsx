@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
+import type * as DeliveryModule from '@/api/delivery'
+import { cashApi } from '@/api/cash'
 import { integrationsApi } from '@/api/integrations'
 import type { OrderDetail } from '@/api/orders'
 import { shippingApi, type Shipment } from '@/api/shipping'
@@ -22,7 +24,7 @@ vi.mock('@/api/cash', () => ({
         name: 'Основна каса',
         type: 'cash',
         isActive: true,
-        balances: {},
+        balances: { UAH: 0 },
       },
     ]),
     transactions: vi.fn().mockResolvedValue({
@@ -108,6 +110,7 @@ const delivery = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
   payments: [payment()],
   workflowState: 'Open',
   refundDueUah: 5400,
+  retainedDeliveryCostUah: 0,
   refundAllocations: [],
   ...over,
 })
@@ -277,6 +280,66 @@ it('keeps «received» and «paid» apart while the post-payment travels (9.2)',
       screen.getByRole('region', { name: 'Доставка · Нова пошта' }),
     ).getByText('Доставлено · Очікуємо післяплату'),
   ).toBeVisible()
+  expect(
+    within(
+      screen.getByRole('region', { name: 'Доставка · Нова пошта' }),
+    ).getByText('дорівнює залишку'),
+  ).toBeVisible()
+})
+
+it.each(['9', '11'])(
+  'keeps the historical COD amount without comparing it to the settled balance at carrier status %s',
+  async (trackingCode) => {
+    const user = userEvent.setup()
+    renderBody(
+      load({
+        money: delivery({
+          appliedUah: 9600,
+          outstandingUah: 0,
+          netReceivedUah: 9600,
+          awaitingCodReconciliation: false,
+          workflowState: 'Completed',
+          payments: [
+            payment(),
+            payment({
+              id: 'pay-cod',
+              kind: 'cod',
+              amountUah: 4200,
+              netUah: 4200,
+            }),
+          ],
+        }),
+        shipment: shipment({ trackingCode, paymentState: 'Reconciled' }),
+      }),
+    )
+
+    await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+    const block = screen.getByRole('region', { name: 'Доставка · Нова пошта' })
+    const codRow = within(block).getByText('Післяплата').closest('div')!
+    expect(codRow).toHaveTextContent(/4\s200,00 UAH/)
+    expect(codRow).not.toHaveTextContent('залишку')
+  },
+)
+
+it('still warns when a live waybill COD no longer matches the balance before receipt', async () => {
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      money: delivery({
+        receivedAt: null,
+        outstandingUah: 0,
+        appliedUah: 9600,
+      }),
+      shipment: shipment({ trackingCode: '5', receivedAt: null }),
+    }),
+  )
+
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(
+    within(
+      screen.getByRole('region', { name: 'Доставка · Нова пошта' }),
+    ).getByText('не дорівнює залишку'),
+  ).toBeVisible()
 })
 
 it('asks for the post-payment by hand without a till and books it as cod (9.4, 9.8, 9.10)', async () => {
@@ -305,19 +368,19 @@ it('asks for the post-payment by hand without a till and books it as cod (9.4, 9
   ).toBeVisible()
   await user.click(within(block).getByRole('button', { name: 'Внести оплату' }))
 
-  const sheet = await screen.findByRole('dialog', { name: 'Внести оплату' })
-  expect(sheet).toHaveTextContent(
-    'Замовлення #361 · післяплата за ТТН 20451200987731',
-  )
-  expect(sheet).toHaveTextContent('Операція з’явиться у «Фінансах»')
+  const sheet = await screen.findByRole('dialog', { name: 'Додати платіж' })
+  expect(sheet).toHaveTextContent('Фактична оплата')
+  expect(sheet).toHaveTextContent('Валюту обліку ще не обрано')
+  await user.type(await within(sheet).findByLabelText('Сума'), '4200')
   await user.click(
-    within(sheet).getByRole('button', { name: /^Внести 4\s200,00/ }),
+    within(sheet).getByRole('button', { name: 'Записати оплату' }),
   )
 
   expect(deliveryApi.recordPayment).toHaveBeenCalledWith(
     'order-1',
     expect.objectContaining({
       amountUah: 4200,
+      feeUah: 0,
       kind: 'cod',
       accountId: 'till-1',
     }),
@@ -452,28 +515,26 @@ it('refunds the whole amount after a final confirmation (10.6–10.8, 10.11)', a
   const card = screen.getByRole('region', { name: 'Повернення' })
   expect(card).toHaveTextContent('3 одиниці в наявності')
   expect(card).toHaveTextContent(
-    /Товар повернено в наявність\. Залишилось повернути клієнту 9\s600,00 UAH\./,
+    /Товар уже на складі\. У нас залишилося 9\s600,00 UAH коштів клієнта\./,
   )
-  expect(
-    within(paymentBlock()).getByText('Очікуємо повернення коштів'),
-  ).toBeVisible()
+  expect(within(paymentBlock()).getByText('Потрібен розрахунок')).toBeVisible()
   await user.click(
-    within(card).getByRole('button', { name: 'Повернути кошти' }),
+    within(card).getByRole('button', { name: 'Завершити розрахунок' }),
   )
 
-  const sheet = await screen.findByRole('dialog', { name: 'Повернути кошти' })
-  const amount = within(sheet).getByRole('textbox', { name: 'Сума' })
-  await user.clear(amount)
-  await user.type(amount, '9800')
-  expect(amount).toHaveAccessibleDescription(/^Більше за залишок до повернення/)
-  await user.clear(amount)
-  await user.type(amount, '9600')
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Завершити розрахунок',
+  })
+  expect(
+    within(sheet).queryByRole('textbox', { name: 'Сума' }),
+  ).not.toBeInTheDocument()
+  expect(sheet).toHaveTextContent(/Клієнту повертаємо всі 9\s600,00 UAH/)
   await user.click(
-    within(sheet).getByRole('button', { name: /^Зафіксувати повернення/ }),
+    within(sheet).getByRole('button', { name: /^Підтвердити повернення/ }),
   )
 
   const confirm = await screen.findByRole('dialog', {
-    name: /^Зафіксувати повернення .+\?$/,
+    name: /^Повернути клієнту .+\?$/,
   })
   expect(confirm).toHaveTextContent('Rozbirka не переказує гроші')
   await user.click(
@@ -505,10 +566,14 @@ it('says when a linked expense already belongs to another order (10.9)', async (
     }),
   )
 
-  await user.click(screen.getByRole('button', { name: 'Повернути кошти' }))
-  const sheet = await screen.findByRole('dialog', { name: 'Повернути кошти' })
+  await user.click(screen.getByRole('button', { name: 'Завершити розрахунок' }))
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Завершити розрахунок',
+  })
   await user.click(
-    within(sheet).getByRole('button', { name: 'Прив’язати наявну' }),
+    within(sheet).getByRole('button', {
+      name: 'Повернення вже є у «Фінансах»',
+    }),
   )
   await user.click(
     await within(sheet).findByRole('button', { name: /ОП-2291/ }),
@@ -631,3 +696,396 @@ it('asks to book and refund money the carrier paid after cancellation (10.16)', 
     { idempotencyKey: expect.stringMatching(/^delivery-late-/) as string },
   )
 })
+
+const openRetentionRefund = async (amountUah: number) => {
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      money: delivery({
+        payments: [payment({ amountUah })],
+        appliedUah: amountUah,
+        refundDueUah: amountUah,
+        outstandingUah: 0,
+        returnedAt: '2026-10-30T10:00:00Z',
+        workflowState: 'AwaitingRefund',
+      }),
+    }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Завершити розрахунок' }))
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Завершити розрахунок',
+  })
+  return { user, sheet }
+}
+
+it('settles a 186 prepayment with actual delivery retention and no cash source', async () => {
+  vi.mocked(deliveryApi.confirmFullRefund).mockResolvedValue(
+    delivery({ workflowState: 'Cancelled', refundDueUah: 0 }),
+  )
+  const { user, sheet } = await openRetentionRefund(186)
+  const retained = within(sheet).getByRole('textbox', {
+    name: 'Залишаємо за доставку',
+  })
+  expect(retained).toHaveValue('0')
+  await user.clear(retained)
+  await user.type(retained, '186')
+  expect(sheet).toHaveTextContent(
+    /Усі 186,00 UAH, що залишилися у нас, покривають доставку\. Клієнту нічого повертати не потрібно\./,
+  )
+  await user.type(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+    'Доставка в обидва боки за квитанціями',
+  )
+  expect(
+    within(sheet).queryByRole('combobox', { name: 'Каса' }),
+  ).not.toBeInTheDocument()
+  const submit = within(sheet).getByRole('button', {
+    name: 'Завершити без виплати клієнту',
+  })
+  await user.click(submit)
+  expect(deliveryApi.confirmFullRefund).not.toHaveBeenCalled()
+  const confirm = await screen.findByRole('dialog', {
+    name: 'Завершити розрахунок без виплати?',
+  })
+  expect(confirm).toHaveTextContent('186,00 UAH')
+  await user.click(
+    within(confirm).getByRole('button', {
+      name: 'Завершити без виплати клієнту',
+    }),
+  )
+  expect(deliveryApi.confirmFullRefund).toHaveBeenCalledWith(
+    'order-1',
+    {
+      retainedDeliveryCostUah: 186,
+      retentionNote: 'Доставка в обидва боки за квитанціями',
+    },
+    expect.any(Object),
+  )
+})
+
+it('refunds only 314 after explicitly retaining 186 from 500', async () => {
+  vi.mocked(deliveryApi.confirmFullRefund).mockResolvedValue(
+    delivery({ workflowState: 'Cancelled', refundDueUah: 0 }),
+  )
+  const { user, sheet } = await openRetentionRefund(500)
+  const retained = within(sheet).getByRole('textbox', {
+    name: 'Залишаємо за доставку',
+  })
+  await user.clear(retained)
+  await user.type(retained, '186')
+  await user.type(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+    'Фактичні витрати',
+  )
+  expect(sheet).toHaveTextContent(
+    /Із 500,00 UAH залишаємо 186,00 UAH за доставку, а 314,00 UAH повертаємо клієнту\./,
+  )
+  expect(
+    within(sheet).queryByRole('textbox', { name: 'Сума' }),
+  ).not.toBeInTheDocument()
+  await user.click(
+    within(sheet).getByRole('button', {
+      name: /Підтвердити повернення 314,00\sUAH/,
+    }),
+  )
+  const confirm = await screen.findByRole('dialog', {
+    name: /Повернути клієнту 314,00\sUAH\?/,
+  })
+  await user.click(
+    within(confirm).getByRole('button', { name: /Зафіксувати 314,00\sUAH/ }),
+  )
+  expect(deliveryApi.confirmFullRefund).toHaveBeenCalledWith(
+    'order-1',
+    {
+      accountId: 'till-1',
+      retainedDeliveryCostUah: 186,
+      retentionNote: 'Фактичні витрати',
+    },
+    expect.any(Object),
+  )
+})
+
+it('rejects invalid retention and requires a reason for positive actual costs', async () => {
+  const { user, sheet } = await openRetentionRefund(186)
+  const retained = within(sheet).getByRole('textbox', {
+    name: 'Залишаємо за доставку',
+  })
+  for (const value of ['-1', '187', '1.001', 'abc']) {
+    await user.clear(retained)
+    await user.type(retained, value)
+    expect(
+      within(sheet).getByRole('button', { name: /^Підтвердити повернення/ }),
+    ).toBeDisabled()
+  }
+  await user.clear(retained)
+  await user.type(retained, '100')
+  expect(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+  ).toHaveAttribute('maxlength', '500')
+  expect(
+    within(sheet).getByRole('button', { name: /^Підтвердити повернення/ }),
+  ).toBeDisabled()
+  await user.type(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+    'Квитанція',
+  )
+  expect(
+    within(sheet).getByRole('button', { name: /^Підтвердити повернення/ }),
+  ).toBeEnabled()
+  expect(deliveryApi.confirmFullRefund).not.toHaveBeenCalled()
+})
+
+it('shows retained delivery costs on a cancelled return without claiming a cash refund', async () => {
+  renderBody(
+    load({
+      money: delivery({
+        workflowState: 'Cancelled',
+        returnedAt: 'x',
+        refundDueUah: 0,
+        retainedDeliveryCostUah: 186,
+        deliveryRetentionNote: 'Обидва напрямки',
+        payments: [payment({ amountUah: 186, retainedDeliveryCostUah: 186 })],
+      }),
+    }),
+  )
+  const card = screen.getByRole('region', { name: 'Повернення' })
+  expect(card).not.toHaveTextContent('Кошти повернено')
+  expect(card).toHaveTextContent('Розрахунок завершено')
+  expect(card).toHaveTextContent('186,00 UAH')
+  expect(card).toHaveTextContent('Обидва напрямки')
+  expect(paymentBlock()).toHaveTextContent('Утримано за доставку')
+  expect(paymentBlock()).not.toHaveTextContent('Не застосовується')
+  expect(
+    screen.getByRole('list', { name: 'Платежі замовлення' }),
+  ).toHaveTextContent('Утримано за фактичну доставку: 186,00 UAH.')
+  await screen.findByRole('tab', { name: /Доставка/ })
+})
+
+it('links only the net refund expense while retaining confirmed actual delivery costs', async () => {
+  vi.mocked(cashApi.transactions).mockResolvedValueOnce({
+    items: [
+      {
+        id: 'tx-net',
+        amount: 314,
+        direction: 'out',
+        type: 'manual_out',
+        currency: 'UAH',
+        note: 'Повернення 314',
+        referenceId: null,
+        createdAt: '2026-10-30T10:00:00Z',
+        createdByName: 'Олег',
+      },
+      {
+        id: 'tx-gross',
+        amount: 500,
+        direction: 'out',
+        type: 'manual_out',
+        currency: 'UAH',
+        note: 'Повернення 500',
+        referenceId: null,
+        createdAt: '2026-10-30T10:00:00Z',
+        createdByName: 'Олег',
+      },
+    ],
+  } as Awaited<ReturnType<typeof cashApi.transactions>>)
+  vi.mocked(deliveryApi.confirmFullRefund).mockResolvedValue(
+    delivery({ workflowState: 'Cancelled', refundDueUah: 0 }),
+  )
+  const { user, sheet } = await openRetentionRefund(500)
+  const retained = within(sheet).getByRole('textbox', {
+    name: 'Залишаємо за доставку',
+  })
+  await user.clear(retained)
+  await user.type(retained, '186')
+  await user.type(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+    'Фактична доставка',
+  )
+  await user.click(
+    within(sheet).getByRole('button', {
+      name: 'Повернення вже є у «Фінансах»',
+    }),
+  )
+  await user.click(
+    await within(sheet).findByRole('button', { name: /Повернення 500/ }),
+  )
+  expect(
+    within(sheet).getByRole('button', { name: 'Прив’язати операцію' }),
+  ).toBeDisabled()
+  expect(sheet).toHaveTextContent(/Сума операції має дорівнювати.+314,00/)
+  await user.click(
+    within(sheet).getByRole('button', { name: /Повернення 314/ }),
+  )
+  await user.click(
+    within(sheet).getByRole('button', { name: 'Прив’язати операцію' }),
+  )
+  expect(deliveryApi.confirmFullRefund).toHaveBeenCalledWith(
+    'order-1',
+    {
+      existingCashTransactionId: 'tx-net',
+      retainedDeliveryCostUah: 186,
+      retentionNote: 'Фактична доставка',
+    },
+    expect.any(Object),
+  )
+})
+
+it('preserves retention and reuses the replay key after an ambiguous no-cash settlement', async () => {
+  vi.mocked(deliveryApi.confirmFullRefund)
+    .mockRejectedValueOnce({ kind: 'network', message: 'Timeout' })
+    .mockResolvedValueOnce(
+      delivery({ workflowState: 'Cancelled', refundDueUah: 0 }),
+    )
+  const { user, sheet } = await openRetentionRefund(186)
+  const retained = within(sheet).getByRole('textbox', {
+    name: 'Залишаємо за доставку',
+  })
+  await user.clear(retained)
+  await user.type(retained, '186')
+  await user.type(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+    'Квитанції',
+  )
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await user.click(
+      within(sheet).getByRole('button', {
+        name: 'Завершити без виплати клієнту',
+      }),
+    )
+    const confirm = await screen.findByRole('dialog', {
+      name: 'Завершити розрахунок без виплати?',
+    })
+    await user.click(
+      within(confirm).getByRole('button', {
+        name: 'Завершити без виплати клієнту',
+      }),
+    )
+    if (attempt === 0) {
+      expect(
+        await within(sheet).findByText(
+          'Не вдалося зберегти. Дані збережено — спробуйте ще раз.',
+        ),
+      ).toBeVisible()
+      expect(retained).toHaveValue('186')
+    }
+  }
+  const calls = vi.mocked(deliveryApi.confirmFullRefund).mock.calls
+  expect(calls).toHaveLength(2)
+  expect(calls[0]).toEqual(calls[1])
+})
+
+it('does not offer retention before physical goods acceptance or on a cancelled order', async () => {
+  const user = userEvent.setup()
+  const view = renderBody(
+    load({
+      money: delivery({ workflowState: 'AwaitingRefund', returnedAt: null }),
+    }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Завершити розрахунок' }))
+  let sheet = await screen.findByRole('dialog', {
+    name: 'Завершити розрахунок',
+  })
+  expect(
+    within(sheet).queryByRole('textbox', {
+      name: 'Залишаємо за доставку',
+    }),
+  ).not.toBeInTheDocument()
+  view.unmount()
+  renderBody(
+    load({
+      money: delivery({
+        workflowState: 'Cancelled',
+        returnedAt: 'x',
+        refundDueUah: 500,
+      }),
+    }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Завершити розрахунок' }))
+  sheet = await screen.findByRole('dialog', { name: 'Завершити розрахунок' })
+  expect(
+    within(sheet).queryByRole('textbox', {
+      name: 'Залишаємо за доставку',
+    }),
+  ).not.toBeInTheDocument()
+})
+
+it('needs no active till to settle a fully retained prepayment', async () => {
+  vi.mocked(cashApi.list).mockResolvedValueOnce([])
+  const { user, sheet } = await openRetentionRefund(186)
+  const retained = within(sheet).getByRole('textbox', {
+    name: 'Залишаємо за доставку',
+  })
+  await user.clear(retained)
+  await user.type(retained, '186')
+  const submit = within(sheet).getByRole('button', {
+    name: 'Завершити без виплати клієнту',
+  })
+  expect(submit).toBeDisabled()
+  expect(
+    within(sheet).queryByRole('combobox', { name: 'Каса' }),
+  ).not.toBeInTheDocument()
+  await user.type(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+    '  ',
+  )
+  expect(submit).toBeDisabled()
+  await user.type(
+    within(sheet).getByRole('textbox', { name: 'За що залишаємо ці гроші' }),
+    'Квитанція',
+  )
+  expect(submit).toBeEnabled()
+  expect(sheet).not.toHaveTextContent('Активних кас немає')
+})
+
+it.each([false, true])(
+  'offers retention only for a supporting Core response and preserves a default full refund (supported=%s)',
+  async (supported) => {
+    const { normalizeDeliveryOrder } =
+      await vi.importActual<typeof DeliveryModule>('@/api/delivery')
+    const raw = delivery({
+      workflowState: 'AwaitingRefund',
+      returnedAt: '2026-10-30T10:00:00Z',
+      payments: [payment({ amountUah: 500 })],
+      refundDueUah: 500,
+    })
+    if (!supported) delete raw.retainedDeliveryCostUah
+    // Repeated normalization must not turn its own default zero into support.
+    const summary = normalizeDeliveryOrder(normalizeDeliveryOrder(raw))
+    vi.mocked(deliveryApi.confirmFullRefund).mockResolvedValue(
+      delivery({ workflowState: 'Cancelled', refundDueUah: 0 }),
+    )
+    const user = userEvent.setup()
+    renderBody(load({ money: summary }))
+    await user.click(
+      screen.getByRole('button', { name: 'Завершити розрахунок' }),
+    )
+    const sheet = await screen.findByRole('dialog', {
+      name: 'Завершити розрахунок',
+    })
+    const retention = within(sheet).queryByRole('textbox', {
+      name: 'Залишаємо за доставку',
+    })
+    if (supported) expect(retention).toHaveValue('0')
+    else expect(retention).not.toBeInTheDocument()
+    expect(
+      within(sheet).queryByRole('textbox', { name: 'Сума' }),
+    ).not.toBeInTheDocument()
+    expect(sheet).toHaveTextContent(/Клієнту повертаємо всі 500,00 UAH/)
+    await user.click(
+      within(sheet).getByRole('button', {
+        name: /Підтвердити повернення 500,00\sUAH/,
+      }),
+    )
+    const confirm = await screen.findByRole('dialog', {
+      name: /Повернути клієнту 500,00\sUAH\?/,
+    })
+    await user.click(
+      within(confirm).getByRole('button', { name: /Зафіксувати 500,00\sUAH/ }),
+    )
+    expect(deliveryApi.confirmFullRefund).toHaveBeenCalledWith(
+      'order-1',
+      { accountId: 'till-1' },
+      expect.any(Object),
+    )
+  },
+)

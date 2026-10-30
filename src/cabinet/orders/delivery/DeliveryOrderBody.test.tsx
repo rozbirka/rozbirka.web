@@ -23,7 +23,7 @@ vi.mock('@/api/cash', () => ({
         name: 'ФОП Nova Pay',
         type: 'bank',
         isActive: true,
-        balances: {},
+        balances: { UAH: 0 },
       },
     ]),
     transactions: vi.fn().mockResolvedValue({ items: [] }),
@@ -222,10 +222,20 @@ const load = (state: Partial<DeliveryOrderState>): DeliveryOrderLoad => ({
   reload: vi.fn(),
 })
 
-const renderBody = (value: DeliveryOrderLoad) =>
+const renderBody = (
+  value: DeliveryOrderLoad,
+  initialAction?: 'form' | 'attach',
+  notes?: string,
+) =>
   render(
     <MemoryRouter>
       <DeliveryOrderBody
+        initialAction={initialAction}
+        notes={
+          notes === undefined ? undefined : (
+            <section aria-label="Нотатки">{notes}</section>
+          )
+        }
         accountingCurrency="USD"
         customerPath="/app/koval/customers/cust-1"
         delivery={value.state!.money!}
@@ -359,9 +369,8 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
       name: 'Внести оплату',
     }),
   )
-  await user.click(
-    await screen.findByRole('button', { name: 'Зберегти платіж' }),
-  )
+  await user.type(await screen.findByLabelText('Сума'), '1200')
+  await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
   // 9.9: what was typed stays, and the sheet says so at the top.
   expect(
     await screen.findAllByText(
@@ -369,7 +378,7 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
     ),
   ).toHaveLength(1)
 
-  await user.click(screen.getByRole('button', { name: 'Зберегти платіж' }))
+  await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
   expect(recordPayment).toHaveBeenNthCalledWith(
     1,
     'order-1',
@@ -387,15 +396,19 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
     },
   )
   expect(randomUUID).toHaveBeenCalledOnce()
+  expect(
+    within(screen.getByRole('region', { name: 'Оплата' })).getByRole('button', {
+      name: 'Внести оплату',
+    }),
+  ).toHaveFocus()
 
   await user.click(
     within(screen.getByRole('region', { name: 'Оплата' })).getByRole('button', {
       name: 'Внести оплату',
     }),
   )
-  await user.click(
-    await screen.findByRole('button', { name: 'Зберегти платіж' }),
-  )
+  await user.type(await screen.findByLabelText('Сума'), '1200')
+  await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
   expect(recordPayment).toHaveBeenNthCalledWith(
     3,
     'order-1',
@@ -562,7 +575,8 @@ it('speaks British English on both halves of the card', async () => {
   expect(screen.getByRole('region', { name: 'Items' })).toBeVisible()
   const payment = screen.getByRole('region', { name: 'Payment' })
   // The pill and the «Paid» fact both say it.
-  expect(within(payment).getAllByText('Paid')).toHaveLength(2)
+  expect(within(payment).getByText('Paid')).toBeVisible()
+  expect(within(payment).getByText('Received from customer')).toBeVisible()
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
   const carrier = screen.getByRole('region', { name: 'Delivery · Nova Poshta' })
@@ -712,3 +726,150 @@ it('leaves a waybill of a working cabinet as it is', async () => {
     '/app/koval/sales/waybills/ship-1',
   )
 })
+
+it.each(['form', 'attach'] as const)(
+  'opens the %s directly from the order entry action and restores focus (4.1–4.2)',
+  async (action) => {
+    const user = userEvent.setup()
+    renderBody(load({ points: [point()] }), action)
+    expect(
+      await screen.findByRole('dialog', {
+        name:
+          action === 'form' ? 'Оформлення доставки' : 'Прив’язати наявну ТТН',
+      }),
+    ).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Закрити' }))
+    expect(screen.getByRole('tab', { name: /Доставка/ })).toHaveFocus()
+    expect(screen.getByRole('tab', { name: /Доставка/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  },
+)
+
+it('keeps order notes beside the working content when switching delivery tabs', async () => {
+  const user = userEvent.setup()
+  renderBody(
+    load({ shipment: shipment() }),
+    undefined,
+    'Перевірити пакування перед відправленням',
+  )
+  const notes = screen.getByRole('region', { name: 'Нотатки' })
+  expect(notes).toHaveTextContent('Перевірити пакування перед відправленням')
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(notes).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Історія' })).toBeVisible()
+})
+
+it('switches sales and delivery tabs with arrow keys and keeps one tab stop', async () => {
+  const user = userEvent.setup()
+  renderBody(load({ shipment: shipment() }))
+  const sales = screen.getByRole('tab', { name: /Продажі/ })
+  const shipping = screen.getByRole('tab', { name: /Доставка/ })
+  expect(sales).toHaveAttribute('tabindex', '0')
+  expect(shipping).toHaveAttribute('tabindex', '-1')
+  sales.focus()
+  await user.keyboard('{ArrowRight}')
+  expect(shipping).toHaveFocus()
+  expect(shipping).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/Доставка/)
+  await user.keyboard('{Home}')
+  expect(sales).toHaveFocus()
+  expect(screen.getByRole('region', { name: 'Позиції' })).toBeVisible()
+})
+
+it('shows no-prepayment as complete in both progress views while the order still awaits COD', async () => {
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      money: delivery({
+        customerTrusted: true,
+        depositWaived: true,
+        appliedUah: 0,
+        netReceivedUah: 0,
+        outstandingUah: 4600,
+        payments: [],
+      }),
+      shipment: shipment(),
+    }),
+  )
+  const progress = screen.getByRole('region', {
+    name: 'Стан оплати та доставки',
+  })
+  expect(
+    within(progress).getByText('Без передоплати').closest('li'),
+  ).toHaveAttribute('data-state', 'done')
+  expect(
+    within(progress).queryByText('Оплачено повністю'),
+  ).not.toBeInTheDocument()
+  const payment = screen.getByRole('region', { name: 'Оплата' })
+  expect(within(payment).getByText('Не оплачено')).toBeVisible()
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  const steps = screen.getByRole('region', { name: 'Порядок дій' })
+  expect(within(steps).getByText('Без передоплати')).toBeVisible()
+  expect(within(steps).queryByText('Оплачено')).not.toBeInTheDocument()
+})
+
+it('explains payment and delivery independently when the parcel is received before COD', () => {
+  renderBody(
+    load({
+      money: delivery({
+        appliedUah: 186,
+        outstandingUah: 314,
+        receivedAt: '2026-10-30T11:00:00Z',
+        dispatchedAt: '2026-10-30T10:00:00Z',
+      }),
+      shipment: shipment(),
+    }),
+  )
+  const progress = screen.getByRole('region', {
+    name: 'Стан оплати та доставки',
+  })
+  expect(progress).toHaveTextContent('Очікуємо оплату')
+  expect(progress).toHaveTextContent('Отримано клієнтом')
+  expect(progress).toHaveTextContent('Оплата й доставка оновлюються окремо')
+  const steps = within(progress).getAllByRole('listitem')
+  expect(steps[0]).toHaveAttribute('data-state', 'pending')
+  expect(steps[3]).toHaveAttribute('data-state', 'done')
+})
+
+it.each([
+  ['Unknown', 'Результат невідомий'],
+  ['Creating', 'Створюємо ТТН'],
+  ['Cancelled', 'Скасовано'],
+])(
+  'keeps the carrier outcome truthful in the milestone: %s',
+  (state, label) => {
+    renderBody(load({ shipment: shipment({ state, number: null }) }))
+    const progress = screen.getByRole('region', {
+      name: 'Стан оплати та доставки',
+    })
+    const waybill = within(progress).getAllByRole('listitem')[1]!
+    expect(waybill).toHaveTextContent(label)
+    expect(waybill).not.toHaveTextContent('ТТН не створена')
+    expect(waybill).not.toHaveAttribute('data-state', 'done')
+  },
+)
+
+it.each(['Cancelled', 'AwaitingGoods', 'AwaitingRefund'])(
+  'does not expect a new payment once order settlement has stopped: %s',
+  (workflowState) => {
+    renderBody(
+      load({
+        money: delivery({
+          workflowState,
+          appliedUah: 186,
+          outstandingUah: 314,
+        }),
+        shipment: shipment(),
+      }),
+    )
+    const progress = screen.getByRole('region', {
+      name: 'Стан оплати та доставки',
+    })
+    expect(within(progress).getAllByRole('listitem')[0]).toHaveTextContent(
+      'Оплату не очікуємо',
+    )
+    expect(progress).not.toHaveTextContent('Очікуємо оплату')
+  },
+)

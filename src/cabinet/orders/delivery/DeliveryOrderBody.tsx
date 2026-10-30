@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Button, Notice, useOptionalToast } from '@/components/app'
@@ -7,6 +7,7 @@ import {
   deliveryApi,
   type DeliveryOrder,
   type DeliveryRefundSource,
+  type DeliveryFullRefundInput,
   type LateCarrierPayment,
 } from '@/api/delivery'
 import { integrationsApi } from '@/api/integrations'
@@ -31,6 +32,7 @@ import {
   OrderItemsCard,
 } from '../OrderDetailCards'
 import { orderEventTitle } from '../order-labels'
+import { orderMoney } from '../order-money'
 import { DeliveryDrawer } from './DeliveryDrawer'
 import {
   DeliveryLifecycle,
@@ -155,10 +157,12 @@ export function DeliveryOrderBody({
   financeAllowed,
   financePath = null,
   integrationsPath,
+  initialAction,
   intent = null,
   load,
   mutationsAllowed,
   novaPoshtaAvailable = true,
+  notes,
   onIntentHandled,
   order,
   partsPath,
@@ -175,6 +179,8 @@ export function DeliveryOrderBody({
   /** «Фінанси», where an ambiguous carrier payout is reconciled (9.6). */
   financePath?: string | null
   integrationsPath: string | null
+  /** Continue the entry button into its form without a second click. */
+  initialAction?: 'form' | 'attach' | undefined
   /** A header action waiting to open its dialog. */
   intent?: DeliveryIntent | null
   load: DeliveryOrderLoad
@@ -182,6 +188,8 @@ export function DeliveryOrderBody({
   mutationsAllowed: boolean
   /** False for a business outside Ukraine. */
   novaPoshtaAvailable?: boolean
+  /** The existing inline note editor, kept in the main column. */
+  notes?: ReactNode
   /** Called once the dialog asked for by `intent` has closed. */
   onIntentHandled?: () => void
   order: OrderDetail
@@ -204,8 +212,18 @@ export function DeliveryOrderBody({
   const state = load.state!
   const { carrier, disconnected, integrationId, points, shipment } = state
 
-  const [tab, setTab] = useState<DeliveryTab>('sales')
-  const [drawer, setDrawer] = useState<Drawer | null>(null)
+  const tabPanelId = useId()
+  const tabListRef = useRef<HTMLDivElement>(null)
+  const [tab, setTab] = useState<DeliveryTab>(
+    initialAction === undefined ? 'sales' : 'shipping',
+  )
+  const [drawer, setDrawer] = useState<Drawer | null>(() =>
+    initialAction === 'form'
+      ? { kind: 'form', then: 'close', prefill: null }
+      : initialAction === 'attach'
+        ? { kind: 'attach' }
+        : null,
+  )
   const [dialog, setDialog] = useState<WaybillDialog | null>(null)
   const [dialogPending, setDialogPending] = useState(false)
   const [dialogError, setDialogError] = useState<string | null>(null)
@@ -320,6 +338,10 @@ export function DeliveryOrderBody({
     }
     const opener = openerRef.current
     if (opener?.isConnected === true) opener.focus()
+    else
+      tabListRef.current
+        ?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+        ?.focus()
   }
 
   const runMoney = async (action: () => Promise<DeliveryOrder>) => {
@@ -522,7 +544,7 @@ export function DeliveryOrderBody({
       toast?.show({ tone: 'ok', message: tf('cancelledToast') })
   }
 
-  const confirmRefund = async (source: DeliveryRefundSource) => {
+  const confirmRefund = async (source: DeliveryFullRefundInput) => {
     await runPayment('delivery-refund', source, (idempotencyKey) =>
       deliveryApi.confirmFullRefund(order.id, source, { idempotencyKey }),
     )
@@ -613,7 +635,21 @@ export function DeliveryOrderBody({
 
   return (
     <>
+      <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b pb-1">
+        <DeliveryTabs
+          tabListRef={tabListRef}
+          panelId={tabPanelId}
+          delivery={delivery}
+          onChange={setTab}
+          shipment={shipment}
+          tab={tab}
+        />
+      </div>
+
       <DeliveryLifecycle
+        paymentKnown={delivery.agreedTotalUah > 0}
+        paymentExpected={!closing}
+        waybillState={shipment?.state ?? null}
         steps={lifecycle(delivery, shipment, locale, timeZone)}
       />
 
@@ -623,13 +659,6 @@ export function DeliveryOrderBody({
           <p className="m-0 mt-1">{tf('sentNote')}</p>
         </Notice>
       ) : null}
-
-      <DeliveryTabs
-        delivery={delivery}
-        onChange={setTab}
-        shipment={shipment}
-        tab={tab}
-      />
 
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
       {load.error === null ? null : (
@@ -645,8 +674,8 @@ export function DeliveryOrderBody({
         </Notice>
       )}
 
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid min-w-0 gap-3.5">
           <DeliveryFlowCard
             actions={{
               accept: () => open({ kind: 'accept' }),
@@ -666,124 +695,137 @@ export function DeliveryOrderBody({
               stage === 'cancelUnknown' || stage === 'cancelling'
             }
           />
-          {tab === 'sales' ? (
-            <>
-              <OrderItemsCard
-                addPath={null}
-                currency={accountingCurrency}
-                editable={false}
-                items={order.items}
-                onEdit={() => undefined}
-                partsPath={partsPath}
-                total={order.items.reduce(
-                  (sum, item) => sum + item.totalPrice,
-                  0,
+          <div
+            id={tabPanelId}
+            role="tabpanel"
+            aria-labelledby={`${tabPanelId}-${tab}`}
+            className="grid min-w-0 gap-3.5"
+          >
+            {tab === 'sales' ? (
+              <>
+                <OrderItemsCard
+                  addPath={null}
+                  currency={accountingCurrency}
+                  editable={false}
+                  items={order.items}
+                  onEdit={() => undefined}
+                  partsPath={partsPath}
+                  total={order.items.reduce(
+                    (sum, item) => sum + item.totalPrice,
+                    0,
+                  )}
+                />
+                <DeliveryPaymentsCard
+                  actions={
+                    !financeAllowed ||
+                    closing ||
+                    delivery.outstandingUah <= 0 ? null : (
+                      <>
+                        <Button
+                          disabled={busy}
+                          onClick={() => open(payDrawer('link'))}
+                        >
+                          {t('linkTransaction')}
+                        </Button>
+                        <Button
+                          disabled={busy}
+                          onClick={() => open(payDrawer('record'))}
+                        >
+                          <Plus aria-hidden />
+                          {t('recordPayment')}
+                        </Button>
+                      </>
+                    )
+                  }
+                  delivery={delivery}
+                  tillName={tillName}
+                />
+              </>
+            ) : (
+              <>
+                {novaPoshtaAvailable ? null : (
+                  <Notice tone="info">{t('countryUnavailable')}</Notice>
                 )}
-              />
-              <DeliveryPaymentsCard
-                actions={
-                  !financeAllowed ||
-                  closing ||
-                  delivery.outstandingUah <= 0 ? null : (
-                    <>
-                      <Button
-                        disabled={busy}
-                        onClick={() => open(payDrawer('link'))}
-                      >
-                        {t('linkTransaction')}
-                      </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() => open(payDrawer('record'))}
-                      >
-                        <Plus aria-hidden />
-                        {t('recordPayment')}
-                      </Button>
-                    </>
-                  )
-                }
-                delivery={delivery}
-                tillName={tillName}
-              />
-            </>
-          ) : (
-            <>
-              {novaPoshtaAvailable ? null : (
-                <Notice tone="info">{t('countryUnavailable')}</Notice>
-              )}
-              {/* Switched off, the block itself says so (2.16–2.17). */}
-              {novaPoshtaAvailable &&
-              integrationId === null &&
-              carrier !== null &&
-              disconnected === null ? (
-                <Notice block tone="warn">
-                  <p className="rz-strong m-0 font-semibold">
-                    {carrier.status === 'missing'
-                      ? t('npNotConnected')
-                      : t('npUnavailable', {
-                          status: integrationStatusPresentation(
-                            carrier.status,
-                            locale,
-                          ).label.toLocaleLowerCase(locale),
-                        })}
-                  </p>
-                  {carrier.errorCode === null ? null : (
-                    <p className="m-0 mt-1">
-                      {integrationErrorMessage(carrier.errorCode, locale)}
+                {/* Switched off, the block itself says so (2.16–2.17). */}
+                {novaPoshtaAvailable &&
+                integrationId === null &&
+                carrier !== null &&
+                disconnected === null ? (
+                  <Notice block tone="warn">
+                    <p className="rz-strong m-0 font-semibold">
+                      {carrier.status === 'missing'
+                        ? t('npNotConnected')
+                        : t('npUnavailable', {
+                            status: integrationStatusPresentation(
+                              carrier.status,
+                              locale,
+                            ).label.toLocaleLowerCase(locale),
+                          })}
                     </p>
-                  )}
-                  <p className="m-0 mt-1">{t('npDownNote')}</p>
-                  {integrationsPath === null ? null : (
-                    <p className="m-0 mt-2">
-                      <RouterLink className="font-medium" to={integrationsPath}>
-                        {t('openIntegrations')}
-                      </RouterLink>
-                    </p>
-                  )}
-                </Notice>
-              ) : null}
+                    {carrier.errorCode === null ? null : (
+                      <p className="m-0 mt-1">
+                        {integrationErrorMessage(carrier.errorCode, locale)}
+                      </p>
+                    )}
+                    <p className="m-0 mt-1">{t('npDownNote')}</p>
+                    {integrationsPath === null ? null : (
+                      <p className="m-0 mt-2">
+                        <RouterLink
+                          className="font-medium"
+                          to={integrationsPath}
+                        >
+                          {t('openIntegrations')}
+                        </RouterLink>
+                      </p>
+                    )}
+                  </Notice>
+                ) : null}
 
-              <DeliveryShipmentBlock
-                actions={blockActions}
-                attachedAt={attachedAt}
-                awaitingCod={payState === 'awaitingCod'}
-                busy={busy}
-                canManage={mutationsAllowed && !closing && cancelFlow === null}
-                canPay={financeAllowed}
-                cancelled={cancelled}
-                carrierReady={novaPoshtaAvailable && integrationId !== null}
-                delivery={delivery}
-                disconnected={
-                  disconnected === null
-                    ? null
-                    : {
-                        at: disconnected.at,
-                        integrationPath:
-                          integrationsPath === null
-                            ? null
-                            : `${integrationsPath}/${encodeURIComponent(disconnected.integrationId)}`,
-                      }
-                }
-                lost={lost !== null}
-                numberRef={numberRef}
-                points={points}
-                recoverRef={recoverRef}
-                shipment={shipment}
-                stage={stage}
-                waiting={waiting}
-                waybillPath={
-                  waybillsPath === null || shipment === null
-                    ? null
-                    : `${waybillsPath}/${encodeURIComponent(shipment.id)}`
-                }
-              />
+                <DeliveryShipmentBlock
+                  actions={blockActions}
+                  attachedAt={attachedAt}
+                  awaitingCod={payState === 'awaitingCod'}
+                  busy={busy}
+                  canManage={
+                    mutationsAllowed && !closing && cancelFlow === null
+                  }
+                  canPay={financeAllowed}
+                  cancelled={cancelled}
+                  carrierReady={novaPoshtaAvailable && integrationId !== null}
+                  delivery={delivery}
+                  disconnected={
+                    disconnected === null
+                      ? null
+                      : {
+                          at: disconnected.at,
+                          integrationPath:
+                            integrationsPath === null
+                              ? null
+                              : `${integrationsPath}/${encodeURIComponent(disconnected.integrationId)}`,
+                        }
+                  }
+                  lost={lost !== null}
+                  numberRef={numberRef}
+                  points={points}
+                  recoverRef={recoverRef}
+                  shipment={shipment}
+                  stage={stage}
+                  waiting={waiting}
+                  waybillPath={
+                    waybillsPath === null || shipment === null
+                      ? null
+                      : `${waybillsPath}/${encodeURIComponent(shipment.id)}`
+                  }
+                />
 
-              <DeliverySteps delivery={delivery} shipment={shipment} />
-            </>
-          )}
+                <DeliverySteps delivery={delivery} shipment={shipment} />
+              </>
+            )}
+          </div>
+          {notes}
         </div>
 
-        <aside className="grid max-w-full min-w-0 flex-[1_1_280px] gap-4 lg:sticky lg:top-(--rz-topbar-h) lg:max-w-95">
+        <aside className="grid min-w-0 gap-3.5">
           <DeliveryPaymentBlock
             actions={{
               record: () => open(payDrawer('record')),
@@ -815,6 +857,8 @@ export function DeliveryOrderBody({
 
       {drawer?.kind === 'pay' && (
         <PaymentDrawer
+          accountingCurrency={accountingCurrency}
+          orderValue={orderMoney(order).value}
           codWaybill={drawer.cod ? (shipment?.number ?? '—') : null}
           delivery={delivery}
           mode={drawer.mode}

@@ -19,6 +19,8 @@ export interface DeliveryPayment {
   recordedBy: string | null
   createdAt: string
   refundedAt: string | null
+  /** Actual delivery costs retained from this original payment. */
+  retainedDeliveryCostUah?: number
 }
 
 export interface DeliveryOrder {
@@ -50,6 +52,10 @@ export interface DeliveryOrder {
   workflowState: string
   /** Payments not yet given back; the refund step is done only at zero. */
   refundDueUah: number
+  retainedDeliveryCostUah?: number
+  /** Client-only capability captured before legacy response defaults are added. */
+  supportsDeliveryCostRetention?: boolean
+  deliveryRetentionNote?: string | null
   refundAllocations: DeliveryRefundAllocation[]
 }
 
@@ -64,6 +70,15 @@ export interface DeliveryRefundAllocation {
 export type DeliveryRefundSource =
   | { accountId: string }
   | { existingCashTransactionId: string }
+
+/** Settles the held payments, optionally retaining confirmed actual delivery costs. */
+export type DeliveryFullRefundInput = (
+  | DeliveryRefundSource
+  | { accountId?: never; existingCashTransactionId?: never }
+) & {
+  retainedDeliveryCostUah?: number
+  retentionNote?: string
+}
 
 export interface LateCarrierPayment {
   shipmentId: string
@@ -110,6 +125,11 @@ export const normalizeDeliveryOrder = (
   ...delivery,
   workflowState: delivery.workflowState ?? 'Open',
   refundDueUah: delivery.refundDueUah ?? 0,
+  supportsDeliveryCostRetention:
+    delivery.supportsDeliveryCostRetention ??
+    Object.hasOwn(delivery, 'retainedDeliveryCostUah'),
+  retainedDeliveryCostUah: delivery.retainedDeliveryCostUah ?? 0,
+  deliveryRetentionNote: delivery.deliveryRetentionNote ?? null,
   refundAllocations: delivery.refundAllocations ?? [],
   dispatchedAt: delivery.dispatchedAt ?? null,
   receivedAt: delivery.receivedAt ?? null,
@@ -119,6 +139,7 @@ export const normalizeDeliveryOrder = (
     kind: payment.kind ?? null,
     recordedBy: payment.recordedBy ?? null,
     refundedAt: payment.refundedAt ?? null,
+    retainedDeliveryCostUah: payment.retainedDeliveryCostUah ?? 0,
   })),
 })
 
@@ -139,19 +160,20 @@ export const deliveryApi = {
   /**
    * Says this order ships — and nothing else. What the recipient still owes is
    * a separate decision, made when the waybill is booked, because goods that
-   * are already paid for have nothing to hold at all. The deposit exception
-   * for a trusted customer is not offered here: the cabinet has nowhere to
-   * mark that trust yet.
+   * are already paid for have nothing to hold at all. Omitting waiveDeposit
+   * preserves an existing choice; Core supplies the trusted-customer default
+   * only when delivery is first configured.
    */
   async configure(
     orderId: string,
     agreedTotalUah?: number,
+    waiveDeposit?: boolean,
   ): Promise<DeliveryOrder> {
     return normalizeDeliveryOrder(
       (
         await apiClient.put<DeliveryOrder>(endpoint(orderId), {
           ...(agreedTotalUah === undefined ? {} : { agreedTotalUah }),
-          waiveDeposit: false,
+          ...(waiveDeposit === undefined ? {} : { waiveDeposit }),
         })
       ).data,
     )
@@ -270,10 +292,10 @@ export const deliveryApi = {
       ).data,
     )
   },
-  /** Books the refund of every payment still held, in one expense. */
+  /** Settles held payments: confirmed delivery retention plus the net refund. */
   async confirmFullRefund(
     orderId: string,
-    source: DeliveryRefundSource,
+    source: DeliveryFullRefundInput,
     replay: IdempotentMutation,
   ): Promise<DeliveryOrder> {
     return normalizeDeliveryOrder(
