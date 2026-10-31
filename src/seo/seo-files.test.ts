@@ -68,6 +68,17 @@ describe('SEO surface', () => {
       expect(sitemap).toContain(`<loc>${seo.canonical}</loc>`)
     }
     expect(sitemap).not.toMatch(/screens|account|login/)
+    expect(sitemap).toContain('xmlns:xhtml="http://www.w3.org/1999/xhtml"')
+    for (const [hreflang, href] of [
+      ['uk', 'https://rozbirka.pro/'],
+      ['en-GB', 'https://rozbirka.pro/en'],
+      ['pl', 'https://rozbirka.pro/pl'],
+      ['x-default', 'https://rozbirka.pro/'],
+    ]) {
+      expect(sitemap).toContain(
+        `<xhtml:link rel="alternate" hreflang="${hreflang}" href="${href}"/>`,
+      )
+    }
     expect(notFound).toContain('<title>Сторінку не знайдено — rozbirka</title>')
     expect(notFound).toContain('href="/"')
   })

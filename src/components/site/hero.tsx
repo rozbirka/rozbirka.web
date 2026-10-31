@@ -1,111 +1,198 @@
-import { Link } from 'react-router'
-import { Section } from '@/components/layout/section'
-import { PageContainer } from '@/components/layout/page-container'
 import { useT } from '@/i18n'
+import { Count, PrimaryLink, QrPattern, TelegramIcon } from './landing-ui'
+import { useMoney, useSupportHref } from './landing-hooks'
+import { landingMessages, listOf, rowsOf } from './landing-messages'
 import { siteMessages } from './site-messages'
-import hero720Avif from '@/assets/optimized/hero/hero-720.avif'
-import hero1080Avif from '@/assets/optimized/hero/hero-1080.avif'
-import hero720Webp from '@/assets/optimized/hero/hero-720.webp'
-import hero1080Webp from '@/assets/optimized/hero/hero-1080.webp'
+import { AppStoreBadge } from './store-badges'
 
-interface HeroLine {
-  text: string
-  className?: string
-  delay?: string
-  visibleFromStart?: boolean
-}
+const heroSalePrices = [1450, 160, 180]
 
-function AnimatedHeading({ lines }: { lines: HeroLine[] }) {
+/** «BMW 320d» profile card with the sticker that lands on it. */
+function CarCard() {
+  const l = useT(landingMessages)
+  const money = useMoney()
+  const sales = listOf(l('heroSales'))
   return (
-    <>
-      {lines.map((line) => (
-        <span
-          key={line.text}
-          className={`${line.visibleFromStart ? 'anim-fade-up-visible' : 'anim-fade-up'} block min-h-[1em] ${line.className ?? ''}`}
-          style={line.delay ? { animationDelay: line.delay } : undefined}
-        >
-          {line.text}
-        </span>
-      ))}
-    </>
+    <div className="relative mx-auto w-full max-w-[544px] min-w-0 pt-10 pb-[70px] pl-6 max-sm:pt-2 max-sm:pb-16 max-sm:pl-0 min-[1072px]:max-w-none">
+      <div className="bg-lp-card relative ml-auto flex max-w-[520px] flex-col gap-6 rounded-[28px] border border-white/[0.09] p-7 max-sm:gap-5 max-sm:rounded-3xl max-sm:p-5 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-lp-muted flex items-center gap-2 text-[13px]">
+              <span
+                className="bg-lp-ok lp-pulse size-[7px] rounded-full"
+                aria-hidden
+              />
+              {l('cardStatus')}
+            </span>
+            <span className="font-unbounded text-[22px] font-semibold tracking-[-0.02em] max-sm:text-[18px]">
+              BMW 320d E90 · 2008
+            </span>
+            <span className="text-lp-dim font-mono text-[12px]">
+              VIN WBAPN71060A•••482
+            </span>
+          </div>
+          <span className="text-lp-accent-hover rounded-full bg-[rgba(255,106,26,0.14)] px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap">
+            {l('cardPaidOff')}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5 max-sm:gap-2">
+          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
+            <span className="text-lp-muted text-[13px]">{l('invested')}</span>
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
+              <Count value={3200} prefix="$" />
+            </span>
+          </div>
+          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
+            <span className="text-lp-muted text-[13px]">{l('earned')}</span>
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
+              <Count value={5870} prefix="$" />
+            </span>
+          </div>
+          <div className="bg-lp-accent text-lp-bg flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
+            <span className="text-[13px]">ROI</span>
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
+              <Count value={83} prefix="+" suffix="%" />
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2.5">
+          <div className="text-lp-muted flex justify-between text-[14px]">
+            <span>{l('soldParts')}</span>
+            <span className="text-lp-ink tabular-nums">
+              {l('soldOf', { sold: 131, total: 184 })}
+            </span>
+          </div>
+          <div className="bg-lp-inset h-2 overflow-hidden rounded-full">
+            <div
+              data-bar=""
+              className="bg-lp-accent h-full rounded-full"
+              style={{ width: '71%' }}
+            />
+          </div>
+        </div>
+        <ul role="list" className="flex flex-col gap-0.5">
+          {sales.map((name, index) => (
+            <li
+              key={name}
+              className="flex justify-between gap-3 py-2.5 text-[15px]"
+            >
+              <span className="text-lp-soft">{name}</span>
+              <span className="tabular-nums">
+                {money(heroSalePrices[index] ?? 0)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div
+        aria-hidden
+        className="lp-sticker text-lp-bg absolute bottom-0 left-0 flex w-[230px] origin-[30%_60%] items-center gap-3.5 rounded-[20px] bg-lp-ink p-4 max-sm:w-[200px] max-sm:gap-3 max-sm:p-3 shadow-[0_14px_30px_rgba(0,0,0,0.45)]"
+      >
+        <span className="lp-sticker-press pointer-events-none absolute -inset-2.5 rounded-[26px] border-2 border-[rgba(255,106,26,0.7)]" />
+        <span className="lp-sticker-curl absolute top-0 right-0 size-[34px] origin-top-right rounded-[0_20px_0_12px] bg-[linear-gradient(225deg,#0b0b0b_0_49%,#d9d5cc_51%,#bdb8ae_100%)] shadow-[-3px_3px_6px_rgba(0,0,0,0.25)]" />
+        <QrPattern className="size-16 flex-none max-sm:size-14" />
+        <div className="flex min-w-0 flex-col gap-[3px]">
+          <span className="text-[15px] font-semibold">{l('stickerPart')}</span>
+          <span className="font-mono text-[12px]">#A-0142</span>
+          <span className="text-lp-paper-muted text-[12px]">
+            {l('stickerShelf')}
+          </span>
+        </div>
+      </div>
+    </div>
   )
 }
 
 export function Hero() {
   const t = useT(siteMessages)
-  const heroLines: HeroLine[] = [
-    { text: t('heroLine1'), visibleFromStart: true },
-    { text: t('heroLine2'), delay: '100ms' },
-    { text: t('heroLine3'), delay: '200ms' },
-    { text: t('heroLine4'), className: 'text-brand', delay: '300ms' },
-  ]
+  const l = useT(landingMessages)
+  const supportHref = useSupportHref()
+  const stats = rowsOf(l('heroStats'))
 
   return (
-    <Section
-      id="top"
-      className="overflow-hidden pt-12 pb-0 lg:pt-8"
-      aria-label={t('heroLabel')}
-    >
-      <PageContainer>
-        <div className="grid grid-cols-1 items-end gap-10 lg:grid-cols-[minmax(0,720px)_1fr] lg:gap-12">
-          <div className="flex flex-col gap-6 lg:self-start lg:pl-16">
-            <h1
-              className="text-[44px] leading-[1] font-light tracking-[-0.035em] sm:text-[64px] lg:text-[88px]"
-              style={{ fontFamily: '"Visuelt Hero", system-ui, sans-serif' }}
+    <div className="relative">
+      <div
+        className="lp-grid-bg pointer-events-none absolute inset-0"
+        aria-hidden
+      />
+      <section
+        id="top"
+        aria-label={t('heroLabel')}
+        className="relative mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,480px),1fr))] items-center gap-16 px-6 pt-20 pb-24 max-sm:gap-10 max-sm:pt-10 max-sm:pb-16"
+      >
+        <div className="flex flex-col gap-7 max-sm:gap-6">
+          {/* The category line is part of the H1 so the page heading names
+              what the product is (CRM / ERP for car breakers), not only the
+              benefit. */}
+          <h1 className="m-0 flex flex-col gap-7 max-sm:gap-6">
+            <span className="font-onest text-lp-muted self-start rounded-full border border-white/14 px-3.5 py-[7px] text-[14px] leading-[normal] font-normal tracking-normal">
+              {l('heroBadge')}
+            </span>{' '}
+            <span className="font-unbounded text-[clamp(40px,8vw,64px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance min-[1072px]:text-[clamp(40px,5.8vw,84px)]">
+              {t('heroTitleStart')}{' '}
+              <span className="text-lp-accent">{t('heroTitleAccent')}</span>
+            </span>
+          </h1>
+          <p className="text-lp-muted m-0 max-w-[520px] text-[20px] leading-[1.5] text-pretty max-sm:text-[17px]">
+            {t('heroSub')}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <PrimaryLink to="/login" className="max-sm:w-full">
+              {t('heroCta')}
+            </PrimaryLink>
+            <AppStoreBadge />
+          </div>
+          {supportHref && (
+            <a
+              href={supportHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-lp-soft hover:text-lp-accent-hover flex min-h-11 items-center gap-2.5 self-start text-[15px]"
             >
-              <span className="sr-only">{t('heroTitle')}</span>
-              <span aria-hidden>
-                <AnimatedHeading lines={heroLines} />
+              <TelegramIcon size={28} />
+              <span className="underline underline-offset-4">
+                {l('heroDemo')}
               </span>
-            </h1>
-
-            <p
-              className="anim-fade-up max-w-[400px] text-[17px] leading-[1.5] font-normal text-neutral-400"
-              style={{ animationDelay: '520ms' }}
-            >
-              {t('heroSub')}
-            </p>
-
-            <div
-              className="anim-fade-up mt-3 flex flex-wrap items-center gap-3"
-              style={{ animationDelay: '680ms' }}
-            >
-              <Link
-                to="/login"
-                className="bg-brand hover:bg-brand-hover text-brand-foreground inline-flex min-h-[72px] items-center rounded-full px-12 text-[16px] font-normal transition-all duration-300 hover:scale-[1.03]"
-              >
-                {t('heroCta')}
-              </Link>
-            </div>
-          </div>
-
-          <div className="hidden lg:block">
-            <picture>
-              <source
-                media="(min-width: 1024px)"
-                type="image/avif"
-                srcSet={`${hero720Avif} 720w, ${hero1080Avif} 1080w`}
-                sizes="680px"
-              />
-              <source
-                media="(min-width: 1024px)"
-                type="image/webp"
-                srcSet={`${hero720Webp} 720w, ${hero1080Webp} 1080w`}
-                sizes="680px"
-              />
-              <img
-                src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
-                width={2076}
-                height={2220}
-                alt={t('heroImageAlt')}
-                decoding="async"
-                fetchPriority="high"
-                className="anim-float-slow ml-auto block h-auto w-full max-w-[680px]"
-              />
-            </picture>
-          </div>
+            </a>
+          )}
+          <dl className="text-lp-muted m-0 flex flex-wrap gap-7 pt-3 text-[15px] max-sm:grid max-sm:grid-cols-3 max-sm:gap-3 max-sm:pt-1 max-sm:text-[13px]">
+            {stats.map(([value, label]) => (
+              <div key={value} className="flex flex-col-reverse gap-1">
+                <dd className="m-0">{label}</dd>
+                <dt className="font-unbounded text-lp-ink text-[22px] tabular-nums max-sm:text-[16px]">
+                  {value}
+                </dt>
+              </div>
+            ))}
+          </dl>
         </div>
-      </PageContainer>
-    </Section>
+        <CarCard />
+      </section>
+    </div>
+  )
+}
+
+/** Endless strip of integrations under the hero. */
+export function IntegrationsTicker() {
+  const l = useT(landingMessages)
+  const items = rowsOf(l('ticker'))
+  return (
+    <div className="lp-fade-x overflow-hidden border-t border-white/[0.07]">
+      <ul role="list" className="lp-marquee flex w-max">
+        {[0, 1].map((copy) =>
+          items.map(([name, description]) => (
+            <li
+              key={`${copy}-${name}`}
+              aria-hidden={copy === 1 ? true : undefined}
+              className="text-lp-muted flex items-center gap-3 px-7 py-[18px] text-[15px] whitespace-nowrap"
+            >
+              <span className="bg-lp-ok size-1.5 rounded-full" aria-hidden />
+              <span className="text-lp-ink font-semibold">{name}</span>
+              <span>{description}</span>
+            </li>
+          )),
+        )}
+      </ul>
+    </div>
   )
 }

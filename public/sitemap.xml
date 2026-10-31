@@ -1,7 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://rozbirka.pro/</loc></url>
-  <url><loc>https://rozbirka.pro/en</loc></url>
-  <url><loc>https://rozbirka.pro/pl</loc></url>
-  <url><loc>https://rozbirka.pro/privacy</loc></url>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://rozbirka.pro/</loc>
+    <xhtml:link rel="alternate" hreflang="uk" href="https://rozbirka.pro/"/>
+    <xhtml:link rel="alternate" hreflang="en-GB" href="https://rozbirka.pro/en"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://rozbirka.pro/pl"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rozbirka.pro/"/>
+  </url>
+  <url>
+    <loc>https://rozbirka.pro/en</loc>
+    <xhtml:link rel="alternate" hreflang="uk" href="https://rozbirka.pro/"/>
+    <xhtml:link rel="alternate" hreflang="en-GB" href="https://rozbirka.pro/en"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://rozbirka.pro/pl"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rozbirka.pro/"/>
+  </url>
+  <url>
+    <loc>https://rozbirka.pro/pl</loc>
+    <xhtml:link rel="alternate" hreflang="uk" href="https://rozbirka.pro/"/>
+    <xhtml:link rel="alternate" hreflang="en-GB" href="https://rozbirka.pro/en"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://rozbirka.pro/pl"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rozbirka.pro/"/>
+  </url>
+  <url>
+    <loc>https://rozbirka.pro/privacy</loc>
+  </url>
 </urlset>

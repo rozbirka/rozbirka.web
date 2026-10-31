@@ -13,50 +13,30 @@ describe('Hero conversion', () => {
     expect(
       screen.getByRole('heading', {
         level: 1,
-        name: 'Знаєш де кожна деталь і де твої гроші',
+        name: 'Програма для авторозбірки — CRM і ERP Знаєш, де кожна деталь і де твої гроші',
       }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: 'Спробувати безкоштовно' }),
     ).toHaveAttribute('href', '/login')
-    expect(screen.queryByRole('link', { name: 'Дивитись демо' })).toBeNull()
+    expect(
+      screen.getByRole('link', { name: 'Завантажити в App Store' }),
+    ).toHaveAttribute(
+      'href',
+      'https://apps.apple.com/ua/app/rozbirka/id6762130912',
+    )
   })
 
-  it('reveals heading lines, copy, and CTA in the approved sequence', () => {
+  it('renders the final demo figures on the server, ready to count up', () => {
     const { container } = render(
       <MemoryRouter>
         <Hero />
       </MemoryRouter>,
     )
-
-    const expectedAnimatedLines = [
-      ['де кожна', '100ms'],
-      ['деталь і де', '200ms'],
-      ['твої гроші', '300ms'],
-    ] as const
-
-    const firstLine = screen.getByText('Знаєш')
-    expect(firstLine).toHaveClass('anim-fade-up-visible')
-    expect(firstLine).not.toHaveClass('anim-fade-up')
-    expect(firstLine).not.toHaveAttribute('style')
-
-    expectedAnimatedLines.forEach(([text, delay]) => {
-      const line = screen.getByText(text)
-      expect(line).toHaveClass('anim-fade-up')
-      expect(line).toHaveStyle({ animationDelay: delay })
-    })
-
-    const copy = screen.getByText(
-      "Застосунок, який об'єднує фінанси, функції та управління в одному інтерфейсі.",
+    const counts = [...container.querySelectorAll('[data-count]')].map(
+      (element) => element.textContent?.replace(/\s/g, ' '),
     )
-    expect(copy).toHaveClass('anim-fade-up')
-    expect(copy).toHaveStyle({ animationDelay: '520ms' })
-
-    const cta = screen.getByRole('link', {
-      name: 'Спробувати безкоштовно',
-    }).parentElement
-    expect(cta).toHaveClass('anim-fade-up')
-    expect(cta).toHaveStyle({ animationDelay: '680ms' })
-    expect(container.querySelector('.animate-pulse')).toBeNull()
+    expect(counts).toEqual(['$3 200', '$5 870', '+83%'])
+    expect(screen.getByText('131 з 184')).toBeInTheDocument()
   })
 })

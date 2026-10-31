@@ -84,24 +84,23 @@ describe('landing plan contract', () => {
           'Партії, звіти та QR-коди',
         ],
       }),
-      expect.objectContaining({
-        code: 'enterprise_monthly',
-        price: '$299',
-        trialDays: 14,
-        perks: [
-          'Без лімітів на авто та запчастини',
-          'Без лімітів на користувачів і каси',
-          'Партії, звіти, команда та QR-коди',
-        ],
-      }),
     ])
-    expect(resolveLandingPlans(apiPlans)).toHaveLength(2)
+    expect(resolveLandingPlans(apiPlans)).toHaveLength(1)
+  })
+
+  it('never offers the Enterprise plan on the landing', () => {
+    expect(fallbackLandingPlans().map((plan) => plan.code)).toEqual([
+      'pro_monthly',
+    ])
+    expect(JSON.stringify(resolveLandingPlans(apiPlans))).not.toMatch(
+      /enterprise|\$299/i,
+    )
   })
 
   it('falls back when any required plan is missing or malformed', () => {
-    expect(resolveLandingPlans(apiPlans.slice(0, 2))).toEqual(
-      FALLBACK_LANDING_PLANS,
-    )
+    expect(
+      resolveLandingPlans(apiPlans.filter((plan) => plan.name !== 'Pro')),
+    ).toEqual(FALLBACK_LANDING_PLANS)
     expect(
       resolveLandingPlans([...apiPlans, { ...apiPlans[1]!, trialDays: 7 }]),
     ).toEqual(FALLBACK_LANDING_PLANS)
@@ -129,12 +128,6 @@ describe('landing plan contract', () => {
           'Batches, reports and QR codes',
         ],
         ctaLabel: 'Start 14-day free trial',
-      }),
-      expect.objectContaining({
-        code: 'enterprise_monthly',
-        name: 'Enterprise',
-        price: '$299',
-        ctaLabel: 'Choose',
       }),
     ])
     expect(resolveLandingPlans(null, 'pl')).toEqual(fallbackLandingPlans('pl'))

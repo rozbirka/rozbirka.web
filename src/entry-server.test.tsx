@@ -7,6 +7,10 @@ import {
   structuredDataForRoute,
 } from './entry-server'
 
+/** Rendered text the way the prerender check reads it (tags dropped). */
+const visibleText = (html: string) =>
+  html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+
 describe('server product routes', () => {
   it('exports all product SEO entries for prerendering', () => {
     expect(prerenderManifest.map((entry) => entry.path)).toEqual([
@@ -18,10 +22,10 @@ describe('server product routes', () => {
 
   it('renders the homepage product route', () => {
     const pathname = '/'
-    const expectedH1 = 'Знаєш де кожна деталь і де твої гроші'
+    const expectedH1 = 'Знаєш, де кожна деталь і де твої гроші'
 
     expect(renderRoute(pathname)).toContain(`<h1`)
-    expect(renderRoute(pathname)).toContain(expectedH1)
+    expect(visibleText(renderRoute(pathname))).toContain(expectedH1)
   })
 
   it('builds homepage structured data from its SEO record', () => {
@@ -32,7 +36,7 @@ describe('server product routes', () => {
 
   it('provides the expected visible H1 for the homepage', () => {
     expect(expectedH1ForRoute('/')).toBe(
-      'Знаєш де кожна деталь і де твої гроші',
+      'Програма для авторозбірки — CRM і ERP Знаєш, де кожна деталь і де твої гроші',
     )
   })
 
@@ -51,8 +55,16 @@ describe('server product routes', () => {
   })
 
   it.each([
-    ['/en', 'en-GB', 'Know where every part is and where your money is'],
-    ['/pl', 'pl', 'Wiesz, gdzie każda część i gdzie są Twoje pieniądze'],
+    [
+      '/en',
+      'en-GB',
+      'Software for car breakers — CRM and ERP Know where every part is and where your money is',
+    ],
+    [
+      '/pl',
+      'pl',
+      'Program do demontażu aut — CRM i ERP Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
+    ],
   ])(
     'renders the %s landing in its own language',
     (pathname, locale, expectedH1) => {
@@ -60,8 +72,8 @@ describe('server product routes', () => {
 
       expect(expectedH1ForRoute(pathname)).toBe(expectedH1)
       expect(html.match(/<h1[\s>]/g)).toHaveLength(1)
-      expect(html).toContain(expectedH1)
-      expect(html).not.toContain('Знаєш де кожна деталь і де твої гроші')
+      expect(visibleText(html)).toContain(expectedH1)
+      expect(visibleText(html)).not.toContain('Знаєш, де кожна деталь')
       // Language links are anchors with lang and hreflang, so they work
       // before hydration and without JavaScript.
       for (const [href, hreflang] of [

@@ -1,10 +1,10 @@
 import { useId, useMemo, useState } from 'react'
-import { Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Section } from '@/components/layout/section'
-import { PageContainer } from '@/components/layout/page-container'
 import { useLocale, useT } from '@/i18n'
 import { landingFaqEntries, type FaqEntry } from './faq-messages'
+import { Eyebrow, SectionTitle, TelegramIcon } from './landing-ui'
+import { useSupportHref } from './landing-hooks'
+import { landingMessages } from './landing-messages'
 import { siteMessages } from './site-messages'
 
 export type { FaqEntry }
@@ -17,34 +17,47 @@ export function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
   const { locale } = useLocale()
   const t = useT(siteMessages)
+  const l = useT(landingMessages)
+  const supportHref = useSupportHref()
   const entries = useMemo(() => landingFaqEntries(locale), [locale])
 
   return (
-    <Section id="faq" className="py-16 lg:py-24">
-      <PageContainer width="md">
-        <header className="mb-12 flex flex-col items-start gap-8 lg:mb-16">
-          <span className="text-brand text-[11px] font-medium tracking-[0.28em] uppercase">
-            {t('faqEyebrow')}
-          </span>
-          <h2 className="text-[44px] leading-[0.95] font-light tracking-[-0.025em] lg:text-[72px]">
-            <span className="block">{t('faqTitleLine1')}</span>
-            <span className="text-brand block">{t('faqTitleLine2')}</span>
-          </h2>
-        </header>
-
-        <ul role="list" className="flex flex-col gap-3">
-          {entries.map((entry, i) => (
-            <FaqRow
-              key={entry.question}
-              number={String(i + 1).padStart(2, '0')}
-              entry={entry}
-              isOpen={openIndex === i}
-              onToggle={() => setOpenIndex(openIndex === i ? null : i)}
-            />
-          ))}
-        </ul>
-      </PageContainer>
-    </Section>
+    <section
+      id="faq"
+      data-reveal=""
+      className="mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-12 px-6 py-28 max-sm:gap-8 max-sm:py-16"
+    >
+      <div className="flex flex-col gap-5">
+        <Eyebrow>{t('faqEyebrow')}</Eyebrow>
+        <SectionTitle>{l('faqTitle')}</SectionTitle>
+        {supportHref && (
+          <a
+            href={supportHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t('supportAria')}
+            className="text-lp-ink hover:text-lp-accent-hover flex h-11 items-center gap-2.5 self-start rounded-full border border-white/16 pr-[18px] pl-2.5 text-[15px]"
+          >
+            <TelegramIcon />
+            {t('support')}
+          </a>
+        )}
+      </div>
+      <ul
+        role="list"
+        className="col-span-2 flex min-w-0 flex-col gap-2 max-lg:col-span-1"
+      >
+        {entries.map((entry, i) => (
+          <FaqRow
+            key={entry.question}
+            number={String(i + 1).padStart(2, '0')}
+            entry={entry}
+            isOpen={openIndex === i}
+            onToggle={() => setOpenIndex(openIndex === i ? null : i)}
+          />
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -61,10 +74,8 @@ function FaqRow({ number, entry, isOpen, onToggle }: FaqRowProps) {
   return (
     <li
       className={cn(
-        'rounded-[28px] transition-colors duration-300 ease-out',
-        isOpen
-          ? 'bg-brand text-brand-foreground'
-          : 'text-white ring-1 ring-white/[0.08] hover:ring-white/15',
+        'rounded-[20px] transition-colors duration-200 ease-out',
+        isOpen && 'bg-lp-surface',
       )}
     >
       <button
@@ -72,43 +83,28 @@ function FaqRow({ number, entry, isOpen, onToggle }: FaqRowProps) {
         onClick={onToggle}
         aria-expanded={isOpen}
         aria-controls={panelId}
-        className="flex w-full items-center gap-6 px-6 py-5 text-left lg:px-8 lg:py-6"
+        className="hover:text-lp-accent-hover flex w-full cursor-pointer items-center gap-5 px-6 py-[22px] text-left max-sm:gap-3 max-sm:px-4 max-sm:py-[18px]"
       >
         <span
-          className={cn(
-            'shrink-0 text-[13px] font-medium tracking-[0.05em] tabular-nums',
-            isOpen ? 'text-brand-foreground/80' : 'text-brand',
-          )}
+          className="text-lp-dim flex-none font-mono text-[13px]"
           aria-hidden
         >
           {number}
         </span>
-
-        <span className="flex-1 text-[16px] leading-[1.3] font-normal lg:text-[18px]">
+        <span className="flex-1 text-[19px] leading-[1.35] font-medium max-sm:text-[17px]">
           {entry.question}
         </span>
-
         <span
           aria-hidden
-          className={cn(
-            'grid size-9 shrink-0 place-items-center rounded-full ring-1 transition-all duration-300 ease-out',
-            isOpen
-              ? 'rotate-180 ring-brand-foreground/30'
-              : 'rotate-0 ring-white/15',
-          )}
+          className="flex size-8 flex-none items-center justify-center rounded-full border border-white/18 text-[18px]"
         >
-          {isOpen ? <Minus className="size-4" /> : <Plus className="size-4" />}
+          {isOpen ? '–' : '+'}
         </span>
       </button>
 
       {isOpen && (
-        <div
-          id={panelId}
-          role="region"
-          aria-label={entry.question}
-          className="overflow-hidden"
-        >
-          <p className="text-brand-foreground/80 max-w-[640px] pr-12 pb-6 pl-[60px] text-[14px] leading-[1.55] lg:pl-[68px] lg:text-[15px]">
+        <div id={panelId} role="region" aria-label={entry.question}>
+          <p className="text-lp-muted m-0 pr-[76px] pb-6 pl-[57px] text-[17px] leading-[1.55] text-pretty max-sm:pr-4 max-sm:pb-5 max-sm:pl-[49px] max-sm:text-[16px]">
             {entry.answer}
           </p>
         </div>

@@ -1,18 +1,12 @@
 import { defineMessages } from '@/i18n/messages'
 
-/** Landing «Модулі» carousel: heading, controls and one card per module. */
+/** Landing «Можливості» grid: heading and one card per module. */
 export const featuresMessages = defineMessages({
   uk: {
-    eyebrow: 'Модулі',
-    titleLine1: 'Поточні фічі',
+    eyebrow: 'Можливості',
+    title: '9 модулів — вся розбірка в одній системі',
     intro:
-      'Усі модулі — один інтерфейс. Від обліку авто до фінансів і команди.',
-    autoplayOn: 'Увімкнути автопрокрутку',
-    autoplayOff: 'Зупинити автопрокрутку',
-    previous: 'Попередня',
-    next: 'Наступна',
-    carousel: 'Карусель модулів rozbirka',
-    imageAlt: 'Скриншот фічі {title}',
+      'Усі модулі в одному інтерфейсі: від обліку авто до фінансів і команди.',
 
     carsTitle: 'Авто',
     cars1: 'Розбирай авто — система рахує кожну деталь',
@@ -81,16 +75,10 @@ export const featuresMessages = defineMessages({
     team5: 'Без зайвих очей: продавець не бачить собівартість',
   },
   'en-GB': {
-    eyebrow: 'Modules',
-    titleLine1: 'Current features',
+    eyebrow: 'Features',
+    title: '9 modules — your whole yard in one system',
     intro:
-      'All modules, one interface. From tracking cars to finances and your team.',
-    autoplayOn: 'Turn on autoplay',
-    autoplayOff: 'Pause autoplay',
-    previous: 'Previous',
-    next: 'Next',
-    carousel: 'rozbirka modules carousel',
-    imageAlt: '{title} screenshot',
+      'All modules in one interface: from tracking cars to finances and your team.',
 
     carsTitle: 'Cars',
     cars1: 'Strip a car — the system counts every part',
@@ -161,16 +149,10 @@ export const featuresMessages = defineMessages({
     team5: 'No prying eyes: sellers can’t see cost prices',
   },
   pl: {
-    eyebrow: 'Moduły',
-    titleLine1: 'Aktualne funkcje',
+    eyebrow: 'Funkcje',
+    title: '9 modułów — cały demontaż w jednym systemie',
     intro:
-      'Wszystkie moduły — jeden interfejs. Od ewidencji aut po finanse i zespół.',
-    autoplayOn: 'Włącz autoprzewijanie',
-    autoplayOff: 'Zatrzymaj autoprzewijanie',
-    previous: 'Poprzednia',
-    next: 'Następna',
-    carousel: 'Karuzela modułów rozbirka',
-    imageAlt: 'Zrzut ekranu: {title}',
+      'Wszystkie moduły w jednym interfejsie: od ewidencji aut po finanse i zespół.',
 
     carsTitle: 'Auta',
     cars1: 'Rozbierasz auto — system liczy każdą część',

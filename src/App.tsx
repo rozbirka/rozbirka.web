@@ -1,17 +1,29 @@
 import { useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router'
 import { SiteHeader } from '@/components/site/header'
-import { Hero } from '@/components/site/hero'
+import { Hero, IntegrationsTicker } from '@/components/site/hero'
+import { Reviews } from '@/components/site/reviews'
+import { Pains } from '@/components/site/pains'
+import { HowItWorks } from '@/components/site/how-it-works'
+import {
+  CarsSpotlight,
+  OrdersSpotlight,
+  StockSpotlight,
+  TeamSpotlight,
+  TrialBand,
+} from '@/components/site/spotlights'
 import { Features } from '@/components/site/features'
+import { Compare } from '@/components/site/compare'
 import { Pricing } from '@/components/site/pricing'
 import { FAQ } from '@/components/site/faq'
 import { landingFaqEntries } from '@/components/site/faq-messages'
-import { CtaBanner } from '@/components/site/cta-banner'
+import { StartCta } from '@/components/site/start-cta'
 import { SupportLink } from '@/components/site/support-link'
 import { SiteFooter } from '@/components/site/site-footer'
 import type { LandingNavigationState } from '@/components/site/language-switcher'
 import { siteMessages } from '@/components/site/site-messages'
-import { useLocale, useT } from '@/i18n'
+import { useLandingMotion } from '@/components/site/use-landing-motion'
+import { intlLocale, useLocale, useT } from '@/i18n'
 import { landingSeoFor } from '@/seo/product-seo'
 import { RouteSeo } from '@/seo/route-seo'
 
@@ -32,8 +44,9 @@ function useFocusHeadingAfterLanguageSwitch() {
 }
 
 /**
- * Public landing. Rendered under `LocaleOverride` at `/` (uk), `/en`
- * (en-GB) and `/pl`, so copy, SEO and FAQ follow the route's language.
+ * Public landing (mock-up «Rozbirka Landing v6»). Rendered under
+ * `LocaleOverride` at `/` (uk), `/en` (en-GB) and `/pl`, so copy, SEO and
+ * FAQ follow the route's language.
  */
 function App() {
   const { locale } = useLocale()
@@ -41,31 +54,38 @@ function App() {
   const seo = landingSeoFor(locale)
   const faq = useMemo(() => landingFaqEntries(locale), [locale])
   useFocusHeadingAfterLanguageSwitch()
+  useLandingMotion(intlLocale(locale))
 
   return (
     <>
       <RouteSeo entry={seo} faq={faq} />
       <a
         href="#main"
-        className="bg-brand text-brand-foreground sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-full focus:px-5 focus:py-3 focus:text-sm focus:font-medium"
+        className="bg-lp-accent text-lp-bg sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-full focus:px-5 focus:py-3 focus:text-sm focus:font-medium"
       >
         {t('skipToContent')}
       </a>
-      <div className="min-h-screen bg-black text-white">
+      <div className="bg-lp-bg text-lp-ink font-onest relative isolate min-h-dvh overflow-x-clip leading-[normal] antialiased">
         <SiteHeader />
-        <SupportLink floating />
+        <SupportLink />
         <main id="main">
           <Hero />
-          <div className="font-visuelt">
-            <Features />
-            <Pricing />
-            <FAQ />
-            <CtaBanner />
-          </div>
+          <IntegrationsTicker />
+          <Reviews />
+          <Pains />
+          <HowItWorks />
+          <CarsSpotlight />
+          <StockSpotlight />
+          <OrdersSpotlight />
+          <TeamSpotlight />
+          <TrialBand />
+          <Features />
+          <Compare />
+          <Pricing />
+          <FAQ />
+          <StartCta />
         </main>
-        <div className="font-visuelt">
-          <SiteFooter />
-        </div>
+        <SiteFooter />
       </div>
     </>
   )

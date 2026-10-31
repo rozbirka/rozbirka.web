@@ -144,6 +144,261 @@
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
 
+/* Landing v6 (Rozbirka Landing Page): Unbounded for headings and figures,
+   Onest for text. Self-hosted like the cabinet fonts. The landing keeps its
+   own palette; the cabinet design system does not apply to it. */
+@font-face {
+  font-family: 'Unbounded';
+  src: url('/fonts/unbounded-cyrillic-ext.woff2') format('woff2');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Unbounded';
+  src: url('/fonts/unbounded-cyrillic.woff2') format('woff2');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Unbounded';
+  src: url('/fonts/unbounded-latin-ext.woff2') format('woff2');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Unbounded';
+  src: url('/fonts/unbounded-latin.woff2') format('woff2');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Onest';
+  src: url('/fonts/onest-cyrillic-ext.woff2') format('woff2');
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: 'Onest';
+  src: url('/fonts/onest-cyrillic.woff2') format('woff2');
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Onest';
+  src: url('/fonts/onest-latin-ext.woff2') format('woff2');
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Onest';
+  src: url('/fonts/onest-latin.woff2') format('woff2');
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+@theme {
+  --font-unbounded: 'Unbounded', system-ui, sans-serif;
+  --font-onest: 'Onest', system-ui, sans-serif;
+
+  --color-lp-bg: #0b0b0b;
+  --color-lp-surface: #141414;
+  --color-lp-card: #151515;
+  --color-lp-inset: #0f0f0f;
+  --color-lp-track: #1f1f1f;
+  --color-lp-chip: #2a2a2a;
+  --color-lp-ink: #f2f0ea;
+  --color-lp-soft: #dedbd4;
+  --color-lp-bullet: #c9c6bf;
+  --color-lp-muted: #a3a09a;
+  --color-lp-dim: #8a8780;
+  --color-lp-paper-muted: #5c5954;
+  --color-lp-off: #4a4845;
+  --color-lp-accent: #ff6a1a;
+  --color-lp-accent-hover: #ff8640;
+  --color-lp-accent-deep: #b8420a;
+  --color-lp-ok: #3ecf6e;
+  --color-lp-ok-text: #5fdc8a;
+  --color-lp-telegram: #229ed9;
+  --color-lp-excel: #107c41;
+  --color-lp-store-border: #a6a6a6;
+}
+
+@keyframes lp-scan {
+  0%,
+  100% {
+    top: 4%;
+  }
+  50% {
+    top: 92%;
+  }
+}
+@keyframes lp-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes lp-stick {
+  0% {
+    opacity: 0;
+    transform: translate(-70px, -120px) rotate(-18deg) scale(1.35);
+    box-shadow: 0 60px 90px rgba(0, 0, 0, 0.6);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(-1deg) scale(1.04);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+  }
+  70% {
+    transform: rotate(-3.5deg) scale(0.96);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5);
+  }
+  85% {
+    transform: rotate(-2.6deg) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-3deg) scale(1);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+  }
+}
+@keyframes lp-curl {
+  0%,
+  60% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+@keyframes lp-press {
+  0%,
+  62% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  72% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+@keyframes lp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.lp-sticker {
+  opacity: 0;
+  transform: rotate(-3deg);
+  animation: lp-stick 1.1s cubic-bezier(0.3, 0.7, 0.3, 1) 1s forwards;
+}
+.lp-sticker-press {
+  opacity: 0;
+  animation: lp-press 1.1s ease-out 1s forwards;
+}
+.lp-sticker-curl {
+  animation: lp-curl 1.6s cubic-bezier(0.4, 0, 0.2, 1) 1s forwards;
+}
+.lp-scan {
+  animation: lp-scan 2.8s ease-in-out infinite;
+}
+.lp-marquee {
+  animation: lp-marquee 40s linear infinite;
+}
+.lp-pulse {
+  animation: lp-pulse 2s ease-in-out infinite;
+}
+/* Pointer spotlight on module cards (`--mx`/`--my` set by useLandingMotion). */
+.lp-spot {
+  background:
+    radial-gradient(
+      420px circle at var(--mx, -200px) var(--my, -200px),
+      rgba(255, 106, 26, 0.1),
+      transparent 60%
+    ),
+    var(--color-lp-surface);
+}
+.lp-grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: center top;
+  mask-image: radial-gradient(
+    ellipse 80% 70% at 70% 40%,
+    #000 30%,
+    transparent 80%
+  );
+}
+.lp-fade-x {
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 8%,
+    #000 92%,
+    transparent
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-sticker {
+    opacity: 1;
+    animation: none;
+  }
+  .lp-sticker-press,
+  .lp-sticker-curl {
+    display: none;
+  }
+  .lp-scan,
+  .lp-marquee,
+  .lp-pulse {
+    animation: none;
+  }
+}
+
 @theme {
   /* Type */
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;

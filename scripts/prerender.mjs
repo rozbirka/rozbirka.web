@@ -131,13 +131,25 @@ for (const field of ['title', 'description', 'canonical']) {
   }
 }
 
+// Each language version lists all of them (hreflang incl. x-default), so
+// search engines tie /, /en and /pl together as one page in three languages.
 const sitemapEntries = [
   ...prerenderManifest
     .filter((seo) => seo.includeInSitemap)
-    .map((seo) => seo.canonical),
-  'https://rozbirka.pro/privacy',
+    .map((seo) => ({ loc: seo.canonical, alternates: seo.alternates })),
+  { loc: 'https://rozbirka.pro/privacy', alternates: [] },
 ]
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapEntries
-  .map((canonical) => `  <url><loc>${canonical}</loc></url>`)
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${sitemapEntries
+  .map(({ loc, alternates }) =>
+    [
+      `  <url>`,
+      `    <loc>${loc}</loc>`,
+      ...alternates.map(
+        ({ hreflang, href }) =>
+          `    <xhtml:link rel="alternate" hreflang="${hreflang}" href="${href}"/>`,
+      ),
+      `  </url>`,
+    ].join('\n'),
+  )
   .join('\n')}\n</urlset>\n`
 await writeFile(resolve('dist/sitemap.xml'), sitemap)

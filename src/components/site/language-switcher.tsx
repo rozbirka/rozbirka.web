@@ -170,7 +170,7 @@ export function LanguageMenu({ className }: { className?: string }) {
         aria-label={t('siteLangAria')}
         onClick={() => (open ? close(false) : openAt(currentIndex))}
         onKeyDown={onButtonKeyDown}
-        className="flex h-12 items-center gap-2 rounded-full px-4 text-[15px] text-white ring-1 ring-white/10 transition-all duration-300 hover:bg-white/[0.06] hover:ring-white/25"
+        className="flex h-11 items-center gap-2 rounded-full px-4 text-[15px] text-white ring-1 ring-white/16 transition-all duration-300 hover:bg-white/[0.06] hover:ring-white/25"
       >
         <Globe className="size-4" aria-hidden />
         <span>{LOCALE_CODES[locale]}</span>

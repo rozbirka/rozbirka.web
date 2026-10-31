@@ -58,25 +58,26 @@ describe('localized landing', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it('renders every landing section in British English', async () => {
+    vi.stubEnv('VITE_TELEGRAM_SUPPORT_BOT', 'rozbirkabot')
     renderLanding('en-GB', '/en')
 
     expect(
       screen.getByRole('heading', {
         level: 1,
-        name: 'Know where every part is and where your money is',
+        name: 'Software for car breakers — CRM and ERP Know where every part is and where your money is',
       }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: 'Skip to main content' }),
     ).toHaveAttribute('href', '#main')
     const nav = screen.getByRole('navigation', { name: 'Main navigation' })
-    expect(within(nav).getByRole('link', { name: 'Features' })).toHaveAttribute(
-      'href',
-      '/en#features',
-    )
+    expect(
+      within(nav).getByRole('link', { name: 'How it works' }),
+    ).toHaveAttribute('href', '/en#how')
     expect(within(nav).getByRole('link', { name: 'Pricing' })).toHaveAttribute(
       'href',
       '/en#pricing',
@@ -89,17 +90,25 @@ describe('localized landing', () => {
       '/login',
     )
     expect(
-      screen.getByRole('link', { name: 'Start free trial' }),
+      screen.getAllByRole('link', { name: 'Start free trial' })[0],
     ).toHaveAttribute('href', '/login')
+    for (const title of [
+      'Already on board',
+      'Sound familiar?',
+      'From VIN to the last nut — all in one profile',
+      'Clear profit on every car',
+      'Every part in its place — found in seconds',
+      'No prying eyes: salespeople don’t see the cost price',
+      '9 modules — your whole yard in one system',
+      'Why not Excel or a generic auto parts shop system',
+      'Pricing plans',
+      'Frequently asked questions',
+      'Still keeping your books by hand?',
+    ]) {
+      expect(screen.getAllByText(title).length).toBeGreaterThan(0)
+    }
     expect(
       screen.getByRole('heading', { level: 3, name: 'Tills' }),
-    ).toBeInTheDocument()
-    expect(screen.getByAltText('Tills screenshot')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Pause autoplay' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Pricing plans' }),
     ).toBeInTheDocument()
     expect(screen.getByText('14 days free')).toBeInTheDocument()
     expect(
@@ -110,19 +119,13 @@ describe('localized landing', () => {
         name: /Can I see the profit for each car separately\?/,
       }),
     ).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByAltText('rozbirka on phones')).toBeInTheDocument()
+    expect(screen.getByLabelText('Phone or Telegram')).toBeRequired()
     expect(
       screen.getAllByRole('link', { name: 'Download on the App Store' }),
     ).not.toHaveLength(0)
     expect(
-      screen.getAllByLabelText('Google Play — coming soon'),
-    ).not.toHaveLength(0)
-    expect(
       screen.getByRole('link', { name: 'Privacy policy' }),
     ).toHaveAttribute('hreflang', 'uk')
-    expect(
-      screen.getByRole('button', { name: 'Back to top' }),
-    ).toBeInTheDocument()
     expect(textOutsideLanguageNames()).not.toMatch(/[А-Яа-яЇїІіЄєҐґ]/)
   })
 
@@ -132,7 +135,7 @@ describe('localized landing', () => {
     expect(
       screen.getByRole('heading', {
         level: 1,
-        name: 'Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
+        name: 'Program do demontażu aut — CRM i ERP Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('14 dni za darmo')).toBeInTheDocument()

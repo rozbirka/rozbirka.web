@@ -35,9 +35,9 @@ describe('NavLinks', () => {
       </LocaleProvider>,
     )
 
-    expect(screen.getByRole('link', { name: 'Strona główna' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Jak to działa' })).toHaveAttribute(
       'href',
-      '/pl',
+      '/pl#how',
     )
     expect(screen.getByRole('link', { name: 'Cennik' })).toHaveAttribute(
       'href',
