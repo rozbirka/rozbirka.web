@@ -1,18 +1,15 @@
 import type { MouseEventHandler, SVGProps } from 'react'
 import { useT } from '@/i18n'
-import { landingMessages } from './landing-messages'
 import { siteMessages } from './site-messages'
 
 const APP_STORE_URL = 'https://apps.apple.com/ua/app/rozbirka/id6762130912'
 
-/** Black App Store badge of the landing (56px, Apple's outline colour). */
 export function AppStoreBadge({
   onClick,
 }: {
   onClick?: MouseEventHandler<HTMLAnchorElement>
 }) {
   const t = useT(siteMessages)
-  const l = useT(landingMessages)
   return (
     <a
       href={APP_STORE_URL}
@@ -20,15 +17,17 @@ export function AppStoreBadge({
       rel="noreferrer"
       onClick={onClick}
       aria-label={t('appStoreLabel')}
-      className="border-lp-store-border flex h-14 items-center gap-2.5 rounded-xl border bg-black pr-5 pl-4 whitespace-nowrap text-white"
+      className="flex min-h-12 items-center gap-2.5 rounded-full bg-black px-4 ring-1 ring-white/10 transition-colors hover:bg-white/[0.08]"
     >
-      <AppleLogo className="size-[26px] flex-none text-white" />
-      <span className="flex flex-col leading-[1.1]">
-        <span className="text-[11px]">{l('appStoreLine1')}</span>
-        <span className="text-[20px] font-semibold tracking-[-0.01em]">
+      <AppleLogo className="size-7 text-white" />
+      <div className="flex flex-col leading-none">
+        <span className="text-[10px] tracking-wide text-neutral-300">
+          {t('appStoreLine1')}
+        </span>
+        <span className="mt-0.5 text-[15px] font-semibold text-white">
           App Store
         </span>
-      </span>
+      </div>
     </a>
   )
 }
@@ -38,7 +37,7 @@ export { APP_STORE_URL }
 function AppleLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
-      <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701" />
+      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.47-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.13.74 2.8.78.96-.2 1.88-.91 3.04-.83 1.38.11 2.42.66 3.1 1.55-2.79 1.68-2.24 5.46.48 6.46-.55 1.45-1.27 2.91-2.42 5.01zM12.03 7.25c-.16-2.5 1.99-4.39 4.15-4.36.26 2.71-2.49 4.66-4.15 4.36z" />
     </svg>
   )
 }

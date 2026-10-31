@@ -140,7 +140,6 @@ export const landingMessages = defineMessages({
       "Зв'яжемось найближчим часом. А поки можна зареєструватись і додати перше авто.",
     formThanksCta: 'Перейти до реєстрації',
 
-    appStoreLine1: 'Завантажте в',
     footerTagline:
       'Програма обліку для авторозбірки: авто, деталі, замовлення, каси й команда.',
     footerProduct: 'Продукт',
@@ -284,7 +283,6 @@ export const landingMessages = defineMessages({
       'We’ll be in touch soon. Meanwhile you can sign up and add your first car.',
     formThanksCta: 'Go to sign-up',
 
-    appStoreLine1: 'Download on the',
     footerTagline:
       'Accounting software for car breakers: cars, parts, orders, tills and team.',
     footerProduct: 'Product',
@@ -430,7 +428,6 @@ export const landingMessages = defineMessages({
       'Skontaktujemy się wkrótce. A tymczasem możesz się zarejestrować i dodać pierwsze auto.',
     formThanksCta: 'Przejdź do rejestracji',
 
-    appStoreLine1: 'Pobierz z',
     footerTagline:
       'Program do ewidencji dla demontażu aut: auta, części, zamówienia, kasy i zespół.',
     footerProduct: 'Produkt',
