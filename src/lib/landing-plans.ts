@@ -5,14 +5,13 @@ import { defineMessages, translate, type MessageKey } from '@/i18n/messages'
 
 export interface LandingPlan {
   code: PlanCode
-  name: 'Pro' | 'Enterprise'
+  name: 'Pro'
   price: string
   period: string
   trialDays: 14
   description: string
   perks: string[]
   ctaLabel: string
-  variant: 'pro' | 'enterprise'
 }
 
 /** Plan card copy of the public landing (names and prices are not text). */
@@ -24,11 +23,6 @@ export const landingPlanMessages = defineMessages({
     proPerk2: '5 користувачів, 2 каси',
     proPerk3: 'Партії, звіти та QR-коди',
     proCta: 'Почати 14 днів безкоштовно',
-    enterpriseDescription: 'Для розбірок без обмежень каталогу',
-    enterprisePerk1: 'Без лімітів на авто та запчастини',
-    enterprisePerk2: 'Без лімітів на користувачів і каси',
-    enterprisePerk3: 'Партії, звіти, команда та QR-коди',
-    enterpriseCta: 'Обрати',
   },
   'en-GB': {
     period: 'month',
@@ -37,11 +31,6 @@ export const landingPlanMessages = defineMessages({
     proPerk2: '5 users, 2 tills',
     proPerk3: 'Batches, reports and QR codes',
     proCta: 'Start 14-day free trial',
-    enterpriseDescription: 'For businesses that need an unlimited catalogue',
-    enterprisePerk1: 'Unlimited cars and parts',
-    enterprisePerk2: 'Unlimited users and tills',
-    enterprisePerk3: 'Batches, reports, team and QR codes',
-    enterpriseCta: 'Choose',
   },
   pl: {
     period: 'miesiąc',
@@ -50,11 +39,6 @@ export const landingPlanMessages = defineMessages({
     proPerk2: '5 użytkowników, 2 kasy',
     proPerk3: 'Partie, raporty i kody QR',
     proCta: 'Zacznij 14 dni za darmo',
-    enterpriseDescription: 'Dla firm bez limitów katalogu',
-    enterprisePerk1: 'Bez limitów aut i części',
-    enterprisePerk2: 'Bez limitów użytkowników i kas',
-    enterprisePerk3: 'Partie, raporty, zespół i kody QR',
-    enterpriseCta: 'Wybierz',
   },
 })
 
@@ -74,18 +58,6 @@ export function fallbackLandingPlans(
       description: t('proDescription'),
       perks: [t('proPerk1'), t('proPerk2'), t('proPerk3')],
       ctaLabel: t('proCta'),
-      variant: 'pro',
-    },
-    {
-      code: 'enterprise_monthly',
-      name: 'Enterprise',
-      price: '$299',
-      period: t('period'),
-      trialDays: 14,
-      description: t('enterpriseDescription'),
-      perks: [t('enterprisePerk1'), t('enterprisePerk2'), t('enterprisePerk3')],
-      ctaLabel: t('enterpriseCta'),
-      variant: 'enterprise',
     },
   ]
 }
@@ -94,7 +66,8 @@ export function fallbackLandingPlans(
 export const FALLBACK_LANDING_PLANS: readonly LandingPlan[] =
   fallbackLandingPlans(SOURCE_LOCALE)
 
-const order: PlanCode[] = ['pro_monthly', 'enterprise_monthly']
+/** Plans the landing sells. Enterprise ($299) is not offered here. */
+const order: PlanCode[] = ['pro_monthly']
 
 const featureContract = [
   'intake_management',
@@ -114,18 +87,6 @@ const contracts = {
       parts: 2000,
       users: 5,
       cashRegisters: 2,
-      photosPerPart: null,
-    },
-  },
-  enterprise_monthly: {
-    amount: 299,
-    features: featureContract,
-    limits: {
-      cars: null,
-      intakes: null,
-      parts: null,
-      users: null,
-      cashRegisters: null,
       photosPerPart: null,
     },
   },
@@ -153,7 +114,7 @@ function mapPlan(
   fallbackPlans: readonly LandingPlan[],
 ): LandingPlan | null {
   if (!(plan.code in contracts)) return null
-  const code = plan.code as PlanCode
+  const code = plan.code as keyof typeof contracts
   const fallback = fallbackPlans.find((candidate) => candidate.code === code)
   const contract = contracts[code]
   const limitsMatch = Object.entries(contract.limits).every(

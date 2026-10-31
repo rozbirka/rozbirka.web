@@ -3,7 +3,6 @@ import { Link } from 'react-router'
 import { billingApi } from '@/api/billing'
 import { useAuth } from '@/auth/AuthContext'
 import { resolveLandingPlans, type LandingPlan } from '@/lib/landing-plans'
-import { cn } from '@/lib/utils'
 import { accountPathForPlan, loginPathForPlan } from '@/lib/plan-selection'
 import { useLocale, useT } from '@/i18n'
 import { Eyebrow, SectionInner, SectionTitle } from './landing-ui'
@@ -50,7 +49,7 @@ export function Pricing() {
         </div>
         <ul
           role="list"
-          className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4 p-0"
+          className="m-0 flex max-w-[588px] list-none flex-col gap-4 p-0"
         >
           {plans.map((plan) => {
             const destination =
@@ -76,55 +75,31 @@ function PlanCard({
   destination: string
 }) {
   const t = useT(siteMessages)
-  const isPro = plan.variant === 'pro'
 
   return (
-    <li
-      className={cn(
-        'flex flex-col gap-7 rounded-[28px] p-10 max-sm:p-7',
-        isPro ? 'bg-lp-bg text-lp-ink' : 'border border-black/[0.08] bg-white',
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="font-unbounded m-0 text-[24px] leading-[31px] font-semibold">
-          {plan.name}
-        </h3>
-        {isPro && (
-          <span className="bg-lp-accent text-lp-bg rounded-full px-3 py-1.5 text-[13px] font-semibold">
-            {t('pricingPopular')}
-          </span>
-        )}
-      </div>
+    <li className="bg-lp-bg text-lp-ink flex flex-col gap-7 rounded-[28px] p-10 max-sm:p-7">
+      <h3 className="font-unbounded m-0 text-[24px] leading-[31px] font-semibold">
+        {plan.name}
+      </h3>
       <div className="flex flex-col gap-2">
         <p className="m-0 flex items-baseline gap-2">
           <span className="font-unbounded text-[64px] font-semibold tracking-[-0.04em] tabular-nums max-sm:text-[52px]">
             {plan.price}
           </span>
-          <span className={isPro ? 'text-lp-muted' : 'text-lp-paper-muted'}>
-            / {plan.period}
-          </span>
+          <span className="text-lp-muted">/ {plan.period}</span>
         </p>
-        {isPro && (
-          <span className="text-lp-accent-hover font-medium">
-            {t('pricingTrial', { count: plan.trialDays })}
-          </span>
-        )}
+        <span className="text-lp-accent-hover font-medium">
+          {t('pricingTrial', { count: plan.trialDays })}
+        </span>
       </div>
-      <p
-        className={cn(
-          'm-0 text-[17px]',
-          isPro ? 'text-lp-muted' : 'text-lp-paper-muted',
-        )}
-      >
-        {plan.description}
-      </p>
+      <p className="text-lp-muted m-0 text-[17px]">{plan.description}</p>
       <ul
         role="list"
         className="m-0 flex flex-1 list-none flex-col gap-3.5 p-0"
       >
         {plan.perks.map((perk) => (
           <li key={perk} className="flex gap-3 text-[17px]">
-            <span className={isPro ? 'text-lp-accent' : undefined} aria-hidden>
+            <span className="text-lp-accent" aria-hidden>
               ✓
             </span>
             {perk}
@@ -133,12 +108,7 @@ function PlanCard({
       </ul>
       <Link
         to={destination}
-        className={cn(
-          'flex h-14 items-center justify-center rounded-full text-center text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97]',
-          isPro
-            ? 'bg-lp-accent text-lp-bg hover:bg-lp-accent-hover'
-            : 'border-lp-bg text-lp-bg hover:bg-lp-bg hover:text-lp-ink border-[1.5px]',
-        )}
+        className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover flex h-14 items-center justify-center rounded-full text-center text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97]"
       >
         {plan.ctaLabel}
       </Link>

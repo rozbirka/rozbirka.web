@@ -138,9 +138,7 @@ describe('Pricing destinations', () => {
     const links = await screen.findAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/login?plan=pro_monthly',
-      '/login?plan=enterprise_monthly',
     ])
-    expect(links).toHaveLength(2)
     links.forEach((link) => expect(link).toHaveClass('h-14'))
   })
 
@@ -154,10 +152,10 @@ describe('Pricing destinations', () => {
     expect(
       await screen.findByText('20 авто, 2 000 запчастин'),
     ).toBeInTheDocument()
-    expect(screen.getAllByRole('link')).toHaveLength(2)
+    expect(screen.getAllByRole('link')).toHaveLength(1)
   })
 
-  it('renders a stable full monthly period label beside every price', async () => {
+  it('renders the monthly period label beside the price', async () => {
     render(
       <MemoryRouter>
         <Pricing />
@@ -165,24 +163,22 @@ describe('Pricing destinations', () => {
     )
 
     const periods = await screen.findAllByText('/ місяць')
-    expect(periods).toHaveLength(2)
+    expect(periods).toHaveLength(1)
     periods.forEach((period) => {
       expect(period.previousElementSibling?.textContent).toMatch(/^\$\d+$/)
     })
   })
 
-  it('renders the two plans side by side from 340px per card', async () => {
-    const { container } = render(
+  it('offers only the Pro plan, without Enterprise', async () => {
+    render(
       <MemoryRouter>
         <Pricing />
       </MemoryRouter>,
     )
 
-    await screen.findByText('Enterprise')
-    const grid = container.querySelector('#pricing ul')
-    expect(grid).toHaveClass(
-      'grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))]',
-    )
-    expect(grid?.children).toHaveLength(2)
+    expect(await screen.findByText('Pro')).toBeInTheDocument()
+    expect(screen.queryByText('Enterprise')).toBeNull()
+    expect(screen.queryByText('$299')).toBeNull()
+    expect(screen.queryByText('Популярний')).toBeNull()
   })
 })

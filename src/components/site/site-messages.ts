@@ -36,7 +36,6 @@ export const siteMessages = defineMessages({
     heroLabel: 'Головний блок',
     heroCta: 'Спробувати безкоштовно',
     pricingTitle: 'Тарифні плани',
-    pricingPopular: 'Популярний',
     pricingTrial: {
       one: '{count} день безкоштовно',
       few: '{count} дні безкоштовно',
@@ -75,7 +74,6 @@ export const siteMessages = defineMessages({
     heroLabel: 'Introduction',
     heroCta: 'Start free trial',
     pricingTitle: 'Pricing plans',
-    pricingPopular: 'Popular',
     pricingTrial: {
       one: '{count} day free',
       other: '{count} days free',
@@ -112,7 +110,6 @@ export const siteMessages = defineMessages({
     heroLabel: 'Wprowadzenie',
     heroCta: 'Wypróbuj za darmo',
     pricingTitle: 'Plany cenowe',
-    pricingPopular: 'Popularny',
     pricingTrial: {
       one: '{count} dzień za darmo',
       few: '{count} dni za darmo',

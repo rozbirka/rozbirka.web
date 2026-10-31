@@ -75,7 +75,7 @@ describe('structured data', () => {
       (software?.['offers'] as { name: string; price: string }[]).map(
         ({ name, price }) => `${name} ${price}`,
       ),
-    ).toEqual(['Pro 59', 'Enterprise 299'])
+    ).toEqual(['Pro 59'])
     expect(
       graph.find((node) => node['@type'] === 'Organization'),
     ).toMatchObject({ logo: 'https://rozbirka.pro/favicon.png' })
