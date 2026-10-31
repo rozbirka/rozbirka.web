@@ -43,6 +43,8 @@ export function Features() {
         </div>
         <ul
           role="list"
+          aria-label={t('title')}
+          tabIndex={0}
           className={cn(
             'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4 p-0',
             phoneCarousel,
