@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { phoneCarousel } from './landing-classes'
 import { Count, Eyebrow, SectionInner, SectionTitle } from './landing-ui'
 import { landingMessages, listOf } from './landing-messages'
+import { siteMessages } from './site-messages'
 
 const trustFigures = [
   { value: 120, suffix: '+' },
@@ -18,6 +19,7 @@ const reviewKeys = [
 ] as const
 
 export function Reviews() {
+  const t = useT(siteMessages)
   const l = useT(landingMessages)
   const labels = listOf(l('trust'))
   return (
@@ -47,6 +49,9 @@ export function Reviews() {
           ))}
         </dl>
         <div
+          role="region"
+          aria-label={t('navReviews')}
+          tabIndex={0}
           className={cn(
             'grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4',
             phoneCarousel,
