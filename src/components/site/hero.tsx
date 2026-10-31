@@ -13,8 +13,8 @@ function CarCard() {
   const money = useMoney()
   const sales = listOf(l('heroSales'))
   return (
-    <div className="relative min-w-0 pt-10 pb-[70px] pl-6">
-      <div className="bg-lp-card relative ml-auto flex max-w-[520px] flex-col gap-6 rounded-[28px] border border-white/[0.09] p-7 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
+    <div className="relative mx-auto w-full max-w-[544px] min-w-0 pt-10 pb-[70px] pl-6 max-sm:pt-2 max-sm:pb-16 max-sm:pl-0 min-[1072px]:max-w-none">
+      <div className="bg-lp-card relative ml-auto flex max-w-[520px] flex-col gap-6 rounded-[28px] border border-white/[0.09] p-7 max-sm:gap-5 max-sm:rounded-3xl max-sm:p-5 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1.5">
             <span className="text-lp-muted flex items-center gap-2 text-[13px]">
@@ -24,7 +24,7 @@ function CarCard() {
               />
               {l('cardStatus')}
             </span>
-            <span className="font-unbounded text-[22px] font-semibold tracking-[-0.02em]">
+            <span className="font-unbounded text-[22px] font-semibold tracking-[-0.02em] max-sm:text-[18px]">
               BMW 320d E90 · 2008
             </span>
             <span className="text-lp-dim font-mono text-[12px]">
@@ -35,22 +35,22 @@ function CarCard() {
             {l('cardPaidOff')}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2.5">
-          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5">
+        <div className="grid grid-cols-3 gap-2.5 max-sm:gap-2">
+          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
             <span className="text-lp-muted text-[13px]">{l('invested')}</span>
-            <span className="text-[20px] font-semibold tabular-nums">
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
               <Count value={3200} prefix="$" />
             </span>
           </div>
-          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5">
+          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
             <span className="text-lp-muted text-[13px]">{l('earned')}</span>
-            <span className="text-[20px] font-semibold tabular-nums">
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
               <Count value={5870} prefix="$" />
             </span>
           </div>
-          <div className="bg-lp-accent text-lp-bg flex flex-col gap-1.5 rounded-2xl p-3.5">
+          <div className="bg-lp-accent text-lp-bg flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
             <span className="text-[13px]">ROI</span>
-            <span className="text-[20px] font-semibold tabular-nums">
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
               <Count value={83} prefix="+" suffix="%" />
             </span>
           </div>
@@ -86,11 +86,11 @@ function CarCard() {
       </div>
       <div
         aria-hidden
-        className="lp-sticker text-lp-bg absolute bottom-0 left-0 flex w-[230px] origin-[30%_60%] items-center gap-3.5 rounded-[20px] bg-lp-ink p-4 shadow-[0_14px_30px_rgba(0,0,0,0.45)]"
+        className="lp-sticker text-lp-bg absolute bottom-0 left-0 flex w-[230px] origin-[30%_60%] items-center gap-3.5 rounded-[20px] bg-lp-ink p-4 max-sm:w-[200px] max-sm:gap-3 max-sm:p-3 shadow-[0_14px_30px_rgba(0,0,0,0.45)]"
       >
         <span className="lp-sticker-press pointer-events-none absolute -inset-2.5 rounded-[26px] border-2 border-[rgba(255,106,26,0.7)]" />
         <span className="lp-sticker-curl absolute top-0 right-0 size-[34px] origin-top-right rounded-[0_20px_0_12px] bg-[linear-gradient(225deg,#0b0b0b_0_49%,#d9d5cc_51%,#bdb8ae_100%)] shadow-[-3px_3px_6px_rgba(0,0,0,0.25)]" />
-        <QrPattern className="size-16 flex-none" />
+        <QrPattern className="size-16 flex-none max-sm:size-14" />
         <div className="flex min-w-0 flex-col gap-[3px]">
           <span className="text-[15px] font-semibold">{l('stickerPart')}</span>
           <span className="font-mono text-[12px]">#A-0142</span>
@@ -118,22 +118,24 @@ export function Hero() {
       <section
         id="top"
         aria-label={t('heroLabel')}
-        className="relative mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,480px),1fr))] items-center gap-16 px-6 pt-20 pb-24"
+        className="relative mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,480px),1fr))] items-center gap-16 px-6 pt-20 pb-24 max-sm:gap-10 max-sm:pt-10 max-sm:pb-16"
       >
-        <div className="flex flex-col gap-7">
+        <div className="flex flex-col gap-7 max-sm:gap-6">
           <span className="text-lp-muted self-start rounded-full border border-white/14 px-3.5 py-[7px] text-[14px]">
             {l('heroBadge')}
           </span>
-          <h1 className="font-unbounded m-0 text-[clamp(40px,5.8vw,84px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance">
+          <h1 className="font-unbounded m-0 text-[clamp(40px,8vw,64px)] min-[1072px]:text-[clamp(40px,5.8vw,84px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance">
             {t('heroTitleStart')}{' '}
             <span className="text-lp-accent">{t('heroTitleAccent')}</span>{' '}
             {t('heroTitleEnd')}
           </h1>
-          <p className="text-lp-muted m-0 max-w-[520px] text-[20px] leading-[1.5] text-pretty">
+          <p className="text-lp-muted m-0 max-w-[520px] text-[20px] leading-[1.5] text-pretty max-sm:text-[17px]">
             {t('heroSub')}
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <PrimaryLink to="/login">{t('heroCta')}</PrimaryLink>
+            <PrimaryLink to="/login" className="max-sm:w-full">
+              {t('heroCta')}
+            </PrimaryLink>
             <AppStoreBadge />
           </div>
           {supportHref && (
@@ -149,11 +151,11 @@ export function Hero() {
               </span>
             </a>
           )}
-          <dl className="text-lp-muted m-0 flex flex-wrap gap-7 pt-3 text-[15px]">
+          <dl className="text-lp-muted m-0 flex flex-wrap gap-7 pt-3 text-[15px] max-sm:grid max-sm:grid-cols-3 max-sm:gap-3 max-sm:pt-1 max-sm:text-[13px]">
             {stats.map(([value, label]) => (
               <div key={value} className="flex flex-col-reverse gap-1">
                 <dd className="m-0">{label}</dd>
-                <dt className="font-unbounded text-lp-ink text-[22px] tabular-nums">
+                <dt className="font-unbounded text-lp-ink text-[22px] tabular-nums max-sm:text-[16px]">
                   {value}
                 </dt>
               </div>

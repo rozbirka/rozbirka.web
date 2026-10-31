@@ -29,14 +29,14 @@ export function Reviews() {
           <Eyebrow>{l('reviewsEyebrow')}</Eyebrow>
           <SectionTitle>{l('reviewsTitle')}</SectionTitle>
         </div>
-        <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-4">
+        <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-4 max-[1071px]:grid-cols-2 max-sm:gap-x-4 max-sm:gap-y-0">
           {trustFigures.map((figure, index) => (
             <div
               key={labels[index]}
-              className="border-lp-accent flex flex-col-reverse gap-2 border-t-2 py-7"
+              className="border-lp-accent flex flex-col-reverse gap-2 border-t-2 py-7 max-sm:py-5"
             >
               <dd className="text-lp-muted m-0 text-[16px]">{labels[index]}</dd>
-              <dt className="font-unbounded text-[clamp(36px,4vw,52px)] font-semibold tracking-[-0.04em] tabular-nums">
+              <dt className="font-unbounded text-[clamp(36px,4vw,52px)] font-semibold max-sm:text-[28px] tracking-[-0.04em] tabular-nums">
                 <Count {...figure} />
               </dt>
             </div>
@@ -46,7 +46,7 @@ export function Reviews() {
           {reviewKeys.map(([quote, name, role]) => (
             <figure
               key={quote}
-              className="bg-lp-bg m-0 flex flex-col gap-7 rounded-3xl border border-white/[0.08] p-7"
+              className="bg-lp-bg m-0 flex flex-col gap-7 rounded-3xl border border-white/[0.08] p-7 max-sm:gap-6 max-sm:p-6"
             >
               <blockquote className="text-lp-ink m-0 text-[18px] leading-[1.5] text-pretty">
                 «{l(quote)}»

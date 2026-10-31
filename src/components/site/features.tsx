@@ -37,14 +37,14 @@ export function Features() {
         </div>
         <ul
           role="list"
-          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,360px),1fr))] gap-4 p-0"
+          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4 p-0"
         >
           {modules.map((id, index) => (
             <li
               key={id}
               data-reveal=""
               data-spot=""
-              className="lp-spot hover:border-lp-accent/50 relative flex min-h-[280px] flex-col gap-[22px] overflow-hidden rounded-3xl border border-white/[0.08] p-7 transition-[transform,border-color] duration-250 ease-out hover:-translate-y-1"
+              className="lp-spot hover:border-lp-accent/50 relative flex min-h-[280px] flex-col gap-[22px] overflow-hidden rounded-3xl border border-white/[0.08] p-7 max-sm:min-h-0 max-sm:gap-5 max-sm:p-6 transition-[transform,border-color] duration-250 ease-out hover:-translate-y-1"
             >
               <span
                 className="text-lp-accent font-mono text-[13px]"
@@ -52,7 +52,7 @@ export function Features() {
               >
                 {String(index + 1).padStart(2, '0')}
               </span>
-              <h3 className="font-unbounded m-0 text-[28px] font-semibold tracking-[-0.03em]">
+              <h3 className="font-unbounded m-0 text-[28px] font-semibold tracking-[-0.03em] max-sm:text-[24px]">
                 {t(`${id}Title`)}
               </h3>
               <ul

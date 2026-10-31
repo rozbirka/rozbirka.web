@@ -22,7 +22,7 @@ function PromoBar() {
   return (
     <Link
       to={to}
-      className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover hover:text-lp-bg flex flex-wrap items-center justify-center gap-2.5 px-6 py-2.5 text-center text-[15px] font-medium"
+      className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover hover:text-lp-bg flex flex-wrap items-center justify-center gap-x-2.5 gap-y-0.5 px-6 py-2.5 text-center text-[15px] font-medium max-sm:px-4 max-sm:py-2 max-sm:text-[14px]"
     >
       <span>{l('promoText')}</span>
       <span className="font-semibold underline underline-offset-[3px]">

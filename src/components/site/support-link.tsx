@@ -16,9 +16,9 @@ export function SupportLink() {
       rel="noopener noreferrer"
       aria-label={t('supportAria')}
       title={t('support')}
-      className="bg-lp-telegram fixed right-5 bottom-[calc(20px+env(safe-area-inset-bottom))] z-[61] flex size-[60px] items-center justify-center rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.08]"
+      className="bg-lp-telegram fixed right-5 bottom-[calc(20px+env(safe-area-inset-bottom))] z-[61] flex size-[60px] items-center justify-center max-sm:right-4 max-sm:bottom-[calc(16px+env(safe-area-inset-bottom))] max-sm:size-[52px] rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.08]"
     >
-      <TelegramIcon size={60} />
+      <TelegramIcon size={60} className="block size-full" />
     </a>
   )
 }

@@ -13,7 +13,7 @@ import { useMoney, useSupportHref } from './landing-hooks'
 import { landingMessages, listOf } from './landing-messages'
 
 const twoColumns =
-  'mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-16 px-6'
+  'mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-16 px-6 max-sm:gap-10'
 
 const cars = [
   {
@@ -47,13 +47,13 @@ export function CarsSpotlight() {
   const area =
     'M0 152 C60 140 80 128 120 126 C170 124 200 140 240 136 C290 130 320 98 360 92 C410 86 440 82 480 76 C530 68 560 44 600 32'
   return (
-    <section data-reveal="" className={cn(twoColumns, 'pb-28')}>
+    <section data-reveal="" className={cn(twoColumns, 'pb-28 max-sm:pb-16')}>
       <div className="flex flex-col gap-6">
         <Eyebrow>{l('carsEyebrow')}</Eyebrow>
         <SectionTitle>{l('carsTitle')}</SectionTitle>
         <DashList items={listOf(l('carsPoints'))} />
       </div>
-      <div className="bg-lp-surface flex min-w-0 flex-col gap-2 rounded-[28px] border border-white/[0.08] p-7">
+      <div className="bg-lp-surface flex min-w-0 flex-col gap-2 rounded-[28px] border border-white/[0.08] p-7 max-sm:p-5">
         <div className="mb-3 flex flex-col gap-4 border-b border-white/[0.07] pb-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="flex flex-col gap-1">
@@ -182,8 +182,11 @@ export function StockSpotlight() {
       data-reveal=""
       className="bg-lp-surface border-y border-white/[0.07]"
     >
-      <div className={cn(twoColumns, 'py-28')}>
-        <div className="flex flex-wrap justify-center gap-5" aria-hidden>
+      <div className={cn(twoColumns, 'py-28 max-sm:py-16')}>
+        <div
+          className="flex flex-wrap justify-center gap-5 max-[1031px]:order-last"
+          aria-hidden
+        >
           <div className="bg-lp-ink text-lp-bg flex w-[260px] flex-col gap-[18px] rounded-3xl p-[22px] shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
             <div className="relative aspect-square">
               <span className="lp-scan bg-lp-accent absolute -right-[6%] -left-[6%] z-[1] h-0.5 rounded-[2px] shadow-[0_0_12px_2px_rgba(255,106,26,0.7)]" />
@@ -249,14 +252,14 @@ export function OrdersSpotlight() {
   return (
     <section
       data-reveal=""
-      className="mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28"
+      className="mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28 max-sm:gap-10 max-sm:py-16"
     >
       <div className="flex max-w-[760px] flex-col gap-5">
         <Eyebrow>{l('ordersEyebrow')}</Eyebrow>
         <SectionTitle>{l('ordersTitle')}</SectionTitle>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,360px),1fr))] gap-4">
-        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7">
+        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7 max-sm:p-5">
           <div className="flex items-baseline justify-between gap-3">
             <span className="font-unbounded text-[20px] font-semibold">
               {l('orderTitle')}
@@ -296,7 +299,7 @@ export function OrdersSpotlight() {
             </div>
           </div>
         </div>
-        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7">
+        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7 max-sm:p-5">
           <span className="font-unbounded text-[20px] font-semibold">
             {l('cashTitle')}
           </span>
@@ -337,20 +340,32 @@ const permissions = [
   [true, false, false],
 ]
 
+/** «✓ Так»: phones show only the mark; the full text stays for readers. */
+function PermissionMark({ text }: { text: string }) {
+  return (
+    <>
+      <span aria-hidden className="sm:hidden">
+        {text.split(' ')[0]}
+      </span>
+      <span className="max-sm:sr-only">{text}</span>
+    </>
+  )
+}
+
 /** «Команда»: who sees what. */
 export function TeamSpotlight() {
   const l = useT(landingMessages)
   const roles = listOf(l('permRoles'))
   const rows = listOf(l('permRows'))
   return (
-    <section data-reveal="" className={cn(twoColumns, 'pb-28')}>
+    <section data-reveal="" className={cn(twoColumns, 'pb-28 max-sm:pb-16')}>
       <div className="flex flex-col gap-6">
         <Eyebrow>{l('teamEyebrow')}</Eyebrow>
         <SectionTitle>{l('teamTitle')}</SectionTitle>
         <DashList items={listOf(l('teamPoints'))} />
       </div>
-      <div className="bg-lp-surface min-w-0 overflow-x-auto rounded-[28px] border border-white/[0.08] p-3">
-        <table className="w-full min-w-[440px] border-collapse text-[15px]">
+      <div className="bg-lp-surface min-w-0 overflow-x-auto rounded-[28px] border border-white/[0.08] p-3 max-sm:rounded-3xl max-sm:p-1.5">
+        <table className="w-full min-w-[440px] border-collapse text-[15px] max-sm:min-w-0 max-sm:text-[clamp(10.5px,3.4vw,13px)] [&_td]:max-sm:px-[clamp(2px,0.8vw,4px)] [&_td]:max-sm:py-3 [&_th]:max-sm:px-[clamp(2px,0.8vw,4px)] [&_th]:max-sm:py-3">
           <thead>
             <tr>
               <th
@@ -390,7 +405,9 @@ export function TeamSpotlight() {
                       allowed ? 'text-lp-ink' : 'text-lp-dim',
                     )}
                   >
-                    {allowed ? l('permYes') : l('permNo')}
+                    <PermissionMark
+                      text={allowed ? l('permYes') : l('permNo')}
+                    />
                   </td>
                 ))}
               </tr>
@@ -407,15 +424,18 @@ export function TrialBand() {
   const l = useT(landingMessages)
   const supportHref = useSupportHref()
   return (
-    <section data-reveal="" className="mx-auto max-w-[1240px] px-6 pb-28">
-      <div className="bg-lp-ink text-lp-bg flex flex-wrap items-center justify-between gap-8 rounded-[32px] p-12">
+    <section
+      data-reveal=""
+      className="mx-auto max-w-[1240px] px-6 pb-28 max-sm:pb-16"
+    >
+      <div className="bg-lp-ink text-lp-bg flex flex-wrap items-center justify-between gap-8 rounded-[32px] p-12 max-lg:p-10 max-sm:gap-6 max-sm:rounded-[28px] max-sm:p-6">
         <div className="flex max-w-[640px] flex-col gap-3">
           <h2 className="font-unbounded m-0 text-[clamp(26px,3vw,38px)] leading-[1.1] font-semibold tracking-[-0.03em] text-balance">
             {l('midTitle')}
           </h2>
           <p className="text-lp-paper-muted m-0 text-[17px]">{l('midBody')}</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 max-sm:w-full max-sm:flex-col max-sm:[&>*]:w-full max-sm:[&>*]:justify-center">
           <PrimaryLink to="/login">{l('startFree')}</PrimaryLink>
           {supportHref && (
             <a

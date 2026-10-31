@@ -50,7 +50,7 @@ export function Pricing() {
         </div>
         <ul
           role="list"
-          className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))] gap-4 p-0"
+          className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4 p-0"
         >
           {plans.map((plan) => {
             const destination =

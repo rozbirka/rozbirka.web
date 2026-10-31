@@ -171,7 +171,7 @@ describe('Pricing destinations', () => {
     })
   })
 
-  it('renders the two plans side by side from 380px per card', async () => {
+  it('renders the two plans side by side from 340px per card', async () => {
     const { container } = render(
       <MemoryRouter>
         <Pricing />
@@ -181,7 +181,7 @@ describe('Pricing destinations', () => {
     await screen.findByText('Enterprise')
     const grid = container.querySelector('#pricing ul')
     expect(grid).toHaveClass(
-      'grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))]',
+      'grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))]',
     )
     expect(grid?.children).toHaveLength(2)
   })

@@ -48,7 +48,7 @@ export function SectionTitle({ className, ...props }: ComponentProps<'h2'>) {
   return (
     <h2
       className={cn(
-        'font-unbounded m-0 text-[clamp(30px,4vw,52px)] leading-[1.08] font-semibold tracking-[-0.03em] text-balance',
+        'font-unbounded m-0 text-[clamp(30px,5.5vw,44px)] min-[1072px]:text-[clamp(30px,4vw,52px)] leading-[1.08] font-semibold tracking-[-0.03em] text-balance',
         className,
       )}
       {...props}
@@ -61,7 +61,7 @@ export function SectionInner({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        'mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28',
+        'mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28 max-sm:gap-10 max-sm:py-16',
         className,
       )}
       {...props}
@@ -109,7 +109,7 @@ export function DashList({
       {items.map((item) => (
         <li
           key={item}
-          className="text-lp-soft flex gap-3.5 text-[17px] leading-[1.45]"
+          className="text-lp-soft flex gap-3.5 text-[17px] leading-[1.45] max-sm:gap-3 max-sm:text-[16px]"
         >
           <span className="text-lp-accent" aria-hidden>
             —

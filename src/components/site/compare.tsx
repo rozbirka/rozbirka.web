@@ -30,8 +30,40 @@ export function Compare() {
           <Eyebrow>{l('compareEyebrow')}</Eyebrow>
           <SectionTitle>{l('compareTitle')}</SectionTitle>
         </div>
-        <div className="bg-lp-surface overflow-x-auto rounded-[28px] border border-white/[0.08]">
-          <table className="w-full min-w-[720px] border-collapse text-[16px]">
+        <ul
+          role="list"
+          className="m-0 flex list-none flex-col gap-3 p-0 sm:hidden"
+        >
+          {rows.map(([label, a, b, c]) => (
+            <li
+              key={label}
+              className="bg-lp-surface flex flex-col gap-3 rounded-3xl border border-white/[0.08] p-5"
+            >
+              <span className="text-lp-ink text-[16px] font-semibold">
+                {label}
+              </span>
+              <dl className="m-0 flex flex-col gap-2 text-[14px]">
+                {[
+                  [excel, a],
+                  [erp, b],
+                ].map(([name, value]) => (
+                  <div key={name} className="flex justify-between gap-4">
+                    <dt className="text-lp-muted">{name}</dt>
+                    <dd className="text-lp-dim m-0 text-right">{value}</dd>
+                  </div>
+                ))}
+                <div className="text-lp-ink flex justify-between gap-4 rounded-xl bg-[rgba(255,106,26,0.1)] px-3 py-2.5 font-medium">
+                  <dt className="font-unbounded text-lp-accent-hover font-semibold">
+                    rozbirka
+                  </dt>
+                  <dd className="m-0 text-right">{c}</dd>
+                </div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+        <div className="bg-lp-surface overflow-x-auto rounded-[28px] border border-white/[0.08] max-sm:hidden">
+          <table className="w-full min-w-[680px] border-collapse text-[16px]">
             <colgroup>
               <col className="w-[33%]" />
               <col />
@@ -103,14 +135,14 @@ export function Compare() {
             </tbody>
           </table>
         </div>
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4 max-sm:flex-col max-sm:items-stretch">
           <PrimaryLink to="/login">{t('heroCta')}</PrimaryLink>
           {supportHref && (
             <a
               href={supportHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-lp-ink hover:border-lp-accent-hover hover:text-lp-accent-hover flex h-14 items-center gap-2.5 rounded-full border border-white/20 pr-6 pl-4 text-[17px] font-semibold"
+              className="text-lp-ink hover:border-lp-accent-hover hover:text-lp-accent-hover flex h-14 items-center gap-2.5 rounded-full border border-white/20 pr-6 pl-4 max-sm:justify-center text-[17px] font-semibold"
             >
               <TelegramIcon />
               {l('orderDemo')}
