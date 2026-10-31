@@ -200,15 +200,28 @@ test.describe('responsive matrix', () => {
         ),
       ).toBe(true)
       // Unbounded/Onest swap in after first paint and reflow the headings;
-      // capture only once they are in, so the page height is stable.
+      // capture only once they are in.
       await page.evaluate(() => document.fonts.ready)
+      // A full-page capture stretches the viewport and the blank space under
+      // the footer then grows or shrinks by a few pixels. Measure the content
+      // (footer incl. its own padding) at the normal viewport, size the
+      // viewport to exactly that and capture it, so the image size is exact.
+      const pageHeight = await page.evaluate(() => {
+        const copyright = [...document.querySelectorAll('footer span')].find(
+          (element) => element.textContent?.startsWith('©'),
+        )
+        const container = copyright?.parentElement?.parentElement
+        if (!container) throw new Error('Footer copyright row is missing')
+        return Math.ceil(
+          container.getBoundingClientRect().bottom + window.scrollY,
+        )
+      })
+      await page.setViewportSize({ width, height: pageHeight })
+      await page.evaluate(() => window.scrollTo(0, 0))
       const platformSuffix = process.platform === 'linux' ? '-linux' : ''
       await expect(page).toHaveScreenshot(
         `landing-${width}${platformSuffix}.png`,
-        {
-          fullPage: true,
-          animations: 'disabled',
-        },
+        { animations: 'disabled' },
       )
     })
   }
