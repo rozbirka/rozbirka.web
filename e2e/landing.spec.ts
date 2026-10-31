@@ -54,9 +54,6 @@ test('landing interactions work without serious accessibility violations', async
     'true',
   )
   await expect(
-    page.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-  ).toBeDisabled()
-  await expect(
     page.getByRole('heading', {
       name: 'Усе для щоденної роботи авторозбірки',
     }),
@@ -68,61 +65,50 @@ test('landing interactions work without serious accessibility violations', async
     ),
   ).toEqual([])
 
-  await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await expect(
-    page.getByRole('button', { name: 'Зупинити автопрокрутку' }),
-  ).toBeEnabled()
-  await page.getByRole('button', { name: 'Наступна' }).click()
-  await page.getByRole('button', { name: 'Зупинити автопрокрутку' }).click()
-  await expect(
-    page.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-  ).toHaveAttribute('aria-pressed', 'true')
+  const second = page.getByRole('button', {
+    name: 'Як швидко я можу почати працювати після реєстрації?',
+  })
+  await second.click()
+  await expect(second).toHaveAttribute('aria-expanded', 'true')
   await expect(
     page.getByRole('link', { name: 'Почати 14 днів безкоштовно' }),
   ).toHaveAttribute('href', '/login?plan=pro_monthly')
 })
 
-test('hero content is immediately visible with reduced motion', async ({
+test('landing content is immediately visible with reduced motion', async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
+  await expect(page.locator('#root')).toHaveAttribute(
+    'data-app-hydrated',
+    'true',
+  )
 
-  const animatedHeroNodes = [
-    page.getByText('Знаєш', { exact: true }),
-    page.getByText('де кожна', { exact: true }),
-    page.getByText('деталь і де', { exact: true }),
-    page.getByText('твої гроші', { exact: true }),
-    page.getByText(
-      "Застосунок, який об'єднує фінанси, функції та управління в одному інтерфейсі.",
-    ),
-    page.getByRole('link', { name: 'Спробувати безкоштовно' }).locator('..'),
-  ]
-
-  for (const node of animatedHeroNodes) {
-    await expect(node).toBeVisible()
-    await expect(node).toHaveCSS('animation-name', 'none')
-    await expect(node).toHaveCSS('opacity', '1')
-    await expect(node).toHaveCSS('transform', 'none')
+  for (const id of ['top', 'reviews', 'features', 'pricing', 'faq']) {
+    const section = page.locator(`#${id}`)
+    await section.scrollIntoViewIfNeeded()
+    await expect(section).toHaveCSS('opacity', '1')
+    await expect(section).toHaveCSS('transform', 'none')
   }
+  await expect(page.locator('#top [data-count]').first()).toHaveText(
+    /^\$3\s200$/,
+  )
 })
 
-test('hero LCP line is visible from initial paint while later lines stagger', async ({
+test('blocks below the fold fade in when scrolled into view', async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-
-  const firstHeroLine = page.getByText('Знаєш', { exact: true })
-  await expect(firstHeroLine).toBeVisible()
-  await expect(firstHeroLine).toHaveCSS('opacity', '1')
-  await expect(firstHeroLine).toHaveCSS('transform', 'none')
-  await expect(firstHeroLine).toHaveCSS('animation-name', 'none')
-
-  await expect(page.getByText('де кожна', { exact: true })).toHaveCSS(
-    'animation-name',
-    'fade-up',
+  await page.goto('/')
+  await expect(page.locator('#root')).toHaveAttribute(
+    'data-app-hydrated',
+    'true',
   )
+
+  const faq = page.locator('#faq')
+  await faq.scrollIntoViewIfNeeded()
+  await expect(faq).toHaveCSS('opacity', '1')
 })
 
 test('direct SPA deep links mount one matching page without hydration warnings', async ({
@@ -149,33 +135,32 @@ test('direct SPA deep links mount one matching page without hydration warnings',
   await expect(
     page.getByRole('heading', {
       level: 1,
-      name: 'Знаєш де кожна деталь і де твої гроші',
+      name: 'Більше прибутку з кожного авто на розбірці',
     }),
   ).toHaveCount(0)
   expect(hydrationWarnings).toEqual([])
 })
 
 test.describe('responsive matrix', () => {
-  test('uses the Visuelt Pro footer typography on the landing page', async ({
+  test('uses the Unbounded and Onest typography of the mock-up', async ({
     page,
   }) => {
     await page.goto('/')
     await page.evaluate(() => document.fonts.ready)
 
-    const wordmark = page.locator('footer p').filter({ hasText: /^rozbirka$/ })
-    const fontFamily = await wordmark.evaluate(
-      (element) => getComputedStyle(element).fontFamily,
-    )
-
-    expect(fontFamily).toContain('Visuelt Pro')
+    const fonts = await page.evaluate(() => ({
+      heading: getComputedStyle(document.querySelector('h1')!).fontFamily,
+      body: getComputedStyle(document.querySelector('#top p')!).fontFamily,
+    }))
+    expect(fonts.heading).toContain('Unbounded')
+    expect(fonts.body).toContain('Onest')
   })
 
   for (const { width, expectedFontSize } of [
-    { width: 375, expectedFontSize: '44px' },
-    { width: 768, expectedFontSize: '64px' },
-    { width: 1440, expectedFontSize: '88px' },
+    { width: 375, expectedFontSize: '40px' },
+    { width: 1600, expectedFontSize: '84px' },
   ]) {
-    test(`uses compact hero typography at ${width}px`, async ({ page }) => {
+    test(`scales the hero heading at ${width}px`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' })
       await page.setViewportSize({ width, height: 1000 })
       await page.goto('/')
@@ -184,34 +169,6 @@ test.describe('responsive matrix', () => {
         'font-size',
         expectedFontSize,
       )
-    })
-  }
-
-  for (const width of [375, 768, 1440]) {
-    test(`shows the complete shared footer wordmark at ${width}px`, async ({
-      page,
-    }) => {
-      await page.emulateMedia({ reducedMotion: 'reduce' })
-      await page.setViewportSize({ width, height: 1000 })
-      await page.goto('/')
-
-      const footer = page.locator('footer')
-      const wordmark = footer.locator('p').filter({ hasText: /^rozbirka$/ })
-      await expect(wordmark).toBeVisible()
-      await wordmark.scrollIntoViewIfNeeded()
-
-      const isFullyVisible = await wordmark.evaluate((element) => {
-        const wordmarkRect = element.getBoundingClientRect()
-        const containerRect = element.parentElement?.getBoundingClientRect()
-
-        return (
-          containerRect !== undefined &&
-          wordmarkRect.top >= containerRect.top &&
-          wordmarkRect.bottom <= containerRect.bottom
-        )
-      })
-
-      expect(isFullyVisible, `homepage at ${width}px`).toBe(true)
     })
   }
 

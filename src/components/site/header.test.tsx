@@ -59,7 +59,7 @@ describe('SiteHeader mobile menu', () => {
     ).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('closes after the mobile App Store badge is selected', async () => {
+  it('closes after the mobile log-in link is selected', async () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter>
@@ -72,11 +72,7 @@ describe('SiteHeader mobile menu', () => {
       name: 'Мобільна навігація',
     })
 
-    await user.click(
-      within(mobileNav).getByRole('link', {
-        name: 'Завантажити в App Store',
-      }),
-    )
+    await user.click(within(mobileNav).getByRole('link', { name: 'Увійти' }))
 
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
     expect(

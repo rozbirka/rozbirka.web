@@ -1,37 +1,24 @@
-import { telegramSupportHref } from '@/lib/telegram-support'
-import { MessageCircle } from 'lucide-react'
 import { useT } from '@/i18n'
+import { TelegramIcon } from './landing-ui'
+import { useSupportHref } from './landing-hooks'
 import { siteMessages } from './site-messages'
 
-export function SupportLink({
-  floating = false,
-  asListItem = false,
-}: {
-  floating?: boolean
-  asListItem?: boolean
-}) {
+/** Round Telegram button pinned to the bottom-right corner of the landing. */
+export function SupportLink() {
   const t = useT(siteMessages)
-  const username: unknown = import.meta.env['VITE_TELEGRAM_SUPPORT_BOT']
-  const href = telegramSupportHref(
-    typeof username === 'string' ? username : undefined,
-  )
+  const href = useSupportHref()
   if (!href) return null
 
-  const link = (
+  return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={t('supportAria')}
-      className={
-        floating
-          ? 'bg-brand text-brand-foreground font-visuelt fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 inline-flex min-h-12 items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg focus-visible:outline-2 focus-visible:outline-offset-4 md:right-6 md:bottom-6'
-          : 'inline-flex min-h-11 items-center gap-2 text-[15px] text-neutral-300 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-4'
-      }
+      title={t('support')}
+      className="bg-lp-telegram fixed right-5 bottom-[calc(20px+env(safe-area-inset-bottom))] z-[61] flex size-[60px] items-center justify-center rounded-full shadow-[0_10px_30px_rgba(0,0,0,0.45)] transition-transform duration-200 hover:scale-[1.08]"
     >
-      <MessageCircle size={20} aria-hidden="true" />
-      {t('support')}
+      <TelegramIcon size={60} />
     </a>
   )
-  return asListItem ? <li>{link}</li> : link
 }

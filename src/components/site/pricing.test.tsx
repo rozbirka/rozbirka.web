@@ -128,7 +128,7 @@ describe('Pricing destinations', () => {
     ).toHaveAttribute('href', '/account?section=plans&plan=pro_monthly')
   })
 
-  it('renders every guest plan destination with a 44px minimum touch target', async () => {
+  it('renders every guest plan destination with a 56px touch target', async () => {
     render(
       <MemoryRouter>
         <Pricing />
@@ -141,7 +141,7 @@ describe('Pricing destinations', () => {
       '/login?plan=enterprise_monthly',
     ])
     expect(links).toHaveLength(2)
-    links.forEach((link) => expect(link).toHaveClass('min-h-11'))
+    links.forEach((link) => expect(link).toHaveClass('h-14'))
   })
 
   it('renders the complete fallback when the public API fails', async () => {
@@ -167,20 +167,11 @@ describe('Pricing destinations', () => {
     const periods = await screen.findAllByText('/ місяць')
     expect(periods).toHaveLength(2)
     periods.forEach((period) => {
-      expect(period).toHaveClass(
-        'font-visuelt',
-        'text-[14px]',
-        'leading-none',
-        'whitespace-nowrap',
-        'font-normal',
-        'tracking-normal',
-        'mb-[0.55em]',
-        'self-end',
-      )
+      expect(period.previousElementSibling?.textContent).toMatch(/^\$\d+$/)
     })
   })
 
-  it('renders the two plans in two columns on tablet and desktop', async () => {
+  it('renders the two plans side by side from 380px per card', async () => {
     const { container } = render(
       <MemoryRouter>
         <Pricing />
@@ -189,10 +180,9 @@ describe('Pricing destinations', () => {
 
     await screen.findByText('Enterprise')
     const grid = container.querySelector('#pricing ul')
-    expect(grid).toHaveClass('md:grid-cols-2')
-    expect(grid).not.toHaveClass('lg:grid-cols-3')
-
-    const enterpriseCard = screen.getByText('Enterprise').closest('li')
-    expect(enterpriseCard).not.toHaveClass('md:col-span-2')
+    expect(grid).toHaveClass(
+      'grid-cols-[repeat(auto-fit,minmax(min(100%,380px),1fr))]',
+    )
+    expect(grid?.children).toHaveLength(2)
   })
 })

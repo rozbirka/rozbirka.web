@@ -5,40 +5,35 @@ import { landingPathFor } from '@/seo/landing-locales'
 import { siteMessages } from './site-messages'
 
 interface NavLinksProps {
-  activeHref?: string
   className?: string
+  linkClassName?: string
   onNavigate?: () => void
 }
 
-export function NavLinks({ activeHref, className, onNavigate }: NavLinksProps) {
+export function NavLinks({
+  className,
+  linkClassName,
+  onNavigate,
+}: NavLinksProps) {
   const { locale } = useLocale()
   const t = useT(siteMessages)
   const landingPath = landingPathFor(locale)
   return (
-    <ul
-      role="list"
-      className={cn('flex flex-wrap items-center gap-1', className)}
-    >
-      {navItems.map((item) => {
-        const isActive = activeHref === item.href
-        return (
-          <li key={item.href}>
-            <a
-              href={navDestination(item, landingPath)}
-              aria-current={isActive ? 'page' : undefined}
-              onClick={onNavigate}
-              className={cn(
-                'flex h-11 items-center rounded-full px-5 text-[15px] transition-colors',
-                isActive
-                  ? 'border-brand text-brand border'
-                  : 'text-neutral-400 hover:text-white',
-              )}
-            >
-              {t(item.label)}
-            </a>
-          </li>
-        )
-      })}
+    <ul role="list" className={cn('flex flex-wrap gap-6', className)}>
+      {navItems.map((item) => (
+        <li key={item.href}>
+          <a
+            href={navDestination(item, landingPath)}
+            onClick={onNavigate}
+            className={cn(
+              'text-lp-muted hover:text-lp-accent-hover text-[15px]',
+              linkClassName,
+            )}
+          >
+            {t(item.label)}
+          </a>
+        </li>
+      ))}
     </ul>
   )
 }
