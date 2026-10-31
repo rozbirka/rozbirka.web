@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { Features } from './features'
 
 describe('Features grid', () => {
-  it('lists the nine modules with their first three benefits', () => {
+  it('lists the thirteen modules with their first three benefits', () => {
     render(<Features />)
     expect(
       screen.getByRole('heading', {
         level: 2,
-        name: '9 модулів — вся розбірка в одній системі',
+        name: '13 модулів в одній системі',
       }),
     ).toBeInTheDocument()
     const titles = screen
@@ -18,12 +18,16 @@ describe('Features grid', () => {
       'Авто',
       'Партії',
       'Склад',
+      'Склади',
+      'Інвентаризація',
       'Стікери',
       'Замовлення',
       'Клієнти',
       'Каси',
       'Звіти',
       'Команда',
+      'Нова Пошта',
+      'OLX',
     ])
     const team = screen.getByRole('heading', {
       level: 3,

@@ -16,7 +16,7 @@ export function HowItWorks() {
           </p>
         </div>
         <div
-          className="-mb-10 h-0.5 overflow-hidden rounded-[2px] bg-white/[0.08]"
+          className="-mb-10 h-0.5 overflow-hidden rounded-[2px] bg-white/[0.08] max-sm:hidden"
           aria-hidden
         >
           <div
@@ -25,9 +25,41 @@ export function HowItWorks() {
             style={{ width: '100%' }}
           />
         </div>
+        {/* Phones: a vertical timeline instead of the card row. */}
+        <ol role="list" className="m-0 flex list-none flex-col p-0 sm:hidden">
+          {steps.map(([tag, title, text], index) => (
+            <li
+              key={tag}
+              className="grid grid-cols-[48px_minmax(0,1fr)] gap-x-4"
+            >
+              <div className="flex flex-col items-center">
+                <span className="font-unbounded text-lp-accent-hover border-lp-accent flex size-12 flex-none items-center justify-center rounded-full border-[1.5px] bg-[rgba(255,106,26,0.1)] text-[14px] font-semibold tabular-nums">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                {index < steps.length - 1 && (
+                  <span
+                    className="my-2 min-h-6 w-0.5 flex-1 rounded-[2px] bg-[linear-gradient(#ff6a1a,rgba(255,106,26,0.15))]"
+                    aria-hidden
+                  />
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5 pt-1 pb-8">
+                <span className="text-lp-dim text-[12px] font-semibold tracking-[0.08em] uppercase">
+                  {tag}
+                </span>
+                <h3 className="font-unbounded m-0 text-[20px] font-semibold tracking-[-0.02em]">
+                  {title}
+                </h3>
+                <p className="text-lp-muted m-0 text-[16px] leading-[1.5] text-pretty">
+                  {text}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
         <ol
           role="list"
-          className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4 p-0"
+          className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-4 p-0 max-sm:hidden"
         >
           {steps.map(([tag, title, text], index) => (
             <li

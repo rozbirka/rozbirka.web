@@ -20,7 +20,7 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-white/[0.07]">
       <div className="mx-auto flex max-w-[1240px] flex-col gap-14 px-6 pt-[72px] pb-10">
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-10">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-10 max-sm:grid-cols-2 max-sm:gap-x-5 max-sm:gap-y-8 max-sm:[&>*:nth-child(3)]:col-span-full">
           <div className="flex flex-col gap-[18px]">
             <LandingLogo className="gap-2 text-[22px]" markSize={26} />
             <span className="text-lp-muted max-w-[260px] text-[15px] leading-[1.5]">

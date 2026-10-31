@@ -1,4 +1,6 @@
 import { useT } from '@/i18n'
+import { cn } from '@/lib/utils'
+import { phoneCarousel } from './landing-classes'
 import { Count, Eyebrow, SectionInner, SectionTitle } from './landing-ui'
 import { landingMessages, listOf } from './landing-messages'
 
@@ -44,7 +46,12 @@ export function Reviews() {
             </div>
           ))}
         </dl>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4">
+        <div
+          className={cn(
+            'grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4',
+            phoneCarousel,
+          )}
+        >
           {reviewKeys.map(([quote, name, role]) => (
             <figure
               key={quote}
