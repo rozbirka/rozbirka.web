@@ -22,7 +22,7 @@ describe('server product routes', () => {
 
   it('renders the homepage product route', () => {
     const pathname = '/'
-    const expectedH1 = 'Більше прибутку з кожного авто на розбірці'
+    const expectedH1 = 'Знаєш, де кожна деталь і де твої гроші'
 
     expect(renderRoute(pathname)).toContain(`<h1`)
     expect(visibleText(renderRoute(pathname))).toContain(expectedH1)
@@ -36,7 +36,7 @@ describe('server product routes', () => {
 
   it('provides the expected visible H1 for the homepage', () => {
     expect(expectedH1ForRoute('/')).toBe(
-      'Програма для авторозбірки — CRM і ERP Більше прибутку з кожного авто на розбірці',
+      'Програма для авторозбірки — CRM і ERP Знаєш, де кожна деталь і де твої гроші',
     )
   })
 
@@ -58,12 +58,12 @@ describe('server product routes', () => {
     [
       '/en',
       'en-GB',
-      'Software for car breakers — CRM and ERP More profit from every car you strip',
+      'Software for car breakers — CRM and ERP Know where every part is and where your money is',
     ],
     [
       '/pl',
       'pl',
-      'Program do demontażu aut — CRM i ERP Większy zysk z każdego auta w demontażu',
+      'Program do demontażu aut — CRM i ERP Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
     ],
   ])(
     'renders the %s landing in its own language',
@@ -73,7 +73,7 @@ describe('server product routes', () => {
       expect(expectedH1ForRoute(pathname)).toBe(expectedH1)
       expect(html.match(/<h1[\s>]/g)).toHaveLength(1)
       expect(visibleText(html)).toContain(expectedH1)
-      expect(visibleText(html)).not.toContain('Більше прибутку')
+      expect(visibleText(html)).not.toContain('Знаєш, де кожна деталь')
       // Language links are anchors with lang and hreflang, so they work
       // before hydration and without JavaScript.
       for (const [href, hreflang] of [

@@ -135,7 +135,7 @@ test('direct SPA deep links mount one matching page without hydration warnings',
   await expect(
     page.getByRole('heading', {
       level: 1,
-      name: /Більше прибутку з кожного авто на розбірці/,
+      name: /Знаєш, де кожна деталь і де твої гроші/,
     }),
   ).toHaveCount(0)
   expect(hydrationWarnings).toEqual([])

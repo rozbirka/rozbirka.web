@@ -130,8 +130,7 @@ export function Hero() {
             </span>{' '}
             <span className="font-unbounded text-[clamp(40px,8vw,64px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance min-[1072px]:text-[clamp(40px,5.8vw,84px)]">
               {t('heroTitleStart')}{' '}
-              <span className="text-lp-accent">{t('heroTitleAccent')}</span>{' '}
-              {t('heroTitleEnd')}
+              <span className="text-lp-accent">{t('heroTitleAccent')}</span>
             </span>
           </h1>
           <p className="text-lp-muted m-0 max-w-[520px] text-[20px] leading-[1.5] text-pretty max-sm:text-[17px]">

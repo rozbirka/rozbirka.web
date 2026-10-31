@@ -8,10 +8,9 @@ import { defineMessages } from '@/i18n/messages'
  */
 export const siteMessages = defineMessages({
   uk: {
-    heroTitle: 'Більше прибутку з кожного авто на розбірці',
-    heroTitleStart: 'Більше прибутку',
-    heroTitleAccent: 'з кожного авто',
-    heroTitleEnd: 'на розбірці',
+    heroTitle: 'Знаєш, де кожна деталь і де твої гроші',
+    heroTitleStart: 'Знаєш, де кожна деталь і де',
+    heroTitleAccent: 'твої гроші',
     heroSub:
       'Бачиш, яке авто окупилось, знаходиш будь-яку деталь за секунди і не губиш жодного замовлення.',
     navHow: 'Як це працює',
@@ -46,10 +45,9 @@ export const siteMessages = defineMessages({
     privacyPolicy: 'Політика конфіденційності',
   },
   'en-GB': {
-    heroTitle: 'More profit from every car you strip',
-    heroTitleStart: 'More profit',
-    heroTitleAccent: 'from every car',
-    heroTitleEnd: 'you strip',
+    heroTitle: 'Know where every part is and where your money is',
+    heroTitleStart: 'Know where every part is and where',
+    heroTitleAccent: 'your money is',
     heroSub:
       'See which car paid off, find any part in seconds and never lose an order.',
     navHow: 'How it works',
@@ -82,10 +80,9 @@ export const siteMessages = defineMessages({
     privacyPolicy: 'Privacy policy',
   },
   pl: {
-    heroTitle: 'Większy zysk z każdego auta w demontażu',
-    heroTitleStart: 'Większy zysk',
-    heroTitleAccent: 'z każdego auta',
-    heroTitleEnd: 'w demontażu',
+    heroTitle: 'Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
+    heroTitleStart: 'Wiesz, gdzie każda część i gdzie są',
+    heroTitleAccent: 'Twoje pieniądze',
     heroSub:
       'Widzisz, które auto się zwróciło, znajdujesz każdą część w kilka sekund i nie gubisz żadnego zamówienia.',
     navHow: 'Jak to działa',

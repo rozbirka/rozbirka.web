@@ -68,7 +68,7 @@ describe('localized landing', () => {
     expect(
       screen.getByRole('heading', {
         level: 1,
-        name: 'Software for car breakers — CRM and ERP More profit from every car you strip',
+        name: 'Software for car breakers — CRM and ERP Know where every part is and where your money is',
       }),
     ).toBeInTheDocument()
     expect(
@@ -135,7 +135,7 @@ describe('localized landing', () => {
     expect(
       screen.getByRole('heading', {
         level: 1,
-        name: 'Program do demontażu aut — CRM i ERP Większy zysk z każdego auta w demontażu',
+        name: 'Program do demontażu aut — CRM i ERP Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('14 dni za darmo')).toBeInTheDocument()
