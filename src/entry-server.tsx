@@ -4,6 +4,7 @@ import { AuthProvider } from '@/auth/AuthContext'
 import { AppLocaleProvider } from '@/i18n/AppLocaleProvider'
 import { SOURCE_LOCALE } from '@/i18n/locales'
 import { landingFaqEntries } from '@/components/site/faq-messages'
+import { landingMessages } from '@/components/site/landing-messages'
 import { siteMessages } from '@/components/site/site-messages'
 import { translate } from '@/i18n/messages'
 import { getProductSeo, productSeoEntries } from '@/seo/product-seo'
@@ -37,7 +38,8 @@ export { serializeStructuredData }
 export function expectedH1ForRoute(pathname: string): string {
   const seo = getProductSeo(pathname)
   if (!seo) throw new Error(`Missing product SEO for ${pathname}`)
-  return translate(siteMessages, seo.locale, 'heroTitle')
+  // The H1 opens with the category line («… — CRM і ERP»), then the headline.
+  return `${translate(landingMessages, seo.locale, 'heroBadge')} ${translate(siteMessages, seo.locale, 'heroTitle')}`
 }
 
 export function structuredDataForRoute(pathname: string) {

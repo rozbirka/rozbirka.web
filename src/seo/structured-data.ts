@@ -1,3 +1,5 @@
+import { APP_STORE_URL } from '@/lib/app-store'
+import { fallbackLandingPlans } from '@/lib/landing-plans'
 import type { ProductSeoEntry } from './product-seo'
 
 interface FaqEntry {
@@ -36,6 +38,8 @@ export function buildStructuredData(
         '@id': `${origin}/#organization`,
         name: 'rozbirka',
         url: `${origin}/`,
+        logo: `${origin}/favicon.png`,
+        sameAs: [APP_STORE_URL],
       },
       {
         '@type': 'WebSite',
@@ -51,6 +55,27 @@ export function buildStructuredData(
         name: 'rozbirka',
         url: entry.canonical,
         description: entry.description,
+        inLanguage: entry.locale,
+        applicationCategory: 'BusinessApplication',
+        applicationSubCategory: 'CRM, ERP',
+        operatingSystem: 'Web, iOS',
+        keywords: [entry.primaryQuery, ...entry.supportingQueries].join(', '),
+        installUrl: APP_STORE_URL,
+        sameAs: [APP_STORE_URL],
+        publisher: { '@id': `${origin}/#organization` },
+        offers: fallbackLandingPlans(entry.locale).map((plan) => ({
+          '@type': 'Offer',
+          name: plan.name,
+          price: plan.price.replace('$', ''),
+          priceCurrency: 'USD',
+          url: `${origin}/login?plan=${plan.code}`,
+          priceSpecification: {
+            '@type': 'UnitPriceSpecification',
+            price: plan.price.replace('$', ''),
+            priceCurrency: 'USD',
+            unitCode: 'MON',
+          },
+        })),
       },
       faqPage,
     ],

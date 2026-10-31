@@ -56,6 +56,31 @@ describe('structured data', () => {
     )
   })
 
+  it('describes the product as CRM and ERP with the published plans', () => {
+    const graph = buildStructuredData(getProductSeo('/')!, homepageFaqEntries)[
+      '@graph'
+    ] as Record<string, unknown>[]
+    const software = graph.find(
+      (node) => node['@type'] === 'SoftwareApplication',
+    )
+    expect(software).toMatchObject({
+      applicationCategory: 'BusinessApplication',
+      applicationSubCategory: 'CRM, ERP',
+      operatingSystem: 'Web, iOS',
+      inLanguage: 'uk',
+      installUrl: 'https://apps.apple.com/ua/app/rozbirka/id6762130912',
+    })
+    expect(software?.['keywords']).toContain('ERP для авторозбірки')
+    expect(
+      (software?.['offers'] as { name: string; price: string }[]).map(
+        ({ name, price }) => `${name} ${price}`,
+      ),
+    ).toEqual(['Pro 59', 'Enterprise 299'])
+    expect(
+      graph.find((node) => node['@type'] === 'Organization'),
+    ).toMatchObject({ logo: 'https://rozbirka.pro/favicon.png' })
+  })
+
   it('escapes script-terminating characters during serialization', () => {
     expect(serializeStructuredData({ value: '</script>' })).toContain(
       '\\u003c/script>',

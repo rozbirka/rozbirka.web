@@ -36,7 +36,7 @@ describe('server product routes', () => {
 
   it('provides the expected visible H1 for the homepage', () => {
     expect(expectedH1ForRoute('/')).toBe(
-      'Більше прибутку з кожного авто на розбірці',
+      'Програма для авторозбірки — CRM і ERP Більше прибутку з кожного авто на розбірці',
     )
   })
 
@@ -55,8 +55,16 @@ describe('server product routes', () => {
   })
 
   it.each([
-    ['/en', 'en-GB', 'More profit from every car you strip'],
-    ['/pl', 'pl', 'Większy zysk z każdego auta w demontażu'],
+    [
+      '/en',
+      'en-GB',
+      'Software for car breakers — CRM and ERP More profit from every car you strip',
+    ],
+    [
+      '/pl',
+      'pl',
+      'Program do demontażu aut — CRM i ERP Większy zysk z każdego auta w demontażu',
+    ],
   ])(
     'renders the %s landing in its own language',
     (pathname, locale, expectedH1) => {

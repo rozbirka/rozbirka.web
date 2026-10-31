@@ -5,7 +5,7 @@ import { LandingLogo, TelegramIcon } from './landing-ui'
 import { useSupportHref } from './landing-hooks'
 import { landingMessages } from './landing-messages'
 import { siteMessages } from './site-messages'
-import { APP_STORE_URL } from './store-badges'
+import { APP_STORE_URL } from '@/lib/app-store'
 
 const footerNav = navItems.filter((item) => item.href !== '#reviews')
 

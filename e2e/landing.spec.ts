@@ -135,7 +135,7 @@ test('direct SPA deep links mount one matching page without hydration warnings',
   await expect(
     page.getByRole('heading', {
       level: 1,
-      name: 'Більше прибутку з кожного авто на розбірці',
+      name: /Більше прибутку з кожного авто на розбірці/,
     }),
   ).toHaveCount(0)
   expect(hydrationWarnings).toEqual([])
@@ -149,7 +149,8 @@ test.describe('responsive matrix', () => {
     await page.evaluate(() => document.fonts.ready)
 
     const fonts = await page.evaluate(() => ({
-      heading: getComputedStyle(document.querySelector('h1')!).fontFamily,
+      heading: getComputedStyle(document.querySelector('h1 > span:last-child')!)
+        .fontFamily,
       body: getComputedStyle(document.querySelector('#top p')!).fontFamily,
     }))
     expect(fonts.heading).toContain('Unbounded')
@@ -165,7 +166,7 @@ test.describe('responsive matrix', () => {
       await page.setViewportSize({ width, height: 1000 })
       await page.goto('/')
 
-      await expect(page.getByRole('heading', { level: 1 })).toHaveCSS(
+      await expect(page.locator('h1 > span').last()).toHaveCSS(
         'font-size',
         expectedFontSize,
       )

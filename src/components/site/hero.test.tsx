@@ -13,7 +13,7 @@ describe('Hero conversion', () => {
     expect(
       screen.getByRole('heading', {
         level: 1,
-        name: 'Більше прибутку з кожного авто на розбірці',
+        name: 'Програма для авторозбірки — CRM і ERP Більше прибутку з кожного авто на розбірці',
       }),
     ).toBeInTheDocument()
     expect(

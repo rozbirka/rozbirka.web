@@ -1,8 +1,7 @@
 import type { MouseEventHandler, SVGProps } from 'react'
 import { useT } from '@/i18n'
+import { APP_STORE_URL } from '@/lib/app-store'
 import { siteMessages } from './site-messages'
-
-const APP_STORE_URL = 'https://apps.apple.com/ua/app/rozbirka/id6762130912'
 
 export function AppStoreBadge({
   onClick,
@@ -31,8 +30,6 @@ export function AppStoreBadge({
     </a>
   )
 }
-
-export { APP_STORE_URL }
 
 function AppleLogo(props: SVGProps<SVGSVGElement>) {
   return (

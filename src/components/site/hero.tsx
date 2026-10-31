@@ -121,13 +121,18 @@ export function Hero() {
         className="relative mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,480px),1fr))] items-center gap-16 px-6 pt-20 pb-24 max-sm:gap-10 max-sm:pt-10 max-sm:pb-16"
       >
         <div className="flex flex-col gap-7 max-sm:gap-6">
-          <span className="text-lp-muted self-start rounded-full border border-white/14 px-3.5 py-[7px] text-[14px]">
-            {l('heroBadge')}
-          </span>
-          <h1 className="font-unbounded m-0 text-[clamp(40px,8vw,64px)] min-[1072px]:text-[clamp(40px,5.8vw,84px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance">
-            {t('heroTitleStart')}{' '}
-            <span className="text-lp-accent">{t('heroTitleAccent')}</span>{' '}
-            {t('heroTitleEnd')}
+          {/* The category line is part of the H1 so the page heading names
+              what the product is (CRM / ERP for car breakers), not only the
+              benefit. */}
+          <h1 className="m-0 flex flex-col gap-7 max-sm:gap-6">
+            <span className="font-onest text-lp-muted self-start rounded-full border border-white/14 px-3.5 py-[7px] text-[14px] leading-[normal] font-normal tracking-normal">
+              {l('heroBadge')}
+            </span>{' '}
+            <span className="font-unbounded text-[clamp(40px,8vw,64px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance min-[1072px]:text-[clamp(40px,5.8vw,84px)]">
+              {t('heroTitleStart')}{' '}
+              <span className="text-lp-accent">{t('heroTitleAccent')}</span>{' '}
+              {t('heroTitleEnd')}
+            </span>
           </h1>
           <p className="text-lp-muted m-0 max-w-[520px] text-[20px] leading-[1.5] text-pretty max-sm:text-[17px]">
             {t('heroSub')}

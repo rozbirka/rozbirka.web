@@ -13,7 +13,7 @@ export const landingMessages = defineMessages({
     promoCta: 'Почати зараз →',
     headerCta: 'Спробувати',
 
-    heroBadge: 'Програма для авторозбірки',
+    heroBadge: 'Програма для авторозбірки — CRM і ERP',
     heroDemo: 'Не готовий реєструватись? Покажемо демо в Telegram за 10 хвилин',
     heroStats:
       '14 днів=безкоштовно|9 модулів=в одному інтерфейсі|Веб + iOS=версія і застосунок',
@@ -141,7 +141,7 @@ export const landingMessages = defineMessages({
     formThanksCta: 'Перейти до реєстрації',
 
     footerTagline:
-      'Програма обліку для авторозбірки: авто, деталі, замовлення, каси й команда.',
+      'CRM і ERP для авторозбірки: облік авто, деталей, замовлень, кас і команди.',
     footerProduct: 'Продукт',
     footerSupport: 'Підтримка',
     footerSupportHint: 'Питання, демо, допомога з налаштуванням',
@@ -153,7 +153,7 @@ export const landingMessages = defineMessages({
     promoCta: 'Start now →',
     headerCta: 'Try it',
 
-    heroBadge: 'Software for car breakers',
+    heroBadge: 'Software for car breakers — CRM and ERP',
     heroDemo:
       'Not ready to sign up? We’ll show you a demo on Telegram in 10 minutes',
     heroStats:
@@ -284,7 +284,7 @@ export const landingMessages = defineMessages({
     formThanksCta: 'Go to sign-up',
 
     footerTagline:
-      'Accounting software for car breakers: cars, parts, orders, tills and team.',
+      'CRM and ERP for car breakers: cars, parts, orders, tills and team.',
     footerProduct: 'Product',
     footerSupport: 'Support',
     footerSupportHint: 'Questions, demos, help with setup',
@@ -296,7 +296,7 @@ export const landingMessages = defineMessages({
     promoCta: 'Zacznij teraz →',
     headerCta: 'Wypróbuj',
 
-    heroBadge: 'Program dla demontażu aut',
+    heroBadge: 'Program do demontażu aut — CRM i ERP',
     heroDemo:
       'Nie chcesz się jeszcze rejestrować? Pokażemy demo na Telegramie w 10 minut',
     heroStats:
@@ -429,7 +429,7 @@ export const landingMessages = defineMessages({
     formThanksCta: 'Przejdź do rejestracji',
 
     footerTagline:
-      'Program do ewidencji dla demontażu aut: auta, części, zamówienia, kasy i zespół.',
+      'CRM i ERP dla demontażu aut: auta, części, zamówienia, kasy i zespół.',
     footerProduct: 'Produkt',
     footerSupport: 'Wsparcie',
     footerSupportHint: 'Pytania, demo, pomoc w konfiguracji',

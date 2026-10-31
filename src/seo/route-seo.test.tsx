@@ -18,7 +18,7 @@ describe('RouteSeo', () => {
     render(<RouteSeo entry={getProductSeo('/')!} faq={homepageFaqEntries} />)
 
     expect(document.title).toBe(
-      'Програма для авторозбірки — облік запчастин і продажів | rozbirka',
+      'Програма для авторозбірки: CRM і ERP для запчастин | rozbirka',
     )
     expect(document.querySelector('link[rel="canonical"]')).toHaveAttribute(
       'href',
@@ -89,7 +89,7 @@ describe('RouteSeo', () => {
     )
 
     expect(document.title).toBe(
-      'Software for car breakers — parts stock and sales | rozbirka',
+      'Software for car breakers: CRM and ERP for parts | rozbirka',
     )
     expect(document.querySelector('link[rel="canonical"]')).toHaveAttribute(
       'href',
