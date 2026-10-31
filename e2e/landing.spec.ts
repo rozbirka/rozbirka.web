@@ -199,6 +199,9 @@ test.describe('responsive matrix', () => {
           () => document.documentElement.scrollWidth === window.innerWidth,
         ),
       ).toBe(true)
+      // Unbounded/Onest swap in after first paint and reflow the headings;
+      // capture only once they are in, so the page height is stable.
+      await page.evaluate(() => document.fonts.ready)
       const platformSuffix = process.platform === 'linux' ? '-linux' : ''
       await expect(page).toHaveScreenshot(
         `landing-${width}${platformSuffix}.png`,
