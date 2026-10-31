@@ -4,7 +4,6 @@ import { publicApiClient } from './client'
 export interface LandingLeadRequest {
   name: string
   contact: string
-  cars: string
   locale: string
   /** Honeypot: hidden from people; Core drops leads that fill it. */
   website: string

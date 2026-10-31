@@ -25,10 +25,6 @@ async function fillAndSubmit() {
     screen.getByLabelText('Телефон або Telegram'),
     '+380 67 123 45 67',
   )
-  await user.selectOptions(
-    screen.getByLabelText('Скільки авто зараз на розбірці'),
-    '5–20',
-  )
   await user.click(
     screen.getByRole('button', { name: 'Отримати 14 днів безкоштовно' }),
   )
@@ -48,7 +44,6 @@ describe('landing lead form', () => {
     expect(createLead).toHaveBeenCalledWith({
       name: 'Олег',
       contact: '+380 67 123 45 67',
-      cars: '5–20',
       locale: 'uk',
       website: '',
     })
@@ -66,6 +61,13 @@ describe('landing lead form', () => {
     )
     expect(screen.getByLabelText("Ім'я")).toHaveValue('Олег')
     expect(screen.queryByText('Дякуємо!')).toBeNull()
+  })
+
+  it('asks only for a name and a contact', () => {
+    renderForm()
+
+    expect(screen.getAllByRole('textbox')).toHaveLength(2)
+    expect(screen.queryByRole('combobox')).toBeNull()
   })
 
   it('keeps the bot honeypot out of reach of people', () => {

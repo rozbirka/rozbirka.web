@@ -4,7 +4,7 @@ import { supportApi } from '@/api/support'
 import { useLocale, useT } from '@/i18n'
 import { PrimaryLink } from './landing-ui'
 import { useSupportHref } from './landing-hooks'
-import { landingMessages, listOf } from './landing-messages'
+import { landingMessages } from './landing-messages'
 import { AppStoreBadge } from './store-badges'
 
 const field =
@@ -23,7 +23,6 @@ function StartForm() {
   )
   const nameId = useId()
   const contactId = useId()
-  const carsId = useId()
   const errorId = useId()
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -39,7 +38,6 @@ function StartForm() {
       await supportApi.createLead({
         name: field('name'),
         contact: field('phone'),
-        cars: field('cars'),
         locale,
         website: field('website'),
       })
@@ -105,14 +103,6 @@ function StartForm() {
           placeholder={l('formContactPlaceholder')}
           className={field}
         />
-      </div>
-      <div className="text-lp-muted flex flex-col gap-2 text-[14px]">
-        <label htmlFor={carsId}>{l('formCars')}</label>
-        <select id={carsId} name="cars" className={`${field} px-3.5`}>
-          {listOf(l('formCarsOptions')).map((option) => (
-            <option key={option}>{option}</option>
-          ))}
-        </select>
       </div>
       {/* Honeypot for form bots: off-screen, skipped by keyboard and readers. */}
       <input

@@ -131,8 +131,6 @@ export const landingMessages = defineMessages({
     formNamePlaceholder: 'Олег',
     formContact: 'Телефон або Telegram',
     formContactPlaceholder: '+380 або @nickname',
-    formCars: 'Скільки авто зараз на розбірці',
-    formCarsOptions: 'До 5|5–20|Понад 20',
     formSubmit: 'Отримати 14 днів безкоштовно',
     formSending: 'Надсилаємо…',
     formError:
@@ -277,8 +275,6 @@ export const landingMessages = defineMessages({
     formNamePlaceholder: 'Oleh',
     formContact: 'Phone or Telegram',
     formContactPlaceholder: '+44 or @nickname',
-    formCars: 'How many cars are you stripping now',
-    formCarsOptions: 'Up to 5|5–20|More than 20',
     formSubmit: 'Get 14 days free',
     formSending: 'Sending…',
     formError:
@@ -425,8 +421,6 @@ export const landingMessages = defineMessages({
     formNamePlaceholder: 'Ołeh',
     formContact: 'Telefon lub Telegram',
     formContactPlaceholder: '+48 lub @nickname',
-    formCars: 'Ile aut masz teraz w demontażu',
-    formCarsOptions: 'Do 5|5–20|Ponad 20',
     formSubmit: 'Odbierz 14 dni za darmo',
     formSending: 'Wysyłamy…',
     formError:
