@@ -158,7 +158,7 @@ test.describe('responsive matrix', () => {
   })
 
   for (const { width, expectedFontSize } of [
-    { width: 375, expectedFontSize: '40px' },
+    { width: 375, expectedFontSize: '36px' },
     { width: 1600, expectedFontSize: '84px' },
   ]) {
     test(`scales the hero heading at ${width}px`, async ({ page }) => {

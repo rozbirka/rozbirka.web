@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { billingApi } from '@/api/billing'
@@ -101,7 +101,7 @@ describe('Pricing destinations', () => {
         name: 'Почати 14 днів безкоштовно',
       }),
     ).toHaveAttribute('href', '/login?plan=pro_monthly')
-    expect(screen.getByText('20 авто, 2 000 запчастин')).toBeInTheDocument()
+    expect(screen.getByText('Інвентаризація')).toBeInTheDocument()
     expect(screen.queryByText(/API і мульти-локація/i)).toBeNull()
   })
 
@@ -150,7 +150,7 @@ describe('Pricing destinations', () => {
       </MemoryRouter>,
     )
     expect(
-      await screen.findByText('20 авто, 2 000 запчастин'),
+      await screen.findByRole('heading', { level: 3, name: 'Pro' }),
     ).toBeInTheDocument()
     expect(screen.getAllByRole('link')).toHaveLength(1)
   })
@@ -180,5 +180,9 @@ describe('Pricing destinations', () => {
     expect(screen.queryByText('Enterprise')).toBeNull()
     expect(screen.queryByText('$299')).toBeNull()
     expect(screen.queryByText('Популярний')).toBeNull()
+    const included = screen.getByRole('heading', { name: 'Включено' })
+      .nextElementSibling as HTMLElement
+    expect(within(included).getAllByRole('listitem')).toHaveLength(13)
+    expect(within(included).getByText('Нова Пошта')).toBeInTheDocument()
   })
 })

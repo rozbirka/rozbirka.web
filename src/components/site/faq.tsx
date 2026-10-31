@@ -25,7 +25,7 @@ export function FAQ() {
     <section
       id="faq"
       data-reveal=""
-      className="mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-12 px-6 py-28 max-sm:gap-8 max-sm:py-16"
+      className="mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] items-start gap-12 px-6 py-28 max-sm:gap-10 max-sm:px-5 max-sm:py-16"
     >
       <div className="flex flex-col gap-5">
         <Eyebrow>{t('faqEyebrow')}</Eyebrow>
@@ -83,7 +83,7 @@ function FaqRow({ number, entry, isOpen, onToggle }: FaqRowProps) {
         onClick={onToggle}
         aria-expanded={isOpen}
         aria-controls={panelId}
-        className="hover:text-lp-accent-hover flex w-full cursor-pointer items-center gap-5 px-6 py-[22px] text-left max-sm:gap-3 max-sm:px-4 max-sm:py-[18px]"
+        className="hover:text-lp-accent-hover flex w-full cursor-pointer items-center gap-5 px-6 py-[22px] text-left max-sm:gap-3.5 max-sm:px-4 max-sm:py-[18px]"
       >
         <span
           className="text-lp-dim flex-none font-mono text-[13px]"
@@ -104,7 +104,7 @@ function FaqRow({ number, entry, isOpen, onToggle }: FaqRowProps) {
 
       {isOpen && (
         <div id={panelId} role="region" aria-label={entry.question}>
-          <p className="text-lp-muted m-0 pr-[76px] pb-6 pl-[57px] text-[17px] leading-[1.55] text-pretty max-sm:pr-4 max-sm:pb-5 max-sm:pl-[49px] max-sm:text-[16px]">
+          <p className="text-lp-muted m-0 pr-[76px] pb-6 pl-[57px] text-[17px] leading-[1.55] text-pretty max-sm:px-5 max-sm:pb-5 max-sm:text-[16px]">
             {entry.answer}
           </p>
         </div>

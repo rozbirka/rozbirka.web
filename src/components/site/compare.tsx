@@ -37,23 +37,23 @@ export function Compare() {
           {rows.map(([label, a, b, c]) => (
             <li
               key={label}
-              className="bg-lp-surface flex flex-col gap-3 rounded-3xl border border-white/[0.08] p-5"
+              className="bg-lp-surface flex flex-col gap-3 rounded-[20px] border border-white/[0.08] p-5"
             >
-              <span className="text-lp-ink text-[16px] font-semibold">
+              <span className="text-lp-ink text-[17px] leading-[1.35] font-semibold">
                 {label}
               </span>
-              <dl className="m-0 flex flex-col gap-2 text-[14px]">
+              <dl className="m-0 flex flex-col gap-3 text-[15px]">
                 {[
                   [excel, a],
                   [erp, b],
                 ].map(([name, value]) => (
-                  <div key={name} className="flex justify-between gap-4">
-                    <dt className="text-lp-muted">{name}</dt>
-                    <dd className="text-lp-dim m-0 text-right">{value}</dd>
+                  <div key={name} className="flex justify-between gap-3">
+                    <dt className="text-lp-dim">{name}</dt>
+                    <dd className="text-lp-muted m-0 text-right">{value}</dd>
                   </div>
                 ))}
-                <div className="text-lp-ink flex justify-between gap-4 rounded-xl bg-[rgba(255,106,26,0.1)] px-3 py-2.5 font-medium">
-                  <dt className="font-unbounded text-lp-accent-hover font-semibold">
+                <div className="text-lp-ink flex justify-between gap-3 rounded-xl bg-[rgba(255,106,26,0.12)] px-3.5 py-3 font-semibold">
+                  <dt className="text-lp-accent-hover font-semibold">
                     rozbirka
                   </dt>
                   <dd className="m-0 text-right">{c}</dd>

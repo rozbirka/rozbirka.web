@@ -150,9 +150,9 @@ export function StartCta() {
     <section
       id="start"
       data-reveal=""
-      className="mx-auto max-w-[1240px] px-6 pb-28 max-sm:px-4 max-sm:pb-16"
+      className="mx-auto max-w-[1240px] px-6 pb-28 max-sm:px-5 max-sm:pb-16"
     >
-      <div className="bg-lp-accent text-lp-bg grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] items-center gap-12 rounded-[36px] px-14 py-16 max-lg:px-10 max-lg:py-12 max-sm:gap-8 max-sm:rounded-[28px] max-sm:px-5 max-sm:py-8">
+      <div className="bg-lp-accent text-lp-bg grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] items-center gap-12 rounded-[36px] px-14 py-16 max-lg:px-10 max-lg:py-12 max-sm:gap-8 max-sm:rounded-3xl max-sm:px-[22px] max-sm:py-7">
         <div className="flex flex-col gap-6">
           <h2 className="font-unbounded m-0 text-[clamp(34px,5vw,64px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance">
             {l('startTitle')}
@@ -170,7 +170,7 @@ export function StartCta() {
             <AppStoreBadge />
           </div>
         </div>
-        <div className="bg-lp-bg text-lp-ink flex flex-col gap-5 rounded-[28px] p-8 max-sm:p-6">
+        <div className="bg-lp-bg text-lp-ink flex flex-col gap-5 rounded-[28px] p-8 max-sm:px-[22px] max-sm:py-7">
           <StartForm />
         </div>
       </div>

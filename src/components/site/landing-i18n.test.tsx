@@ -101,7 +101,7 @@ describe('localized landing', () => {
       'No prying eyes: salespeople don’t see the cost price',
       '9 modules — your whole yard in one system',
       'Why not Excel or a generic auto parts shop system',
-      'Pricing plans',
+      'One plan — every module',
       'Frequently asked questions',
       'Still keeping your books by hand?',
     ]) {

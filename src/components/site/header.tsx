@@ -64,7 +64,7 @@ export function SiteHeader() {
       <header className="sticky top-0 z-10 border-b border-white/[0.07] bg-[rgba(11,11,11,0.92)]">
         <nav
           aria-label={t('mainNav')}
-          className="mx-auto flex max-w-[1240px] items-center gap-8 px-6 py-3 max-xl:gap-3"
+          className="mx-auto flex max-w-[1240px] items-center gap-8 px-6 py-3 max-xl:gap-3 max-sm:px-5 max-sm:py-2.5"
         >
           <a
             href={landingPathFor(locale)}
@@ -92,6 +92,10 @@ export function SiteHeader() {
             </PrimaryLink>
           </div>
 
+          {/* Phones and tablets keep the trial CTA next to the menu button. */}
+          <PrimaryLink to="/login" size="md" className="ml-auto lg:hidden">
+            {l('headerCta')}
+          </PrimaryLink>
           <button
             ref={triggerRef}
             type="button"
@@ -99,7 +103,7 @@ export function SiteHeader() {
             aria-controls="mobile-site-menu"
             aria-label={open ? t('closeMenu') : t('openMenu')}
             onClick={() => setOpen((value) => !value)}
-            className="text-lp-ink ml-auto grid size-11 place-items-center rounded-full border border-white/16 lg:hidden"
+            className="text-lp-ink grid size-11 flex-none place-items-center rounded-full border border-white/16 lg:hidden"
           >
             {open ? (
               <X className="size-5" aria-hidden />
@@ -112,7 +116,7 @@ export function SiteHeader() {
           <nav
             id="mobile-site-menu"
             aria-label={t('mobileNav')}
-            className="mx-auto flex max-w-[1240px] flex-col gap-5 px-6 pt-2 pb-6 lg:hidden"
+            className="mx-auto flex max-w-[1240px] flex-col gap-5 px-6 pt-2 pb-6 max-sm:px-5 lg:hidden"
           >
             <NavLinks
               className="flex-col gap-1"

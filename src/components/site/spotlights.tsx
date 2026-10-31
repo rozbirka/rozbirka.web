@@ -13,7 +13,7 @@ import { useMoney, useSupportHref } from './landing-hooks'
 import { landingMessages, listOf } from './landing-messages'
 
 const twoColumns =
-  'mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-16 px-6 max-sm:gap-10'
+  'mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-16 px-6 max-sm:gap-10 max-sm:px-5'
 
 const cars = [
   {
@@ -53,7 +53,7 @@ export function CarsSpotlight() {
         <SectionTitle>{l('carsTitle')}</SectionTitle>
         <DashList items={listOf(l('carsPoints'))} />
       </div>
-      <div className="bg-lp-surface flex min-w-0 flex-col gap-2 rounded-[28px] border border-white/[0.08] p-7 max-sm:p-5">
+      <div className="bg-lp-surface flex min-w-0 flex-col gap-2 rounded-[28px] border border-white/[0.08] p-7">
         <div className="mb-3 flex flex-col gap-4 border-b border-white/[0.07] pb-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="flex flex-col gap-1">
@@ -252,14 +252,14 @@ export function OrdersSpotlight() {
   return (
     <section
       data-reveal=""
-      className="mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28 max-sm:gap-10 max-sm:py-16"
+      className="mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28 max-sm:gap-10 max-sm:px-5 max-sm:py-16"
     >
       <div className="flex max-w-[760px] flex-col gap-5">
         <Eyebrow>{l('ordersEyebrow')}</Eyebrow>
         <SectionTitle>{l('ordersTitle')}</SectionTitle>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,360px),1fr))] gap-4">
-        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7 max-sm:p-5">
+        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7">
           <div className="flex items-baseline justify-between gap-3">
             <span className="font-unbounded text-[20px] font-semibold">
               {l('orderTitle')}
@@ -299,7 +299,7 @@ export function OrdersSpotlight() {
             </div>
           </div>
         </div>
-        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7 max-sm:p-5">
+        <div className="bg-lp-surface flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-7">
           <span className="font-unbounded text-[20px] font-semibold">
             {l('cashTitle')}
           </span>
@@ -340,18 +340,6 @@ const permissions = [
   [true, false, false],
 ]
 
-/** «✓ Так»: phones show only the mark; the full text stays for readers. */
-function PermissionMark({ text }: { text: string }) {
-  return (
-    <>
-      <span aria-hidden className="sm:hidden">
-        {text.split(' ')[0]}
-      </span>
-      <span className="max-sm:sr-only">{text}</span>
-    </>
-  )
-}
-
 /** «Команда»: who sees what. */
 export function TeamSpotlight() {
   const l = useT(landingMessages)
@@ -364,8 +352,8 @@ export function TeamSpotlight() {
         <SectionTitle>{l('teamTitle')}</SectionTitle>
         <DashList items={listOf(l('teamPoints'))} />
       </div>
-      <div className="bg-lp-surface min-w-0 overflow-x-auto rounded-[28px] border border-white/[0.08] p-3 max-sm:rounded-3xl max-sm:p-1.5">
-        <table className="w-full min-w-[440px] border-collapse text-[15px] max-sm:min-w-0 max-sm:text-[clamp(10.5px,3.4vw,13px)] [&_td]:max-sm:px-[clamp(2px,0.8vw,4px)] [&_td]:max-sm:py-3 [&_th]:max-sm:px-[clamp(2px,0.8vw,4px)] [&_th]:max-sm:py-3">
+      <div className="bg-lp-surface min-w-0 overflow-x-auto rounded-[28px] border border-white/[0.08] p-3 max-sm:rounded-[20px] max-sm:p-1.5">
+        <table className="w-full min-w-[440px] border-collapse text-[15px] max-sm:min-w-0 max-sm:table-fixed max-sm:text-[12.5px] [&_td]:max-sm:px-1 [&_td]:max-sm:py-3 [&_th]:max-sm:px-1 [&_th]:max-sm:py-3 [&_th:first-child]:max-sm:w-[29%] [&_th:first-child]:max-sm:pl-3 [&_th]:max-sm:[overflow-wrap:anywhere]">
           <thead>
             <tr>
               <th
@@ -405,9 +393,7 @@ export function TeamSpotlight() {
                       allowed ? 'text-lp-ink' : 'text-lp-dim',
                     )}
                   >
-                    <PermissionMark
-                      text={allowed ? l('permYes') : l('permNo')}
-                    />
+                    {allowed ? l('permYes') : l('permNo')}
                   </td>
                 ))}
               </tr>
@@ -426,9 +412,9 @@ export function TrialBand() {
   return (
     <section
       data-reveal=""
-      className="mx-auto max-w-[1240px] px-6 pb-28 max-sm:pb-16"
+      className="mx-auto max-w-[1240px] px-6 pb-28 max-sm:px-5 max-sm:pb-16"
     >
-      <div className="bg-lp-ink text-lp-bg flex flex-wrap items-center justify-between gap-8 rounded-[32px] p-12 max-lg:p-10 max-sm:gap-6 max-sm:rounded-[28px] max-sm:p-6">
+      <div className="bg-lp-ink text-lp-bg flex flex-wrap items-center justify-between gap-8 rounded-[32px] p-12 max-lg:p-10 max-sm:gap-6 max-sm:rounded-3xl max-sm:px-[22px] max-sm:py-7">
         <div className="flex max-w-[640px] flex-col gap-3">
           <h2 className="font-unbounded m-0 text-[clamp(26px,3vw,38px)] leading-[1.1] font-semibold tracking-[-0.03em] text-balance">
             {l('midTitle')}
