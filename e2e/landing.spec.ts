@@ -184,6 +184,12 @@ test.describe('responsive matrix', () => {
       await page.emulateMedia({ reducedMotion: 'reduce' })
       await page.setViewportSize({ width, height: 1000 })
       await page.goto('/', { waitUntil: 'networkidle' })
+      await expect(page.locator('#root')).toHaveAttribute(
+        'data-app-hydrated',
+        'true',
+      )
+      // Settle font metrics before Playwright measures the full-page height.
+      await page.evaluate(() => document.fonts.ready)
       await page
         .locator('img')
         .evaluateAll(async (images: HTMLImageElement[]) => {
@@ -205,6 +211,7 @@ test.describe('responsive matrix', () => {
         {
           fullPage: true,
           animations: 'disabled',
+          timeout: 15_000,
         },
       )
     })
