@@ -44,7 +44,7 @@ export function Features() {
               key={id}
               data-reveal=""
               data-spot=""
-              className="lp-spot hover:border-lp-accent/50 relative flex min-h-[280px] flex-col gap-[22px] overflow-hidden rounded-3xl border border-white/[0.08] p-7 max-sm:min-h-0 max-sm:gap-5 max-sm:p-6 transition-[transform,border-color] duration-250 ease-out hover:-translate-y-1"
+              className="lp-spot hover:border-lp-accent/50 relative flex min-h-[280px] flex-col gap-[22px] overflow-hidden rounded-3xl border border-white/[0.08] p-7 max-sm:min-h-0 max-sm:gap-4 max-sm:p-[22px] transition-[transform,border-color] duration-250 ease-out hover:-translate-y-1"
             >
               <span
                 className="text-lp-accent font-mono text-[13px]"

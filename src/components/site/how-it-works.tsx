@@ -32,7 +32,7 @@ export function HowItWorks() {
           {steps.map(([tag, title, text], index) => (
             <li
               key={tag}
-              className="bg-lp-surface flex min-h-[240px] flex-col gap-10 rounded-3xl border border-white/[0.07] p-7 max-sm:min-h-0 max-sm:gap-8 max-sm:p-6"
+              className="bg-lp-surface flex min-h-[240px] flex-col gap-10 rounded-3xl border border-white/[0.07] p-7 max-sm:min-h-0 max-sm:gap-6 max-sm:p-[22px]"
             >
               <div className="flex items-center justify-between">
                 <span className="font-unbounded text-lp-accent text-[15px] font-semibold tabular-nums">

@@ -13,8 +13,8 @@ function CarCard() {
   const money = useMoney()
   const sales = listOf(l('heroSales'))
   return (
-    <div className="relative mx-auto w-full max-w-[544px] min-w-0 pt-10 pb-[70px] pl-6 max-sm:pt-2 max-sm:pb-16 max-sm:pl-0 min-[1072px]:max-w-none">
-      <div className="bg-lp-card relative ml-auto flex max-w-[520px] flex-col gap-6 rounded-[28px] border border-white/[0.09] p-7 max-sm:gap-5 max-sm:rounded-3xl max-sm:p-5 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
+    <div className="relative mx-auto w-full max-w-[544px] min-w-0 pt-10 pb-[70px] pl-6 max-sm:pt-4 max-sm:pb-[76px] max-sm:pl-0 min-[1072px]:max-w-none">
+      <div className="bg-lp-card relative ml-auto flex max-w-[520px] flex-col gap-6 rounded-[28px] border border-white/[0.09] p-7 max-sm:gap-5 max-sm:rounded-[22px] max-sm:p-5 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1.5">
             <span className="text-lp-muted flex items-center gap-2 text-[13px]">
@@ -36,21 +36,21 @@ function CarCard() {
           </span>
         </div>
         <div className="grid grid-cols-3 gap-2.5 max-sm:gap-2">
-          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
+          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-2.5">
             <span className="text-lp-muted text-[13px]">{l('invested')}</span>
-            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[15px]">
               <Count value={3200} prefix="$" />
             </span>
           </div>
-          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
+          <div className="bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-2.5">
             <span className="text-lp-muted text-[13px]">{l('earned')}</span>
-            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[15px]">
               <Count value={5870} prefix="$" />
             </span>
           </div>
-          <div className="bg-lp-accent text-lp-bg flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-3">
+          <div className="bg-lp-accent text-lp-bg flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-2.5">
             <span className="text-[13px]">ROI</span>
-            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[16px]">
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[15px]">
               <Count value={83} prefix="+" suffix="%" />
             </span>
           </div>
@@ -118,7 +118,7 @@ export function Hero() {
       <section
         id="top"
         aria-label={t('heroLabel')}
-        className="relative mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,480px),1fr))] items-center gap-16 px-6 pt-20 pb-24 max-sm:gap-10 max-sm:pt-10 max-sm:pb-16"
+        className="relative mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,480px),1fr))] items-center gap-16 px-6 pt-20 pb-24 max-sm:gap-6 max-sm:px-5 max-sm:pt-10 max-sm:pb-12"
       >
         <div className="flex flex-col gap-7 max-sm:gap-6">
           {/* The category line is part of the H1 so the page heading names
@@ -128,7 +128,7 @@ export function Hero() {
             <span className="font-onest text-lp-muted self-start rounded-full border border-white/14 px-3.5 py-[7px] text-[14px] leading-[normal] font-normal tracking-normal">
               {l('heroBadge')}
             </span>{' '}
-            <span className="font-unbounded text-[clamp(40px,8vw,64px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance min-[1072px]:text-[clamp(40px,5.8vw,84px)]">
+            <span className="font-unbounded text-[clamp(40px,8vw,64px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance min-[1072px]:text-[clamp(40px,5.8vw,84px)] max-sm:text-[36px]">
               {t('heroTitleStart')}{' '}
               <span className="text-lp-accent">{t('heroTitleAccent')}</span>
             </span>

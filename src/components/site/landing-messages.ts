@@ -117,8 +117,11 @@ export const landingMessages = defineMessages({
     compare:
       'Прибуток і ROI по кожному авто=Рахуєш вручну=Немає=Автоматично|Партії й собівартість деталі=Формули ламаються=Частково=З коробки|QR-стікер на кожну деталь=Немає=Штрих-коди товарів=QR + полиця + авто|Робота з телефону=Незручно=Складський додаток=Весь бізнес у телефоні|Приховати собівартість від продавця=Неможливо=Залежить від тарифу=Ролі й права|Створено саме для розбірки=Ні=Один із сегментів=Так',
 
-    pricingEyebrow: 'Тарифи',
-    pricingNote: '14 днів безкоштовно на тарифі Pro',
+    pricingEyebrow: 'Тариф',
+    pricingIncluded: 'Включено',
+    pricingModules:
+      'Авто|Партії|Склад|Стікери|Замовлення|Клієнти|Каси|Звіти|Команда|Інвентаризація|Склади|Нова Пошта|OLX',
+    pricingAsk: 'Є питання — напиши в Telegram →',
     faqTitle: 'Поширені питання',
 
     startTitle: 'Ти все ще ведеш облік вручну?',
@@ -261,8 +264,11 @@ export const landingMessages = defineMessages({
     compare:
       'Profit and ROI per car=Worked out by hand=No=Automatic|Batches and cost per part=Formulas break=Partly=Out of the box|QR sticker on every part=No=Product barcodes=QR + shelf + car|Working from a phone=Awkward=Warehouse app=Your whole business on your phone|Hide cost price from salespeople=Impossible=Depends on the plan=Roles and permissions|Built for car breakers=No=One of many segments=Yes',
 
-    pricingEyebrow: 'Pricing',
-    pricingNote: '14 days free on the Pro plan',
+    pricingEyebrow: 'Plan',
+    pricingIncluded: 'Included',
+    pricingModules:
+      'Cars|Batches|Stock|Labels|Orders|Customers|Tills|Reports|Team|Stocktaking|Warehouses|Nova Poshta|OLX',
+    pricingAsk: 'Questions? Message us on Telegram →',
     faqTitle: 'Frequently asked questions',
 
     startTitle: 'Still keeping your books by hand?',
@@ -407,8 +413,11 @@ export const landingMessages = defineMessages({
     compare:
       'Zysk i ROI z każdego auta=Liczysz ręcznie=Brak=Automatycznie|Partie i koszt części=Formuły się psują=Częściowo=Od razu|Naklejka QR na każdą część=Brak=Kody kreskowe towarów=QR + półka + auto|Praca z telefonu=Niewygodnie=Aplikacja magazynowa=Cały biznes w telefonie|Ukrycie kosztu zakupu przed sprzedawcą=Niemożliwe=Zależy od planu=Role i uprawnienia|Stworzony dla demontażu aut=Nie=Jeden z segmentów=Tak',
 
-    pricingEyebrow: 'Cennik',
-    pricingNote: '14 dni za darmo na planie Pro',
+    pricingEyebrow: 'Plan',
+    pricingIncluded: 'W cenie',
+    pricingModules:
+      'Auta|Partie|Magazyn|Naklejki|Zamówienia|Klienci|Kasy|Raporty|Zespół|Inwentaryzacja|Magazyny|Nova Poshta|OLX',
+    pricingAsk: 'Masz pytania? Napisz na Telegramie →',
     faqTitle: 'Najczęstsze pytania',
 
     startTitle: 'Nadal prowadzisz ewidencję ręcznie?',

@@ -32,7 +32,7 @@ export function Pains() {
           <tbody className="max-sm:block">
             {pains.map(([before, after]) => (
               <tr key={before} data-reveal="" className="group max-sm:block">
-                <td className="text-lp-muted border-t border-white/[0.07] px-7 py-[22px] align-top text-[17px] leading-[1.45] italic max-sm:block max-sm:px-5 max-sm:pt-5 max-sm:pb-3 max-sm:text-[16px] max-sm:group-first:border-t-0">
+                <td className="text-lp-muted border-t border-white/[0.07] px-7 py-[22px] align-top text-[17px] leading-[1.45] italic max-sm:block max-sm:px-5 max-sm:py-3.5 max-sm:text-[16px] max-sm:group-first:border-t-0">
                   <span className="flex gap-3">
                     <span className="flex-none not-italic" aria-hidden>
                       ✕
@@ -40,7 +40,7 @@ export function Pains() {
                     «{before}»
                   </span>
                 </td>
-                <td className="text-lp-ink border-t border-white/[0.07] bg-[rgba(255,106,26,0.06)] px-7 py-[22px] align-top text-[17px] leading-[1.45] max-sm:block max-sm:border-t-0 max-sm:px-5 max-sm:py-4 max-sm:text-[16px]">
+                <td className="text-lp-ink border-t border-white/[0.07] bg-[rgba(255,106,26,0.06)] px-7 py-[22px] align-top text-[17px] leading-[1.45] max-sm:block max-sm:border-t-0 max-sm:px-5 max-sm:py-3.5 max-sm:text-[16px]">
                   <span className="flex gap-3">
                     <span className="text-lp-accent flex-none" aria-hidden>
                       ✓

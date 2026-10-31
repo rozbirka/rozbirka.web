@@ -3,16 +3,43 @@ import { Link } from 'react-router'
 import { intlLocale, useLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-/** Orange square + wordmark, as in the header and footer of the mock-up. */
-export function LandingLogo({ className }: { className?: string }) {
+/** Hexagon nut mark + wordmark (header 24px, footer 26px in the mock-up). */
+export function LandingLogo({
+  className,
+  markSize = 24,
+}: {
+  className?: string
+  markSize?: number
+}) {
   return (
     <span
       className={cn(
-        'font-unbounded flex items-center gap-2 font-bold tracking-[-0.02em]',
+        'font-unbounded flex items-center gap-[9px] font-bold tracking-[-0.02em]',
         className,
       )}
     >
-      <span className="bg-lp-accent size-2.5 rounded-[2px]" aria-hidden />
+      <svg
+        viewBox="0 0 24 24"
+        width={markSize}
+        height={markSize}
+        className="block flex-none"
+        aria-hidden
+      >
+        <path
+          fill="#ff6a1a"
+          fillRule="evenodd"
+          d="M6.2 1.9h11.6L23.6 12l-5.8 10.1H6.2L.4 12zM12 7.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z"
+        />
+        <circle
+          cx="12"
+          cy="12"
+          r="6.6"
+          fill="none"
+          stroke="#0b0b0b"
+          strokeOpacity=".28"
+          strokeWidth="1"
+        />
+      </svg>
       rozbirka
     </span>
   )
@@ -61,7 +88,7 @@ export function SectionInner({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        'mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28 max-sm:gap-10 max-sm:py-16',
+        'mx-auto flex max-w-[1240px] flex-col gap-14 px-6 py-28 max-sm:gap-10 max-sm:px-5 max-sm:py-16',
         className,
       )}
       {...props}
@@ -109,7 +136,7 @@ export function DashList({
       {items.map((item) => (
         <li
           key={item}
-          className="text-lp-soft flex gap-3.5 text-[17px] leading-[1.45] max-sm:gap-3 max-sm:text-[16px]"
+          className="text-lp-soft flex gap-3.5 text-[17px] leading-[1.45]"
         >
           <span className="text-lp-accent" aria-hidden>
             —

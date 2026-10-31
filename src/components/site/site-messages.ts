@@ -34,7 +34,7 @@ export const siteMessages = defineMessages({
     appStoreLine1: 'Available on the',
     heroLabel: 'Головний блок',
     heroCta: 'Спробувати безкоштовно',
-    pricingTitle: 'Тарифні плани',
+    pricingTitle: 'Один тариф — усі модулі',
     pricingTrial: {
       one: '{count} день безкоштовно',
       few: '{count} дні безкоштовно',
@@ -71,7 +71,7 @@ export const siteMessages = defineMessages({
     appStoreLine1: 'Download on the',
     heroLabel: 'Introduction',
     heroCta: 'Start free trial',
-    pricingTitle: 'Pricing plans',
+    pricingTitle: 'One plan — every module',
     pricingTrial: {
       one: '{count} day free',
       other: '{count} days free',
@@ -106,7 +106,7 @@ export const siteMessages = defineMessages({
     appStoreLine1: 'Pobierz z',
     heroLabel: 'Wprowadzenie',
     heroCta: 'Wypróbuj za darmo',
-    pricingTitle: 'Plany cenowe',
+    pricingTitle: 'Jeden plan — wszystkie moduły',
     pricingTrial: {
       one: '{count} dzień za darmo',
       few: '{count} dni za darmo',
