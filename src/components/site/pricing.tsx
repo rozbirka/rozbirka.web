@@ -95,12 +95,12 @@ export function Pricing() {
             </h4>
             <ul
               role="list"
-              className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,150px),1fr))] gap-x-6 gap-y-3.5 p-0"
+              className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,150px),1fr))] gap-x-6 gap-y-3.5 p-0 max-sm:grid-cols-2 max-sm:gap-x-4 max-sm:gap-y-3"
             >
               {listOf(l('pricingModules')).map((module) => (
                 <li
                   key={module}
-                  className="text-lp-soft flex items-baseline gap-3 text-[17px] leading-[1.4]"
+                  className="text-lp-soft flex items-baseline gap-3 text-[17px] leading-[1.4] max-sm:text-[15px]"
                 >
                   <span className="text-lp-accent flex-none" aria-hidden>
                     ✓

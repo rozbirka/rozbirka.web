@@ -1,14 +1,12 @@
 import { useId, useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
 import { supportApi } from '@/api/support'
 import { useLocale, useT } from '@/i18n'
-import { PrimaryLink } from './landing-ui'
+import { Eyebrow, PrimaryLink, SectionTitle } from './landing-ui'
 import { useSupportHref } from './landing-hooks'
-import { landingMessages } from './landing-messages'
-import { AppStoreBadge } from './store-badges'
+import { landingMessages, listOf } from './landing-messages'
 
 const field =
-  'bg-lp-card text-lp-ink h-[52px] rounded-[14px] border border-white/14 px-4 text-[17px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lp-accent'
+  'bg-lp-bg text-lp-ink h-[52px] rounded-[14px] border border-white/14 px-4 text-[17px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lp-accent'
 
 /**
  * «Допоможемо почати». Core posts the lead to the Telegram support group,
@@ -77,7 +75,9 @@ function StartForm() {
         <h3 className="font-unbounded m-0 text-[22px] font-semibold">
           {l('formTitle')}
         </h3>
-        <p className="text-lp-muted m-0 text-[15px]">{l('formIntro')}</p>
+        <p className="text-lp-muted m-0 text-[15px] leading-[1.5]">
+          {l('formIntro')}
+        </p>
       </div>
       <div className="text-lp-muted flex flex-col gap-2 text-[14px]">
         <label htmlFor={nameId}>{l('formName')}</label>
@@ -143,7 +143,7 @@ function StartForm() {
   )
 }
 
-/** Closing orange block: «Ти все ще ведеш облік вручну?» + lead form. */
+/** Closing block: «Ти все ще ведеш облік вручну?», what you get, lead form. */
 export function StartCta() {
   const l = useT(landingMessages)
   return (
@@ -152,25 +152,34 @@ export function StartCta() {
       data-reveal=""
       className="mx-auto max-w-[1240px] px-6 pb-28 max-sm:px-5 max-sm:pb-16"
     >
-      <div className="bg-lp-accent text-lp-bg grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] items-center gap-12 rounded-[36px] px-14 py-16 max-lg:px-10 max-lg:py-12 max-sm:gap-8 max-sm:rounded-3xl max-sm:px-[22px] max-sm:py-7">
-        <div className="flex flex-col gap-6">
-          <h2 className="font-unbounded m-0 text-[clamp(34px,5vw,64px)] leading-[1.02] font-semibold tracking-[-0.035em] text-balance">
-            {l('startTitle')}
-          </h2>
-          <p className="m-0 max-w-[480px] text-[20px] leading-[1.5] max-sm:text-[17px]">
+      <div className="relative grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] items-center gap-12 overflow-hidden rounded-[36px] border border-[rgba(255,106,26,0.35)] bg-[radial-gradient(90%_120%_at_0%_0%,rgba(255,106,26,0.28),transparent_55%),var(--color-lp-surface)] px-14 py-16 max-lg:px-10 max-lg:py-12 max-sm:gap-8 max-sm:rounded-3xl max-sm:px-[22px] max-sm:py-7">
+        <div className="flex flex-col gap-7">
+          <Eyebrow>{l('startEyebrow')}</Eyebrow>
+          <SectionTitle>
+            {l('startTitleStart')}{' '}
+            <span className="text-lp-accent">{l('startTitleAccent')}</span>
+          </SectionTitle>
+          <p className="text-lp-muted m-0 max-w-[480px] text-[18px] leading-[1.5] text-pretty">
             {l('startBody')}
           </p>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              to="/login"
-              className="bg-lp-bg text-lp-ink hover:text-lp-ink flex h-14 items-center justify-center rounded-full px-7 max-sm:w-full text-[17px] font-semibold transition-transform duration-150 ease-out hover:bg-[#222] active:scale-[0.97]"
-            >
-              {l('startFree')}
-            </Link>
-            <AppStoreBadge />
-          </div>
+          <ul role="list" className="m-0 flex list-none flex-col gap-3.5 p-0">
+            {listOf(l('startPoints')).map((point) => (
+              <li
+                key={point}
+                className="text-lp-soft flex items-center gap-3.5 text-[17px]"
+              >
+                <span
+                  className="bg-lp-accent text-lp-bg flex size-7 flex-none items-center justify-center rounded-full text-[14px] font-bold"
+                  aria-hidden
+                >
+                  ✓
+                </span>
+                {point}
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="bg-lp-bg text-lp-ink flex flex-col gap-5 rounded-[28px] p-8 max-sm:px-[22px] max-sm:py-7">
+        <div className="bg-lp-bg text-lp-ink flex flex-col gap-5 rounded-[28px] border border-white/[0.08] p-8 shadow-[0_30px_80px_rgba(0,0,0,0.45)] max-sm:px-[22px] max-sm:py-7">
           <StartForm />
         </div>
       </div>

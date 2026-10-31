@@ -4,7 +4,7 @@ import { defineMessages } from '@/i18n/messages'
 export const featuresMessages = defineMessages({
   uk: {
     eyebrow: 'Можливості',
-    title: '9 модулів — вся розбірка в одній системі',
+    title: '13 модулів в одній системі',
     intro:
       'Усі модулі в одному інтерфейсі: від обліку авто до фінансів і команди.',
 
@@ -73,10 +73,30 @@ export const featuresMessages = defineMessages({
     team3: 'Розумієш хто скільки продав і заробив',
     team4: 'Налаштовуєш права: що може бачити, що редагувати',
     team5: 'Без зайвих очей: продавець не бачить собівартість',
+
+    warehousesTitle: 'Склади',
+    warehouses1: 'Кілька складів чи точок в одній системі',
+    warehouses2: 'Бачиш, на якому складі лежить кожна деталь',
+    warehouses3: 'Переміщуєш деталі між складами в кілька кліків',
+
+    stocktakingTitle: 'Інвентаризація',
+    stocktaking1: 'Перевіряєш склад скануванням QR, без паперових списків',
+    stocktaking2: 'Одразу бачиш, чого не вистачає і що зайве',
+    stocktaking3: 'Історія кожної інвентаризації зберігається',
+
+    novaPoshtaTitle: 'Нова Пошта',
+    novaPoshta1: 'Створюєш ТТН прямо із замовлення',
+    novaPoshta2: 'Номер накладної привʼязаний до замовлення',
+    novaPoshta3: 'Дані клієнта не переписуєш вручну',
+
+    olxTitle: 'OLX',
+    olx1: 'Публікуєш оголошення з картки деталі',
+    olx2: 'Фото, ціна й опис підтягуються автоматично',
+    olx3: 'Продана деталь не висить в оголошеннях',
   },
   'en-GB': {
     eyebrow: 'Features',
-    title: '9 modules — your whole yard in one system',
+    title: '13 modules in one system',
     intro:
       'All modules in one interface: from tracking cars to finances and your team.',
 
@@ -147,10 +167,30 @@ export const featuresMessages = defineMessages({
     team3: 'Know who sold and earned how much',
     team4: 'Set permissions: what each person can see and edit',
     team5: 'No prying eyes: sellers can’t see cost prices',
+
+    warehousesTitle: 'Warehouses',
+    warehouses1: 'Several warehouses or sites in one system',
+    warehouses2: 'See which warehouse holds every part',
+    warehouses3: 'Move parts between warehouses in a few clicks',
+
+    stocktakingTitle: 'Stocktaking',
+    stocktaking1: 'Check stock by scanning QR codes, no paper lists',
+    stocktaking2: 'See straight away what is missing and what is extra',
+    stocktaking3: 'The history of every stocktake is kept',
+
+    novaPoshtaTitle: 'Nova Poshta',
+    novaPoshta1: 'Create a waybill straight from the order',
+    novaPoshta2: 'The waybill number is linked to the order',
+    novaPoshta3: 'No retyping customer details',
+
+    olxTitle: 'OLX',
+    olx1: 'Publish a listing from the part card',
+    olx2: 'Photos, price and description fill in automatically',
+    olx3: 'A sold part doesn’t linger in listings',
   },
   pl: {
     eyebrow: 'Funkcje',
-    title: '9 modułów — cały demontaż w jednym systemie',
+    title: '13 modułów w jednym systemie',
     intro:
       'Wszystkie moduły w jednym interfejsie: od ewidencji aut po finanse i zespół.',
 
@@ -219,5 +259,25 @@ export const featuresMessages = defineMessages({
     team3: 'Wiesz, kto ile sprzedał i zarobił',
     team4: 'Ustawiasz uprawnienia: co można widzieć, a co edytować',
     team5: 'Bez zbędnych oczu: sprzedawca nie widzi kosztu zakupu',
+
+    warehousesTitle: 'Magazyny',
+    warehouses1: 'Kilka magazynów lub punktów w jednym systemie',
+    warehouses2: 'Widzisz, w którym magazynie leży każda część',
+    warehouses3: 'Przenosisz części między magazynami w kilka kliknięć',
+
+    stocktakingTitle: 'Inwentaryzacja',
+    stocktaking1: 'Sprawdzasz magazyn, skanując kody QR, bez papierowych list',
+    stocktaking2: 'Od razu widzisz, czego brakuje, a co jest w nadmiarze',
+    stocktaking3: 'Historia każdej inwentaryzacji jest zapisywana',
+
+    novaPoshtaTitle: 'Nova Poshta',
+    novaPoshta1: 'Tworzysz list przewozowy prosto z zamówienia',
+    novaPoshta2: 'Numer listu przewozowego jest przypisany do zamówienia',
+    novaPoshta3: 'Nie przepisujesz ręcznie danych klienta',
+
+    olxTitle: 'OLX',
+    olx1: 'Publikujesz ogłoszenie z karty części',
+    olx2: 'Zdjęcia, cena i opis uzupełniają się automatycznie',
+    olx3: 'Sprzedana część nie wisi w ogłoszeniach',
   },
 })

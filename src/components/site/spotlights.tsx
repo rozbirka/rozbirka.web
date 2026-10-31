@@ -184,10 +184,10 @@ export function StockSpotlight() {
     >
       <div className={cn(twoColumns, 'py-28 max-sm:py-16')}>
         <div
-          className="flex flex-wrap justify-center gap-5 max-[1031px]:order-last"
+          className="flex flex-wrap justify-center gap-5 max-sm:order-last max-sm:gap-3"
           aria-hidden
         >
-          <div className="bg-lp-ink text-lp-bg flex w-[260px] flex-col gap-[18px] rounded-3xl p-[22px] shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
+          <div className="bg-lp-ink text-lp-bg flex w-[260px] flex-col gap-[18px] rounded-3xl p-[22px] max-sm:w-[min(100%,240px)] shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
             <div className="relative aspect-square">
               <span className="lp-scan bg-lp-accent absolute -right-[6%] -left-[6%] z-[1] h-0.5 rounded-[2px] shadow-[0_0_12px_2px_rgba(255,106,26,0.7)]" />
               <QrPattern className="size-full" />
@@ -202,7 +202,7 @@ export function StockSpotlight() {
               <span className="font-mono text-[13px]">#A-0142</span>
             </div>
           </div>
-          <div className="bg-lp-bg flex w-[220px] flex-col gap-3 self-end rounded-3xl border border-white/10 p-5">
+          <div className="bg-lp-bg flex w-[220px] flex-col gap-3 self-end rounded-3xl border border-white/10 p-5 max-sm:w-full max-sm:self-stretch">
             <span className="text-lp-muted text-[13px]">
               {l('statusTitle')}
             </span>

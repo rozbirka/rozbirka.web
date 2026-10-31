@@ -1,6 +1,8 @@
 import { useT, type MessageKey } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { Eyebrow, SectionInner, SectionTitle } from './landing-ui'
 import { featuresMessages } from './features-messages'
+import { phoneCarousel } from './landing-classes'
 
 type FeatureKey = MessageKey<typeof featuresMessages>
 
@@ -9,15 +11,19 @@ const modules = [
   'cars',
   'intakes',
   'parts',
+  'warehouses',
+  'stocktaking',
   'stickers',
   'orders',
   'customers',
   'cash',
   'reports',
   'team',
+  'novaPoshta',
+  'olx',
 ] as const
 
-/** «Можливості»: nine module cards with their first three benefits. */
+/** «Можливості»: thirteen module cards with their first three benefits. */
 export function Features() {
   const t = useT(featuresMessages)
   return (
@@ -37,14 +43,17 @@ export function Features() {
         </div>
         <ul
           role="list"
-          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4 p-0"
+          className={cn(
+            'm-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-4 p-0',
+            phoneCarousel,
+          )}
         >
           {modules.map((id, index) => (
             <li
               key={id}
               data-reveal=""
               data-spot=""
-              className="lp-spot hover:border-lp-accent/50 relative flex min-h-[280px] flex-col gap-[22px] overflow-hidden rounded-3xl border border-white/[0.08] p-7 max-sm:min-h-0 max-sm:gap-4 max-sm:p-[22px] transition-[transform,border-color] duration-250 ease-out hover:-translate-y-1"
+              className="lp-spot hover:border-lp-accent/50 relative flex flex-col gap-4 overflow-hidden rounded-3xl border border-white/[0.08] p-7 max-sm:p-[22px] transition-[transform,border-color] duration-250 ease-out hover:-translate-y-1"
             >
               <span
                 className="text-lp-accent font-mono text-[13px]"
@@ -52,17 +61,14 @@ export function Features() {
               >
                 {String(index + 1).padStart(2, '0')}
               </span>
-              <h3 className="font-unbounded m-0 text-[28px] font-semibold tracking-[-0.03em] max-sm:text-[24px]">
+              <h3 className="font-unbounded m-0 text-[24px] font-semibold tracking-[-0.03em]">
                 {t(`${id}Title`)}
               </h3>
-              <ul
-                role="list"
-                className="m-0 mt-auto flex list-none flex-col gap-2.5 p-0"
-              >
+              <ul role="list" className="m-0 flex list-none flex-col gap-2 p-0">
                 {[1, 2, 3].map((n) => (
                   <li
                     key={n}
-                    className="text-lp-bullet flex gap-3 text-[16px] leading-[1.45]"
+                    className="text-lp-bullet flex gap-3 text-[15px] leading-[1.4]"
                   >
                     <span className="text-lp-accent flex-none" aria-hidden>
                       —

@@ -99,18 +99,23 @@ describe('localized landing', () => {
       'Clear profit on every car',
       'Every part in its place — found in seconds',
       'No prying eyes: salespeople don’t see the cost price',
-      '9 modules — your whole yard in one system',
+      '13 modules in one system',
       'Why not Excel or a generic auto parts shop system',
       'One plan — every module',
       'Frequently asked questions',
-      'Still keeping your books by hand?',
     ]) {
       expect(screen.getAllByText(title).length).toBeGreaterThan(0)
     }
     expect(
       screen.getByRole('heading', { level: 3, name: 'Tills' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('14 days free')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Still keeping your books by hand?',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('14 days free').length).toBeGreaterThan(0)
     expect(
       await screen.findByRole('link', { name: 'Start 14-day free trial' }),
     ).toBeInTheDocument()
@@ -138,7 +143,7 @@ describe('localized landing', () => {
         name: 'Program do demontażu aut — CRM i ERP Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('14 dni za darmo')).toBeInTheDocument()
+    expect(screen.getAllByText('14 dni za darmo').length).toBeGreaterThan(0)
     expect(
       screen.getByRole('link', { name: 'Zacznij 14 dni za darmo' }),
     ).toBeInTheDocument()

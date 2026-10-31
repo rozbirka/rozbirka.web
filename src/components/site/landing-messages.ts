@@ -16,7 +16,7 @@ export const landingMessages = defineMessages({
     heroBadge: 'Програма для авторозбірки — CRM і ERP',
     heroDemo: 'Не готовий реєструватись? Покажемо демо в Telegram за 10 хвилин',
     heroStats:
-      '14 днів=безкоштовно|9 модулів=в одному інтерфейсі|Веб + iOS=версія і застосунок',
+      '14 днів=безкоштовно|13 модулів=в одному інтерфейсі|Веб + iOS=версія і застосунок',
     cardStatus: 'Профіль авто · онлайн',
     cardPaidOff: 'Окупилось',
     invested: 'Вклав',
@@ -124,9 +124,13 @@ export const landingMessages = defineMessages({
     pricingAsk: 'Є питання — напиши в Telegram →',
     faqTitle: 'Поширені питання',
 
-    startTitle: 'Ти все ще ведеш облік вручну?',
+    startEyebrow: 'Старт за 1 день',
+    startTitleStart: 'Ти все ще ведеш облік',
+    startTitleAccent: 'вручну?',
     startBody:
-      'Переходь на rozbirka: 14 днів безкоштовно, без картки. Авто, склад, замовлення й каси в одній системі. Є веб-версія і застосунок в App Store.',
+      'Авто, склад, замовлення й каси в одній системі. Є веб-версія і застосунок в App Store.',
+    startPoints:
+      '14 днів безкоштовно|Без картки|Допоможемо налаштувати розбірку',
     formTitle: 'Допоможемо почати',
     formIntro:
       'Залиш контакт — менеджер напише в Telegram або зателефонує й допоможе налаштувати розбірку.',
@@ -161,7 +165,7 @@ export const landingMessages = defineMessages({
     heroDemo:
       'Not ready to sign up? We’ll show you a demo on Telegram in 10 minutes',
     heroStats:
-      '14 days=free|9 modules=in one interface|Web + iOS=web app and iPhone app',
+      '14 days=free|13 modules=in one interface|Web + iOS=web app and iPhone app',
     cardStatus: 'Car profile · live',
     cardPaidOff: 'Paid off',
     invested: 'Invested',
@@ -271,9 +275,12 @@ export const landingMessages = defineMessages({
     pricingAsk: 'Questions? Message us on Telegram →',
     faqTitle: 'Frequently asked questions',
 
-    startTitle: 'Still keeping your books by hand?',
+    startEyebrow: 'Up and running in a day',
+    startTitleStart: 'Still keeping your books',
+    startTitleAccent: 'by hand?',
     startBody:
-      'Switch to rozbirka: 14 days free, no card needed. Cars, stock, orders and tills in one system. There’s a web app and an iPhone app on the App Store.',
+      'Cars, stock, orders and tills in one system. There’s a web app and an iPhone app on the App Store.',
+    startPoints: '14 days free|No card needed|We’ll help set up your yard',
     formTitle: 'We’ll help you get started',
     formIntro:
       'Leave your contact — a manager will message you on Telegram or call and help set up your yard.',
@@ -308,7 +315,7 @@ export const landingMessages = defineMessages({
     heroDemo:
       'Nie chcesz się jeszcze rejestrować? Pokażemy demo na Telegramie w 10 minut',
     heroStats:
-      '14 dni=za darmo|9 modułów=w jednym interfejsie|Web + iOS=wersja przeglądarkowa i aplikacja',
+      '14 dni=za darmo|13 modułów=w jednym interfejsie|Web + iOS=wersja przeglądarkowa i aplikacja',
     cardStatus: 'Profil auta · online',
     cardPaidOff: 'Zwróciło się',
     invested: 'Włożone',
@@ -420,9 +427,13 @@ export const landingMessages = defineMessages({
     pricingAsk: 'Masz pytania? Napisz na Telegramie →',
     faqTitle: 'Najczęstsze pytania',
 
-    startTitle: 'Nadal prowadzisz ewidencję ręcznie?',
+    startEyebrow: 'Start w 1 dzień',
+    startTitleStart: 'Nadal prowadzisz ewidencję',
+    startTitleAccent: 'ręcznie?',
     startBody:
-      'Przejdź na rozbirka: 14 dni za darmo, bez karty. Auta, magazyn, zamówienia i kasy w jednym systemie. Jest wersja przeglądarkowa i aplikacja w App Store.',
+      'Auta, magazyn, zamówienia i kasy w jednym systemie. Jest wersja przeglądarkowa i aplikacja w App Store.',
+    startPoints:
+      '14 dni za darmo|Bez karty|Pomożemy skonfigurować Twój demontaż',
     formTitle: 'Pomożemy zacząć',
     formIntro:
       'Zostaw kontakt — menedżer napisze na Telegramie lub zadzwoni i pomoże skonfigurować Twój demontaż.',
