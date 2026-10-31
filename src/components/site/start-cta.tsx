@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { useT } from '@/i18n'
+import { supportApi } from '@/api/support'
+import { useLocale, useT } from '@/i18n'
 import { PrimaryLink } from './landing-ui'
 import { useSupportHref } from './landing-hooks'
 import { landingMessages, listOf } from './landing-messages'
@@ -10,24 +11,45 @@ const field =
   'bg-lp-card text-lp-ink h-[52px] rounded-[14px] border border-white/14 px-4 text-[17px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lp-accent'
 
 /**
- * «Допоможемо почати». There is no lead endpoint yet, so the form hands the
- * visitor over to the support bot in Telegram, where the team picks it up.
+ * «Допоможемо почати». Core posts the lead to the Telegram support group,
+ * where managers pick it up; on failure the visitor gets the bot link.
  */
 function StartForm() {
   const l = useT(landingMessages)
+  const { locale } = useLocale()
   const supportHref = useSupportHref()
-  const [sent, setSent] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>(
+    'idle',
+  )
   const nameId = useId()
   const contactId = useId()
   const carsId = useId()
+  const errorId = useId()
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (supportHref) window.open(supportHref, '_blank', 'noopener,noreferrer')
-    setSent(true)
+    if (status === 'sending') return
+    const form = new FormData(event.currentTarget)
+    const field = (name: string) => {
+      const value = form.get(name)
+      return typeof value === 'string' ? value : ''
+    }
+    setStatus('sending')
+    try {
+      await supportApi.createLead({
+        name: field('name'),
+        contact: field('phone'),
+        cars: field('cars'),
+        locale,
+        website: field('website'),
+      })
+      setStatus('sent')
+    } catch {
+      setStatus('error')
+    }
   }
 
-  if (sent) {
+  if (status === 'sent') {
     return (
       <div className="flex flex-col gap-4 py-6" role="status">
         <span
@@ -48,7 +70,11 @@ function StartForm() {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4">
+    <form
+      onSubmit={(event) => void submit(event)}
+      aria-describedby={status === 'error' ? errorId : undefined}
+      className="flex flex-col gap-4"
+    >
       <div className="flex flex-col gap-1.5">
         <h3 className="font-unbounded m-0 text-[22px] font-semibold">
           {l('formTitle')}
@@ -61,6 +87,7 @@ function StartForm() {
           id={nameId}
           required
           name="name"
+          maxLength={80}
           autoComplete="name"
           placeholder={l('formNamePlaceholder')}
           className={field}
@@ -72,6 +99,8 @@ function StartForm() {
           id={contactId}
           required
           name="phone"
+          minLength={3}
+          maxLength={64}
           autoComplete="tel"
           placeholder={l('formContactPlaceholder')}
           className={field}
@@ -85,11 +114,30 @@ function StartForm() {
           ))}
         </select>
       </div>
+      {/* Honeypot for form bots: off-screen, skipped by keyboard and readers. */}
+      <input
+        type="text"
+        name="website"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden
+        className="absolute -left-[9999px] h-px w-px opacity-0"
+      />
+      {status === 'error' && (
+        <p
+          id={errorId}
+          role="alert"
+          className="m-0 rounded-[14px] bg-[rgba(255,106,26,0.12)] px-4 py-3 text-[15px] leading-[1.45]"
+        >
+          {l('formError')}
+        </p>
+      )}
       <button
         type="submit"
-        className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover mt-1 flex h-14 cursor-pointer items-center justify-center rounded-full text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97]"
+        disabled={status === 'sending'}
+        className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover mt-1 flex h-14 cursor-pointer items-center justify-center rounded-full text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97] disabled:cursor-wait disabled:opacity-70"
       >
-        {l('formSubmit')}
+        {status === 'sending' ? l('formSending') : l('formSubmit')}
       </button>
       {supportHref && (
         <a

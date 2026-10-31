@@ -126,7 +126,7 @@ export const landingMessages = defineMessages({
       'Переходь на rozbirka: 14 днів безкоштовно, без картки. Авто, склад, замовлення й каси в одній системі. Є веб-версія і застосунок в App Store.',
     formTitle: 'Допоможемо почати',
     formIntro:
-      'Залиш контакт — напишемо з Telegram-бота підтримки і допоможемо налаштувати розбірку.',
+      'Залиш контакт — менеджер напише в Telegram або зателефонує й допоможе налаштувати розбірку.',
     formName: "Ім'я",
     formNamePlaceholder: 'Олег',
     formContact: 'Телефон або Telegram',
@@ -134,6 +134,9 @@ export const landingMessages = defineMessages({
     formCars: 'Скільки авто зараз на розбірці',
     formCarsOptions: 'До 5|5–20|Понад 20',
     formSubmit: 'Отримати 14 днів безкоштовно',
+    formSending: 'Надсилаємо…',
+    formError:
+      'Не вдалося надіслати заявку. Спробуй ще раз або напиши нам у Telegram.',
     formTelegram: 'або одразу напиши в Telegram-бот →',
     formThanks: 'Дякуємо!',
     formThanksBody:
@@ -269,7 +272,7 @@ export const landingMessages = defineMessages({
       'Switch to rozbirka: 14 days free, no card needed. Cars, stock, orders and tills in one system. There’s a web app and an iPhone app on the App Store.',
     formTitle: 'We’ll help you get started',
     formIntro:
-      'Leave your contact — our Telegram support bot will message you and help set up your yard.',
+      'Leave your contact — a manager will message you on Telegram or call and help set up your yard.',
     formName: 'Name',
     formNamePlaceholder: 'Oleh',
     formContact: 'Phone or Telegram',
@@ -277,6 +280,9 @@ export const landingMessages = defineMessages({
     formCars: 'How many cars are you stripping now',
     formCarsOptions: 'Up to 5|5–20|More than 20',
     formSubmit: 'Get 14 days free',
+    formSending: 'Sending…',
+    formError:
+      'We couldn’t send your request. Try again or message us on Telegram.',
     formTelegram: 'or message the Telegram bot straight away →',
     formThanks: 'Thank you!',
     formThanksBody:
@@ -414,7 +420,7 @@ export const landingMessages = defineMessages({
       'Przejdź na rozbirka: 14 dni za darmo, bez karty. Auta, magazyn, zamówienia i kasy w jednym systemie. Jest wersja przeglądarkowa i aplikacja w App Store.',
     formTitle: 'Pomożemy zacząć',
     formIntro:
-      'Zostaw kontakt — napiszemy z bota wsparcia na Telegramie i pomożemy skonfigurować Twój demontaż.',
+      'Zostaw kontakt — menedżer napisze na Telegramie lub zadzwoni i pomoże skonfigurować Twój demontaż.',
     formName: 'Imię',
     formNamePlaceholder: 'Ołeh',
     formContact: 'Telefon lub Telegram',
@@ -422,6 +428,9 @@ export const landingMessages = defineMessages({
     formCars: 'Ile aut masz teraz w demontażu',
     formCarsOptions: 'Do 5|5–20|Ponad 20',
     formSubmit: 'Odbierz 14 dni za darmo',
+    formSending: 'Wysyłamy…',
+    formError:
+      'Nie udało się wysłać zgłoszenia. Spróbuj ponownie albo napisz do nas na Telegramie.',
     formTelegram: 'albo napisz od razu do bota na Telegramie →',
     formThanks: 'Dziękujemy!',
     formThanksBody:
