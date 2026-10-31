@@ -79,4 +79,41 @@ describe('SiteHeader mobile menu', () => {
       screen.queryByRole('navigation', { name: 'Мобільна навігація' }),
     ).not.toBeInTheDocument()
   })
+
+  it('closes after the mobile App Store badge is selected', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+    const trigger = screen.getByRole('button', { name: 'Відкрити меню' })
+    await user.click(trigger)
+    const mobileNav = screen.getByRole('navigation', {
+      name: 'Мобільна навігація',
+    })
+
+    await user.click(
+      within(mobileNav).getByRole('link', {
+        name: 'Завантажити в App Store',
+      }),
+    )
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('shows the App Store badge in the desktop header', () => {
+    render(
+      <MemoryRouter>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+    const nav = screen.getByRole('navigation', { name: 'Головна навігація' })
+    expect(
+      within(nav).getByRole('link', { name: 'Завантажити в App Store' }),
+    ).toHaveAttribute(
+      'href',
+      'https://apps.apple.com/ua/app/rozbirka/id6762130912',
+    )
+  })
 })

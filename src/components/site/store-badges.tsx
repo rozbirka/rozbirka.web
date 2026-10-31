@@ -17,7 +17,7 @@ export function AppStoreBadge({
       rel="noreferrer"
       onClick={onClick}
       aria-label={t('appStoreLabel')}
-      className="flex min-h-12 items-center gap-2.5 rounded-full bg-black px-4 ring-1 ring-white/10 transition-colors hover:bg-white/[0.08]"
+      className="flex min-h-12 flex-none items-center gap-2.5 rounded-full bg-black px-4 whitespace-nowrap ring-1 ring-white/10 transition-colors hover:bg-white/[0.08]"
     >
       <AppleLogo className="size-7 text-white" />
       <div className="flex flex-col leading-none">

@@ -10,6 +10,7 @@ import { LandingLogo, PrimaryLink } from './landing-ui'
 import { landingMessages } from './landing-messages'
 import { LanguageMenu, LanguageSegments } from './language-switcher'
 import { siteMessages } from './site-messages'
+import { AppStoreBadge } from './store-badges'
 
 /** Orange Pro-trial strip above the header. */
 function PromoBar() {
@@ -63,7 +64,7 @@ export function SiteHeader() {
       <header className="sticky top-0 z-10 border-b border-white/[0.07] bg-[rgba(11,11,11,0.92)]">
         <nav
           aria-label={t('mainNav')}
-          className="mx-auto flex max-w-[1240px] items-center gap-8 px-6 py-3"
+          className="mx-auto flex max-w-[1240px] items-center gap-8 px-6 py-3 max-xl:gap-3"
         >
           <a
             href={landingPathFor(locale)}
@@ -72,10 +73,14 @@ export function SiteHeader() {
           >
             <LandingLogo />
           </a>
-          <NavLinks className="hidden flex-1 lg:flex" />
+          <NavLinks
+            className="hidden flex-1 flex-nowrap whitespace-nowrap max-xl:gap-3 lg:flex"
+            linkClassName="max-xl:text-[14px]"
+          />
 
-          <div className="ml-auto hidden items-center gap-3 lg:flex">
+          <div className="ml-auto hidden items-center gap-3 max-xl:gap-2 lg:flex">
             <LanguageMenu />
+            <AppStoreBadge />
             <Link
               to={isAuthed ? '/account' : '/login'}
               className="text-lp-ink hover:text-lp-accent-hover flex h-11 max-w-[200px] items-center rounded-full border border-white/16 px-[18px] text-[15px]"
@@ -115,6 +120,9 @@ export function SiteHeader() {
               onNavigate={() => setOpen(false)}
             />
             <LanguageSegments onNavigate={() => setOpen(false)} />
+            <div className="self-start">
+              <AppStoreBadge onClick={() => setOpen(false)} />
+            </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
                 to={isAuthed ? '/account' : '/login'}
