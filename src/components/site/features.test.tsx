@@ -1,14 +1,27 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
+import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { Features } from './features'
 
-describe('Features grid', () => {
-  it('groups the thirteen modules with their first three benefits', () => {
-    const { container } = render(<Features />)
-    expect(container.querySelector('section')).toHaveClass(
-      'lp-surface',
-      'lp-island',
-    )
+const modules = [
+  'Авто',
+  'Партії',
+  'Запчастини',
+  'Склади',
+  'Інвентаризація',
+  'Стікери',
+  'Замовлення',
+  'Клієнти',
+  'Каси',
+  'Звіти',
+  'Команда',
+  'Нова Пошта',
+  'OLX',
+]
+
+describe('Features scroll story', () => {
+  it('lists all thirteen modules as headings with their lead', () => {
+    render(<Features />)
     expect(
       screen.getByRole('heading', {
         level: 2,
@@ -18,40 +31,61 @@ describe('Features grid', () => {
     expect(
       screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent),
     ).toEqual(['Облік і склад', 'Продажі й гроші', 'Інтеграції'])
-
-    const groups = ['Облік і склад', 'Продажі й гроші', 'Інтеграції'].map(
-      (name) => screen.getByRole('list', { name }),
-    )
     expect(
-      groups.map((group) =>
-        within(group)
-          .getAllByRole('heading', { level: 4 })
-          .map((h) => h.textContent),
+      screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent),
+    ).toEqual(modules)
+
+    const steps = within(screen.getByRole('list')).getAllByRole('listitem')
+    expect(steps).toHaveLength(13)
+    expect(
+      within(steps[1]!).getByText(
+        'Купив запчастини партією — заводиш її як джерело і кладеш туди всі деталі',
       ),
-    ).toEqual([
-      ['Авто', 'Партії', 'Склад', 'Склади', 'Інвентаризація', 'Стікери'],
-      ['Замовлення', 'Клієнти', 'Каси', 'Звіти', 'Команда'],
-      ['Нова Пошта', 'OLX'],
-    ])
-    expect(screen.getByText('12–13')).toBeInTheDocument()
-
-    const team = screen
-      .getByRole('heading', { level: 4, name: 'Команда' })
-      .closest('li')!
-    expect(within(team).getAllByRole('listitem')).toHaveLength(3)
-    expect(
-      within(team).getByText('Розумієш хто скільки продав і заробив'),
     ).toBeInTheDocument()
-    expect(within(team).getByText('11')).toBeInTheDocument()
+    expect(
+      within(steps[10]!).getByText(
+        'Додаєш співробітників — кожному своя роль і доступ',
+      ),
+    ).toBeInTheDocument()
   })
 
-  it('makes every scrollable phone carousel keyboard focusable', () => {
-    render(<Features />)
-    for (const name of ['Облік і склад', 'Продажі й гроші', 'Інтеграції']) {
-      expect(screen.getByRole('list', { name })).toHaveAttribute(
-        'tabindex',
-        '0',
-      )
-    }
+  it('server HTML shows module 1 active in a decorative window', () => {
+    const html = renderToString(<Features />)
+    for (const name of modules) expect(html).toContain(name)
+    expect(html).toContain('rozbirka.pro/cars')
+    expect(html).toContain('01 / 13')
+    expect(html).toContain('Окупність · Tesla Model Y 2021')
+    expect(html).not.toContain('animation:lp-story-in')
+
+    const { container } = render(<Features />)
+    const mock = container.querySelector('[data-story-window]')!
+    expect(mock).toHaveAttribute('aria-hidden', 'true')
+    expect(mock).toHaveTextContent('LIVE')
+    expect(mock).toHaveTextContent('Прозорий прибуток по кожному кузову')
+    expect(
+      within(screen.getByRole('list'))
+        .getAllByRole('listitem')
+        .map((step) => step.hasAttribute('data-active')),
+    ).toEqual(modules.map((_, index) => index === 0))
+  })
+
+  it('switches the window to the step nearest the middle of the screen', async () => {
+    const { container } = render(<Features />)
+    const steps = within(screen.getByRole('list')).getAllByRole('listitem')
+    steps.forEach((step, index) => {
+      step.getBoundingClientRect = () =>
+        ({ top: (index - 2) * 400 + 200, height: 400 }) as DOMRect
+    })
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    // Without IntersectionObserver in jsdom the listener is always on.
+    const mock = container.querySelector('[data-story-window]')!
+    expect(mock).toHaveTextContent('rozbirka.pro/parts')
+    expect(mock).toHaveTextContent('03 / 13')
+    expect(mock).toHaveTextContent('Веб + iPhone')
+    expect(mock).toHaveTextContent('942 поз.')
+    expect(steps[2]).toHaveAttribute('data-active')
   })
 })

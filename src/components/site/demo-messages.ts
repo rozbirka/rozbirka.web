@@ -1,7 +1,7 @@
 import { defineMessages } from '@/i18n/messages'
 
 /**
- * «LIVE ДЕМО» players of the landing: the cars demo («Авто та партії») and
+ * «LIVE ДЕМО» players of the landing: the cars demo («Авто») and
  * the orders demo («Замовлення і каси»). Lists use `|` between items and `=`
  * between fields (see `listOf` / `rowsOf` in `landing-messages.ts`).
  * Captions list one text per moment of a chapter; the moments themselves
@@ -16,7 +16,7 @@ export const demoMessages = defineMessages({
 
     carsIntro: 'Подивись, як це працює: 4 кроки, пів хвилини.',
     carsChapters:
-      'Додаєш авто за VIN|Вказуєш, скільки вклав|Продаєш деталі — прибуток росте|Порівнюєш авто й партії',
+      'Додаєш авто за VIN|Вказуєш, скільки вклав|Продаєш деталі — прибуток росте|Порівнюєш авто між собою',
     carsCaptions0:
       'Створюєш нове авто|Вводиш VIN-код|Система розшифровує марку, модель і двигун',
     carsCaptions1:
@@ -24,7 +24,7 @@ export const demoMessages = defineMessages({
     carsCaptions2:
       'Продаєш деталі — кожен продаж іде в профіль авто|Продажі перекрили закупівлю — авто окупилось',
     carsCaptions3:
-      'Порівнюєш, яке авто заробило найбільше|І бачиш результат по всій партії',
+      'Порівнюєш, яке авто заробило найбільше|І бачиш, які моделі варто брати ще',
     newCar: 'Нове авто',
     vinLabel: 'VIN-код',
     decodeVin: 'Розшифрувати VIN',
@@ -40,8 +40,6 @@ export const demoMessages = defineMessages({
     soldParts:
       'Двигун N47D20|КПП|Турбіна|Блок ABS|Двері передні|Фара ліва|Капот|Дзеркало',
     allCars: 'Усі авто',
-    batchName: 'Партія #12 · Аукціон, Литва',
-    batchSummary: '3 авто · вклав {amount}',
 
     ordersIntro:
       'Кілька платежів у різних валютах — і кожен видно в потрібній касі.',
@@ -87,7 +85,7 @@ export const demoMessages = defineMessages({
 
     carsIntro: 'See how it works: 4 steps, half a minute.',
     carsChapters:
-      'Add a car by VIN|Enter what you paid|Sell parts — profit grows|Compare cars and batches',
+      'Add a car by VIN|Enter what you paid|Sell parts — profit grows|Compare cars side by side',
     carsCaptions0:
       'Create a new car|Type in the VIN|The system decodes the make, model and engine',
     carsCaptions1:
@@ -95,7 +93,7 @@ export const demoMessages = defineMessages({
     carsCaptions2:
       'Sell parts — every sale goes into the car’s profile|Sales have covered the purchase — the car has paid off',
     carsCaptions3:
-      'Compare which car earned the most|And see the result for the whole batch',
+      'Compare which car earned the most|And see which models are worth buying again',
     newCar: 'New car',
     vinLabel: 'VIN',
     decodeVin: 'Decode VIN',
@@ -111,8 +109,6 @@ export const demoMessages = defineMessages({
     soldParts:
       'N47D20 engine|Gearbox|Turbo|ABS unit|Front door|Left headlight|Bonnet|Mirror',
     allCars: 'All cars',
-    batchName: 'Batch #12 · Auction, Lithuania',
-    batchSummary: '3 cars · paid {amount}',
 
     ordersIntro:
       'Several payments in different currencies — each one shows up in the right till.',
@@ -158,7 +154,7 @@ export const demoMessages = defineMessages({
 
     carsIntro: 'Zobacz, jak to działa: 4 kroki, pół minuty.',
     carsChapters:
-      'Dodajesz auto po VIN|Wpisujesz, ile zapłaciłeś|Sprzedajesz części — zysk rośnie|Porównujesz auta i partie',
+      'Dodajesz auto po VIN|Wpisujesz, ile zapłaciłeś|Sprzedajesz części — zysk rośnie|Porównujesz auta między sobą',
     carsCaptions0:
       'Tworzysz nowe auto|Wpisujesz numer VIN|System odczytuje markę, model i silnik',
     carsCaptions1:
@@ -166,7 +162,7 @@ export const demoMessages = defineMessages({
     carsCaptions2:
       'Sprzedajesz części — każda sprzedaż trafia do profilu auta|Sprzedaż pokryła zakup — auto się zwróciło',
     carsCaptions3:
-      'Porównujesz, które auto zarobiło najwięcej|I widzisz wynik całej partii',
+      'Porównujesz, które auto zarobiło najwięcej|I widzisz, które modele warto brać znowu',
     newCar: 'Nowe auto',
     vinLabel: 'Numer VIN',
     decodeVin: 'Odczytaj VIN',
@@ -182,8 +178,6 @@ export const demoMessages = defineMessages({
     soldParts:
       'Silnik N47D20|Skrzynia biegów|Turbosprężarka|Moduł ABS|Drzwi przednie|Lewy reflektor|Maska|Lusterko',
     allCars: 'Wszystkie auta',
-    batchName: 'Partia #12 · Aukcja, Litwa',
-    batchSummary: '3 auta · włożyłeś {amount}',
 
     ordersIntro:
       'Kilka wpłat w różnych walutach — każdą widać we właściwej kasie.',

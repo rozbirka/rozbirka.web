@@ -29,8 +29,6 @@ const CARS = [
   { name: 'Toyota Camry 50 · 2014', invested: 5100, earned: 4300 },
 ]
 const MAX_EARNED = 4300
-const BATCH_INVESTED = 10700
-const BATCH_EARNED = 10985
 
 /** Cursor path per chapter: `[moment, [x%, y%]]` inside the screen. */
 const PATHS: readonly (readonly (readonly [
@@ -84,15 +82,14 @@ const panelTitle = 'font-unbounded text-[18px] font-semibold'
 const fieldLabel = 'text-lp-dim text-[12px]'
 const field =
   'bg-lp-bg flex h-[46px] items-center gap-2 rounded-xl border-[1.5px] px-3.5 text-[15px] tabular-nums transition-[border-color] duration-200'
-const tile = 'flex flex-col rounded-xl bg-[#181818]'
+const tile = 'flex flex-col rounded-xl bg-lp-inset'
 const pressButton =
-  'bg-lp-accent text-lp-bg flex h-11 items-center rounded-full text-[15px] font-semibold transition-transform duration-150'
+  'bg-lp-accent text-[#0b0b0b] flex h-11 items-center rounded-full text-[15px] font-semibold transition-transform duration-150'
 
 const border = (on: boolean) => (on ? 'border-lp-accent' : 'border-white/10')
 
 function CarsScreen({ player }: { player: DemoPlayer }) {
   const d = useT(demoMessages)
-  const money = useMoney()
   const { step, t } = player
   const [x, y] = along(PATHS[step]!, t, (a, b, u) => [
     a[0] + (b[0] - a[0]) * u,
@@ -180,7 +177,7 @@ function CarsScreen({ player }: { player: DemoPlayer }) {
             return (
               <div
                 key={car.name}
-                className="lp-demo-row-in flex flex-col gap-2.5 rounded-[14px] bg-[#181818] p-3.5"
+                className="lp-demo-row-in flex flex-col gap-2.5 rounded-[14px] bg-lp-inset p-3.5"
               >
                 <div className="flex justify-between gap-2.5 text-[14px]">
                   <span className="font-semibold">{car.name}</span>
@@ -194,7 +191,7 @@ function CarsScreen({ player }: { player: DemoPlayer }) {
                     {Math.abs(roi)}%
                   </span>
                 </div>
-                <div className="h-[5px] overflow-hidden rounded-full bg-[#262626]">
+                <div className="h-[5px] overflow-hidden rounded-full bg-lp-track">
                   <div
                     className={cn(
                       'h-full rounded-full',
@@ -208,21 +205,6 @@ function CarsScreen({ player }: { player: DemoPlayer }) {
               </div>
             )
           })}
-          <div className="lp-demo-row-in flex items-center justify-between gap-3 rounded-[14px] border border-dashed border-[rgba(255,106,26,0.45)] bg-[rgba(255,106,26,0.06)] p-3.5 [animation-delay:.2s]">
-            <span className="flex flex-col gap-0.5">
-              <span className={fieldLabel}>{d('batchName')}</span>
-              <span className="text-[14px] font-semibold">
-                {d('batchSummary', { amount: money(BATCH_INVESTED) })}
-              </span>
-            </span>
-            <span className="text-lp-accent-hover font-semibold tabular-nums">
-              +
-              {Math.round(
-                ((BATCH_EARNED - BATCH_INVESTED) / BATCH_INVESTED) * 100,
-              )}
-              %
-            </span>
-          </div>
         </div>
       )}
       <DemoCaption step={step} text={caption} />
@@ -265,7 +247,7 @@ function SalesPanel({ t }: { t: number }) {
         <span
           className={cn(
             'flex flex-col gap-1 rounded-xl p-3 transition-[background] duration-[400ms]',
-            paid ? 'bg-lp-accent text-lp-bg' : 'text-lp-ink bg-[#181818]',
+            paid ? 'bg-lp-accent text-[#0b0b0b]' : 'text-lp-ink bg-lp-inset',
           )}
         >
           <span className="text-[12px]">
@@ -304,7 +286,7 @@ function SalesPanel({ t }: { t: number }) {
   )
 }
 
-/** «Авто та партії»: the cars demo with its chapter list. */
+/** «Авто»: the cars demo with its chapter list, first light chapter. */
 export function CarsSpotlight() {
   const l = useT(landingMessages)
   const d = useT(demoMessages)
@@ -314,7 +296,8 @@ export function CarsSpotlight() {
   return (
     <section
       data-reveal=""
-      className="lp-sec mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-16 px-6 py-28 max-[960px]:grid-cols-1 max-sm:gap-10 max-sm:px-5 max-sm:py-16"
+      data-tone="light"
+      className="lp-light lp-chap lp-chap-first grid grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-16 max-[960px]:grid-cols-1 max-sm:gap-10"
     >
       <div className="flex flex-col gap-6">
         <Eyebrow>{l('carsEyebrow')}</Eyebrow>

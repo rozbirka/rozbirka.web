@@ -8,7 +8,7 @@ const carChapters = [
   'Додаєш авто за VIN',
   'Вказуєш, скільки вклав',
   'Продаєш деталі — прибуток росте',
-  'Порівнюєш авто й партії',
+  'Порівнюєш авто між собою',
 ]
 
 function stubReducedMotion(reduce: boolean) {
@@ -57,6 +57,14 @@ describe('Cars demo player', () => {
     expect(html).toContain('Система розшифровує марку, модель і двигун')
     expect(html).toContain('0:07 / 0:28')
     expect(html).toContain('aria-label="Пауза"')
+    expect(html).toContain('>Авто<')
+  })
+
+  it('opens the light chapters block', () => {
+    const { container } = render(<CarsSpotlight />)
+    const section = container.querySelector('section')
+    expect(section).toHaveAttribute('data-tone', 'light')
+    expect(section).toHaveClass('lp-light', 'lp-chap', 'lp-chap-first')
   })
 
   it('exposes a heading, chapter buttons and hides the fake screen', () => {
@@ -102,7 +110,12 @@ describe('Cars demo player', () => {
     expect(current()).toContain(carChapters[3])
     expect(screen.getByRole('button', { name: 'Пауза' })).toBeInTheDocument()
     expect(container.textContent).toContain('Усі авто')
-    tick(7000)
+    expect(container.textContent).not.toContain('Партія')
+    tick(4000)
+    expect(container.textContent).toContain(
+      'І бачиш, які моделі варто брати ще',
+    )
+    tick(3000)
     expect(current()).toContain(carChapters[0])
   })
 

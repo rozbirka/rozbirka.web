@@ -77,7 +77,7 @@ export function DemoChapters({
 }
 
 /**
- * Glass card of a «LIVE ДЕМО»: title bar, the animated fake screen (hidden
+ * Card of a «LIVE ДЕМО» (white inside a light chapter): title bar, the animated fake screen (hidden
  * from assistive technology, the chapter buttons carry the story) and the
  * play/pause controls with chapter progress and the clock.
  */
@@ -126,7 +126,7 @@ export function DemoPlayerCard({
         ref={screenRef}
         aria-hidden
         className={cn(
-          'relative overflow-hidden bg-[radial-gradient(80%_60%_at_50%_0%,rgba(255,106,26,0.06),transparent),#121212]',
+          'relative overflow-hidden bg-[radial-gradient(80%_60%_at_50%_0%,rgba(255,106,26,0.06),transparent),var(--color-lp-surface)]',
           screenClassName,
         )}
       >

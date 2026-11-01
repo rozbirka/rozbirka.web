@@ -399,6 +399,51 @@
   }
 }
 
+/* Header burger menu card. */
+@keyframes lp-scr-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Modules story window. */
+@keyframes lp-story-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes lp-feed-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+    background: rgba(255, 106, 26, 0.16);
+  }
+  40% {
+    opacity: 1;
+    transform: none;
+    background: rgba(255, 106, 26, 0.12);
+  }
+  100% {
+    background: rgba(255, 106, 26, 0.05);
+  }
+}
+@keyframes lp-feed-slide {
+  from {
+    transform: translateY(-8px);
+  }
+  to {
+    transform: none;
+  }
+}
 /* Hero preview of the glass mock-up. */
 @keyframes lp-tab-prog {
   from {
@@ -470,72 +515,13 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.09),
     0 24px 60px rgba(0, 0, 0, 0.35);
 }
-.lp-island .lp-glass {
-  background-color: rgba(8, 8, 8, 0.6);
-}
 .lp-btn-glow {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
     0 8px 28px rgba(255, 106, 26, 0.28);
 }
-/* Sections are separated by a hairline with an orange diamond in the middle;
-   tinted surfaces (island, band, warm) carry the same hairline as a border and
-   fade into the page at the bottom. */
-.lp-sec {
-  position: relative;
-}
-.lp-sec::before,
-.lp-sec::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  pointer-events: none;
-  /* Above the fade at the bottom of a preceding tinted surface. */
-  z-index: 2;
-}
-.lp-sec::before {
-  top: 0;
-  width: min(1192px, calc(100% - 48px));
-  height: 1px;
-  transform: translateX(-50%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.1) 25%,
-    rgba(255, 130, 60, 0.5) 50%,
-    rgba(255, 255, 255, 0.1) 75%,
-    transparent
-  );
-}
-.lp-sec::after {
-  top: -4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 1px;
-  transform: translateX(-50%) rotate(45deg);
-  background: var(--color-lp-accent);
-  box-shadow:
-    0 0 0 5px #0b0908,
-    0 0 14px rgba(255, 106, 26, 0.45);
-}
-/* A section without top padding puts the divider into the middle of the gap
-   left by the previous section's bottom padding. */
-.lp-sec-gap::before {
-  top: -56px;
-}
-.lp-sec-gap::after {
-  top: -60px;
-}
-@media (max-width: 639px) {
-  .lp-sec-gap::before {
-    top: -32px;
-  }
-  .lp-sec-gap::after {
-    top: -36px;
-  }
-}
+/* Hairline above and below a tinted band (compare). */
 .lp-surface {
-  position: relative;
   border-style: solid;
   border-width: 1px 0;
   border-image: linear-gradient(
@@ -548,52 +534,97 @@
     )
     1;
 }
-.lp-surface::before {
-  content: '';
-  position: absolute;
-  inset: auto 0 0;
-  height: 140px;
-  background: linear-gradient(180deg, transparent, #0b0908);
-  pointer-events: none;
-  z-index: 0;
+/* Light tone: cream cards on the dark page (reviews, chapters, pricing).
+   The landing tokens are redefined, so `text-lp-ink`, `bg-lp-surface`… turn
+   light, and `white/…` hairlines turn black. */
+.lp-light,
+.lp-light-ui {
+  --color-lp-bg: #f5f3ee;
+  --color-lp-surface: #ffffff;
+  --color-lp-card: #ffffff;
+  --color-lp-inset: #f1eee8;
+  --color-lp-track: #e3dfd7;
+  --color-lp-chip: #e3dfd7;
+  --color-lp-ink: #151413;
+  --color-lp-soft: #2b2926;
+  --color-lp-bullet: #2b2926;
+  --color-lp-muted: #5c5954;
+  --color-lp-dim: #67635d;
+  --color-lp-accent-hover: #b03a0a;
+  --color-lp-ok: #15803d;
+  --color-lp-ok-text: #15803d;
+  --color-white: #000;
+  color: var(--color-lp-ink);
 }
-.lp-surface > * {
+.lp-light {
   position: relative;
   z-index: 1;
+  margin-inline: 12px;
+  border-radius: 40px;
+  overflow: clip;
+  background: var(--color-lp-bg);
 }
-.lp-island {
-  overflow: hidden;
-  background:
-    radial-gradient(
-      60% 40% at 50% 0%,
-      rgba(255, 106, 26, 0.13),
-      transparent 75%
-    ),
-    rgba(0, 0, 0, 0.35);
+.lp-light .text-lp-accent {
+  color: #b03a0a;
 }
-.lp-band {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.045),
-    rgba(255, 255, 255, 0.012)
-  );
+/* Orange buttons and pills keep their dark label on light surfaces. */
+.lp-light .bg-lp-accent,
+.lp-light-ui .bg-lp-accent {
+  color: #0b0b0b;
+}
+.lp-light .lp-glass {
+  background: #fff;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+/* Light app screens on the dark page (hero preview). */
+.lp-light-ui {
+  --color-lp-inset: #f4f2ee;
+  --color-lp-track: #e6e2db;
+  --color-lp-dim: #67635d;
+  --color-lp-ok: #1a6b3a;
+  --color-lp-ok-text: #1a6b3a;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 40px 100px -30px rgba(0, 0, 0, 0.7);
+}
+/* Chapters: consecutive light sections form one full-width cream block with
+   rounded outer corners and hairlines between them. */
+.lp-chap {
+  border-radius: 0;
+  padding: 88px max(24px, calc((100% - 1192px) / 2));
+}
+.lp-chap + .lp-chap {
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.07);
+}
+.lp-chap-first {
+  border-radius: 40px 40px 0 0;
+  padding-top: 120px;
+}
+.lp-chap-last {
+  border-radius: 0 0 40px 40px;
+  padding-bottom: 120px;
+}
+@media (max-width: 639px) {
+  .lp-light {
+    margin-inline: 6px;
+    border-radius: 26px;
+  }
+  .lp-chap {
+    padding: 56px 18px;
+  }
+  .lp-chap-first {
+    border-radius: 26px 26px 0 0;
+    padding-top: 72px;
+  }
+  .lp-chap-last {
+    border-radius: 0 0 26px 26px;
+    padding-bottom: 72px;
+  }
 }
 /* «Знайомо?»: armed by the component, rows get data-go when scrolled to. */
-[data-pains][data-arm] [data-strike] {
-  background-image: linear-gradient(#ff6a1a, #ff6a1a);
-  background-repeat: no-repeat;
-  background-position: 0 60%;
-  background-size: 0% 2px;
-  transition:
-    background-size 0.8s cubic-bezier(0.6, 0, 0.2, 1),
-    color 0.8s;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-[data-pains][data-arm] [data-go] [data-strike] {
-  background-size: 100% 2px;
-  color: #7d7a74;
-}
 [data-pains][data-arm] [data-sol] {
   opacity: 0;
   transform: translateY(10px);
@@ -620,13 +651,6 @@
     0 0 0 6px rgba(255, 106, 26, 0.14),
     0 0 28px rgba(255, 106, 26, 0.45);
   transform: scale(1.06);
-}
-.lp-warm {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 106, 26, 0.12),
-    rgba(255, 106, 26, 0.03) 75%
-  );
 }
 
 @theme {

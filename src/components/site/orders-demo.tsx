@@ -118,9 +118,9 @@ function placeCursor(
 const panel =
   'flex flex-col gap-3 rounded-[18px] border border-white/[0.08] bg-lp-inset p-4'
 const row =
-  'lp-demo-row-in flex items-center justify-between gap-3 rounded-xl bg-[#181818] px-3 py-2.5 text-[14px]'
+  'lp-demo-row-in flex items-center justify-between gap-3 rounded-xl bg-lp-inset px-3 py-2.5 text-[14px]'
 const pressButton =
-  'bg-lp-accent text-lp-bg flex h-10 items-center justify-center rounded-full px-4 text-[14px] font-semibold whitespace-nowrap transition-transform duration-150'
+  'bg-lp-accent text-[#0b0b0b] flex h-10 items-center justify-center rounded-full px-4 text-[14px] font-semibold whitespace-nowrap transition-transform duration-150'
 
 function OrdersScreen({ player }: { player: DemoPlayer }) {
   const d = useT(demoMessages)
@@ -225,7 +225,7 @@ function OrdersScreen({ player }: { player: DemoPlayer }) {
               className={cn(
                 'rounded-full border px-2.5 py-[5px] text-[12px] whitespace-nowrap transition-all duration-300',
                 chip.on
-                  ? 'border-lp-accent bg-lp-accent text-lp-bg font-semibold'
+                  ? 'border-lp-accent bg-lp-accent text-[#0b0b0b] font-semibold'
                   : 'text-lp-muted border-white/20 bg-transparent',
               )}
             >
@@ -277,7 +277,7 @@ function OrdersScreen({ player }: { player: DemoPlayer }) {
       {(step === 1 || step === 2) && (
         <div className={panel}>
           <div className="grid grid-cols-2 gap-2">
-            <span className="flex flex-col gap-0.5 rounded-xl bg-[#181818] px-3 py-2.5">
+            <span className="flex flex-col gap-0.5 rounded-xl bg-lp-inset px-3 py-2.5">
               <span className="text-lp-dim text-[12px]">{d('orderSum')}</span>
               <span className="text-[17px] font-semibold tabular-nums">
                 {money(ORDER_SUM)}
@@ -286,7 +286,9 @@ function OrdersScreen({ player }: { player: DemoPlayer }) {
             <span
               className={cn(
                 'flex flex-col gap-0.5 rounded-xl px-3 py-2.5 transition-[background] duration-[400ms]',
-                paidUp ? 'bg-lp-accent text-lp-bg' : 'text-lp-ink bg-[#181818]',
+                paidUp
+                  ? 'bg-lp-accent text-[#0b0b0b]'
+                  : 'text-lp-ink bg-lp-inset',
               )}
             >
               <span className="text-[12px]">
@@ -308,7 +310,7 @@ function OrdersScreen({ player }: { player: DemoPlayer }) {
                     className={cn(
                       'flex h-9 min-w-[52px] items-center justify-center rounded-[9px] px-2.5 text-[13px] font-bold transition-[background,color] duration-200',
                       currency === code
-                        ? 'bg-lp-accent text-lp-bg'
+                        ? 'bg-lp-accent text-[#0b0b0b]'
                         : 'text-lp-muted bg-transparent',
                     )}
                   >
@@ -439,7 +441,7 @@ function OrdersScreen({ player }: { player: DemoPlayer }) {
   )
 }
 
-/** «Замовлення і каси»: the orders demo with its chapter list. */
+/** «Замовлення і каси»: the orders demo with its chapter list (light chapter). */
 export function OrdersSpotlight() {
   const l = useT(landingMessages)
   const d = useT(demoMessages)
@@ -458,7 +460,8 @@ export function OrdersSpotlight() {
   return (
     <section
       data-reveal=""
-      className="lp-sec mx-auto grid max-w-[1240px] grid-cols-2 items-center gap-16 px-6 py-28 max-[960px]:grid-cols-1 max-sm:gap-10 max-sm:px-5 max-sm:py-16"
+      data-tone="light"
+      className="lp-light lp-chap grid grid-cols-2 items-center gap-16 max-[960px]:grid-cols-1 max-sm:gap-10"
     >
       <DemoPlayerCard
         player={player}

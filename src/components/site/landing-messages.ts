@@ -55,7 +55,7 @@ export const landingMessages = defineMessages({
     steps:
       'Авто=Привіз BMW E90=Додав авто за VIN і вказав, скільки за нього віддав|Стікер=Зняв ліву фару=Надрукував QR #A-0142 і поклав деталь на полицю B3|Продаж=Клієнт купив фару=Відсканував QR — фара вже в замовленні #1048|Прибуток=Авто окупилось=ROI по BMW оновився одразу після продажу',
 
-    carsEyebrow: 'Авто та партії',
+    carsEyebrow: 'Авто',
     carsTitle: 'Прозорий прибуток по кожному кузову',
 
     stockEyebrow: 'Склад і стікери',
@@ -71,16 +71,18 @@ export const landingMessages = defineMessages({
     ordersTitle: 'Оплата гнучка: кілька платежів, різні валюти й рахунки',
 
     teamEyebrow: 'Команда',
-    teamTitle: 'Без зайвих очей: продавець не бачить собівартість',
+    teamTitle: 'Розбірка працює, навіть коли тебе немає на місці',
+    teamLead: 'Кожен у команді бачить свою частину роботи. Ти бачиш усе.',
     teamPoints:
-      'Додаєш співробітників — кожному своя роль і доступ|Бачиш хто і що зробив — повний журнал дій|Розумієш хто скільки продав і заробив',
-    permAccess: 'Доступ',
-    permRoles: 'Власник|Менеджер|Продавець',
-    permRows: 'Собівартість|Ціни продажу|Каси|Звіти|Журнал дій',
-    permYes: '✓ Так',
-    permNo: '— Ні',
+      'Додаєш співробітників і даєш кожному доступ лише до потрібного|Кожна дія в журналі: хто додав деталь, продав, змінив ціну чи зробив повернення|Видно, хто скільки продав за день і за місяць',
+    teamLogTitle: 'Журнал дій · сьогодні',
+    teamOnline: 'онлайн',
+    teamLog:
+      '09:12=Прийняв BMW 320d E90, наклеїв 46 стікерів=Олег · Майстер|10:40=Замовлення #1048 оплачено · {paid}=Ірина · Менеджер|11:05=Змінила ціну: Фара ліва {from} → {to}=Ірина · Менеджер|13:30=Двигун N47D20 → полиця C-04=Олег · Майстер|15:10=ТТН Нова Пошта для #1048=Ірина · Менеджер',
+    teamSales: 'Продажі Ірини сьогодні',
 
-    midTitle: 'Перевір на своїй розбірці — 14 днів безкоштовно',
+    trialTitle: 'Перевір на своїй розбірці —',
+    trialAccent: '14 днів безкоштовно',
     midBody: 'Додай перше авто, наклей стікери, проведи перше замовлення.',
     startFree: 'Почати безкоштовно',
     orderDemo: 'Замовити демо',
@@ -88,7 +90,7 @@ export const landingMessages = defineMessages({
     pricingEyebrow: 'Тариф',
     pricingIncluded: 'Включено',
     pricingModules:
-      'Авто|Партії|Склад|Стікери|Замовлення|Клієнти|Каси|Звіти|Команда|Інвентаризація|Склади|Нова Пошта|OLX',
+      'Авто|Партії|Запчастини|Стікери|Замовлення|Клієнти|Каси|Звіти|Команда|Інвентаризація|Склади|Нова Пошта|OLX',
     pricingAsk: 'Є питання — напиши в Telegram →',
     faqTitle: 'Поширені питання',
 
@@ -173,7 +175,7 @@ export const landingMessages = defineMessages({
     steps:
       'Car=Brought in a BMW E90=Added the car by VIN and entered what you paid for it|Sticker=Took off the left headlight=Printed QR #A-0142 and put the part on shelf B3|Sale=A customer bought it=Scanned the QR — the headlight is already in order #1048|Profit=The car paid off=The BMW’s ROI updated right after the sale',
 
-    carsEyebrow: 'Cars and batches',
+    carsEyebrow: 'Cars',
     carsTitle: 'Clear profit on every car',
 
     stockEyebrow: 'Stock and stickers',
@@ -190,16 +192,19 @@ export const landingMessages = defineMessages({
       'Flexible payment: several payments, different currencies and accounts',
 
     teamEyebrow: 'Team',
-    teamTitle: 'No prying eyes: salespeople don’t see the cost price',
+    teamTitle: 'Your yard keeps running even when you’re not there',
+    teamLead:
+      'Everyone on the team sees their part of the work. You see it all.',
     teamPoints:
-      'Add staff — each with their own role and access|See who did what — a full activity log|Know who sold and earned how much',
-    permAccess: 'Access',
-    permRoles: 'Owner|Manager|Salesperson',
-    permRows: 'Cost price|Sale prices|Tills|Reports|Activity log',
-    permYes: '✓ Yes',
-    permNo: '— No',
+      'Add staff and give each of them access only to what they need|Every action is logged: who added a part, sold it, changed a price or made a return|See who sold how much today and this month',
+    teamLogTitle: 'Activity log · today',
+    teamOnline: 'online',
+    teamLog:
+      '09:12=Took in a BMW 320d E90, put on 46 stickers=Oleh · Mechanic|10:40=Order #1048 paid · {paid}=Iryna · Manager|11:05=Changed a price: Left headlight {from} → {to}=Iryna · Manager|13:30=N47D20 engine → shelf C-04=Oleh · Mechanic|15:10=Nova Poshta waybill for #1048=Iryna · Manager',
+    teamSales: 'Iryna’s sales today',
 
-    midTitle: 'Try it at your own yard — 14 days free',
+    trialTitle: 'Try it at your own yard —',
+    trialAccent: '14 days free',
     midBody: 'Add your first car, stick on the stickers, run your first order.',
     startFree: 'Start for free',
     orderDemo: 'Book a demo',
@@ -207,7 +212,7 @@ export const landingMessages = defineMessages({
     pricingEyebrow: 'Plan',
     pricingIncluded: 'Included',
     pricingModules:
-      'Cars|Batches|Stock|Labels|Orders|Customers|Tills|Reports|Team|Stocktaking|Warehouses|Nova Poshta|OLX',
+      'Cars|Batches|Parts|Labels|Orders|Customers|Tills|Reports|Team|Stocktaking|Warehouses|Nova Poshta|OLX',
     pricingAsk: 'Questions? Message us on Telegram →',
     faqTitle: 'Frequently asked questions',
 
@@ -292,7 +297,7 @@ export const landingMessages = defineMessages({
     steps:
       'Auto=Przywiozłeś BMW E90=Dodałeś auto po VIN i wpisałeś, ile za nie zapłaciłeś|Naklejka=Zdjąłeś lewy reflektor=Wydrukowałeś QR #A-0142 i odłożyłeś część na półkę B3|Sprzedaż=Klient kupił reflektor=Zeskanowałeś QR — reflektor jest już w zamówieniu #1048|Zysk=Auto się zwróciło=ROI dla BMW zaktualizował się zaraz po sprzedaży',
 
-    carsEyebrow: 'Auta i partie',
+    carsEyebrow: 'Auta',
     carsTitle: 'Przejrzysty zysk z każdego auta',
 
     stockEyebrow: 'Magazyn i naklejki',
@@ -308,16 +313,18 @@ export const landingMessages = defineMessages({
     ordersTitle: 'Elastyczna płatność: kilka wpłat, różne waluty i konta',
 
     teamEyebrow: 'Zespół',
-    teamTitle: 'Bez zbędnych oczu: sprzedawca nie widzi kosztu zakupu',
+    teamTitle: 'Twój demontaż działa, nawet gdy cię nie ma na miejscu',
+    teamLead: 'Każdy w zespole widzi swoją część pracy. Ty widzisz wszystko.',
     teamPoints:
-      'Dodajesz pracowników — każdy ma swoją rolę i dostęp|Widzisz, kto co zrobił — pełny dziennik działań|Wiesz, kto ile sprzedał i zarobił',
-    permAccess: 'Dostęp',
-    permRoles: 'Właściciel|Menedżer|Sprzedawca',
-    permRows: 'Koszt zakupu|Ceny sprzedaży|Kasy|Raporty|Dziennik działań',
-    permYes: '✓ Tak',
-    permNo: '— Nie',
+      'Dodajesz pracowników i dajesz każdemu dostęp tylko do tego, czego potrzebuje|Każde działanie w dzienniku: kto dodał część, sprzedał, zmienił cenę albo przyjął zwrot|Widać, kto ile sprzedał w ciągu dnia i miesiąca',
+    teamLogTitle: 'Dziennik działań · dziś',
+    teamOnline: 'online',
+    teamLog:
+      '09:12=Przyjął BMW 320d E90, nakleił 46 naklejek=Ołeh · Mechanik|10:40=Zamówienie #1048 opłacone · {paid}=Iryna · Menedżerka|11:05=Zmieniła cenę: Lewy reflektor {from} → {to}=Iryna · Menedżerka|13:30=Silnik N47D20 → półka C-04=Ołeh · Mechanik|15:10=List przewozowy Nova Poshta do #1048=Iryna · Menedżerka',
+    teamSales: 'Sprzedaż Iryny dziś',
 
-    midTitle: 'Sprawdź u siebie — 14 dni za darmo',
+    trialTitle: 'Sprawdź u siebie —',
+    trialAccent: '14 dni za darmo',
     midBody:
       'Dodaj pierwsze auto, naklej naklejki, zrealizuj pierwsze zamówienie.',
     startFree: 'Zacznij za darmo',
@@ -326,7 +333,7 @@ export const landingMessages = defineMessages({
     pricingEyebrow: 'Plan',
     pricingIncluded: 'W cenie',
     pricingModules:
-      'Auta|Partie|Magazyn|Naklejki|Zamówienia|Klienci|Kasy|Raporty|Zespół|Inwentaryzacja|Magazyny|Nova Poshta|OLX',
+      'Auta|Partie|Części|Naklejki|Zamówienia|Klienci|Kasy|Raporty|Zespół|Inwentaryzacja|Magazyny|Nova Poshta|OLX',
     pricingAsk: 'Masz pytania? Napisz na Telegramie →',
     faqTitle: 'Najczęstsze pytania',
 

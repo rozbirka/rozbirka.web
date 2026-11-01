@@ -98,7 +98,7 @@ describe('localized landing', () => {
       'The path of one part — from VIN to profit',
       'Clear profit on every car',
       'Every part in its place — found in seconds',
-      'No prying eyes: salespeople don’t see the cost price',
+      'Your yard keeps running even when you’re not there',
       '13 modules in one system',
       'Why not Excel or a generic auto parts shop system',
       'One plan — every module',

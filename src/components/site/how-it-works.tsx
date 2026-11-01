@@ -69,7 +69,7 @@ export function HowItWorks() {
   const steps = rowsOf(l('steps'))
   const root = useStepProgress()
   return (
-    <section id="how" data-reveal="" className="lp-surface lp-island">
+    <section id="how" data-reveal="">
       <SectionInner>
         <div className="flex flex-col items-center gap-5 text-center">
           <SectionTitle className="w-full">{l('howTitle')}</SectionTitle>

@@ -48,7 +48,7 @@ export function Compare() {
   const [excel, erp] = listOf(c('cols'))
   const rows = rowsOf(c('rows'))
   return (
-    <section id="compare" data-reveal="" className="lp-surface lp-band">
+    <section id="compare" data-reveal="" className="lp-surface">
       <SectionInner>
         <div className="flex max-w-[820px] flex-col gap-5">
           <Eyebrow>{c('eyebrow')}</Eyebrow>

@@ -1,5 +1,7 @@
 /* «LIVE ДЕМО» players (cars and orders): keyframes of the mock-up
-   (rzCapIn, rzRowIn, rzBlink, rzImpact) and the caption chip. */
+   (rzCapIn, rzRowIn, rzBlink, rzImpact) and the caption chip. The players
+   sit in light chapters; the caption chip stays dark there, as in the
+   mock-up. */
 @keyframes lp-demo-cap-in {
   from {
     opacity: 0;
@@ -64,7 +66,7 @@
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--color-lp-ink);
+  color: #f2f0ea;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.35;

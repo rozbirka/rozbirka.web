@@ -45,13 +45,13 @@ export function Pricing() {
       : loginPathForPlan(plan.code)
 
   return (
-    <section id="pricing" data-reveal="" className="bg-lp-ink text-lp-bg">
+    <section id="pricing" data-reveal="" data-tone="light" className="lp-light">
       <SectionInner className="gap-12 max-sm:gap-10">
         <div className="flex max-w-[760px] flex-col gap-4">
           <Eyebrow tone="paper">{l('pricingEyebrow')}</Eyebrow>
           <SectionTitle>{t('pricingTitle')}</SectionTitle>
         </div>
-        <article className="bg-lp-bg text-lp-ink grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] overflow-hidden rounded-[32px] max-sm:rounded-3xl">
+        <article className="bg-lp-bg grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] overflow-hidden rounded-[32px] max-sm:rounded-3xl">
           <div className="flex flex-col gap-7 bg-[radial-gradient(120%_90%_at_0%_0%,rgba(255,106,26,0.22),transparent_60%)] p-12 max-sm:px-[22px] max-sm:py-7">
             <div className="flex flex-wrap items-center gap-3">
               <h3 className="font-unbounded m-0 text-[24px] font-semibold">

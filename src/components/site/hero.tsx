@@ -23,8 +23,6 @@ export const HERO_TAB_MS = 6500
 export const HERO_SALE_MS = 3600
 
 const TAB_COUNT = 4
-/** Sidebar row lit for each tab: Авто, Склад, Замовлення, Звіти. */
-const sideForTab = [0, 2, 4, 7]
 
 const invested = 3200
 const totalParts = 184
@@ -33,65 +31,16 @@ const startEarned = 5870
 const startFeedPrices = [1450, 160, 180]
 const poolPrices = [240, 95, 120, 210, 140, 85, 130, 175, 260]
 
-const cars = [
-  { name: 'BMW 320d E90 · 2008', invested: 3200, earned: 5870 },
-  { name: 'VW Passat B7 · 2012', invested: 2400, earned: 3150 },
-  { name: 'Toyota Camry 50 · 2014', invested: 5100, earned: 4300 },
-]
-const maxEarned = Math.max(...cars.map((car) => car.earned))
-
 type PartStatus = 'statusFree' | 'statusReserved' | 'statusInOrder'
 type OrderStatus = 'statusNew' | 'statusPaid' | 'statusSent'
 
-const parts: {
-  code: string
-  car: string
-  shelf: string
-  status: PartStatus
-  price: number
-}[] = [
-  {
-    code: 'A-0142',
-    car: 'BMW E90',
-    shelf: 'B3',
-    status: 'statusFree',
-    price: 180,
-  },
-  {
-    code: 'A-0143',
-    car: 'BMW E90',
-    shelf: 'B3',
-    status: 'statusReserved',
-    price: 175,
-  },
-  {
-    code: 'A-0151',
-    car: 'BMW E90',
-    shelf: 'D2',
-    status: 'statusFree',
-    price: 160,
-  },
-  {
-    code: 'A-0158',
-    car: 'BMW E90',
-    shelf: '',
-    status: 'statusInOrder',
-    price: 1450,
-  },
-  {
-    code: 'B-0217',
-    car: 'Passat B7',
-    shelf: 'C1',
-    status: 'statusFree',
-    price: 95,
-  },
-  {
-    code: 'C-0309',
-    car: 'Camry 50',
-    shelf: 'A4',
-    status: 'statusInOrder',
-    price: 240,
-  },
+const parts: { code: string; status: PartStatus; price: number }[] = [
+  { code: 'A-0142', status: 'statusFree', price: 180 },
+  { code: 'A-0143', status: 'statusReserved', price: 175 },
+  { code: 'A-0151', status: 'statusFree', price: 160 },
+  { code: 'A-0158', status: 'statusInOrder', price: 1450 },
+  { code: 'B-0217', status: 'statusFree', price: 95 },
+  { code: 'C-0309', status: 'statusInOrder', price: 240 },
 ]
 
 const orders: { number: number; status: OrderStatus; sum: number }[] = [
@@ -100,16 +49,17 @@ const orders: { number: number; status: OrderStatus; sum: number }[] = [
   { number: 1047, status: 'statusSent', sum: 1450 },
   { number: 1046, status: 'statusPaid', sum: 160 },
 ]
+/** The highlighted order row (mock-up #1048). */
 const openOrder = 1
-const orderLinePrices = [180, 95, 240]
 
 const monthSales = [1200, 1650, 1500, 2300, 2900, 3600]
 const maxMonth = Math.max(...monthSales)
 
+/** Status chips on the light preview window (mock-up `[data-lightui]`). */
 const statusTone: Record<PartStatus | OrderStatus, string> = {
   statusFree: 'bg-[rgba(62,207,110,0.12)] text-lp-ok-text',
   statusPaid: 'bg-[rgba(62,207,110,0.12)] text-lp-ok-text',
-  statusReserved: 'bg-[rgba(255,176,112,0.12)] text-[#ffb070]',
+  statusReserved: 'bg-[rgba(255,176,112,0.14)] text-[#9a5b05]',
   statusInOrder: 'bg-[rgba(255,106,26,0.15)] text-lp-accent-hover',
   statusNew: 'bg-[rgba(255,106,26,0.15)] text-lp-accent-hover',
   statusSent: 'bg-white/[0.08] text-lp-soft',
@@ -211,157 +161,112 @@ function CarsScreen({ figures }: { figures: LiveFigures }) {
   const roi = roiOf(figures.earned, invested)
 
   return (
-    <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-5 max-[960px]:grid-cols-1">
-      <div className="flex min-w-0 flex-col gap-[22px]">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1.5">
-            <span className="text-lp-muted flex items-center gap-2 text-[13px]">
-              <span
-                className="bg-lp-ok lp-pulse size-[7px] rounded-full"
-                aria-hidden
-              />
-              {l('cardStatus')}
-            </span>
-            <span className="font-unbounded text-[22px] font-semibold tracking-[-0.02em]">
-              BMW 320d E90 · 2008
-            </span>
-            <span className="text-lp-dim font-[ui-monospace,Menlo,monospace] text-[12px]">
-              VIN WBAPN71060A•••482
-            </span>
-          </div>
-          <span className="text-lp-accent-hover rounded-full bg-[rgba(255,106,26,0.14)] px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap">
-            {l('cardPaidOff')}
+    <div className="flex min-w-0 flex-col gap-[22px]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-lp-muted flex items-center gap-2 text-[13px]">
+            <span
+              className="bg-lp-ok lp-pulse size-[7px] rounded-full"
+              aria-hidden
+            />
+            {l('cardStatus')}
+          </span>
+          <span className="font-unbounded text-[22px] font-semibold tracking-[-0.02em]">
+            BMW 320d E90 · 2008
+          </span>
+          <span className="text-lp-dim font-[ui-monospace,Menlo,monospace] text-[12px]">
+            VIN WBAPN71060A•••482
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2.5">
-          {[
-            { label: l('invested'), value: invested, prefix: '$', suffix: '' },
-            {
-              label: l('earned'),
-              value: figures.earned,
-              prefix: '$',
-              suffix: '',
-            },
-            { label: 'ROI', value: roi, prefix: '+', suffix: '%' },
-          ].map((stat, index) => (
-            <div
-              key={stat.label}
-              className={cn(
-                'flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-2.5',
-                index === 2 ? 'bg-lp-accent text-lp-bg' : insetCell,
-              )}
-            >
-              <span
-                className={cn('text-[13px]', index !== 2 && 'text-lp-muted')}
-              >
-                {stat.label}
-              </span>
-              <span className="text-[20px] font-semibold tabular-nums max-sm:text-[15px]">
-                {/* Keyed by value: the count-up writes the final text into
+        <span className="text-lp-accent-hover rounded-full bg-[rgba(255,106,26,0.14)] px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap">
+          {l('cardPaidOff')}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2.5">
+        {[
+          { label: l('invested'), value: invested, prefix: '$', suffix: '' },
+          {
+            label: l('earned'),
+            value: figures.earned,
+            prefix: '$',
+            suffix: '',
+          },
+          { label: 'ROI', value: roi, prefix: '+', suffix: '%' },
+        ].map((stat, index) => (
+          <div
+            key={stat.label}
+            className={cn(
+              'flex flex-col gap-1.5 rounded-2xl p-3.5 max-sm:rounded-xl max-sm:p-2.5',
+              index === 2 ? 'bg-lp-accent text-lp-bg' : insetCell,
+            )}
+          >
+            <span className={cn('text-[13px]', index !== 2 && 'text-lp-muted')}>
+              {stat.label}
+            </span>
+            <span className="text-[20px] font-semibold tabular-nums max-sm:text-[15px]">
+              {/* Keyed by value: the count-up writes the final text into
                     the element, so a new figure gets a fresh element. */}
-                <Count
-                  key={stat.value}
-                  value={stat.value}
-                  prefix={stat.prefix}
-                  suffix={stat.suffix}
-                />
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-col gap-2.5">
-          <div className="text-lp-muted flex justify-between text-[14px]">
-            <span>{l('soldParts')}</span>
-            <span className="text-lp-ink tabular-nums">
-              {l('soldOf', { sold: figures.sold, total: totalParts })}
+              <Count
+                key={stat.value}
+                value={stat.value}
+                prefix={stat.prefix}
+                suffix={stat.suffix}
+              />
             </span>
           </div>
-          <div className={cn(insetCell, 'h-2 overflow-hidden rounded-full')}>
-            <div
-              data-bar=""
-              className="bg-lp-accent h-full rounded-full"
-              style={{
-                width: `${((figures.sold / totalParts) * 100).toFixed(1)}%`,
-              }}
-            />
-          </div>
+        ))}
+      </div>
+      <div className="flex flex-col gap-2.5">
+        <div className="text-lp-muted flex justify-between text-[14px]">
+          <span>{l('soldParts')}</span>
+          <span className="text-lp-ink tabular-nums">
+            {l('soldOf', { sold: figures.sold, total: totalParts })}
+          </span>
         </div>
-        <ul role="list" className="m-0 flex min-h-[132px] flex-col gap-0.5 p-0">
-          {figures.feed.map((sale) => (
-            <li
-              key={sale.id}
-              className={cn(
-                '-mx-2.5 flex items-center justify-between gap-3 overflow-hidden rounded-[10px] p-2.5 text-[15px]',
-                sale.fresh &&
-                  'animate-[lp-row-in_.9s_cubic-bezier(.2,.8,.2,1)_both]',
-              )}
-            >
-              <span className="text-lp-soft flex items-center gap-2.5">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'size-1.5 rounded-full transition-colors duration-[600ms]',
-                    sale.fresh ? 'bg-lp-ok' : 'bg-lp-off',
-                  )}
-                />
-                {(sale.pool ? poolNames : startNames)[sale.index]}
-              </span>
+        <div className={cn(insetCell, 'h-2 overflow-hidden rounded-full')}>
+          <div
+            data-bar=""
+            className="bg-lp-accent h-full rounded-full"
+            style={{
+              width: `${((figures.sold / totalParts) * 100).toFixed(1)}%`,
+            }}
+          />
+        </div>
+      </div>
+      <ul role="list" className="m-0 flex min-h-[132px] flex-col gap-0.5 p-0">
+        {figures.feed.map((sale) => (
+          <li
+            key={sale.id}
+            className={cn(
+              '-mx-2.5 flex items-center justify-between gap-3 overflow-hidden rounded-[10px] p-2.5 text-[15px]',
+              sale.fresh &&
+                'animate-[lp-row-in_.9s_cubic-bezier(.2,.8,.2,1)_both]',
+            )}
+          >
+            <span className="text-lp-soft flex items-center gap-2.5">
               <span
+                aria-hidden
                 className={cn(
-                  'tabular-nums',
-                  sale.fresh
-                    ? 'text-lp-accent-hover font-semibold'
-                    : 'text-lp-ink',
+                  'size-1.5 rounded-full transition-colors duration-[600ms]',
+                  sale.fresh ? 'bg-lp-ok' : 'bg-lp-off',
                 )}
-              >
-                {sale.fresh ? '+' : ''}
-                {money(sale.price)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="flex min-w-0 flex-col gap-2.5">
-        <span className={smallCaps}>{h('allCars')}</span>
-        {cars.map((car, index) => {
-          const earned = index === 0 ? figures.earned : car.earned
-          const carRoi = roiOf(earned, car.invested)
-          const positive = carRoi >= 0
-          return (
-            <div
-              key={car.name}
+              />
+              {(sale.pool ? poolNames : startNames)[sale.index]}
+            </span>
+            <span
               className={cn(
-                insetCell,
-                'flex flex-col gap-2.5 rounded-[14px] p-3.5',
+                'tabular-nums',
+                sale.fresh
+                  ? 'text-lp-accent-hover font-semibold'
+                  : 'text-lp-ink',
               )}
             >
-              <div className="flex justify-between gap-2.5 text-[14px]">
-                <span className="font-semibold">{car.name}</span>
-                <span
-                  className={cn(
-                    'font-semibold',
-                    positive ? 'text-lp-accent-hover' : 'text-lp-muted',
-                  )}
-                >
-                  {positive ? '+' : '−'}
-                  {Math.abs(carRoi)}%
-                </span>
-              </div>
-              <div className="bg-lp-track h-[5px] overflow-hidden rounded-full">
-                <div
-                  className={cn(
-                    'h-full rounded-full',
-                    positive ? 'bg-lp-accent' : 'bg-lp-off',
-                  )}
-                  style={{
-                    width: `${Math.min(100, Math.round((earned / maxEarned) * 100))}%`,
-                  }}
-                />
-              </div>
-            </div>
-          )
-        })}
-      </div>
+              {sale.fresh ? '+' : ''}
+              {money(sale.price)}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -375,9 +280,9 @@ function StockScreen() {
     'text-lp-dim border-b border-white/[0.08] px-3.5 py-2.5 text-[12px] font-semibold tracking-[0.06em] uppercase'
   const cell =
     'flex min-w-0 items-center border-b border-white/[0.05] px-3.5 py-[13px]'
-  // Car and shelf columns drop out on phones (mock-up `data-dcol`).
-  const optional = 'max-sm:hidden'
 
+  // The hero shows part, status and price only (mock-up `[data-hero]
+  // [data-dcol]` hides the car and shelf columns at every width).
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -388,22 +293,18 @@ function StockScreen() {
           {h('search')}
           <span
             aria-hidden
-            className="bg-lp-accent h-[18px] w-[1.5px] animate-[lp-blink_1s_steps(1)_infinite]"
+            className="bg-lp-accent h-[18px] w-[1.5px] animate-[lp-blink_1s_steps(1)_infinite] motion-reduce:animate-none"
           />
         </span>
         <span className="bg-lp-accent text-lp-bg flex h-[42px] items-center rounded-xl px-4 text-[14px] font-semibold">
           {h('scanQr')}
         </span>
       </div>
-      <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,.7fr)_minmax(0,1fr)_minmax(0,.7fr)] text-[14px] max-sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,.8fr)]">
+      <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,.7fr)] text-[14px] max-sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,.8fr)]">
         {columns.map((column, index) => (
           <span
             key={column}
-            className={cn(
-              head,
-              (index === 1 || index === 2) && optional,
-              index === 4 && 'flex justify-end',
-            )}
+            className={cn(head, index === 2 && 'flex justify-end')}
           >
             {column}
           </span>
@@ -415,18 +316,6 @@ function StockScreen() {
                 {part.code}
               </span>
               {names[index]}
-            </span>
-            <span className={cn(cell, optional, 'text-lp-muted')}>
-              {part.car}
-            </span>
-            <span
-              className={cn(
-                cell,
-                optional,
-                'text-lp-soft font-[ui-monospace,Menlo,monospace]',
-              )}
-            >
-              {part.shelf || h('workshop')}
             </span>
             <span className={cell}>
               <StatusChip status={part.status} />
@@ -445,115 +334,60 @@ function OrdersScreen() {
   const h = useT(heroMessages)
   const money = useMoney()
   const rows = rowsOf(h('orders'))
-  const lines = listOf(h('orderLines'))
-  const open = orders[openOrder]
-  const chip = 'rounded-full px-2.5 py-[5px] text-[12px]'
 
+  // The hero keeps the order list only (mock-up `[data-hero] [data-dgrid]
+  // >div:nth-child(2)` hides the open order card).
   return (
-    <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-5 max-[960px]:grid-cols-1">
-      <div className="flex min-w-0 flex-col gap-2">
-        <span className={smallCaps}>{h('ordersToday')}</span>
-        {orders.map((order, index) => {
-          const [client, item] = rows[index] ?? []
-          return (
-            <div
-              key={order.number}
-              className={cn(
-                'flex items-center gap-3.5 rounded-[14px] border p-3.5',
-                index === openOrder
-                  ? 'border-[rgba(255,106,26,0.35)] bg-[rgba(255,106,26,0.07)]'
-                  : 'bg-lp-inset border-transparent',
-              )}
-            >
-              <span className="text-lp-dim flex-none font-[ui-monospace,Menlo,monospace] text-[13px]">
-                #{order.number}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-[15px] font-semibold">{client}</span>
-                <span className="text-lp-muted truncate text-[13px]">
-                  {item}
-                </span>
-              </span>
-              <StatusChip status={order.status} />
-              <span className="min-w-16 flex-none text-right font-semibold tabular-nums">
-                {money(order.sum)}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-      <div className="bg-lp-inset flex min-w-0 flex-col gap-4 rounded-[18px] p-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="font-unbounded text-[18px] font-semibold">
-            {h('orderTitle', { number: String(open?.number ?? '') })}
-          </span>
-          <span className="text-lp-muted text-[13px]">
-            {rows[openOrder]?.[0]}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <span className={cn(chip, 'bg-lp-chip text-lp-soft')}>
-            {h('orderReserved')}
-          </span>
-          <span className={cn(chip, 'bg-lp-accent text-lp-bg font-semibold')}>
-            {h('statusPaid')}
-          </span>
-          <span
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className={smallCaps}>{h('ordersToday')}</span>
+      {orders.map((order, index) => {
+        const [client, item] = rows[index] ?? []
+        return (
+          <div
+            key={order.number}
             className={cn(
-              chip,
-              'text-lp-muted border border-dashed border-white/20',
+              'flex items-center gap-3.5 rounded-[14px] border p-3.5',
+              index === openOrder
+                ? 'border-[rgba(255,106,26,0.35)] bg-[rgba(255,106,26,0.07)]'
+                : 'bg-lp-inset border-transparent',
             )}
           >
-            {h('orderShipping')}
-          </span>
-        </div>
-        <div className="flex flex-col">
-          {lines.map((line, index) => (
-            <div
-              key={line}
-              className="flex justify-between gap-3 border-t border-white/[0.07] py-[11px] text-[14px]"
-            >
-              <span className="text-lp-soft">{line}</span>
-              <span className="tabular-nums">
-                {money(orderLinePrices[index] ?? 0)}
-              </span>
-            </div>
-          ))}
-          <div className="flex justify-between border-t border-white/[0.12] pt-3 text-[16px] font-semibold">
-            <span>{h('orderTotal')}</span>
-            <span className="tabular-nums">
-              {money(orderLinePrices.reduce((sum, price) => sum + price, 0))}
+            <span className="text-lp-dim flex-none font-[ui-monospace,Menlo,monospace] text-[13px]">
+              #{order.number}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-[15px] font-semibold">{client}</span>
+              <span className="text-lp-muted truncate text-[13px]">{item}</span>
+            </span>
+            <StatusChip status={order.status} />
+            <span className="min-w-16 flex-none text-right font-semibold tabular-nums">
+              {money(order.sum)}
             </span>
           </div>
-        </div>
-      </div>
+        )
+      })}
     </div>
   )
 }
 
-function ReportsScreen({ roi }: { roi: number }) {
+function ReportsScreen() {
   const h = useT(heroMessages)
   const money = useMoney()
   const months = listOf(h('months'))
-  const kpi = 'flex flex-col gap-1.5 rounded-2xl p-4'
+  const kpi = 'bg-lp-inset flex flex-col gap-1.5 rounded-2xl p-4'
   const kpiValue = 'font-unbounded text-[24px] font-semibold tabular-nums'
 
+  // Two KPIs in the hero (mock-up `[data-hero] [data-dkpi]`), stacked on phones.
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
-        <div className={cn(kpi, insetCell)}>
+      <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+        <div className={kpi}>
           <span className="text-lp-muted text-[13px]">{h('kpiProfit')}</span>
           <span className={kpiValue}>{money(14650)}</span>
         </div>
-        <div className={cn(kpi, insetCell)}>
+        <div className={kpi}>
           <span className="text-lp-muted text-[13px]">{h('kpiStock')}</span>
           <span className={kpiValue}>{money(48920)}</span>
-        </div>
-        <div className={cn(kpi, 'bg-lp-accent text-lp-bg')}>
-          <span className="text-[13px]">{h('kpiBest')}</span>
-          <span className="font-unbounded text-[20px] font-semibold">
-            BMW E90 · +{roi}%
-          </span>
         </div>
       </div>
       <div className="bg-lp-inset flex flex-col gap-3.5 rounded-2xl p-5">
@@ -570,7 +404,7 @@ function ReportsScreen({ roi }: { roi: number }) {
               <span
                 aria-hidden
                 className={cn(
-                  'w-full max-w-14 origin-bottom animate-[lp-grow_.8s_cubic-bezier(.2,.8,.2,1)_both] rounded-[8px_8px_3px_3px]',
+                  'w-full max-w-14 origin-bottom animate-[lp-grow_.8s_cubic-bezier(.2,.8,.2,1)_both] rounded-[8px_8px_3px_3px] motion-reduce:animate-none',
                   index === monthSales.length - 1
                     ? 'bg-lp-accent'
                     : 'bg-[rgba(255,106,26,0.35)]',
@@ -587,7 +421,7 @@ function ReportsScreen({ roi }: { roi: number }) {
 }
 
 /**
- * Browser-window preview of the app under the hero copy. The server renders
+ * Light browser-window preview of the app beside the hero copy. The server renders
  * the «Авто» tab; after mount (and not under reduced motion) the tabs rotate
  * every 6.5 s and sales keep landing in the feed, both paused while the
  * preview is off screen or the page is hidden. Choosing a tab stops the
@@ -597,7 +431,6 @@ function AppPreview() {
   const h = useT(heroMessages)
   const baseId = useId()
   const tabs = listOf(h('tabs'))
-  const side = listOf(h('side'))
 
   const [tab, setTab] = useState(0)
   const [figures, setFigures] = useState(startFigures)
@@ -699,14 +532,12 @@ function AppPreview() {
 
   const tabId = (index: number) => `${baseId}-tab-${index}`
   const panelId = `${baseId}-panel`
-  const activeSide = sideForTab[tab]
 
   return (
-    <figure ref={rootRef} className="relative m-0 flex w-full flex-col gap-4">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-[10%] right-[8%] -bottom-[6%] left-[8%] bg-[radial-gradient(closest-side,rgba(255,106,26,0.2),transparent)] blur-[40px]"
-      />
+    <figure
+      ref={rootRef}
+      className="relative m-0 flex w-full min-w-0 flex-col gap-3.5"
+    >
       <div
         role="tablist"
         aria-label={h('tabsLabel')}
@@ -716,7 +547,7 @@ function AppPreview() {
           if (!event.currentTarget.contains(event.relatedTarget))
             setFocused(false)
         }}
-        className="relative flex max-w-full gap-1 self-center overflow-x-auto rounded-full border border-white/10 bg-white/5 p-[5px] max-sm:self-stretch"
+        className="relative flex max-w-full gap-1 self-start overflow-x-auto rounded-full border border-white/10 bg-white/5 p-[5px] max-sm:self-stretch"
       >
         {tabs.map((label, index) => {
           const active = index === tab
@@ -759,7 +590,9 @@ function AppPreview() {
           )
         })}
       </div>
-      <div className="lp-glass relative overflow-hidden rounded-[24px]">
+      {/* A white app window on the dark page (mock-up `[data-lightui]`),
+          without the sidebar of the full app. */}
+      <div className="lp-light-ui relative overflow-hidden rounded-[24px]">
         <div
           aria-hidden
           className="bg-lp-inset flex items-center gap-3.5 border-b border-white/[0.07] px-4 py-3"
@@ -768,54 +601,28 @@ function AppPreview() {
             {[0, 1, 2].map((dot) => (
               <span
                 key={dot}
-                className="size-[11px] rounded-full bg-[#3a3a3a]"
+                className="bg-lp-track size-[11px] rounded-full"
               />
             ))}
           </div>
-          <span className="text-lp-dim mx-auto flex h-7 max-w-[340px] flex-1 items-center justify-center rounded-lg bg-[#1a1a1a] text-[13px]">
+          <span className="text-lp-dim bg-lp-inset mx-auto flex h-7 max-w-[340px] flex-1 items-center justify-center rounded-lg text-[13px]">
             rozbirka.pro
           </span>
           <span className="w-[45px]" />
         </div>
-        <div className="grid min-h-[460px] grid-cols-[auto_minmax(0,1fr)] max-[960px]:grid-cols-[minmax(0,1fr)]">
-          <div
-            aria-hidden
-            className="flex w-[200px] flex-col gap-0.5 border-r border-white/[0.07] bg-[#101010] px-3 py-[18px] max-[960px]:hidden"
-          >
-            <span className="font-unbounded flex items-center gap-2 px-2.5 pt-1 pb-4 text-[16px] font-bold">
-              <HexMark />
-              rozbirka
-            </span>
-            {side.map((label, index) => (
-              <span
-                key={label}
-                className={cn(
-                  'rounded-[10px] px-3 py-[9px] text-[14px]',
-                  index === activeSide
-                    ? 'text-lp-accent-hover bg-[rgba(255,106,26,0.14)] font-semibold'
-                    : 'text-lp-muted',
-                )}
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-          <div
-            role="tabpanel"
-            id={panelId}
-            aria-labelledby={tabId(tab)}
-            className="min-w-0 p-6"
-          >
-            {tab === 0 && <CarsScreen figures={figures} />}
-            {tab === 1 && <StockScreen />}
-            {tab === 2 && <OrdersScreen />}
-            {tab === 3 && (
-              <ReportsScreen roi={roiOf(figures.earned, invested)} />
-            )}
-          </div>
+        <div
+          role="tabpanel"
+          id={panelId}
+          aria-labelledby={tabId(tab)}
+          className="min-h-[440px] min-w-0 p-6"
+        >
+          {tab === 0 && <CarsScreen figures={figures} />}
+          {tab === 1 && <StockScreen />}
+          {tab === 2 && <OrdersScreen />}
+          {tab === 3 && <ReportsScreen />}
         </div>
       </div>
-      <figcaption className="text-lp-dim relative self-center text-[13px]">
+      <figcaption className="relative self-start text-[13px] text-[#8a8780]">
         {h('caption')}
       </figcaption>
     </figure>
@@ -837,10 +644,10 @@ export function Hero() {
       <section
         id="top"
         aria-label={t('heroLabel')}
-        className="relative mx-auto flex max-w-[1240px] flex-col items-center gap-14 px-6 pt-[72px] pb-[88px] max-sm:gap-6 max-sm:px-5 max-sm:pt-10 max-sm:pb-12"
+        className="relative mx-auto grid max-w-[1320px] grid-cols-[minmax(0,.92fr)_minmax(0,1.08fr)] items-center gap-14 px-6 pt-16 pb-24 max-[980px]:grid-cols-[minmax(0,1fr)] max-[980px]:gap-10 max-[980px]:pt-12 max-sm:gap-6 max-sm:px-5 max-sm:pt-10 max-sm:pb-12"
       >
-        <div className="flex flex-col items-center gap-[26px] text-center">
-          <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex flex-col items-start gap-[26px] text-left">
+          <div className="flex flex-wrap items-center justify-start gap-2">
             <span
               aria-hidden
               className="text-lp-ink flex items-center gap-2 rounded-full border border-white/[0.22] bg-white/5 py-[9px] pr-4 pl-3 text-[15px] font-medium whitespace-nowrap"
@@ -863,17 +670,17 @@ export function Hero() {
               />
             </Link>
           </div>
-          <h1 className="font-unbounded m-0 max-w-[980px] text-center text-[clamp(42px,6vw,88px)] leading-[0.98] font-semibold tracking-[-0.04em] text-balance max-sm:text-[36px]">
+          <h1 className="font-unbounded m-0 text-left text-[clamp(40px,4.6vw,72px)] leading-none font-semibold tracking-[-0.04em] text-balance max-sm:text-[36px]">
             {/* The product pill above says the same; search engines and
                 screen readers get the CRM/ERP wording as part of the H1. */}
             <span className="sr-only">{l('heroBadge')}</span>{' '}
             {t('heroTitleStart')}{' '}
             <span className="text-lp-accent">{t('heroTitleAccent')}</span>
           </h1>
-          <p className="text-lp-muted m-0 max-w-[560px] text-center text-[20px] leading-[1.5] text-pretty max-sm:text-[17px]">
+          <p className="text-lp-muted m-0 max-w-[500px] text-left text-[20px] leading-[1.5] text-pretty max-sm:text-[17px]">
             {h('lead')}
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex flex-wrap items-center justify-start gap-3">
             <PrimaryLink to="/login" className="max-sm:w-full">
               {t('heroCta')}
             </PrimaryLink>
@@ -884,7 +691,7 @@ export function Hero() {
               href={supportHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-lp-soft hover:text-lp-accent-hover flex min-h-11 items-center gap-2.5 self-center text-[15px]"
+              className="text-lp-soft hover:text-lp-accent-hover flex min-h-11 items-center gap-2.5 self-start text-left text-[15px]"
             >
               <TelegramIcon size={28} />
               <span className="underline underline-offset-4">

@@ -159,7 +159,7 @@ test.describe('responsive matrix', () => {
 
   for (const { width, expectedFontSize } of [
     { width: 375, expectedFontSize: '36px' },
-    { width: 1600, expectedFontSize: '88px' },
+    { width: 1600, expectedFontSize: '72px' },
   ]) {
     test(`scales the hero heading at ${width}px`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' })

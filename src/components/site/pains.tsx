@@ -5,11 +5,11 @@ import { landingMessages, rowsOf } from './landing-messages'
 import { siteMessages } from './site-messages'
 
 /**
- * Strikes each pain through and shows its fix once the row scrolls into the
- * upper part of the viewport. Without the effect (server HTML, reduced
- * motion) the rows simply show both lines.
+ * Fades each pain's fix in once the row scrolls into the upper part of the
+ * viewport. Without the effect (server HTML, reduced motion) the rows simply
+ * show both lines.
  */
-function useStrikeOnScroll() {
+function useFixOnScroll() {
   const list = useRef<HTMLOListElement>(null)
   useEffect(() => {
     const element = list.current
@@ -41,16 +41,16 @@ function useStrikeOnScroll() {
   return list
 }
 
-/** «Знайомо?»: today's pains, each crossed out by the same job in rozbirka. */
+/** «Знайомо?»: today's pains, each answered by the same job in rozbirka. */
 export function Pains() {
   const t = useT(siteMessages)
   const l = useT(landingMessages)
   const pains = rowsOf(l('pains'))
-  const list = useStrikeOnScroll()
+  const list = useFixOnScroll()
   return (
-    <section id="pain" data-reveal="" className="lp-sec">
-      <div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] items-start gap-16 px-6 py-28 max-[960px]:grid-cols-1 max-[960px]:gap-8 max-sm:gap-10 max-sm:px-5 max-sm:py-16">
-        <div className="sticky top-[120px] flex flex-col gap-6 max-[960px]:static">
+    <section id="pain" data-reveal="">
+      <div className="mx-auto flex max-w-[1240px] flex-col gap-12 px-6 pt-28 pb-24 max-sm:gap-10 max-sm:px-5 max-sm:py-16">
+        <div className="flex max-w-[820px] flex-col gap-6">
           <Eyebrow>{l('painEyebrow')}</Eyebrow>
           <h2 className="font-unbounded m-0 text-[clamp(30px,3.6vw,48px)] leading-[1.08] font-semibold tracking-[-0.03em] text-balance">
             {l('painTitle')}
@@ -64,7 +64,7 @@ export function Pains() {
           ref={list}
           data-pains=""
           role="list"
-          className="m-0 flex list-none flex-col p-0"
+          className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-x-12 p-0"
         >
           {pains.map(([before, after], index) => (
             <li
@@ -80,7 +80,7 @@ export function Pains() {
               </span>
               <div className="flex min-w-0 flex-col gap-3.5">
                 <p className="text-lp-bullet m-0 text-[clamp(18px,1.8vw,22px)] leading-[1.45] text-pretty italic">
-                  <span data-strike="">«{before}»</span>
+                  «{before}»
                 </p>
                 <p data-sol="" className="m-0 flex items-start gap-3">
                   <span

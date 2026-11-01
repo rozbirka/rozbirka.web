@@ -23,7 +23,7 @@ export function Reviews() {
   const l = useT(landingMessages)
   const labels = listOf(l('trust'))
   return (
-    <section id="reviews" data-reveal="" className="lp-surface lp-band">
+    <section id="reviews" data-reveal="" data-tone="light" className="lp-light">
       <SectionInner>
         <div className="flex max-w-[760px] flex-col gap-5">
           <Eyebrow>{l('reviewsEyebrow')}</Eyebrow>

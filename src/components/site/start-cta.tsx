@@ -150,7 +150,7 @@ export function StartCta() {
     <section
       id="start"
       data-reveal=""
-      className="lp-sec lp-sec-gap mx-auto max-w-[1240px] px-6 pb-28 max-sm:px-5 max-sm:pb-16"
+      className="mx-auto max-w-[1240px] px-6 pb-28 max-sm:px-5 max-sm:pb-16"
     >
       <div className="relative grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] items-center gap-12 overflow-hidden rounded-[36px] border border-[rgba(255,106,26,0.35)] bg-[radial-gradient(90%_120%_at_0%_0%,rgba(255,106,26,0.28),transparent_55%),var(--color-lp-surface)] px-14 py-16 max-lg:px-10 max-lg:py-12 max-sm:gap-8 max-sm:rounded-3xl max-sm:px-[22px] max-sm:py-7">
         <div className="flex flex-col gap-7">

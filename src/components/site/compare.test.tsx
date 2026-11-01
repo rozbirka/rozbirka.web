@@ -13,10 +13,7 @@ function renderCompare() {
 
 it('compares Excel, a generic ERP and rozbirka with a mark per cell', () => {
   const { container } = renderCompare()
-  expect(container.querySelector('section')).toHaveClass(
-    'lp-surface',
-    'lp-band',
-  )
+  expect(container.querySelector('section')).toHaveClass('lp-surface', '')
   const table = screen.getByRole('table', {
     name: 'Чому не Excel і не універсальна програма для автомагазину',
   })

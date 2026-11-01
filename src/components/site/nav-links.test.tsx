@@ -16,13 +16,35 @@ describe('NavLinks', () => {
       'href',
       '/#features',
     )
-    expect(screen.getByRole('link', { name: 'Тарифи' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Тариф' })).toHaveAttribute(
       'href',
       '/#pricing',
     )
     expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute(
       'href',
       '/#faq',
+    )
+  })
+
+  it('lists the sections in the mock-up order and marks the current one', () => {
+    render(
+      <MemoryRouter>
+        <NavLinks activeHash="#features" activeClassName="is-on" />
+      </MemoryRouter>,
+    )
+    const links = screen.getAllByRole('link')
+    expect(links.map((link) => link.textContent)).toEqual([
+      'Відгуки',
+      'Як це працює',
+      'Можливості',
+      'Тариф',
+      'FAQ',
+    ])
+    const current = screen.getByRole('link', { name: 'Можливості' })
+    expect(current).toHaveAttribute('aria-current', 'location')
+    expect(current).toHaveClass('is-on')
+    expect(screen.getByRole('link', { name: 'FAQ' })).not.toHaveAttribute(
+      'aria-current',
     )
   })
 

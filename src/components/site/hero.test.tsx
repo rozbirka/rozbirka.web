@@ -91,7 +91,7 @@ describe('Hero app preview', () => {
     act(() => {
       vi.advanceTimersByTime(HERO_TAB_MS)
     })
-    expect(selectedTab()).toBe('Склад')
+    expect(selectedTab()).toBe('Запчастини')
     expect(screen.getByText('Сканувати QR')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Звіти' }))
@@ -127,6 +127,36 @@ describe('Hero app preview', () => {
     expect(selectedTab()).toBe('Авто')
     expect(screen.getByText('131 з 184')).toBeInTheDocument()
     expect(document.querySelector('[data-progress]')).toBeNull()
+  })
+
+  it('shows a light window without the sidebar and with the short tables', () => {
+    stubReducedMotion(true)
+    const { container } = renderHero()
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Авто',
+      'Запчастини',
+      'Замовлення',
+      'Звіти',
+    ])
+    const panel = screen.getByRole('tabpanel')
+    expect(panel.closest('.lp-light-ui')).not.toBeNull()
+    // No app sidebar and no «Усі авто» column in the hero.
+    expect(screen.queryByText('Партії')).toBeNull()
+    expect(screen.queryByText('Усі авто')).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Запчастини' }))
+    for (const column of ['Деталь', 'Статус', 'Ціна'])
+      expect(screen.getByText(column)).toBeInTheDocument()
+    expect(screen.queryByText('Полиця')).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Замовлення' }))
+    expect(screen.getByText('Андрій М.')).toBeInTheDocument()
+    expect(screen.queryByText('Разом')).toBeNull()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Звіти' }))
+    expect(screen.getByText('Чистий прибуток · 6 міс')).toBeInTheDocument()
+    expect(screen.queryByText('Найкраще авто')).toBeNull()
+    expect(container.querySelector('h1')?.className).toContain('text-left')
   })
 
   it('moves between tabs with the arrow keys', () => {
