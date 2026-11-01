@@ -3,10 +3,11 @@ import { npFeedMessages } from './np-feed-messages'
 
 /** Minutes are what an operator reads here, not a timestamp. */
 export function waitedFor(
-  from: string,
+  from: string | null | undefined,
   locale: Locale,
   now: number = Date.now(),
 ): string {
+  if (from == null || !Number.isFinite(Date.parse(from))) return '—'
   const minutes = Math.max(0, Math.round((now - Date.parse(from)) / 60000))
   const say = (
     key: 'waitedMinutes' | 'waitedHours' | 'waitedDays',

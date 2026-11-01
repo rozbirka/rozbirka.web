@@ -53,7 +53,12 @@ const snapshotWith = (permissions: string[]): TenantAccessSnapshot => ({
 
 function Probe() {
   const location = useLocation()
-  return <output aria-label="Поточний маршрут">{location.pathname}</output>
+  return (
+    <output aria-label="Поточний маршрут">
+      {location.pathname}
+      {location.search}
+    </output>
+  )
 }
 
 const renderPalette = (permissions: string[], locale: Locale = 'uk') =>
@@ -260,4 +265,18 @@ it('speaks English (UK) inside an en-GB locale', async () => {
     await screen.findByRole('option', { name: /Order No\. 1042/ }),
   ).toBeVisible()
   expect(screen.getByText('Orders', { selector: 'p' })).toBeVisible()
+})
+
+it('opens location stickers from command search for an inventory-only account', async () => {
+  const user = userEvent.setup()
+  renderPalette(['inventory.view'])
+  await user.keyboard('{Meta>}k{/Meta}')
+  await user.type(
+    screen.getByRole('combobox', { name: 'Пошук по кабінету' }),
+    'Стікери',
+  )
+  await user.click(await screen.findByRole('option', { name: /Стікери/ }))
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
+    '/app/koval/stickers?type=locations',
+  )
 })

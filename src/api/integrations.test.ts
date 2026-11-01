@@ -88,3 +88,12 @@ it('sends a key in the body only when one was typed, and never in the path', asy
     true,
   )
 })
+
+it('normalizes the omitted oldest event timestamp in an empty queue', async () => {
+  vi.spyOn(apiClient, 'get').mockResolvedValue({
+    data: { enabled: false, pending: 0, deadLetters: 0, deadLetterIds: [] },
+  })
+  expect(await integrationsApi.webhookStatus('np-1')).toMatchObject({
+    oldestPendingAt: null,
+  })
+})

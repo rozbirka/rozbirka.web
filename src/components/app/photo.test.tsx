@@ -37,6 +37,51 @@ it('opens the same full-size HEIC conversion in the lightbox and closes with Esc
   expect(opener).toHaveFocus()
 })
 
+it.each(['gallery', 'tiles'])(
+  'closes %s photos from empty viewer space and restores focus',
+  async (variant) => {
+    const user = userEvent.setup()
+    render(
+      variant === 'gallery' ? (
+        <Gallery label="Фото деталі" photos={[photo]} />
+      ) : (
+        <PhotoGrid label="Фото деталі" photos={[photo]} variant="tiles" />
+      ),
+    )
+    const opener = screen.getByRole('button')
+    await user.click(opener)
+    await user.click(screen.getByRole('dialog'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(opener).toHaveFocus()
+  },
+)
+
+it('keeps the viewer open when clicking photos, arrows and thumbnails', async () => {
+  const user = userEvent.setup()
+  render(
+    <Gallery
+      label="Фото деталі"
+      photos={[
+        { id: 'one', url: 'https://example.test/one.webp', alt: 'Перше фото' },
+        { id: 'two', url: 'https://example.test/two.webp', alt: 'Друге фото' },
+      ]}
+    />,
+  )
+  await user.click(screen.getByRole('button', { name: /відкрити/ }))
+  const dialog = screen.getByRole('dialog')
+  await user.click(within(dialog).getByRole('img', { name: 'Перше фото' }))
+  expect(dialog).toBeInTheDocument()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Наступне фото' }),
+  )
+  expect(within(dialog).getByRole('img', { name: 'Друге фото' })).toBeVisible()
+  await user.click(within(dialog).getByRole('tab', { name: /^Фото 1 з 2:/ }))
+  const image = within(dialog).getByRole('img', { name: 'Перше фото' })
+  expect(image).toBeVisible()
+  await user.click(image.parentElement!)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+})
+
 it('recovers from a failed image when changing to another photo', () => {
   const { rerender } = render(
     <Thumbnail alt="Деталь" photo={photo} size="full" />,
@@ -84,4 +129,52 @@ it('opens a photo tile at its selected index and returns focus after Escape', as
   await user.keyboard('{Escape}')
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(tile).toHaveFocus()
+})
+
+it('keeps a failed record tile readable and lets its existing button open the full photo', async () => {
+  const user = userEvent.setup()
+  render(
+    <PhotoGrid
+      label="Фото деталі"
+      variant="tiles"
+      photos={[{ ...photo, alt: 'Обкладинка деталі' }]}
+    />,
+  )
+  const tile = screen.getByRole('button', { name: 'Обкладинка деталі' })
+  fireEvent.error(within(tile).getByRole('img'))
+  expect(
+    within(tile).getByText('Фото недоступне', { exact: true }),
+  ).toBeVisible()
+  expect(within(tile).queryByRole('img')).not.toBeInTheDocument()
+  await user.click(tile)
+  expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
+    'src',
+    fullSource,
+  )
+})
+
+it('keeps every photo in a horizontal strip and opens the selected one', async () => {
+  const user = userEvent.setup()
+  const photos = Array.from({ length: 5 }, (_, index) => ({
+    id: String(index),
+    url: `https://example.test/${index}.webp`,
+    alt: `Фото ${index + 1}`,
+  }))
+  render(
+    <PhotoGrid
+      label="Фото деталі"
+      variant="tiles"
+      layout="strip"
+      photos={photos}
+    />,
+  )
+  expect(screen.getAllByRole('button')).toHaveLength(5)
+  expect(screen.getByRole('list', { name: 'Фото деталі' })).toHaveClass(
+    'rz-photo-strip',
+  )
+  await user.click(screen.getByRole('button', { name: 'Фото 5' }))
+  expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
+    'src',
+    photos[4]!.url,
+  )
 })

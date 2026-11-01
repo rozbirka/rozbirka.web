@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
@@ -103,6 +103,35 @@ async function enterOtp(user: ReturnType<typeof userEvent.setup>) {
     await user.type(input, String(index + 1))
   }
 }
+
+it.each([1, 3])(
+  'accepts the complete SMS keyboard suggestion in digit %s',
+  async (position) => {
+    const user = userEvent.setup()
+    renderLogin()
+    await reachOtpStep(user)
+    const input = screen.getByLabelText(`Цифра ${position}`)
+    input.focus()
+    fireEvent.input(input, {
+      target: { value: '012345' },
+      inputType: 'insertReplacementText',
+      data: '012345',
+    })
+    expect(
+      screen
+        .getAllByLabelText(/Цифра \d/)
+        .map((field) => (field as HTMLInputElement).value)
+        .join(''),
+    ).toBe('012345')
+    expect(screen.getByLabelText('Цифра 6')).toHaveFocus()
+    expect(otpVerify).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+    expect(otpVerify).toHaveBeenCalledWith(
+      expect.objectContaining({ code: '012345' }),
+      expect.anything(),
+    )
+  },
+)
 
 let auth: AuthContextValue
 

@@ -971,7 +971,14 @@ function OtpInput({
   }, [autoFocus])
 
   const handleInput = (i: number, e: ChangeEvent<HTMLInputElement>) => {
-    const digit = e.target.value.replace(/\D/g, '').slice(-1)
+    const digits = e.target.value.replace(/\D/g, '')
+    // A keyboard's SMS suggestion arrives as one replacement, not a paste.
+    if (digits.length >= length) {
+      onChange(digits.slice(0, length))
+      inputsRef.current[length - 1]?.focus()
+      return
+    }
+    const digit = digits.slice(-1)
     const chars = value.split('')
     while (chars.length < length) chars.push('')
     chars[i] = digit
@@ -1023,7 +1030,7 @@ function OtpInput({
           inputMode="numeric"
           key={i}
           aria-label={t('digit', { index: i + 1 })}
-          maxLength={1}
+          maxLength={length}
           onChange={(e) => handleInput(i, e)}
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={handlePaste}

@@ -16,7 +16,7 @@ import { useT } from '@/i18n/hooks'
 import { languageNameMessages, profileMessages } from './profile-messages'
 
 type Choice = Locale | 'auto'
-type SaveState = 'idle' | 'pending' | 'error' | 'device'
+type SaveState = 'idle' | 'pending' | 'error'
 
 /** Native name of a browser language tag, e.g. `de-DE` → `Deutsch`. */
 function nativeLanguageName(tag: string): string {
@@ -73,7 +73,8 @@ export function LanguageCard({ embedded = false }: { embedded?: boolean }) {
     setSaveState('pending')
     const keepOnDevice = () => {
       setDevicePreference(language)
-      setSaveState('device')
+      setSaveState('idle')
+      toast?.show({ tone: 'info', message: t('savedDevice') })
     }
     if (!auth.updateLanguage) {
       keepOnDevice()
@@ -150,10 +151,6 @@ export function LanguageCard({ embedded = false }: { embedded?: boolean }) {
             </Notice>
           </div>
         )}
-        {saveState === 'device' && (
-          <Notice tone="info">{t('savedDevice')}</Notice>
-        )}
-
         <fieldset className="m-0 grid gap-1.5 border-0 p-0" disabled={pending}>
           <legend className="sr-only">{t('langTitle')}</legend>
           {rows.map((row) => {

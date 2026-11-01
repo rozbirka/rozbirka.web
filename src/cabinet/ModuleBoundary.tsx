@@ -34,6 +34,7 @@ export interface CabinetModuleScreenProps {
 
 export interface ModuleBoundaryProps {
   module: CabinetModuleKey
+  definition?: CabinetModuleDefinition
   screen: ComponentType<CabinetModuleScreenProps>
 }
 
@@ -48,11 +49,11 @@ export function CabinetModuleRoute({ module }: { module: CabinetModuleKey }) {
 
 export function ModuleBoundary({
   module,
+  definition = cabinetModules[module],
   screen: Screen,
 }: ModuleBoundaryProps) {
   const cabinet = useCabinet()
   const t = useT(accessMessages)
-  const definition = cabinetModules[module]
   const access = cabinetAccessState(cabinet)
   const decision = evaluateModuleAccess(definition, access, 'view')
 

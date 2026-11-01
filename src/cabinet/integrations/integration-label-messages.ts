@@ -9,7 +9,7 @@ export const integrationLabelMessages = defineMessages({
   uk: {
     'status.draft': 'Не налаштована',
     'status.active': 'Підключена',
-    'status.inactive': 'Вимкнена',
+    'status.inactive': 'Відключено',
     'status.error': 'Помилка',
     'mark.nova_poshta': 'НП',
     'kind.nova_poshta': 'Доставка',
@@ -84,7 +84,7 @@ export const integrationLabelMessages = defineMessages({
     'reason.subscription_not_confirmed':
       'Нова пошта не підтвердила створення підписки. Повторіть спробу — якщо повториться, перевірте підписки в кабінеті перевізника.',
     'reason.integration_inactive':
-      'Інтеграція вимкнена. Увімкніть її, щоб отримувати оновлення.',
+      'Інтеграцію відключено. Підключіть її знову, щоб отримувати оновлення.',
     'reason.provider_unauthorized':
       'Нова пошта не прийняла ключ — він недійсний або відкликаний.',
     'reason.provider_rejected': 'Нова пошта відхилила запит на підписку.',
@@ -129,7 +129,7 @@ export const integrationLabelMessages = defineMessages({
   'en-GB': {
     'status.draft': 'Not set up',
     'status.active': 'Connected',
-    'status.inactive': 'Turned off',
+    'status.inactive': 'Disconnected',
     'status.error': 'Error',
     'mark.nova_poshta': 'NP',
     'kind.nova_poshta': 'Delivery',
@@ -206,7 +206,7 @@ export const integrationLabelMessages = defineMessages({
     'reason.subscription_not_confirmed':
       'Nova Poshta didn’t confirm the subscription. Try again — if it happens again, check the subscriptions in the carrier’s account.',
     'reason.integration_inactive':
-      'The integration is turned off. Turn it on to receive updates.',
+      'The integration is disconnected. Connect it again to receive updates.',
     'reason.provider_unauthorized':
       'Nova Poshta didn’t accept the key — it is invalid or revoked.',
     'reason.provider_rejected':
@@ -253,7 +253,7 @@ export const integrationLabelMessages = defineMessages({
   pl: {
     'status.draft': 'Nieskonfigurowana',
     'status.active': 'Połączona',
-    'status.inactive': 'Wyłączona',
+    'status.inactive': 'Odłączona',
     'status.error': 'Błąd',
     'mark.nova_poshta': 'NP',
     'kind.nova_poshta': 'Dostawa',
@@ -329,7 +329,7 @@ export const integrationLabelMessages = defineMessages({
     'reason.subscription_not_confirmed':
       'Nova Poshta nie potwierdziła utworzenia subskrypcji. Spróbuj ponownie — jeśli to się powtórzy, sprawdź subskrypcje w panelu przewoźnika.',
     'reason.integration_inactive':
-      'Integracja jest wyłączona. Włącz ją, aby otrzymywać aktualizacje.',
+      'Integracja jest odłączona. Podłącz ją ponownie, aby otrzymywać aktualizacje.',
     'reason.provider_unauthorized':
       'Nova Poshta nie przyjęła klucza — jest nieprawidłowy lub unieważniony.',
     'reason.provider_rejected': 'Nova Poshta odrzuciła żądanie subskrypcji.',

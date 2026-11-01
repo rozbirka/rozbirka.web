@@ -21,7 +21,9 @@ import { cabinetPath } from './cabinet-paths'
 import { onOpenCommandPalette } from './command-palette-open'
 import { moduleLabel } from './module-messages'
 import { cabinetModules, type CabinetModuleKey } from './module-registry'
+import { useHiddenModules } from './nova-poshta-presence'
 import { evaluateModuleAccess } from './policy'
+import { stickerNavigationTarget } from './stickers/sticker-access'
 import { shellMessages } from './shell-messages'
 
 interface Command {
@@ -70,19 +72,27 @@ export function CommandPalette({
   const [active, setActive] = useState(0)
   const listId = useId()
 
+  const hidden = useHiddenModules(tenant, snapshot)
   const canView = useMemo(() => {
     const allowed = new Set<CabinetModuleKey>()
     for (const definition of Object.values(cabinetModules))
       if (
-        evaluateModuleAccess(
-          definition,
-          { status: 'ready', snapshot, error: null },
-          'view',
-        ).kind === 'allowed'
+        !hidden.has(definition.key) &&
+        (definition.key === 'stickers'
+          ? stickerNavigationTarget(tenant.slug, {
+              status: 'ready',
+              snapshot,
+              error: null,
+            }) !== null
+          : evaluateModuleAccess(
+              definition,
+              { status: 'ready', snapshot, error: null },
+              'view',
+            ).kind === 'allowed')
       )
         allowed.add(definition.key)
     return allowed
-  }, [snapshot])
+  }, [hidden, snapshot, tenant.slug])
 
   const destinations = useMemo<Command[]>(
     () =>
@@ -94,12 +104,19 @@ export function CommandPalette({
             id: `module:${definition.key}`,
             label: moduleLabel(definition.key, locale),
             detail: null,
-            to: cabinetPath(tenant.slug, definition.key),
+            to:
+              definition.key === 'stickers'
+                ? stickerNavigationTarget(tenant.slug, {
+                    status: 'ready',
+                    snapshot,
+                    error: null,
+                  })!
+                : cabinetPath(tenant.slug, definition.key),
             icon: navigation.icon,
           },
         ]
       }),
-    [canView, locale, tenant.slug],
+    [canView, locale, snapshot, tenant.slug],
   )
 
   useEffect(() => {

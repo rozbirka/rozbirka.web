@@ -6,6 +6,8 @@ import type { SubscriptionDto } from '../api/types'
 import type { CabinetContextValue } from './CabinetContext'
 import { useCabinet } from './CabinetContext'
 import { ModuleBoundary, type CabinetModuleScreenProps } from './ModuleBoundary'
+import { StickersModuleBoundary } from './stickers/StickersModuleBoundary'
+import { stickerAccessDefinition } from './stickers/sticker-access'
 import type { CabinetModuleKey } from './module-registry'
 
 vi.mock('./CabinetContext', () => ({
@@ -260,7 +262,7 @@ describe('ModuleBoundary', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: 'Підписка неактивна — дані лише для читання',
+        name: 'Поновіть підписку, щоб відновити доступ',
       }),
     ).toBeVisible()
     // Запчастини are closed while blocked; Підписка stays open. Both come from
@@ -269,4 +271,130 @@ describe('ModuleBoundary', () => {
     expect(screen.getAllByLabelText('доступний').length).toBeGreaterThan(0)
     expect(load).not.toHaveBeenCalled()
   })
+})
+
+describe('sticker mode boundary', () => {
+  it('accepts a trusted access definition and passes it to the screen', () => {
+    mockedUseCabinet.mockReturnValue(cabinet(['inventory.view']))
+    render(
+      <MemoryRouter>
+        <ModuleBoundary
+          module="stickers"
+          definition={stickerAccessDefinition('locations')}
+          screen={({ definition }) => (
+            <p>Permission {definition.viewPermission}</p>
+          )}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Permission inventory.view')).toBeVisible()
+  })
+
+  it('mounts locations for inventory-only access before the screen can request data', () => {
+    mockedUseCabinet.mockReturnValue(cabinet(['inventory.view']))
+    render(
+      <MemoryRouter initialEntries={['/app/koval/stickers?type=locations']}>
+        <StickersModuleBoundary
+          screen={({ definition }) => (
+            <p>Permission {definition.viewPermission}</p>
+          )}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Permission inventory.view')).toBeVisible()
+  })
+
+  it.each([
+    [[], '?type=locations&permission=inventory.view'],
+    [['parts.view'], '?type=locations'],
+    [['inventory.view'], '?type=parts'],
+  ] as const)(
+    'does not mount an inaccessible sticker mode for %j and %s',
+    (permissions, query) => {
+      mockedUseCabinet.mockReturnValue(cabinet([...permissions]))
+      const requestData = vi.fn(() =>
+        Promise.resolve({ default: () => <p>Sticker data</p> }),
+      )
+      render(
+        <MemoryRouter initialEntries={[`/app/koval/stickers${query}`]}>
+          <StickersModuleBoundary screen={lazy(requestData)} />
+        </MemoryRouter>,
+      )
+      expect(
+        screen.getByRole('heading', { name: 'Недостатньо прав' }),
+      ).toBeVisible()
+      expect(requestData).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(['loading', 'error'] as const)(
+    'does not mount locations while access is %s',
+    (status) => {
+      mockedUseCabinet.mockReturnValue({
+        ...cabinet(),
+        status,
+        snapshot: null,
+        error: status === 'error' ? new Error('offline') : null,
+      })
+      const requestData = vi.fn(() =>
+        Promise.resolve({ default: () => <p>Sticker data</p> }),
+      )
+      render(
+        <MemoryRouter initialEntries={['/app/koval/stickers?type=locations']}>
+          <StickersModuleBoundary screen={lazy(requestData)} />
+        </MemoryRouter>,
+      )
+      expect(screen.queryByText('Sticker data')).not.toBeInTheDocument()
+      expect(requestData).not.toHaveBeenCalled()
+    },
+  )
+
+  it('defaults a bare sticker bookmark to locations for inventory-only access', async () => {
+    mockedUseCabinet.mockReturnValue(cabinet(['inventory.view']))
+    function Content({ definition }: CabinetModuleScreenProps) {
+      const location = useLocation()
+      return (
+        <p>
+          {definition.viewPermission} {location.search}
+        </p>
+      )
+    }
+    render(
+      <MemoryRouter initialEntries={['/app/koval/stickers']}>
+        <StickersModuleBoundary screen={Content} />
+      </MemoryRouter>,
+    )
+    expect(
+      await screen.findByText('inventory.view ?type=locations'),
+    ).toBeVisible()
+  })
+})
+
+it('does not offer forbidden billing routes or reveal billing summary to a blocked member', () => {
+  mockedUseCabinet.mockReturnValue({
+    ...cabinet(['parts.view']),
+    snapshot: {
+      ...cabinet(['parts.view']).snapshot!,
+      role: 'manager',
+      entitlement: { state: 'blocked', usage: subscription.usage },
+      subscription: { ...subscription, state: 'blocked' },
+    },
+  })
+  renderBoundary(
+    'parts',
+    lazy(() => Promise.resolve({ default: () => <p>Protected parts</p> })),
+  )
+  expect(
+    screen.getByText(
+      'Керування підпискою недоступне для ваших прав. Зверніться до власника розбірки або підтримки.',
+    ),
+  ).toBeVisible()
+  for (const name of [
+    'Перейти до підписки',
+    'Порівняти тарифи',
+    'Історія платежів',
+  ])
+    expect(screen.queryByRole('link', { name })).not.toBeInTheDocument()
+  expect(screen.queryByText('Сума до сплати')).not.toBeInTheDocument()
+  expect(screen.queryByText('Protected parts')).not.toBeInTheDocument()
 })

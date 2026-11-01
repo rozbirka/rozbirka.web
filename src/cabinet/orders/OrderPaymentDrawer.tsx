@@ -24,6 +24,7 @@ import {
 /** How the last attempt to record a payment ended (board 3c). */
 export type PaymentOutcome =
   | { kind: 'refused'; message: string }
+  | { kind: 'retryable'; message: string }
   | { kind: 'checking' }
   | { kind: 'not-recorded' }
   | { kind: 'check-failed' }
@@ -36,17 +37,26 @@ export type PaymentOutcome =
  */
 export function OrderPaymentDrawer({
   accountingCurrency,
+  allowedCurrencies,
   busy,
+  emptyTillsMessage,
   existing,
   onOpenChange,
+  onCloseAutoFocus,
   onSave,
   open,
   orderNumber,
   orderValue,
   outcome,
+  validatePayment,
 }: {
   /** `null` when no accounting currency is chosen (or reported). */
   accountingCurrency: string | null
+  /** Optional payment constraints for an endpoint that accepts fewer currencies. */
+  allowedCurrencies?: readonly string[]
+  emptyTillsMessage?: string
+  validatePayment?: (payment: ConfirmPayment) => string | null
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
   busy: boolean
   /** Payments the order already holds; the save replaces the whole set. */
   existing: readonly ConfirmPayment[]
@@ -90,11 +100,22 @@ export function OrderPaymentDrawer({
 
   const tills = useMemo(
     () =>
-      registers.filter(
-        (register) =>
-          register.isActive && Object.keys(register.balances).length > 0,
-      ),
-    [registers],
+      registers
+        .filter((register) => register.isActive)
+        .map((register) =>
+          allowedCurrencies === undefined
+            ? register
+            : {
+                ...register,
+                balances: Object.fromEntries(
+                  Object.entries(register.balances).filter(([code]) =>
+                    allowedCurrencies.includes(code),
+                  ),
+                ),
+              },
+        )
+        .filter((register) => Object.keys(register.balances).length > 0),
+    [registers, allowedCurrencies],
   )
   const till = tills.find((item) => item.id === tillId) ?? tills[0]
   const available = till === undefined ? [] : tillCurrencies(till)
@@ -111,12 +132,18 @@ export function OrderPaymentDrawer({
     amount !== null && amount > 0
       ? amountPrecisionError(amount, active, locale)
       : null
+  const paymentError =
+    till !== undefined && active !== null && amount !== null && amount > 0
+      ? (validatePayment?.({ accountId: till.id, amount, currency: active }) ??
+        null)
+      : null
   const valid =
     till !== undefined &&
     active !== null &&
     amount !== null &&
     amount > 0 &&
-    precision === null
+    precision === null &&
+    paymentError === null
 
   const pickTill = (next: CashRegister) => {
     if (next.id === till?.id) return
@@ -185,6 +212,7 @@ export function OrderPaymentDrawer({
           </Button>
         </>
       }
+      onCloseAutoFocus={onCloseAutoFocus}
       onOpenChange={(next) => {
         if (busy && !next) return
         onOpenChange(next)
@@ -192,9 +220,12 @@ export function OrderPaymentDrawer({
       open={open}
       title={t('title')}
     >
-      {outcome === null ? null : outcome.kind === 'refused' ? (
+      {outcome === null ? null : outcome.kind === 'refused' ||
+        outcome.kind === 'retryable' ? (
         <Notice block tone="danger">
-          <p className="rz-strong m-0 font-semibold">{t('refusedTitle')}</p>
+          {outcome.kind === 'refused' ? (
+            <p className="rz-strong m-0 font-semibold">{t('refusedTitle')}</p>
+          ) : null}
           <p className="m-0 mt-1 text-pretty">{outcome.message}</p>
           {amount !== null && active !== null ? (
             <p className="text-app-muted m-0 mt-1">
@@ -243,7 +274,7 @@ export function OrderPaymentDrawer({
         {loading ? (
           <SkeletonRows label={t('loadingTills')} rows={3} />
         ) : tills.length === 0 ? (
-          <Notice tone="warn">{t('noTills')}</Notice>
+          <Notice tone="warn">{emptyTillsMessage ?? t('noTills')}</Notice>
         ) : (
           <>
             <fieldset className="m-0 grid min-h-fit gap-2 border-0 p-0">
@@ -263,6 +294,7 @@ export function OrderPaymentDrawer({
                     >
                       <input
                         checked={chosen}
+                        disabled={busy}
                         className="rz-radio shrink-0"
                         name={`${groupId}-till`}
                         onChange={() => pickTill(option)}
@@ -315,6 +347,7 @@ export function OrderPaymentDrawer({
                     <button
                       aria-label={`${code} (${currencyNameOf(code, locale)})`}
                       aria-pressed={active === code}
+                      disabled={busy}
                       className="flex-1 justify-center font-mono"
                       key={code}
                       onClick={() => {
@@ -330,12 +363,15 @@ export function OrderPaymentDrawer({
               </fieldset>
             )}
 
-            <Field error={precision ?? undefined} label={t('amount')}>
+            <Field
+              error={precision ?? paymentError ?? undefined}
+              label={t('amount')}
+            >
               <MoneyInput
                 className="h-12 text-page"
                 currency={active}
                 inputMode="decimal"
-                numeric
+                readOnly={busy}
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="0"
                 value={draft}

@@ -1,6 +1,8 @@
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
+import { useTheme } from './theme-preference'
 
 let holders = 0
+let previousTheme: string | undefined
 
 /**
  * Puts the design system root (`.rz`) on `<body>` while a cabinet or account
@@ -9,12 +11,21 @@ let holders = 0
  * ring the system's. The landing never mounts it, so its body stays its own.
  */
 export function useDesignSystemRoot() {
-  useEffect(() => {
+  const [theme] = useTheme()
+  useLayoutEffect(() => {
+    if (holders === 0) previousTheme = document.body.dataset['theme']
     holders += 1
     document.body.classList.add('rz')
     return () => {
       holders -= 1
-      if (holders === 0) document.body.classList.remove('rz')
+      if (holders === 0) {
+        document.body.classList.remove('rz')
+        if (previousTheme === undefined) delete document.body.dataset['theme']
+        else document.body.dataset['theme'] = previousTheme
+      }
     }
   }, [])
+  useLayoutEffect(() => {
+    document.body.dataset['theme'] = theme
+  }, [theme])
 }

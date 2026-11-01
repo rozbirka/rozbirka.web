@@ -1,13 +1,13 @@
 import {
+  appOrigin,
+  upstreamOrigin,
   expect,
   test,
   type APIRequestContext,
   type Page,
   type Route,
-} from '@playwright/test'
+} from './fixtures'
 
-const upstreamOrigin = 'http://127.0.0.1:4174'
-const appOrigin = 'http://127.0.0.1:4173'
 const phone = '501112233'
 const otp = '123456'
 const fixtureRefreshSecret = 'refresh-1'
@@ -113,6 +113,7 @@ const accessByTenant = {
 interface RouteOptions {
   newUser?: boolean
   noTenants?: boolean
+  onlyOwnedTenant?: boolean
   parallel401?: boolean
 }
 
@@ -120,6 +121,7 @@ interface RouteState {
   protectedAttempts: Record<string, number>
   invitationAccepted: boolean
   tenantRequests: { path: string; tenantId: string | null }[]
+  unexpectedRequests: string[]
 }
 
 function containsRefreshCredential(value: unknown): boolean {
@@ -175,6 +177,7 @@ async function installApiBoundary(
     protectedAttempts: {},
     invitationAccepted: false,
     tenantRequests: [],
+    unexpectedRequests: [],
   }
 
   await page.route('**/*', async (route) => {
@@ -242,7 +245,14 @@ async function installApiBoundary(
         })
         return
       }
-      await fulfillData(route, options.noTenants ? [] : tenants)
+      await fulfillData(
+        route,
+        options.noTenants
+          ? []
+          : options.onlyOwnedTenant && !state.invitationAccepted
+            ? tenants.slice(0, 1)
+            : tenants,
+      )
       return
     }
     if (
@@ -267,6 +277,53 @@ async function installApiBoundary(
         permissions: ['cars.view'],
       })
       return
+    }
+
+    if (options.onlyOwnedTenant) {
+      if (
+        method === 'GET' &&
+        ['/api/v1/dashboard', '/api/v1/dashboard/analytics'].includes(path)
+      ) {
+        const response = await route.fetch({
+          url: `${upstreamOrigin()}${path}${url.search}`,
+        })
+        await route.fulfill({ response })
+        return
+      }
+      if (path === '/api/v1/me/feature-flags' && method === 'GET') {
+        await fulfillData(route, {})
+        return
+      }
+      if (path === '/api/v1/me/activity' && method === 'POST') {
+        await route.fulfill({ status: 204 })
+        return
+      }
+      if (path === '/api/v1/cars' && method === 'GET') {
+        await fulfillData(route, {
+          items: [],
+          page: 1,
+          pageSize: 5,
+          total: 0,
+          totalPages: 0,
+        })
+        return
+      }
+      if (
+        /^\/api\/v1\/tenants\/[^/]+\/onboarding$/.test(path) &&
+        method === 'GET'
+      ) {
+        await fulfillData(route, {
+          eligible: false,
+          deferred: false,
+          dismissed: false,
+          completed: true,
+          settingsCompleted: true,
+          currencySelected: true,
+          sourceCreated: true,
+          firstPartCreated: true,
+        })
+        return
+      }
     }
 
     const tenantId = request.headers()['x-tenant-id'] ?? null
@@ -320,6 +377,15 @@ async function installApiBoundary(
       return
     }
 
+    if (options.onlyOwnedTenant && path.startsWith('/api/v1/')) {
+      state.unexpectedRequests.push(`${method} ${path}`)
+      await fulfillData(
+        route,
+        { error: { code: 'UNEXPECTED_FIXTURE_REQUEST', message: path } },
+        500,
+      )
+      return
+    }
     await route.continue()
   })
 
@@ -330,14 +396,14 @@ async function resetUpstream(
   request: APIRequestContext,
   options: { newUser?: boolean } = {},
 ) {
-  const response = await request.post(`${upstreamOrigin}/_test/reset`, {
+  const response = await request.post(`${upstreamOrigin()}/_test/reset`, {
     data: options,
   })
   expect(response.ok()).toBeTruthy()
 }
 
 async function upstreamStats(request: APIRequestContext) {
-  const response = await request.get(`${upstreamOrigin}/_test/stats`)
+  const response = await request.get(`${upstreamOrigin()}/_test/stats`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as {
     sendRequests: number
@@ -558,7 +624,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   const sendResponsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return (
-      url.origin === appOrigin &&
+      url.origin === appOrigin() &&
       url.pathname === '/session/otp/send' &&
       response.request().method() === 'POST'
     )
@@ -566,7 +632,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   const verifyResponsePromise = page.waitForResponse((response) => {
     const url = new URL(response.url())
     return (
-      url.origin === appOrigin &&
+      url.origin === appOrigin() &&
       url.pathname === '/session/otp/verify' &&
       response.request().method() === 'POST'
     )
@@ -586,7 +652,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
 
   const verifyResponse = await verifyResponsePromise
   const verifyUrl = new URL(verifyResponse.url())
-  expect(verifyUrl.origin).toBe(appOrigin)
+  expect(verifyUrl.origin).toBe(appOrigin())
   expect(verifyUrl.pathname).toBe('/session/otp/verify')
   expect(verifyResponse.request().method()).toBe('POST')
   expect(verifyResponse.status()).toBe(200)
@@ -608,7 +674,7 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
     verifyRequests: 1,
   })
 
-  const cookies = await context.cookies(`${appOrigin}/session/refresh`)
+  const cookies = await context.cookies(`${appOrigin()}/session/refresh`)
   const refreshCookie = cookies.find(
     (cookie) => cookie.name === 'rozbirka_refresh',
   )
@@ -628,6 +694,22 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   expect(storageText).not.toMatch(
     /access.?token|refresh.?token|access-|refresh-/,
   )
+})
+
+test('accepts a full OTP keyboard replacement in any digit field @auth-smoke', async ({
+  page,
+}) => {
+  await installApiBoundary(page)
+  await page.goto('/login')
+  await page.getByLabel('Номер телефону').fill(phone)
+  await page.getByRole('button', { name: 'Отримати код' }).click()
+  await page.getByLabel('Цифра 1').fill(otp)
+  for (const [index, digit] of [...otp].entries())
+    await expect(page.getByLabel(`Цифра ${index + 1}`)).toHaveValue(digit)
+  await page.getByLabel('Цифра 3').fill(otp)
+  await expect(page.getByLabel('Цифра 6')).toBeFocused()
+  await page.getByRole('button', { name: 'Підтвердити' }).click()
+  await expect(page).toHaveURL(/\/app\/koval\/dashboard$/)
 })
 
 test('invalid OTP reaches the Ukrainian login error through the Worker without leaking upstream details @auth-smoke', async ({
@@ -737,7 +819,7 @@ test('logout expires the cookie and leaves the user as guest @auth-smoke', async
   expect(visitedPaths).toContain('/')
   expect(visitedPaths).not.toContain('/login')
   expect(
-    (await context.cookies(`${appOrigin}/session/logout`)).some(
+    (await context.cookies(`${appOrigin()}/session/logout`)).some(
       (cookie) => cookie.name === 'rozbirka_refresh',
     ),
   ).toBe(false)
@@ -746,6 +828,63 @@ test('logout expires the cookie and leaves the user as guest @auth-smoke', async
   await page.goto('/account')
   await expect(page).toHaveURL(/\/login$/)
 })
+
+for (const width of [1280, 390]) {
+  test(`owner joins another yard as manager from the tenant picker at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    const state = await installApiBoundary(page, { onlyOwnedTenant: true })
+    await loginFrom(page)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Олена')
+
+    if (width < 768) {
+      await page.getByRole('button', { name: 'Ще', exact: true }).click()
+    }
+    await page
+      .getByRole('combobox', { name: 'Перемкнути розбірку' })
+      .filter({ visible: true })
+      .selectOption('')
+    const dialog = page.getByRole('dialog', {
+      name: 'Приєднатися до іншої розбірки',
+    })
+    await expect(dialog).toBeVisible()
+    await expect(
+      dialog.getByRole('button', { name: 'Переглянути запрошення' }),
+    ).toBeDisabled()
+    await dialog.getByLabel('Код запрошення').fill('  INVITE123  ')
+    await expect(dialog.getByLabel('Код запрошення')).toBeFocused()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    await dialog.getByRole('button', { name: 'Переглянути запрошення' }).click()
+    await expect(page).toHaveURL('/invite/INVITE123')
+    await expect(
+      page.getByRole('heading', { name: 'Розбірка Соболя' }),
+    ).toBeVisible()
+    await expect(page.getByText('Менеджер', { exact: true })).toBeVisible()
+    expect(state.invitationAccepted).toBe(false)
+    await page.getByRole('button', { name: 'Прийняти запрошення' }).click()
+    await expect(page).toHaveURL('/app/sobol/dashboard')
+    expect(state.invitationAccepted).toBe(true)
+    if (width < 768) {
+      await page.getByRole('button', { name: 'Ще', exact: true }).click()
+    }
+    const switcher = page
+      .getByRole('combobox', { name: 'Перемкнути розбірку' })
+      .filter({ visible: true })
+    await expect(switcher).toHaveValue('tenant-2')
+    await switcher.selectOption('tenant-1')
+    await expect(page).toHaveURL('/app/koval/dashboard')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Олена')
+    expect(errors).toEqual([])
+    expect(state.unexpectedRequests).toEqual([])
+  })
+}
 
 test('invitation resumes after explicit registration and name into the accepted tenant @registration-smoke', async ({
   page,
@@ -795,17 +934,17 @@ test('scan deep link resumes after OTP without accepting an external return URL'
 
   await completeOtpLogin(page)
   await expect(page).toHaveURL('/app/koval/dashboard?scan=QR-123~part')
-  expect(new URL(page.url()).origin).toBe(appOrigin)
+  expect(new URL(page.url()).origin).toBe(appOrigin())
 })
 
 test('native auth relay keeps raw tokens out of browser cookies and blocks registration @native-auth-smoke', async ({
   request,
 }) => {
-  const send = await request.post(`${appOrigin}/auth/login/phone`, {
+  const send = await request.post(`${appOrigin()}/auth/login/phone`, {
     data: { phone: '+380501112233' },
   })
   expect(send.status()).toBe(200)
-  const verify = await request.post(`${appOrigin}/auth/login/verify`, {
+  const verify = await request.post(`${appOrigin()}/auth/login/verify`, {
     data: {
       phone: '+380501112233',
       code: otp,
@@ -818,7 +957,7 @@ test('native auth relay keeps raw tokens out of browser cookies and blocks regis
   expect(result).toMatchObject({
     data: { refreshToken: 'refresh-1', accessToken: 'access-1' },
   })
-  const denied = await request.post(`${appOrigin}/auth/registration/phone`, {
+  const denied = await request.post(`${appOrigin()}/auth/registration/phone`, {
     data: { phone: '+380501112233' },
   })
   expect(denied.status()).toBe(404)

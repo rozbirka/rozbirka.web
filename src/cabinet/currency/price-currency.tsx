@@ -26,7 +26,12 @@ export function MoneyInput({
       <TextInput
         inputMode="decimal"
         {...props}
-        className={cn('rz-mono', currency === 'none' ? '' : 'pr-14', className)}
+        dir="ltr"
+        className={cn(
+          'rz-mono text-left',
+          currency === 'none' ? '' : 'pr-14',
+          className,
+        )}
       />
       {currency === 'none' ? null : (
         <span

@@ -7,6 +7,7 @@ export const locationLabelMessages = defineMessages({
     subtitle:
       'QR-етикетки місць зберігання. Оберіть потрібні або всі та підготуйте до друку.',
     pagination: 'Сторінки етикеток',
+    warehouse: 'Місця зберігання',
     zone: 'Етикетки зон',
     section: 'Етикетки секцій',
     shelf: 'Етикетки полиць',
@@ -63,6 +64,7 @@ export const locationLabelMessages = defineMessages({
     subtitle:
       'Storage QR labels. Select specific labels or all, then prepare them for printing.',
     pagination: 'Label pages',
+    warehouse: 'Storage locations',
     zone: 'Zone labels',
     section: 'Section labels',
     shelf: 'Shelf labels',
@@ -117,6 +119,7 @@ export const locationLabelMessages = defineMessages({
     subtitle:
       'Etykiety QR miejsc przechowywania. Wybierz konkretne lub wszystkie i przygotuj do druku.',
     pagination: 'Strony etykiet',
+    warehouse: 'Miejsca przechowywania',
     zone: 'Etykiety stref',
     section: 'Etykiety sekcji',
     shelf: 'Etykiety półek',

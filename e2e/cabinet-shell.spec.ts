@@ -1,13 +1,14 @@
+import { readFile } from 'node:fs/promises'
 import AxeBuilder from '@axe-core/playwright'
 import {
+  upstreamOrigin,
   expect,
   test,
   type APIRequestContext,
   type Page,
   type Route,
-} from '@playwright/test'
+} from './fixtures'
 
-const upstreamOrigin = 'http://127.0.0.1:4174'
 const phone = '501112233'
 const otp = '123456'
 
@@ -433,7 +434,7 @@ async function installCabinetApiBoundary(
     if (isRecognizedDashboardPath(path)) {
       const authorization = request.headers().authorization
       const upstreamResponse = await fetch(
-        `${upstreamOrigin}${path}${requestUrl.search}`,
+        `${upstreamOrigin()}${path}${requestUrl.search}`,
         {
           method: request.method(),
           headers: {
@@ -894,7 +895,7 @@ async function installCabinetApiBoundary(
 }
 
 async function resetUpstream(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/reset`, {
+  const response = await request.post(`${upstreamOrigin()}/_test/reset`, {
     data: {},
   })
   expect(response.ok()).toBeTruthy()
@@ -903,7 +904,7 @@ async function resetUpstream(request: APIRequestContext) {
 async function upstreamStats(
   request: APIRequestContext,
 ): Promise<DashboardUpstreamStats> {
-  const response = await request.get(`${upstreamOrigin}/_test/stats`)
+  const response = await request.get(`${upstreamOrigin()}/_test/stats`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as DashboardUpstreamStats
 }
@@ -918,7 +919,7 @@ async function resetDashboardUpstream(
   } = {},
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/reset`,
+    `${upstreamOrigin()}/_test/dashboard/reset`,
     { data: options },
   )
   expect(response.ok()).toBeTruthy()
@@ -929,7 +930,7 @@ async function armDelayedDashboard(
   tenantId: string,
 ) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/delay`,
+    `${upstreamOrigin()}/_test/dashboard/delay`,
     { data: { tenantId } },
   )
   expect(response.ok()).toBeTruthy()
@@ -937,18 +938,20 @@ async function armDelayedDashboard(
 
 async function releaseDelayedDashboard(request: APIRequestContext) {
   const response = await request.post(
-    `${upstreamOrigin}/_test/dashboard/release`,
+    `${upstreamOrigin()}/_test/dashboard/release`,
   )
   expect(response.ok()).toBeTruthy()
 }
 
 async function armDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/delay`)
+  const response = await request.post(`${upstreamOrigin()}/_test/logout/delay`)
   expect(response.ok()).toBeTruthy()
 }
 
 async function releaseDelayedLogout(request: APIRequestContext) {
-  const response = await request.post(`${upstreamOrigin}/_test/logout/release`)
+  const response = await request.post(
+    `${upstreamOrigin()}/_test/logout/release`,
+  )
   expect(response.ok()).toBeTruthy()
 }
 
@@ -1110,9 +1113,7 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
     await expect(
       page.getByRole('heading', { name: 'Підписка', level: 1 }),
     ).toBeVisible()
-    await expect(
-      page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
-    ).toBeVisible()
+    await expect(page.getByText('Koval Pro', { exact: true })).toBeVisible()
     return
   }
   if (path === '/app/koval/settings/billing/plans') {
@@ -1120,7 +1121,9 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
       page.getByRole('heading', { name: 'Тарифи', level: 1 }),
     ).toBeVisible()
     await expect(
-      page.getByRole('heading', { name: 'Lite', level: 2 }),
+      page
+        .getByRole('table', { name: 'Тарифи', exact: true })
+        .getByRole('rowheader', { name: /^Lite/ }),
     ).toBeVisible()
     return
   }
@@ -1129,7 +1132,7 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
       page.getByRole('heading', { name: 'Платежі', level: 1 }),
     ).toBeVisible()
     await expect(
-      page.getByRole('heading', { name: 'Спосіб оплати', level: 2 }),
+      page.getByRole('heading', { name: 'Історія платежів', level: 2 }),
     ).toBeVisible()
     await expect(page.getByText('Платежів ще не було.')).toBeVisible()
     return
@@ -1291,7 +1294,9 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
-  const fixture = await installCabinetApiBoundary(page)
+  const fixture = await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/dashboard')
@@ -1365,9 +1370,7 @@ test('loads tenant-specific subscription data from tenant-scoped requests @cabin
   const fixture = await installCabinetApiBoundary(page, { sobolBilling: true })
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Підписка')
-  await expect(
-    page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
-  ).toBeVisible()
+  await expect(page.getByText('Koval Pro', { exact: true })).toBeVisible()
 
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/settings/billing/overview')
@@ -1391,7 +1394,9 @@ test('loads tenant-specific subscription data from tenant-scoped requests @cabin
 test('falls back to the target dashboard when its policy denies the current module @cabinet-smoke', async ({
   page,
 }) => {
-  await installCabinetApiBoundary(page)
+  await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Підписка')
   await expect(page).toHaveURL('/app/koval/settings/billing/overview')
@@ -1402,6 +1407,35 @@ test('falls back to the target dashboard when its policy denies the current modu
   await expect(
     page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Соболя' }),
   ).toBeVisible()
+})
+
+test('blocked tenant dashboard shows renewal without requesting business data @cabinet-smoke', async ({
+  page,
+}) => {
+  const fixture = await installCabinetApiBoundary(page)
+  await loginFrom(page)
+  await selectVisibleTenant(page, 'tenant-2')
+
+  await expect(page).toHaveURL('/app/sobol/dashboard')
+  await expect(
+    page.getByRole('combobox', { name: 'Перемкнути розбірку' }),
+  ).toHaveValue('tenant-2')
+  await expect(
+    page.getByRole('heading', { name: 'Доступ призупинено', level: 1 }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(
+      'Керування підпискою недоступне для ваших прав. Зверніться до власника розбірки або підтримки.',
+    ),
+  ).toBeVisible()
+  expect(
+    fixture.requests.filter(
+      ({ path, tenantId }) =>
+        tenantId === 'tenant-2' &&
+        (path === '/api/v1/dashboard' ||
+          path === '/api/v1/dashboard/analytics'),
+    ),
+  ).toHaveLength(0)
 })
 
 test('boots an active Manager entitlement without requesting detailed billing @cabinet-smoke', async ({
@@ -1564,7 +1598,11 @@ test('clears stale dashboard totals while the next tenant summary is pending', a
   page,
   request,
 }) => {
-  const fixture = await installCabinetApiBoundary(page)
+  // Both tenants need active access: a blocked subscription correctly skips
+  // business-data requests and renders the renewal entry instead.
+  const fixture = await installCabinetApiBoundary(page, {
+    sobolEntitlementState: 'active',
+  })
   await loginFrom(page)
   await expect(dashboardGreeting(page)).toContainText('Олена')
   await armDelayedDashboard(request, 'tenant-2')
@@ -1723,7 +1761,7 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/app/koval/inventory/warehouses/warehouse-1?labels=1#queue')
   await expect(page).toHaveURL(
-    '/app/koval/warehouses/warehouse-1?labels=1#queue',
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
   )
   await page.goto('/app/koval/inventory/sessions/session-1')
   await expect(page.getByRole('heading', { name: 'INV-001' })).toBeVisible()
@@ -1733,6 +1771,87 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
     page.getByRole('heading', { name: 'Результати сесії' }),
   ).toBeVisible()
   await expect(page.getByText('Крило')).toBeVisible()
+})
+
+test('directory searches retain spaces and rapid typing @search-spaces', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { businessOperations: true })
+  const pageOf = (items: unknown[]) => ({
+    items,
+    page: 1,
+    pageSize: 30,
+    total: items.length,
+    totalPages: 1,
+  })
+  await page.route('**/api/v1/customers*', (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path !== '/api/v1/customers' && path !== '/api/v1/customers/directory')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'customer-search',
+          name: 'Тестовий клієнт',
+          phone: null,
+          ordersCount: 1,
+          totalAmount: 100,
+          averageAmount: 100,
+          firstOrderAt: null,
+          lastOrderAt: null,
+          isActive: true,
+          createdAt: '2026-09-02T10:00:00Z',
+        },
+      ]),
+    )
+  })
+  await page.route('**/api/v1/orders*', (route) => {
+    if (new URL(route.request().url()).pathname !== '/api/v1/orders')
+      return route.fallback()
+    return fulfillData(
+      route,
+      pageOf([
+        {
+          id: 'order-search',
+          number: 1,
+          status: 'pending',
+          customerName: 'Тестовий клієнт',
+          totalAmount: 100,
+          currency: 'USD',
+          createdAt: '2026-09-02T10:00:00Z',
+          itemsCount: 1,
+          paymentAccountNames: [],
+          partNames: ['Тестова деталь'],
+        },
+      ]),
+    )
+  })
+  await loginFrom(page)
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    for (const [route, label] of [
+      ['customers', 'Пошук клієнта'],
+      ['orders', 'Пошук замовлень'],
+    ]) {
+      await page.goto(`/app/koval/${route}`)
+      const search = page.getByRole('searchbox', { name: label, exact: true })
+      await search.pressSequentially('Тест ')
+      await expect(search).toHaveValue('Тест ')
+      await search.pressSequentially('пошук ')
+      await expect(search).toHaveValue('Тест пошук ')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.get('q'))
+        .toBe('Тест пошук ')
+      await search.fill('  Довга назва  ')
+      await expect(search).toHaveValue('  Довга назва  ')
+      await search.clear()
+      await expect(search).toHaveValue('')
+      await expect
+        .poll(() => new URL(page.url()).searchParams.has('q'))
+        .toBe(false)
+    }
+  }
 })
 
 test('compact location browser searches and pages large shelf lists @location-browser', async ({
@@ -1913,7 +2032,10 @@ test('compact location browser searches and pages large shelf lists @location-br
     await expect(
       page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
     ).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук секції' }).fill('S7')
+    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
+    await sectionSearch.pressSequentially('Секція ')
+    await expect(sectionSearch).toHaveValue('Секція ')
+    await sectionSearch.fill('S7')
     await page.getByRole('link', { name: 'Секція 7, S7', exact: true }).click()
     await expect(page).toHaveURL(/warehouses\/sections\/section-6$/)
     const table = page.getByRole('table', { name: 'Полиці: Секція 7' })
@@ -1923,7 +2045,10 @@ test('compact location browser searches and pages large shelf lists @location-br
       .getByRole('button', { name: /Наступна/ })
       .click()
     await expect(page.getByText('S7-P16', { exact: true })).toBeVisible()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('S7-P100')
+    const shelfSearch = page.getByRole('searchbox', { name: 'Пошук полиці' })
+    await shelfSearch.pressSequentially('Полиця ')
+    await expect(shelfSearch).toHaveValue('Полиця ')
+    await shelfSearch.fill('S7-P100')
     await page
       .getByRole('link', {
         name: 'Переглянути запчастини: Полиця 100',
@@ -2717,17 +2842,16 @@ test('reuses the browser payment key after a network failure and reports one err
   await expect(page.getByText('Клієнта не вказано')).toBeVisible()
   const pay = page.getByRole('button', { name: 'Внести оплату' }).first()
   await pay.click()
-  const drawer = page.getByRole('dialog', { name: 'Внести оплату' })
-  await drawer.getByRole('button', { name: 'Зберегти платіж' }).click()
+  const drawer = page.getByRole('dialog', { name: 'Додати платіж' })
+  await drawer.getByLabel('Сума', { exact: true }).fill('1200')
+  await drawer.getByRole('button', { name: 'Записати оплату' }).click()
   await expect(drawer.getByRole('alert')).toHaveCount(1)
 
-  await drawer.getByRole('button', { name: 'Зберегти платіж' }).click()
+  await drawer.getByRole('button', { name: 'Записати оплату' }).click()
   await expect(drawer).toHaveCount(0)
   await pay.click()
-  await page
-    .getByRole('dialog', { name: 'Внести оплату' })
-    .getByRole('button', { name: 'Зберегти платіж' })
-    .click()
+  await drawer.getByLabel('Сума', { exact: true }).fill('1200')
+  await drawer.getByRole('button', { name: 'Записати оплату' }).click()
 
   await expect.poll(() => paymentKeys.length).toBe(3)
   expect(paymentKeys[0]).toBe(paymentKeys[1])
@@ -3046,15 +3170,17 @@ for (const viewport of [
     const full = await dialog.locator('img').first().boundingBox()
     expect(full!.y).toBeGreaterThanOrEqual(0)
     expect(full!.y + full!.height).toBeLessThanOrEqual(viewport.height)
-    const strip = dialog.locator('ul')
+    const strip = dialog.getByRole('tablist', { name: 'Мініатюри' })
     const firstReachable = await strip.evaluate(
       (element) =>
         element.firstElementChild!.getBoundingClientRect().left >=
         element.getBoundingClientRect().left,
     )
     expect(firstReachable).toBe(true)
-    await dialog.getByRole('button', { name: 'Фото 10', exact: true }).click()
-    await expect(dialog.getByText('Фото недоступне')).toBeVisible()
+    await dialog.getByRole('tab', { name: /^Фото 10 з 10:/ }).click()
+    await expect(dialog.getByRole('alert')).toContainText(
+      'Не вдалося завантажити фото',
+    )
     await page.keyboard.press('Escape')
     await expect(opener).toBeFocused()
     await page.goto('/app/koval/cars/car-1/edit')
@@ -3085,170 +3211,1039 @@ for (const viewport of [
   })
 }
 
-test('placement drawer searches large section and shelf choices without moving the page @placement-picker', async ({
-  page,
-}) => {
-  await installCabinetApiBoundary(page, { partsManage: true })
-  const sectionData = Array.from({ length: 100 }, (_, index) => ({
-    id: `section-${index + 1}`,
-    zoneId: 'zone-1',
-    zoneName: 'Зона А',
-    warehouseId: 'warehouse-1',
-    warehouseName: 'Основний склад',
-    name: `Секція ${index + 1}`,
-    code: `S${index + 1}`,
-    isActive: true,
-    qrCode: `section:${index}`,
-  }))
-  const shelfData = Array.from({ length: 100 }, (_, index) => ({
-    id: `shelf-${index + 1}`,
-    sectionId: 'section-100',
-    sectionName: 'Секція 100',
-    zoneId: 'zone-1',
-    zoneName: 'Зона А',
-    warehouseId: 'warehouse-1',
-    warehouseName: 'Основний склад',
-    name: `Полиця ${index + 1}`,
-    code: `P${index + 1}`,
-    isActive: true,
-    qrCode: `shelf:${index}`,
-  }))
-  let saved: Record<string, unknown> | null = null
-  await page.route('**/api/v1/**', async (route) => {
-    const request = route.request()
-    const path = new URL(request.url()).pathname
-    if (path === '/api/v1/parts/part-picker')
-      return fulfillData(route, {
-        id: 'part-picker',
-        name: 'Тестова фара',
-        qrCode: 'part:picker',
-        unit: 'шт',
-        quantityTotal: 1,
-        quantityAvailable: 1,
-        quantityReserved: 0,
-        quantitySold: 0,
-        status: 'available',
-        condition: 'good',
-        photos: [],
-        source: 'batch',
-        car: null,
-        intake: null,
-        desiredSalePrice: null,
-        createdAt: '2026-10-16T10:00:00Z',
-        createdBy: { name: 'Тест' },
+test.describe('placement picker viewport regression', () => {
+  test.beforeEach(async ({ context }, testInfo) => {
+    if (testInfo.project.name === 'ios')
+      await context.tracing.start({
+        screenshots: true,
+        snapshots: true,
+        sources: true,
       })
-    if (path === '/api/v1/parts/part-picker/history')
-      return fulfillData(route, { events: [] })
-    if (path === '/api/v1/parts/part-picker/inventory-zones') {
-      if (request.method() === 'PUT')
-        saved = request.postDataJSON() as Record<string, unknown>
-      return fulfillData(route, [
-        {
-          zoneId: 'zone-1',
-          zoneName: 'Зона А',
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Основний склад',
-          zoneCode: 'A',
-          zoneQrCode: 'zone:1',
-          isSystemUnassigned: false,
-        },
-      ])
-    }
-    if (path === '/api/v1/inventory/zones')
-      return fulfillData(route, [
-        {
-          id: 'zone-1',
-          name: 'Зона А',
-          code: 'A',
-          warehouseId: 'warehouse-1',
-          warehouseName: 'Основний склад',
-          qrCode: 'zone:1',
-          isActive: true,
-          isSystemUnassigned: false,
-        },
-      ])
-    if (path === '/api/v1/inventory/sections')
-      return fulfillData(route, sectionData)
-    if (path === '/api/v1/inventory/shelves')
-      return fulfillData(route, shelfData)
-    if (path === '/api/v1/parts/facets')
-      return fulfillData(route, {
-        zones: [],
-        warehouses: [],
-        origins: [],
-        makes: [],
-        models: [],
-        statuses: [],
-        conditions: [],
-      })
-    await route.fallback()
   })
-  await loginFrom(page)
+  test.afterEach(async ({ context }, testInfo) => {
+    if (testInfo.project.name === 'ios') {
+      const path = testInfo.outputPath('placement-trace.zip')
+      await context.tracing.stop({ path })
+      await testInfo.attach('trace', { path, contentType: 'application/zip' })
+    }
+  })
+
   for (const width of [1440, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 })
-    await page.goto('/app/koval/parts/part-picker')
-    await page.getByRole('button', { name: 'Перемістити', exact: true }).click()
-    const drawer = page.getByRole('dialog', { name: 'Розміщення на складі' })
-    const sectionTrigger = drawer.getByRole('searchbox', {
-      name: 'Пошук секції',
-    })
-    await expect(sectionTrigger).toBeVisible()
-    const pageScroll = await page.evaluate(() => scrollY)
-    await expect(page.getByRole('option')).toHaveCount(0)
-    await sectionTrigger.click()
-    const initialList = page.locator('[data-search-picker-scroll]')
-    const initialMetrics = await initialList.evaluate((el) => ({
-      height: el.clientHeight,
-      scrollHeight: el.scrollHeight,
-    }))
-    expect(initialMetrics.height).toBeLessThanOrEqual(460)
-    expect(initialMetrics.scrollHeight).toBeGreaterThan(initialMetrics.height)
-    const sectionSearch = page.getByRole('searchbox', { name: 'Пошук секції' })
-    await sectionSearch.fill('s100')
-    await expect(page.getByRole('option')).toHaveCount(2)
-    await page.getByRole('option', { name: /Секція 100/ }).click()
-    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
-    await expect(page.getByRole('option')).toHaveCount(2)
-    const popup = page.getByRole('listbox')
-    const bounds = await popup.boundingBox()
-    expect(bounds).not.toBeNull()
-    expect(bounds!.width).toBeLessThanOrEqual(width)
-    expect(bounds!.height).toBeLessThanOrEqual(460)
-    await page.keyboard.press('Escape')
-    await expect(drawer).toBeVisible()
-    await expect(page.getByRole('listbox')).toHaveCount(0)
-    await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
-    await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
-    await page.keyboard.press('Enter')
-    await expect(
-      drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
-    ).toHaveValue('Полиця 100')
-    const overflow = await page.evaluate(() => ({
-      width: innerWidth,
-      scroll: document.documentElement.scrollWidth,
-      nodes: [...document.querySelectorAll('body *')]
-        .filter((el) => {
-          const r = el.getBoundingClientRect()
-          return r.width > 0 && r.right > innerWidth + 1
+    test(`placement drawer searches large section and shelf choices without moving the page at ${width}px @placement-picker`, async ({
+      page,
+    }) => {
+      await installCabinetApiBoundary(page, { partsManage: true })
+      const sectionData = Array.from({ length: 100 }, (_, index) => ({
+        id: `section-${index + 1}`,
+        zoneId: 'zone-1',
+        zoneName: 'Зона А',
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Основний склад',
+        name: `Секція ${index + 1}`,
+        code: `S${index + 1}`,
+        isActive: true,
+        qrCode: `section:${index}`,
+      }))
+      const shelfData = Array.from({ length: 100 }, (_, index) => ({
+        id: `shelf-${index + 1}`,
+        sectionId: 'section-100',
+        sectionName: 'Секція 100',
+        zoneId: 'zone-1',
+        zoneName: 'Зона А',
+        warehouseId: 'warehouse-1',
+        warehouseName: 'Основний склад',
+        name: `Полиця ${index + 1}`,
+        code: `P${index + 1}`,
+        isActive: true,
+        qrCode: `shelf:${index}`,
+      }))
+      let saved: Record<string, unknown> | null = null
+      await page.route('**/api/v1/**', async (route) => {
+        const request = route.request()
+        const path = new URL(request.url()).pathname
+        if (path === '/api/v1/parts/part-picker')
+          return fulfillData(route, {
+            id: 'part-picker',
+            name: 'Тестова фара',
+            qrCode: 'part:picker',
+            unit: 'шт',
+            quantityTotal: 1,
+            quantityAvailable: 1,
+            quantityReserved: 0,
+            quantitySold: 0,
+            status: 'available',
+            condition: 'good',
+            photos: [],
+            source: 'batch',
+            car: null,
+            intake: null,
+            desiredSalePrice: null,
+            createdAt: '2026-10-16T10:00:00Z',
+            createdBy: { name: 'Тест' },
+          })
+        if (path === '/api/v1/parts/part-picker/history')
+          return fulfillData(route, { events: [] })
+        if (path === '/api/v1/parts/part-picker/inventory-zones') {
+          if (request.method() === 'PUT')
+            saved = request.postDataJSON() as Record<string, unknown>
+          return fulfillData(route, [
+            {
+              zoneId: 'zone-1',
+              zoneName: 'Зона А',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              zoneCode: 'A',
+              zoneQrCode: 'zone:1',
+              isSystemUnassigned: false,
+            },
+          ])
+        }
+        if (path === '/api/v1/inventory/zones')
+          return fulfillData(route, [
+            {
+              id: 'zone-1',
+              name: 'Зона А',
+              code: 'A',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              qrCode: 'zone:1',
+              isActive: true,
+              isSystemUnassigned: false,
+            },
+          ])
+        if (path === '/api/v1/inventory/sections')
+          return fulfillData(route, sectionData)
+        if (path === '/api/v1/inventory/shelves')
+          return fulfillData(route, shelfData)
+        if (path === '/api/v1/parts/facets')
+          return fulfillData(route, {
+            zones: [],
+            warehouses: [],
+            origins: [],
+            makes: [],
+            models: [],
+            statuses: [],
+            conditions: [],
+          })
+        await route.fallback()
+      })
+      const scenarioStarted = Date.now()
+      await loginFrom(page)
+      await test.step(`placement choices at ${width}px`, async () => {
+        console.info(
+          `[placement-picker] ${width}px start ${Date.now() - scenarioStarted}ms`,
+        )
+        await page.setViewportSize({ width, height: 900 })
+        await page.goto('/app/koval/parts/part-picker')
+        await page
+          .getByRole('button', { name: 'Перемістити', exact: true })
+          .click()
+        const drawer = page.getByRole('dialog', {
+          name: 'Розміщення на складі',
         })
-        .slice(-12)
-        .map((el) => ({
-          tag: el.tagName,
-          class: el.className,
-          right: el.getBoundingClientRect().right,
-          text: el.textContent?.slice(0, 60),
-        })),
-    }))
-    expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(width)
-    expect(await page.evaluate(() => scrollY)).toBe(pageScroll)
-    await drawer.getByRole('button', { name: 'Зберегти розміщення' }).click()
-    await expect(drawer).toHaveCount(0)
-    expect(saved).toEqual({
-      zoneIds: ['zone-1'],
-      sectionId: 'section-100',
-      shelfId: 'shelf-100',
+        const sectionTrigger = drawer.getByRole('searchbox', {
+          name: 'Пошук секції',
+        })
+        await expect(sectionTrigger).toBeVisible()
+        const pageScroll = await page.evaluate(() => scrollY)
+        await expect(page.getByRole('option')).toHaveCount(0)
+        await sectionTrigger.click()
+        const initialList = page.locator('[data-search-picker-scroll]')
+        const initialMetrics = await initialList.evaluate((el) => ({
+          height: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+        }))
+        expect(initialMetrics.height).toBeLessThanOrEqual(460)
+        expect(initialMetrics.scrollHeight).toBeGreaterThan(
+          initialMetrics.height,
+        )
+        const sectionSearch = page.getByRole('searchbox', {
+          name: 'Пошук секції',
+        })
+        await sectionSearch.fill('s100')
+        await expect(page.getByRole('option')).toHaveCount(2)
+        await page.getByRole('option', { name: /Секція 100/ }).click()
+        await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+        await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+        await expect(page.getByRole('option')).toHaveCount(2)
+        const popup = page.getByRole('listbox')
+        const bounds = await popup.boundingBox()
+        expect(bounds).not.toBeNull()
+        expect(bounds!.width).toBeLessThanOrEqual(width)
+        expect(bounds!.height).toBeLessThanOrEqual(460)
+        await page.keyboard.press('Escape')
+        await expect(drawer).toBeVisible()
+        await expect(page.getByRole('listbox')).toHaveCount(0)
+        await drawer.getByRole('searchbox', { name: 'Пошук полиці' }).click()
+        await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('p100')
+        await page.keyboard.press('Enter')
+        await expect(
+          drawer.getByRole('searchbox', { name: 'Пошук полиці' }),
+        ).toHaveValue('Полиця 100')
+        const overflow = await page.evaluate(() => ({
+          width: innerWidth,
+          scroll: document.documentElement.scrollWidth,
+          nodes: [...document.querySelectorAll('body *')]
+            .filter((el) => {
+              const r = el.getBoundingClientRect()
+              return r.width > 0 && r.right > innerWidth + 1
+            })
+            .slice(-12)
+            .map((el) => ({
+              tag: el.tagName,
+              class: el.className,
+              right: el.getBoundingClientRect().right,
+              text: el.textContent?.slice(0, 60),
+            })),
+        }))
+        expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(
+          width,
+        )
+        expect(await page.evaluate(() => scrollY)).toBe(pageScroll)
+        await drawer
+          .getByRole('button', { name: 'Зберегти розміщення' })
+          .click()
+        await expect(drawer).toHaveCount(0)
+        expect(saved).toEqual({
+          zoneIds: ['zone-1'],
+          sectionId: 'section-100',
+          shelfId: 'shelf-100',
+        })
+        await expect(page).toHaveURL(/\/parts\/part-picker$/)
+        console.info(
+          `[placement-picker] ${width}px complete ${Date.now() - scenarioStarted}ms`,
+        )
+      })
     })
-    await expect(page).toHaveURL(/\/parts\/part-picker$/)
   }
 })
+
+for (const width of [375, 1440]) {
+  test(`permission save errors remain visible at the drawer footer at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    await installCabinetApiBoundary(page)
+    await page.route(
+      '**/api/v1/team/users/user-2/permissions',
+      async (route) => {
+        if (route.request().method() !== 'PUT') return route.fallback()
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: null,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Cannot change own permissions.',
+              details: null,
+            },
+          }),
+        })
+      },
+    )
+    await loginFrom(page)
+    await page.goto('/app/koval/team')
+    await page
+      .getByRole('button', { name: 'Дії з учасником Іван Менеджер' })
+      .click()
+    await page.getByRole('menuitem', { name: 'Права' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Права: Іван Менеджер' })
+    await dialog.getByRole('checkbox').last().scrollIntoViewIfNeeded()
+    const save = dialog.getByRole('button', { name: 'Зберегти права' })
+    await save.click()
+    const alert = dialog.getByRole('alert')
+    await expect(alert).toHaveText(
+      'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
+    )
+    await expect(
+      dialog.locator('.rz-sheet__foot').getByRole('alert'),
+    ).toBeVisible()
+    const bounds = await alert.boundingBox()
+    expect(bounds).not.toBeNull()
+    expect(bounds!.y).toBeGreaterThanOrEqual(0)
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900)
+    await expect(save).toBeEnabled()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath('permission-error-footer.png'),
+    })
+  })
+}
+
+test('unassigned quantity and status columns stay compact at the right edge', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await installCabinetApiBoundary(page, { partsManage: true })
+  await page.route('**/api/v1/warehouses/warehouse-1', (route) =>
+    fulfillData(route, {
+      id: 'warehouse-1',
+      name: 'Основний склад',
+      code: 'main',
+      isActive: true,
+      isSystemDefault: true,
+      unassignedPartCount: 40,
+      zones: [
+        {
+          id: 'system-zone-1',
+          name: 'Без зони',
+          code: 'unassigned',
+          isActive: true,
+          isSystemUnassigned: true,
+        },
+      ],
+    }),
+  )
+  await page.route('**/api/v1/parts/search', (route) =>
+    fulfillData(route, {
+      items: Array.from({ length: 20 }, (_, index) => ({
+        id: `part-${index}`,
+        name: `Запчастина ${index + 1}`,
+        oemCode: `OEM-${index + 1}`,
+        externalCode: null,
+        quantity: index === 1 ? 7 : 1,
+        quantityAvailable: index === 10 ? 0 : 1,
+        quantityReserved: index === 10 ? 1 : 0,
+        unit: 'шт',
+        condition: 'used',
+        sourceType: 'manual',
+        status: index === 10 ? 'reserved' : 'available',
+        createdAt: '2026-10-26T08:00:00Z',
+        isInventoryLocked: false,
+        hasDiscrepancy: false,
+        thumbnailUrl: null,
+        car: null,
+      })),
+      page: 1,
+      pageSize: 20,
+      total: 40,
+      totalPages: 2,
+    }),
+  )
+  await loginFrom(page)
+  await page.goto('/app/koval/warehouses/warehouse-1/unassigned')
+  const table = page.locator('.location-parts--unassigned .rz-table')
+  await expect(
+    table.getByRole('link', { name: 'Запчастина 1', exact: true }),
+  ).toBeVisible()
+  const row = table.locator('tbody tr').first()
+  await expect(row.getByRole('button')).toHaveCount(0)
+  const cell = row.locator('td').last()
+  const badge = cell.locator('.rz-pill')
+  const cellBounds = await cell.boundingBox()
+  const badgeBounds = await badge.boundingBox()
+  expect(cellBounds).not.toBeNull()
+  expect(badgeBounds).not.toBeNull()
+  expect(cellBounds!.width).toBeLessThanOrEqual(160)
+  expect(
+    cellBounds!.x + cellBounds!.width - badgeBounds!.x - badgeBounds!.width,
+  ).toBeLessThanOrEqual(20)
+  await expect(table.getByRole('columnheader', { name: 'Статус' })).toHaveCSS(
+    'text-align',
+    'right',
+  )
+  await page.screenshot({ path: testInfo.outputPath('unassigned-columns.png') })
+})
+
+/** Storage-sticker acceptance uses intercepted Core records and a fake popup.
+ * It verifies browser UI and emitted label HTML, not a real printer or Core. */
+async function installStorageStickerFixture(page: Page, inventoryOnly = false) {
+  const fixture = await installCabinetApiBoundary(page, {
+    inventoryManage: false,
+  })
+  const zones = Array.from({ length: 25 }, (_, index) => ({
+    id: `storage-zone-${index + 1}`,
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: `Зона ${String(index + 1).padStart(2, '0')}`,
+    code: `Z${String(index + 1).padStart(2, '0')}`,
+    qrCode: `fixture-storage-zone:${index + 1}`,
+    isActive: true,
+    isSystemUnassigned: false,
+    partCount: 0,
+  }))
+  const section = {
+    id: 'storage-section-1',
+    zoneId: zones[0].id,
+    zoneName: zones[0].name,
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: 'Секція 01',
+    code: 'S01',
+    qrCode: 'fixture-storage-section:1',
+    isActive: true,
+    partCount: 0,
+  }
+  const shelf = {
+    id: 'storage-shelf-1',
+    sectionId: section.id,
+    sectionName: section.name,
+    zoneId: zones[0].id,
+    zoneName: zones[0].name,
+    warehouseId: 'warehouse-1',
+    warehouseName: 'Основний склад',
+    name: 'Полиця 01',
+    code: 'P01',
+    qrCode: 'fixture-storage-shelf:1',
+    isActive: true,
+    partCount: 0,
+  }
+  await page.route('**/api/v1/warehouses/warehouse-1', (route) =>
+    fulfillData(route, {
+      id: 'warehouse-1',
+      name: 'Основний склад',
+      code: 'main',
+      qrCode: 'fixture-storage-warehouse:1',
+      isActive: true,
+      isSystemDefault: true,
+      unassignedPartCount: 0,
+      zones,
+    }),
+  )
+  await page.route('**/api/v1/inventory/zones*', (route) =>
+    fulfillData(route, zones),
+  )
+  await page.route('**/api/v1/inventory/zones/*', (route) =>
+    fulfillData(
+      route,
+      zones.find(
+        ({ id }) =>
+          id === new URL(route.request().url()).pathname.split('/').at(-1),
+      ),
+    ),
+  )
+  await page.route('**/api/v1/inventory/sections*', (route) =>
+    fulfillData(route, [section]),
+  )
+  await page.route('**/api/v1/inventory/sections/*', (route) =>
+    fulfillData(route, section),
+  )
+  await page.route('**/api/v1/inventory/shelves*', (route) =>
+    fulfillData(route, [shelf]),
+  )
+  await page.route('**/api/v1/inventory/shelves/*', (route) =>
+    fulfillData(route, shelf),
+  )
+  if (inventoryOnly)
+    await page.route('**/api/v1/me/permissions', (route) =>
+      fulfillData(route, {
+        role: 'member',
+        permissions: ['inventory.view'],
+        features: [],
+        entitlement: { state: 'active', usage: activeSubscription.usage },
+      }),
+    )
+  const partsRequests: string[] = []
+  page.on('request', (request) => {
+    if (
+      /^\/api\/v1\/(?:parts|stickers)(?:\/|$)/.test(
+        new URL(request.url()).pathname,
+      )
+    )
+      partsRequests.push(request.url())
+  })
+  return { fixture, zones, partsRequests }
+}
+
+async function installStoragePrintPopup(page: Page) {
+  await page.addInitScript(() => {
+    const state = window as unknown as Window & { __storagePrintHtml: string[] }
+    state.__storagePrintHtml = []
+    window.open = () => {
+      let html = ''
+      return {
+        opener: null,
+        document: {
+          write: (chunk: string) => {
+            html += chunk
+          },
+          close: () => undefined,
+        },
+        focus: () => undefined,
+        close: () => undefined,
+        print: () => state.__storagePrintHtml.push(html),
+      } as unknown as Window
+    }
+  })
+}
+
+async function storagePrintedCodes(page: Page) {
+  return page.evaluate(() => {
+    const html =
+      (
+        window as unknown as Window & { __storagePrintHtml: string[] }
+      ).__storagePrintHtml.at(-1) ?? ''
+    return [
+      ...new DOMParser()
+        .parseFromString(html, 'text/html')
+        .querySelectorAll('.label .code'),
+    ].map((element) => element.textContent)
+  })
+}
+
+for (const target of [
+  {
+    path: 'warehouse-1',
+    menu: 'Інші дії зі складом',
+    action: 'Друк стікерів зон',
+    kind: 'zone',
+    parent: 'warehouse-1',
+    count: 25,
+  },
+  {
+    path: 'zones/storage-zone-1',
+    menu: 'Дії із зоною Зона 01',
+    action: 'Друк стікерів секцій',
+    kind: 'section',
+    parent: 'storage-zone-1',
+    count: 1,
+  },
+  {
+    path: 'sections/storage-section-1',
+    menu: 'Дії з секцією Секція 01',
+    action: 'Друк стікерів полиць',
+    kind: 'shelf',
+    parent: 'storage-section-1',
+    count: 1,
+  },
+]) {
+  test(`storage stickers: ${target.kind} top menu opens canonical direct-child selection (fixture)`, async ({
+    page,
+  }) => {
+    await installStorageStickerFixture(page, true)
+    await loginFrom(page)
+    await page.goto(`/app/koval/warehouses/${target.path}`)
+    const menu = page.getByRole('button', { name: target.menu, exact: true })
+    await expect(
+      page
+        .locator('.rz-topbar__actions')
+        .getByRole('button', { name: target.menu, exact: true }),
+    ).toBeVisible()
+    await menu.focus()
+    await page.keyboard.press('Enter')
+    await expect(
+      page.getByRole('menuitem', { name: target.action }),
+    ).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeFocused()
+    await page.keyboard.press('Enter')
+    await page.getByRole('menuitem', { name: target.action }).click()
+    await expect(page).toHaveURL(
+      `/app/koval/stickers?type=locations&kind=${target.kind}&parent=${target.parent}`,
+    )
+    await expect(
+      page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
+    ).toBeChecked()
+    await expect(
+      page.getByText(
+        `Вибрано ${target.count} обʼєктів · ${target.count} стікерів`,
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', {
+        name: `Підготувати ${target.count}`,
+        exact: true,
+      }),
+    ).toBeEnabled()
+    await expect(
+      page.getByRole('region', { name: 'Активна черга', exact: true }),
+    ).toHaveCount(0)
+    const list = page.getByRole('list', {
+      name: 'Місця зберігання',
+      exact: true,
+    })
+    await expect(list.getByRole('checkbox')).toHaveCount(
+      Math.min(target.count, 10),
+    )
+    const prefixes = { zone: 'Зона', section: 'Секція', shelf: 'Полиця' }
+    for (const [kind, prefix] of Object.entries(prefixes)) {
+      if (kind !== target.kind)
+        await expect(
+          list.getByRole('checkbox', {
+            name: new RegExp(`^Обрати: ${prefix}`),
+          }),
+        ).toHaveCount(0)
+    }
+  })
+}
+
+test('storage stickers: 25 queued, 20 printed, arbitrary 7 confirmed, reload leaves 18 (fixture)', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(60_000)
+  await installStorageStickerFixture(page, true)
+  await installStoragePrintPopup(page)
+  await loginFrom(page)
+  await page.goto(
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
+  )
+  await page
+    .getByRole('button', { name: 'Підготувати 25', exact: true })
+    .click()
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page
+    .getByRole('button', { name: 'Друк наступних 20', exact: true })
+    .click()
+  await expect(
+    page.getByRole('region', {
+      name: 'Підтвердити результат друку',
+      exact: true,
+    }),
+  ).toBeVisible()
+  expect(await storagePrintedCodes(page)).toEqual(
+    Array.from(
+      { length: 20 },
+      (_, index) => `Z${String(index + 1).padStart(2, '0')}`,
+    ),
+  )
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Частково', exact: true }).click()
+  const confirmation = page.getByRole('dialog', {
+    name: 'Що вдалося надрукувати?',
+    exact: true,
+  })
+  for (const number of [1, 3, 6, 9, 12, 15, 20])
+    await confirmation
+      .getByRole('checkbox', {
+        name: `Зона ${String(number).padStart(2, '0')}`,
+        exact: true,
+      })
+      .check()
+  await confirmation
+    .getByRole('button', { name: 'Підтвердити · 7', exact: true })
+    .click()
+  await expect(confirmation).not.toBeVisible()
+  await expect(
+    page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole('region', { name: 'Аркуш стікерів', exact: true })
+      .getByRole('img', { name: /^QR-код Зона / }),
+  ).toHaveCount(6)
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const layout = await page.evaluate(() => ({
+    width: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(layout.scrollWidth, JSON.stringify(layout)).toBeLessThanOrEqual(
+    layout.width,
+  )
+  await page.screenshot({
+    path: testInfo.outputPath('storage-stickers-18-remaining.png'),
+    animations: 'disabled',
+    fullPage: true,
+  })
+  await page
+    .getByRole('button', { name: 'Друк наступних 18', exact: true })
+    .click()
+  await expect(
+    page.getByRole('region', {
+      name: 'Підтвердити результат друку',
+      exact: true,
+    }),
+  ).toBeVisible()
+  expect(await storagePrintedCodes(page)).toEqual([
+    'Z02',
+    'Z04',
+    'Z05',
+    'Z07',
+    'Z08',
+    'Z10',
+    'Z11',
+    'Z13',
+    'Z14',
+    'Z16',
+    'Z17',
+    'Z18',
+    'Z19',
+    'Z21',
+    'Z22',
+    'Z23',
+    'Z24',
+    'Z25',
+  ])
+  await page
+    .getByRole('button', { name: 'Усі надруковано', exact: true })
+    .click()
+  await expect(
+    page.getByText('Чергу надруковано.', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: 'Активна черга', exact: true }),
+  ).toHaveCount(0)
+  await page.reload()
+  await expect(
+    page.getByRole('region', { name: 'Активна черга', exact: true }),
+  ).toHaveCount(0)
+})
+
+test('storage stickers: PDF opens a 20-label document and leaves the queue unchanged (fixture)', async ({
+  page,
+}) => {
+  await installStorageStickerFixture(page, true)
+  await installStoragePrintPopup(page)
+  await loginFrom(page)
+  await page.goto(
+    '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all',
+  )
+  await page
+    .getByRole('button', { name: 'Підготувати 25', exact: true })
+    .click()
+  await page
+    .getByRole('button', { name: 'PDF наступних 20', exact: true })
+    .click()
+  await expect
+    .poll(async () => (await storagePrintedCodes(page)).length)
+    .toBe(20)
+  await expect(
+    page.getByRole('region', {
+      name: 'Підтвердити результат друку',
+      exact: true,
+    }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+  ).toBeVisible()
+})
+
+test('storage stickers: inventory.view-only navigation opens locations and never requests parts (fixture)', async ({
+  page,
+}) => {
+  const fixture = await installStorageStickerFixture(page, true)
+  await loginFrom(page)
+  await clickVisibleCabinetLink(page, 'Стікери')
+  await expect(page).toHaveURL(
+    '/app/koval/stickers?type=locations&kind=warehouse&parent=warehouse-1',
+  )
+  await expect(
+    page.getByRole('radio', { name: 'Запчастини', exact: true }),
+  ).toBeDisabled()
+  await expect(
+    page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
+  ).toBeChecked()
+  await expect(
+    page.getByRole('list', { name: 'Місця зберігання', exact: true }),
+  ).toBeVisible()
+  await page.goto('/app/koval/stickers')
+  await expect(page).toHaveURL(
+    '/app/koval/stickers?type=locations&kind=warehouse&parent=warehouse-1',
+  )
+  await expect(
+    page.getByRole('radio', { name: 'Місця зберігання', exact: true }),
+  ).toBeChecked()
+  await page.goto('/app/koval/stickers?type=parts&permission=parts.view')
+  await expect(
+    page.getByRole('heading', { name: 'Недостатньо прав', exact: true }),
+  ).toBeVisible()
+  expect(fixture.partsRequests).toEqual([])
+})
+
+async function installStickerFileSharing(page: Page) {
+  await page.addInitScript(() => {
+    const state = window as unknown as Window & {
+      __stickerSharedFiles: string[]
+    }
+    state.__stickerSharedFiles = []
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: () => true,
+    })
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data: ShareData) => {
+        for (const file of data.files ?? [])
+          state.__stickerSharedFiles.push(await file.text())
+      },
+    })
+  })
+}
+async function emittedStickerCount(page: Page, selector: string) {
+  return page.evaluate((className) => {
+    const html =
+      (
+        window as unknown as Window & { __storagePrintHtml: string[] }
+      ).__storagePrintHtml.at(-1) ?? ''
+    return new DOMParser()
+      .parseFromString(html, 'text/html')
+      .querySelectorAll(className).length
+  }, selector)
+}
+async function downloadStickerCount(
+  page: Page,
+  className: 'label' | 'sticker',
+) {
+  const ready = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Завантажити', exact: true }).click()
+  const download = await ready
+  expect(download.suggestedFilename()).toBe('rozbirka-stickers.html')
+  const path = await download.path()
+  expect(path).not.toBeNull()
+  const html = await readFile(path, 'utf8')
+  return (html.match(new RegExp(`class="${className}"`, 'g')) ?? []).length
+}
+for (const mode of ['parts', 'locations'] as const) {
+  test(`unified sticker files: ${mode} selection, batch, partial confirmation and restore (fixture)`, async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000)
+    if (mode === 'locations') await installStorageStickerFixture(page, true)
+    else {
+      await installCabinetApiBoundary(page, { partsManage: true })
+      await page.route('**/api/v1/me/permissions', (route) =>
+        fulfillData(route, {
+          role: 'owner',
+          permissions: ['parts.view', 'stickers.manage'],
+          features: [],
+          entitlement: {
+            state: 'active',
+            usage: activeSubscription.usage,
+          },
+        }),
+      )
+      await page.route('**/api/v1/parts**', (route) => {
+        const path = new URL(route.request().url()).pathname
+        if (path === '/api/v1/parts')
+          return fulfillData(route, {
+            items: [
+              {
+                id: 'sticker-part-1',
+                name: 'Деталь для стікерів',
+                externalCode: 'F-1',
+                quantityAvailable: 25,
+                quantityTotal: 25,
+                quantityReserved: 0,
+                quantitySoldTotal: 0,
+                status: 'available',
+                car: null,
+                photos: [],
+                order: null,
+              },
+              {
+                id: 'sticker-part-2',
+                name: 'Інша деталь',
+                externalCode: 'F-2',
+                quantityAvailable: 2,
+                quantityTotal: 2,
+                quantityReserved: 0,
+                quantitySoldTotal: 0,
+                status: 'available',
+                car: null,
+                photos: [],
+                order: null,
+              },
+            ],
+            page: 1,
+            pageSize: 10,
+            total: 2,
+            totalPages: 1,
+          })
+        if (path === '/api/v1/parts/batch-sticker')
+          return fulfillData(route, {
+            items: [
+              {
+                id: 'sticker-part-1',
+                name: 'Деталь для стікерів',
+                qrCode: 'fixture-part:1',
+                quantity: 25,
+                carCode: null,
+                carBrand: null,
+                carModel: null,
+                carYear: null,
+                carId: null,
+                createdAt: '2026-10-01T00:00:00Z',
+              },
+              {
+                id: 'sticker-part-2',
+                name: 'Інша деталь',
+                qrCode: 'fixture-part:2',
+                quantity: 2,
+                carCode: null,
+                carBrand: null,
+                carModel: null,
+                carYear: null,
+                carId: null,
+                createdAt: '2026-10-01T00:00:00Z',
+              },
+            ],
+          })
+        return route.fallback()
+      })
+    }
+    await installStoragePrintPopup(page)
+    await installStickerFileSharing(page)
+    await loginFrom(page)
+    await page.goto(
+      mode === 'locations'
+        ? '/app/koval/stickers?type=locations&kind=zone&parent=warehouse-1&select=all'
+        : '/app/koval/stickers?part=sticker-part-1',
+    )
+    if (mode === 'parts') {
+      const increase = page.getByRole('button', {
+        name: 'Збільшити кількість Деталь для стікерів',
+        exact: true,
+      })
+      for (let i = 1; i < 25; i++) await increase.click()
+    }
+    const className = mode === 'parts' ? 'sticker' : 'label'
+    const selector = `.${className}`
+    await expect(
+      page.getByText(
+        'QR-стікери для запчастин і місць зберігання. Оберіть потрібні та підготуйте до друку.',
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await expect(
+      page.getByText('Вибрані стікери · 25', { exact: true }),
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'PDF · 25', exact: true }).click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(25)
+    expect(await downloadStickerCount(page, className)).toBe(25)
+    await page.getByRole('button', { name: 'Поділитися', exact: true }).click()
+    await expect
+      .poll(() =>
+        page.evaluate((className) => {
+          const html =
+            (
+              window as unknown as Window & { __stickerSharedFiles: string[] }
+            ).__stickerSharedFiles.at(-1) ?? ''
+          return new DOMParser()
+            .parseFromString(html, 'text/html')
+            .querySelectorAll(className).length
+        }, selector),
+      )
+      .toBe(25)
+    await expect(
+      page.getByRole('region', { name: 'Активна черга', exact: true }),
+    ).toHaveCount(0)
+    await page
+      .getByRole('button', { name: 'Підготувати 25', exact: true })
+      .click()
+    await expect(
+      page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText('Наступна партія черги · 20', { exact: true }),
+    ).toBeVisible()
+    expect(await downloadStickerCount(page, className)).toBe(20)
+    if (mode === 'parts') {
+      await expect(
+        page.getByRole('checkbox', {
+          name: 'Деталь для стікерів',
+          exact: true,
+        }),
+      ).toHaveCount(0)
+      await page
+        .getByRole('checkbox', { name: 'Інша деталь', exact: true })
+        .check()
+      await page
+        .getByRole('button', {
+          name: 'Збільшити кількість Інша деталь',
+          exact: true,
+        })
+        .click()
+    } else {
+      await expect(
+        page.getByRole('checkbox', { name: 'Обрати: Зона 01', exact: true }),
+      ).toHaveCount(0)
+      await expect(
+        page
+          .getByRole('list', { name: 'Місця зберігання', exact: true })
+          .getByRole('checkbox'),
+      ).toHaveCount(0)
+      await page.goto(
+        '/app/koval/stickers?type=locations&kind=warehouse&parent=warehouse-1',
+      )
+      await page
+        .getByRole('checkbox', { name: 'Обрати: Секція 01', exact: true })
+        .check()
+      await page
+        .getByRole('checkbox', { name: 'Обрати: Полиця 01', exact: true })
+        .check()
+    }
+    await page.getByRole('button', { name: 'PDF · 2', exact: true }).click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(2)
+    await expect(
+      page.getByText('0 з 25 надруковано · 25 залишилось', { exact: true }),
+    ).toBeVisible()
+    await page.getByRole('button', { name: 'Зняти', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Друк наступних 20', exact: true })
+      .click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(20)
+    const allPrinted = page.getByRole('button', {
+      name: 'Усі надруковано',
+      exact: true,
+    })
+    await expect(allPrinted).toBeVisible()
+    expect(await downloadStickerCount(page, className)).toBe(20)
+    await expect(allPrinted).toBeVisible()
+    await page.getByRole('button', { name: 'Частково', exact: true }).click()
+    const editor = page.getByRole('dialog', {
+      name: 'Що вдалося надрукувати?',
+      exact: true,
+    })
+    for (const number of [1, 3, 5, 8, 11, 14, 20])
+      await editor
+        .getByRole('checkbox', {
+          name:
+            mode === 'parts'
+              ? `Деталь для стікерів · Копія ${number}`
+              : `Зона ${String(number).padStart(2, '0')}`,
+          exact: true,
+        })
+        .check()
+    await editor
+      .getByRole('button', { name: 'Підтвердити · 7', exact: true })
+      .click()
+    await expect(
+      page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+    ).toBeVisible()
+    await page.reload()
+    await expect(
+      page.getByText('7 з 25 надруковано · 18 залишилось', { exact: true }),
+    ).toBeVisible()
+    await page
+      .getByRole('button', { name: 'Друк наступних 18', exact: true })
+      .click()
+    await expect.poll(() => emittedStickerCount(page, selector)).toBe(18)
+    await page
+      .getByRole('button', { name: 'Усі надруковано', exact: true })
+      .click()
+    await expect(
+      page
+        .locator('.rz-toast')
+        .getByText('Чергу надруковано.', { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Активна черга', exact: true }),
+    ).toHaveCount(0)
+    const overflow = await page.evaluate(() => ({
+      width: innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.width)
+    await page.screenshot({
+      path: testInfo.outputPath(`unified-stickers-${mode}-complete.png`),
+      fullPage: true,
+    })
+  })
+}

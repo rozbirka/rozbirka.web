@@ -55,6 +55,7 @@ function LocationProbe() {
 }
 
 beforeEach(() => {
+  localStorage.removeItem('rozbirka.theme')
   signOut.mockReset()
   signOut.mockResolvedValue()
   vi.mocked(useAuth).mockReturnValue({
@@ -80,6 +81,33 @@ beforeEach(() => {
     retry: vi.fn(),
     switchTenant: vi.fn(),
   } satisfies CabinetContextValue)
+})
+
+it('switches the cabinet theme, restores it on remount and cleans up outside the cabinet', async () => {
+  const user = userEvent.setup()
+  const mount = () =>
+    render(
+      <MemoryRouter initialEntries={['/app/koval/dashboard']}>
+        <Routes>
+          <Route path="/app/:tenant" element={<CabinetShell />}>
+            <Route path="dashboard" element={<p>Вміст модуля</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    )
+  const first = mount()
+  await user.click(screen.getAllByRole('switch', { name: 'Світла тема' })[0]!)
+  expect(document.body).toHaveAttribute('data-theme', 'light')
+  expect(localStorage.getItem('rozbirka.theme')).toBe('light')
+  first.unmount()
+  expect(document.body).not.toHaveAttribute('data-theme')
+  mount()
+  const toggle = screen.getAllByRole('switch', { name: 'Світла тема' })[0]!
+  expect(toggle).toHaveAttribute('aria-checked', 'true')
+  expect(document.body).toHaveAttribute('data-theme', 'light')
+  await user.click(toggle)
+  expect(document.body).toHaveAttribute('data-theme', 'dark')
+  expect(localStorage.getItem('rozbirka.theme')).toBe('dark')
 })
 
 it('navigates home before awaiting cabinet logout', async () => {

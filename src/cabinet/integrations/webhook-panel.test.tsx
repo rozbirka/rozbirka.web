@@ -131,7 +131,7 @@ it('retries every stuck event and counts the ones that stayed stuck', async () =
   ).toBeVisible()
 })
 
-it('offers a secret when the feed is not receiving anything yet', async () => {
+it('needs no manual secret and explains periodic tracking when push is unavailable', async () => {
   vi.mocked(integrationsApi.webhookStatus).mockResolvedValue({
     enabled: false,
     pending: 0,
@@ -139,19 +139,26 @@ it('offers a secret when the feed is not receiving anything yet', async () => {
     oldestPendingAt: null,
     deadLetterIds: [],
   })
-  vi.mocked(integrationsApi.configureWebhook).mockResolvedValue(undefined)
-  const user = userEvent.setup()
-
   renderScreen()
+  expect(
+    await screen.findByText(/Періодична перевірка статусів продовжується/),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Додати секрет' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Скопіювати адресу прийому' }),
+  ).not.toBeInTheDocument()
+})
 
-  expect(await screen.findByText(/Прийом подій не налаштований/)).toBeVisible()
-  expect(screen.getByText('секрет не збережено')).toBeVisible()
-  await user.click(screen.getByRole('button', { name: 'Додати секрет' }))
-  await user.type(screen.getByLabelText(/Новий секрет/), '  np-secret  ')
-  await user.click(screen.getByRole('button', { name: 'Зберегти секрет' }))
-
-  expect(integrationsApi.configureWebhook).toHaveBeenCalledWith(
-    'integration-1',
-    'np-secret',
-  )
+it('never displays NaN for an empty queue without a timestamp', async () => {
+  vi.mocked(integrationsApi.webhookStatus).mockResolvedValue({
+    enabled: false,
+    pending: 0,
+    deadLetters: 0,
+    deadLetterIds: [],
+  } as unknown as Awaited<ReturnType<typeof integrationsApi.webhookStatus>>)
+  renderScreen()
+  await screen.findByText('Найстаріша необроблена')
+  expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
 })

@@ -19,7 +19,7 @@ describe('production media contract', () => {
     const files = [
       'src/components/site/hero.tsx',
       'src/components/site/features.tsx',
-      'src/components/site/cta-banner.tsx',
+      'src/components/site/start-cta.tsx',
     ]
     const source = (
       await Promise.all(

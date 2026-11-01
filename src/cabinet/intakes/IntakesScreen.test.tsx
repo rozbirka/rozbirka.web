@@ -8,7 +8,9 @@ import { partsApi } from '@/api/parts'
 import { equipmentApi } from '@/api/equipment'
 import { inventoryApi } from '@/api/inventory'
 import type { PlanUsageDto } from '@/api/types'
+import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
+import { tenantRequestScope } from '../tenant-request-scope'
 import { IntakesScreen } from './IntakesScreen'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are invoked only through their owning singleton. */
@@ -927,14 +929,16 @@ it('keeps OEM after a failed intake save and clears it only after saving and add
     .mockResolvedValueOnce({ id: 'part-new' } as never)
     .mockResolvedValueOnce({ id: 'part-next' } as never)
   render(
-    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/intakes/:intakeId/parts/new"
-          element={<IntakesScreen />}
-        />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/intakes/:intakeId/parts/new"
+            element={<IntakesScreen />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   const oem = await screen.findByRole('textbox', { name: 'OEM-код' })
@@ -945,6 +949,7 @@ it('keeps OEM after a failed intake save and clears it only after saving and add
   await user.click(saveButton('Зберегти й додати ще'))
   await screen.findByText('Немає з’єднання з мережею.')
   expect(oem).toHaveValue('  001RV-8820-02  ')
+  expect(document.querySelector('.rz-toast')).toBeNull()
   expect(intakesApi.addPart).toHaveBeenLastCalledWith(
     'intake-1',
     expect.objectContaining({ oemCode: '001RV-8820-02' }),
@@ -954,6 +959,12 @@ it('keeps OEM after a failed intake save and clears it only after saving and add
   await user.click(saveButton('Зберегти й додати ще'))
   await waitFor(() => expect(oem).toHaveValue(''))
   expect(intakesApi.addPart).toHaveBeenCalledTimes(2)
+  expect(screen.queryByText('Немає з’єднання з мережею.')).toBeNull()
+  const toast = await screen.findByText('Додано «Фара»')
+  expect(toast.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(screen.queryByText('Додані щойно')).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Закрити сповіщення' }))
+  expect(screen.queryByText('Додано «Фара»')).toBeNull()
   expect(intakesApi.addPart).toHaveBeenLastCalledWith(
     'intake-1',
     expect.objectContaining({ oemCode: '001RV-8820-02' }),
@@ -969,6 +980,49 @@ it('keeps OEM after a failed intake save and clears it only after saving and add
     expect.anything(),
   )
 })
+
+it.each(['navigation', 'tenant-change'] as const)(
+  'does not announce a late intake part addition after %s',
+  async (leave) => {
+    const user = userEvent.setup()
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+    )
+    let finishSave!: (value: never) => void
+    const response = new Promise<never>((resolve) => {
+      finishSave = resolve
+    })
+    vi.mocked(intakesApi.addPart).mockReturnValue(response)
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+          <Link to="/left">Leave form</Link>
+          <Routes>
+            <Route
+              path="/app/:tenant/intakes/:intakeId/parts/new"
+              element={<IntakesScreen />}
+            />
+            <Route path="/left" element={<p>Left form</p>} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    )
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Назва' }),
+      'Фара',
+    )
+    await user.click(saveButton('Зберегти й додати ще'))
+    await waitFor(() => expect(intakesApi.addPart).toHaveBeenCalledOnce())
+    if (leave === 'navigation')
+      await user.click(screen.getByRole('link', { name: 'Leave form' }))
+    else tenantRequestScope.rotate()
+    await act(async () => {
+      finishSave({ id: 'part-new' } as never)
+      await response
+    })
+    expect(document.querySelector('.rz-toast')).toBeNull()
+  },
+)
 
 it('saves intake part location through zone, section, and shelf and retries without creating a duplicate', async () => {
   const user = userEvent.setup()

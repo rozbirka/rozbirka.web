@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CabinetLoadingContent } from '../loading-screen'
 import { useSearchParams } from 'react-router'
-import { Check, Minus } from 'lucide-react'
 import {
   Amount,
   Button,
@@ -26,16 +25,11 @@ import { cn } from '@/lib/utils'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { BillingCard, BillingShell } from './billing-shell'
-import { translate, useLocale, useT, type Locale } from '@/i18n'
-import {
-  daysText,
-  featureLabel,
-  intervalLabel,
-  intervalName,
-  limitLabels,
-} from './billing-vocabulary'
+import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
+import { daysText, intervalLabel, intervalName } from './billing-vocabulary'
 import { billingMessages } from './messages'
 import { plansMessages } from './plans-messages'
+import { subscriptionDesignMessages } from './subscription-design-messages'
 import {
   billingManagementUnavailable,
   BillingContractNotice,
@@ -68,7 +62,8 @@ type MutationOutcome = 'applied' | 'stale'
 export function PlansScreen() {
   const { locale } = useLocale()
   const t = useT(plansMessages)
-  const limits = limitLabels(locale)
+  const td = useT(subscriptionDesignMessages)
+  const tc = useT(commonMessages)
   const [searchParams] = useSearchParams()
   const { cabinet, controlDecision, requireLatestMutation } =
     useBillingMutation('plans')
@@ -210,34 +205,6 @@ export function PlansScreen() {
     activeInterval === null
       ? allPlans
       : allPlans.filter((plan) => plan.interval === activeInterval)
-  // Every feature any plan sells, so a plan can also say what it does not give.
-  const allFeatures = [...new Set(allPlans.flatMap((plan) => plan.features))]
-
-  const comparisonRows = [
-    ...limits.map((limit) => ({
-      key: `limit-${limit.key}`,
-      label: limit.label,
-      value: (plan: PublicPlanDto): ReactNode => (
-        <span className="rz-strong">{plan.limits[limit.key] ?? '∞'}</span>
-      ),
-    })),
-    ...allFeatures.map((code) => ({
-      key: `feature-${code}`,
-      label: featureLabel(code, locale),
-      value: (plan: PublicPlanDto): ReactNode =>
-        plan.features.includes(code) ? (
-          <Check
-            aria-label={t('included')}
-            className="text-state-ok ml-auto size-3.5"
-          />
-        ) : (
-          <Minus
-            aria-label={t('notIncluded')}
-            className="text-app-dim ml-auto size-3.5"
-          />
-        ),
-    })),
-  ]
 
   return (
     <PlansFrame
@@ -270,155 +237,113 @@ export function PlansScreen() {
         !canCheckout &&
         !contractManaged && <BillingUnavailableNotice />}
 
-      <ul
-        className="m-0 grid min-w-0 list-none items-start gap-4 p-0 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))]"
-        role="list"
-      >
-        {plans.map((plan) => {
-          const isCurrent =
-            plan.code === currentCode &&
-            (providerSubscription?.canCancel === true ||
-              (!providerSubscription?.canSubscribe &&
-                !providerSubscription?.canReactivate))
-          const isSelected = plan.code === selectedPlanCode
-          return (
-            <li
-              className={cn(
-                'rz-card flex min-w-0 flex-col',
-                // The plan the reader arrived for is the current selection.
-                isSelected && 'border-brand',
-              )}
-              key={plan.code}
-            >
-              <header className="rz-card__head py-2.5">
-                <h2 className="rz-h-card">{plan.name}</h2>
-                {isSelected ? (
-                  <StatusPill tone="info">{t('selected')}</StatusPill>
-                ) : isCurrent ? (
-                  <StatusPill tone="ok">{t('currentPlan')}</StatusPill>
-                ) : null}
-              </header>
-              <div className="rz-card__body grid gap-3">
-                <div className="grid gap-1">
-                  <p className="m-0 flex flex-wrap items-baseline gap-x-2">
-                    <Amount
-                      className="rz-strong text-page font-semibold"
-                      currency={plan.currency}
-                      value={plan.amount}
-                    />
-                    <span className="rz-dim">
-                      {intervalLabel(plan.interval, locale)}
-                    </span>
-                  </p>
-                  <p className="rz-caption m-0">
-                    {plan.trialDays > 0
-                      ? t('trialFree', {
-                          days: daysText(plan.trialDays, locale),
-                        })
-                      : t('noTrial')}
-                  </p>
-                </div>
-                <dl className="rz-facts px-0 py-0">
-                  {limits.map((limit) => (
-                    <div key={limit.key}>
-                      <dt>{limit.label}</dt>
-                      <dd className="rz-num">
-                        {plan.limits[limit.key] ?? '∞'}
-                      </dd>
-                    </div>
-                  ))}
-                  <div>
-                    <dt>{t('photosPerItem')}</dt>
-                    <dd className="rz-num">
-                      {plan.limits.photosPerPart ?? '∞'}
-                    </dd>
-                  </div>
-                </dl>
-                <ul className="border-app-line m-0 grid list-none gap-1.5 border-t p-0 pt-3">
-                  {allFeatures.length === 0 ? (
-                    <li className="rz-caption">{t('noFeaturesListed')}</li>
-                  ) : (
-                    allFeatures.map((code) => {
-                      const included = plan.features.includes(code)
-                      return (
-                        <li
-                          className={cn(
-                            'flex items-start gap-2',
-                            included ? 'rz-muted' : 'rz-dim',
-                          )}
-                          key={code}
-                        >
-                          {included ? (
-                            <Check
-                              aria-label={t('includedInPlan')}
-                              className="text-state-ok mt-0.5 size-3.5 shrink-0"
-                            />
-                          ) : (
-                            <Minus
-                              aria-label={t('notInPlan')}
-                              className="text-app-dim mt-0.5 size-3.5 shrink-0"
-                            />
-                          )}
-                          {featureLabel(code, locale)}
-                        </li>
-                      )
-                    })
-                  )}
-                </ul>
-              </div>
-              {isCurrent ? (
-                <div className="rz-card__foot mt-auto">
-                  <p className="rz-dim m-0">{t('alreadyActive')}</p>
-                </div>
-              ) : canCheckout ? (
-                <div className="rz-card__foot mt-auto">
-                  <BillingMutationGate decision={controlDecision}>
-                    <Button
-                      onClick={() => {
-                        planCodeRef.current = plan.code
-                        checkout.run()
-                      }}
-                      size="wide"
-                      variant="primary"
-                      {...checkout.triggerProps}
-                    >
-                      {t('choose')}
-                    </Button>
-                  </BillingMutationGate>
-                </div>
-              ) : null}
-            </li>
-          )
-        })}
-      </ul>
-
-      <BillingCard
-        bodyClassName="p-0"
-        footer={t('noPlanCopy')}
-        title={t('whatsIncluded')}
-      >
+      <BillingCard title={t('title')} bodyClassName="p-0">
         <DataTable
-          caption={t('comparison')}
+          caption={t('title')}
+          embedded
+          rowKey={(plan) => plan.code}
+          rows={plans}
           columns={[
             {
-              key: 'feature',
-              label: t('feature'),
+              key: 'plan',
+              label: td('plan'),
               variant: 'primary',
-              cell: (row) => row.label,
+              cell: (plan) => {
+                const isCurrent =
+                  plan.code === currentCode &&
+                  (providerSubscription?.canCancel === true ||
+                    (!providerSubscription?.canSubscribe &&
+                      !providerSubscription?.canReactivate))
+                return (
+                  <div className="rz-cell-main flex-wrap">
+                    <h3
+                      className={cn(
+                        'rz-h-card',
+                        plan.code === selectedPlanCode && 'text-brand',
+                      )}
+                    >
+                      {plan.name}
+                    </h3>
+                    {plan.trialDays > 0 && (
+                      <span className="rz-caption">
+                        {t('trialFree', {
+                          days: daysText(plan.trialDays, locale),
+                        })}
+                      </span>
+                    )}
+                    {plan.code === selectedPlanCode ? (
+                      <StatusPill tone="info">{t('selected')}</StatusPill>
+                    ) : isCurrent ? (
+                      <StatusPill tone="ok">{t('currentPlan')}</StatusPill>
+                    ) : null}
+                  </div>
+                )
+              },
             },
-            ...plans.map((plan) => ({
-              key: plan.code,
-              label: plan.name,
-              align: 'end' as const,
-              cell: (row: (typeof comparisonRows)[number]) => row.value(plan),
-            })),
+            {
+              key: 'parts',
+              label: td('parts'),
+              align: 'end',
+              cell: (plan) => (
+                <span className="rz-mono">{plan.limits.parts ?? '∞'}</span>
+              ),
+            },
+            {
+              key: 'users',
+              label: td('users'),
+              align: 'end',
+              cell: (plan) => (
+                <span className="rz-mono">{plan.limits.users ?? '∞'}</span>
+              ),
+            },
+            {
+              key: 'price',
+              label: td('price'),
+              align: 'end',
+              cell: (plan) => (
+                <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                  <Amount currency={plan.currency} value={plan.amount} />
+                  <span className="rz-caption">
+                    {intervalLabel(plan.interval, locale)}
+                  </span>
+                </span>
+              ),
+            },
+            {
+              key: 'actions',
+              label: tc('actions'),
+              headerHidden: true,
+              cell: (plan) => {
+                const isCurrent =
+                  plan.code === currentCode &&
+                  (providerSubscription?.canCancel === true ||
+                    (!providerSubscription?.canSubscribe &&
+                      !providerSubscription?.canReactivate))
+                return (
+                  <div className="flex w-full justify-end">
+                    {!isCurrent && canCheckout && (
+                      <BillingMutationGate decision={controlDecision}>
+                        <Button
+                          {...checkout.triggerProps}
+                          disabled={checkout.pending}
+                          onClick={() => {
+                            planCodeRef.current = plan.code
+                            checkout.run()
+                          }}
+                          variant="primary"
+                        >
+                          {t('choose')}
+                        </Button>
+                      </BillingMutationGate>
+                    )}
+                  </div>
+                )
+              },
+            },
           ]}
-          embedded
-          rowKey={(row) => row.key}
-          rows={comparisonRows}
         />
       </BillingCard>
-      <Notice>{t('noProration')}</Notice>
+      <Notice tone="info">{t('noProration')}</Notice>
     </PlansFrame>
   )
 }

@@ -363,3 +363,27 @@ it.each([
     within(navigation).getByRole('link', { name: inactive }),
   ).not.toHaveAttribute('aria-current')
 })
+
+it.each([
+  [['inventory.view'], '/app/koval/stickers?type=locations'],
+  [['parts.view'], '/app/koval/stickers'],
+  [['parts.view', 'inventory.view'], '/app/koval/stickers'],
+] as const)(
+  'opens an allowed sticker mode for %j',
+  (permissions, destination) => {
+    renderNavigation([...permissions])
+    const desktop = screen.getByRole('navigation', {
+      name: 'Навігація кабінету',
+    })
+    expect(
+      within(desktop).getByRole('link', { name: 'Стікери' }),
+    ).toHaveAttribute('href', destination)
+  },
+)
+
+it('omits stickers when neither mode is allowed', () => {
+  renderNavigation([])
+  expect(
+    screen.queryByRole('link', { name: 'Стікери' }),
+  ).not.toBeInTheDocument()
+})

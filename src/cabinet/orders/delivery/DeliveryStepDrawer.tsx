@@ -6,7 +6,7 @@ import { uah } from './delivery-money'
 import { deliveryDrawerMessages } from './drawer-messages'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 
-export type DeliveryStep = 'dispatch' | 'receive' | 'return'
+export type DeliveryStep = 'dispatch' | 'receive'
 
 type DrawerKey = MessageKey<typeof deliveryDrawerMessages>
 
@@ -31,17 +31,10 @@ const COPY: Record<DeliveryStep, StepCopy> = {
     confirm: 'receiveConfirm',
     note: 'receiveNote',
   },
-  return: {
-    title: 'returnTitle',
-    description: 'returnDescription',
-    confirm: 'returnConfirm',
-    danger: true,
-    note: 'returnNote',
-  },
 }
 
 /**
- * One confirmation for the three steps Core records on a delivery order.
+ * One confirmation for the two steps Core records on a delivery order.
  * Each writes stock or a status that cannot be undone from this screen, so
  * each says plainly what it will do before it is allowed to happen.
  */

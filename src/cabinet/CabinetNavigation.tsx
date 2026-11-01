@@ -2,9 +2,11 @@ import { useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import {
   Ellipsis,
   LogOut,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Sun,
   UserRound,
   X,
 } from 'lucide-react'
@@ -23,10 +25,14 @@ import {
   type CabinetNavigationGroup,
 } from './module-registry'
 import { moduleLabel, navigationGroupLabel } from './module-messages'
+import { useHiddenModules } from './nova-poshta-presence'
 import { evaluateModuleAccess } from './policy'
+import { stickerNavigationTarget } from './stickers/sticker-access'
 import { shellMessages } from './shell-messages'
 import { TenantSwitcher } from './TenantSwitcher'
 import { useNavigationCollapsed } from './use-navigation-collapsed'
+import { Button } from '@/components/app'
+import { useTheme } from '@/components/app/theme-preference'
 
 interface NavigationEntry {
   key: CabinetModuleKey
@@ -80,20 +86,25 @@ export function CabinetNavigation({
   onLogout,
 }: CabinetNavigationProps) {
   const { locale } = useLocale()
+  const hidden = useHiddenModules(tenant, snapshot)
   const entries = useMemo(
     () =>
       Object.values(cabinetModules).flatMap((definition): NavigationEntry[] => {
         const navigation = definition.navigation
+        const access = { status: 'ready' as const, snapshot, error: null }
+        const to =
+          definition.key === 'stickers'
+            ? stickerNavigationTarget(tenant.slug, access)
+            : evaluateModuleAccess(definition, access, 'view').kind ===
+                'allowed'
+              ? cabinetPath(tenant.slug, definition.key)
+              : null
         if (
           navigation === undefined ||
-          evaluateModuleAccess(
-            { ...definition, navigation },
-            { status: 'ready', snapshot, error: null },
-            'view',
-          ).kind !== 'allowed'
-        ) {
+          hidden.has(definition.key) ||
+          to === null
+        )
           return []
-        }
 
         return [
           {
@@ -104,11 +115,11 @@ export function CabinetNavigation({
             group: navigation.group,
             mobilePriority:
               navigation.mobilePriority ?? Number.MAX_SAFE_INTEGER,
-            to: cabinetPath(tenant.slug, definition.key),
+            to,
           },
         ]
       }),
-    [locale, snapshot, tenant.slug],
+    [hidden, locale, snapshot, tenant.slug],
   )
 
   return (
@@ -217,6 +228,7 @@ function DesktopNavigation({
       </nav>
       <div className="border-app-line mt-auto flex items-center gap-2 border-t px-2 pt-2 pb-1">
         <AccountMenu onLogout={onLogout} userName={userName} />
+        <ThemeToggle />
         <button
           aria-controls="cabinet-navigation"
           aria-expanded
@@ -376,6 +388,7 @@ function Rail({
         ) : null}
       </nav>
       <div className="mt-auto grid justify-items-center gap-0.5">
+        <ThemeToggle />
         <LogoutButton onLogout={onLogout} presentation="rail" />
         {toggle}
       </div>
@@ -444,6 +457,7 @@ function MobileNavigation({
             ))}
           </div>
           <div className="border-app-line grid gap-1 border-t pt-2.5">
+            <ThemeToggle full />
             <p className="rz-caption m-0">{t('nav.currentTenant')}</p>
             <TenantSwitcher
               framed
@@ -458,6 +472,31 @@ function MobileNavigation({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  )
+}
+
+function ThemeToggle({ full = false }: { full?: boolean }) {
+  const [theme, setTheme] = useTheme()
+  const t = useT(shellMessages)
+  const light = theme === 'light'
+  return (
+    <Button
+      aria-checked={light}
+      aria-label={t('theme.light')}
+      className={
+        full
+          ? 'w-full justify-start'
+          : 'size-7 shrink-0 pointer-coarse:size-control'
+      }
+      onClick={() => setTheme(light ? 'dark' : 'light')}
+      role="switch"
+      size={full ? 'md' : 'icon'}
+      title={light ? t('theme.toDark') : t('theme.toLight')}
+      variant="quiet"
+    >
+      {light ? <Sun aria-hidden /> : <Moon aria-hidden />}
+      {full && <span>{t('theme.light')}</span>}
+    </Button>
   )
 }
 

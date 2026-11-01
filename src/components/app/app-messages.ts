@@ -64,6 +64,15 @@ export const appMessages = defineMessages({
     noPhotos: 'Фото ще не додано',
     openFullScreen: '{name} — відкрити на весь екран',
     showPhoto: 'Показати {name}',
+    closeViewer: 'Закрити перегляд',
+    thumbnails: 'Мініатюри',
+    thumbnailOf: 'Фото {index} з {total}: {name}',
+    photoLoading: 'Завантаження фото…',
+    photoLoadFailed: 'Не вдалося завантажити фото',
+    photoLoadFailedHint:
+      'Перевірте з’єднання й спробуйте ще раз. Інші фото можна гортати.',
+    retryPhoto: 'Повторити',
+    swipeHint: 'Гортайте вбік',
   },
   'en-GB': {
     searchOptions: 'Search options',
@@ -120,6 +129,15 @@ export const appMessages = defineMessages({
     noPhotos: 'No photos yet',
     openFullScreen: '{name} — open full screen',
     showPhoto: 'Show {name}',
+    closeViewer: 'Close viewer',
+    thumbnails: 'Thumbnails',
+    thumbnailOf: 'Photo {index} of {total}: {name}',
+    photoLoading: 'Loading photo…',
+    photoLoadFailed: 'Couldn’t load the photo',
+    photoLoadFailedHint:
+      'Check your connection and try again. You can still browse the other photos.',
+    retryPhoto: 'Retry',
+    swipeHint: 'Swipe sideways',
   },
   pl: {
     searchOptions: 'Szukaj na liście',
@@ -180,5 +198,14 @@ export const appMessages = defineMessages({
     noPhotos: 'Nie dodano jeszcze zdjęć',
     openFullScreen: '{name} — otwórz na pełnym ekranie',
     showPhoto: 'Pokaż {name}',
+    closeViewer: 'Zamknij podgląd',
+    thumbnails: 'Miniatury',
+    thumbnailOf: 'Zdjęcie {index} z {total}: {name}',
+    photoLoading: 'Ładowanie zdjęcia…',
+    photoLoadFailed: 'Nie udało się wczytać zdjęcia',
+    photoLoadFailedHint:
+      'Sprawdź połączenie i spróbuj ponownie. Pozostałe zdjęcia można przeglądać.',
+    retryPhoto: 'Ponów',
+    swipeHint: 'Przesuń w bok',
   },
 })

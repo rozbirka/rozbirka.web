@@ -103,6 +103,7 @@ import {
 import { evaluateModuleAccess } from '../policy'
 import type { ModuleAccessDecision } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { tenantRequestScope } from '../tenant-request-scope'
 import { CarExpenseDrawer } from './CarExpenseDrawer'
 import { CarPartsCard } from './CarPartsCard'
 import { CarPayoffPill, CarProfitabilityCard } from './CarProfitabilityCard'
@@ -316,21 +317,21 @@ function CarsList({ base }: { base: string }) {
   const number = useCarMoney(null)
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const selected = useMemo<CarListParams>(
-    () => ({
-      search: params.get('search') ?? undefined,
+  const selected = useMemo<CarListParams>(() => {
+    const search = params.get('search')?.trim()
+    return {
+      search: search === '' ? undefined : search,
       status: isCarStatus(params.get('status'))
         ? (params.get('status') as CarListParams['status'])
         : undefined,
       page: positiveInteger(params.get('page'), 1),
       pageSize: pageSizeParam(params.get('pageSize'), 20),
-    }),
-    [params],
-  )
+    }
+  }, [params])
   const sort: CarSort = isCarSort(params.get('sort'))
     ? (params.get('sort') as CarSort)
     : 'payback'
-  const [query, setQuery] = useState(params.get('search') ?? '')
+  const query = params.get('search') ?? ''
   const [attempt, setAttempt] = useState(0)
   const requestKey = `${JSON.stringify(selected)}#${String(attempt)}`
   const [result, setResult] = useState<{
@@ -341,7 +342,10 @@ function CarsList({ base }: { base: string }) {
   useEffect(() => {
     const controller = new AbortController()
     void carsApi.list(selected, { signal: controller.signal }).then(
-      (page) => setResult({ key: requestKey, page, problem: null }),
+      (page) => {
+        if (!controller.signal.aborted)
+          setResult({ key: requestKey, page, problem: null })
+      },
       (error: unknown) => {
         if (!controller.signal.aborted)
           setResult({
@@ -353,12 +357,15 @@ function CarsList({ base }: { base: string }) {
     )
     return () => controller.abort()
   }, [selected, requestKey])
-  const change = (values: Record<string, string | undefined>) => {
+  const change = (
+    values: Record<string, string | undefined>,
+    replace = false,
+  ) => {
     const next = new URLSearchParams(params)
     Object.entries(values).forEach(([key, value]) =>
       value ? next.set(key, value) : next.delete(key),
     )
-    setParams(next)
+    setParams(next, { flushSync: 'search' in values, replace })
   }
   const loading = result?.key !== requestKey
   const data = result?.page ?? null
@@ -538,7 +545,12 @@ function CarsList({ base }: { base: string }) {
         >
           <SearchInput
             aria-label={t('searchLabel')}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) =>
+              change(
+                { search: event.target.value || undefined, page: '1' },
+                true,
+              )
+            }
             placeholder={t('searchLabel')}
             value={query}
           />
@@ -589,7 +601,6 @@ function CarsList({ base }: { base: string }) {
             actions={
               <Button
                 onClick={() => {
-                  setQuery('')
                   change({ search: undefined, status: undefined, page: '1' })
                 }}
               >
@@ -770,7 +781,8 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
       await navigator.clipboard.writeText(vin)
       toast?.show({ tone: 'ok', message: t('vinCopied') })
     } catch {
-      setProblem(t('vinCopyFailed'))
+      if (toast) toast.show({ tone: 'danger', message: t('vinCopyFailed') })
+      else setProblem(t('vinCopyFailed'))
     }
   }
   const crumb = (
@@ -1019,6 +1031,8 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                       </span>
                     }
                     label={t('galleryLabel', { code: car.code })}
+                    title={`${car.brand} ${car.model} · ${String(car.year)}`}
+                    coverLabel={tf('coverPhoto')}
                     photos={photos}
                   />
                 </section>
@@ -1414,6 +1428,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const { locale } = useLocale()
   const day = useDay()
   const navigate = useNavigate()
+  const toast = useOptionalToast()
   const [searchParams] = useSearchParams()
   const base = `/app/${tenant ?? cabinet.targetTenant?.slug ?? ''}/cars`
   const cabinetRoot = base.replace(/\/cars$/, '')
@@ -1466,6 +1481,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     () => draft.initial?.expenses ?? [],
   )
   const [createdCarId, setCreatedCarId] = useState<string | null>(null)
+  const creationNotifications = useRef(new Set<string>())
   /** The car as the server last sent it — for its expenses, parts and dates. */
   const [loaded, setLoaded] = useState<Car | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -1602,6 +1618,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       return
     }
     const lifetimeSignal = lifetime.current?.signal
+    const tenantSignal = tenantRequestScope.signal
     const requestSignal = (signal: AbortSignal) =>
       lifetimeSignal ? AbortSignal.any([signal, lifetimeSignal]) : signal
     setProblem(null)
@@ -1721,6 +1738,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             completed.add(expense.id)
             setCompletedExpenseIds(new Set(completed))
           } catch (error: unknown) {
+            if (lifetimeSignal?.aborted || tenantSignal.aborted) return
+            if (savedCarId && !creationNotifications.current.has(savedCarId)) {
+              creationNotifications.current.add(savedCarId)
+              toast?.show({ tone: 'ok', message: tf('createdNotice') })
+            }
             setProblem(
               tf('expensesPartiallySaved', {
                 error: normalizeApiProblem(error).message,
@@ -1832,7 +1854,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     )
 
   return (
-    <div className="grid content-start">
+    <div className="rz-form-page grid content-start">
       <form aria-busy={busy} onSubmit={(event) => void submit(event)}>
         <RedesignShell
           actions={
@@ -1869,10 +1891,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
 
             {problem ? <Notice tone="danger">{problem}</Notice> : null}
             {createdCarId ? (
-              <Notice tone="ok">
-                {tf('createdNotice')}{' '}
-                <Link to={`${base}/${createdCarId}`}>{tf('openCar')}</Link>
-              </Notice>
+              <div>
+                <Button asChild>
+                  <Link to={`${base}/${createdCarId}`}>{tf('openCar')}</Link>
+                </Button>
+              </div>
             ) : null}
 
             <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -2340,7 +2363,9 @@ function NewCarExpenses({
   return (
     <>
       {expenses.length === 0 ? (
-        <p className="rz-inset rz-muted m-0">{tf('noNewExpenses')}</p>
+        <p className="rz-inset rz-muted bg-app-sheet-field m-0">
+          {tf('noNewExpenses')}
+        </p>
       ) : (
         <ul className="m-0 grid list-none p-0">
           {expenses.map((expense, index) => {

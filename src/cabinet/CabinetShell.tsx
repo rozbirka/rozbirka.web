@@ -27,7 +27,7 @@ export function CabinetShell() {
   }
 
   return (
-    <div className="cabinet-shell bg-background flex min-h-dvh w-full max-w-full text-app-strong">
+    <div className="cabinet-shell bg-app-canvas flex min-h-dvh w-full max-w-full text-app-strong">
       <CabinetNavigation
         userName={auth.user?.displayName ?? null}
         tenant={cabinet.targetTenant}

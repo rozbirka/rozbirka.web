@@ -167,7 +167,9 @@ export const billingApi = {
   },
 
   async cancel(
-    req?: CancelRequest,
+    req?: CancelRequest & {
+      recovery?: { planCode: string; currentPeriodEnd: string }
+    },
     options: RequestOptions = {},
   ): Promise<void> {
     await apiClient.post('/billing/cancel', req ?? {}, requestConfig(options))

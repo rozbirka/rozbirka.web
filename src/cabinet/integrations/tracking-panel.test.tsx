@@ -127,6 +127,35 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+it('observes automatic setup without sending a connect command', async () => {
+  vi.useFakeTimers()
+  vi.mocked(integrationsApi.trackingSubscription)
+    .mockResolvedValueOnce(status({ state: 'Connecting' }))
+    .mockResolvedValueOnce(status({ state: 'AwaitingVerification' }))
+    .mockResolvedValue(
+      status({ state: 'Connected', lastCallbackAt: '2026-10-29T15:00:00Z' }),
+    )
+  renderPanel()
+  await act(async () => {
+    await Promise.resolve()
+  })
+  expect(
+    screen.queryByRole('button', { name: 'Підключити' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByText(/з тим самим API-ключем/)).toBeVisible()
+  await act(async () => {
+    vi.advanceTimersByTime(5_000)
+    await Promise.resolve()
+  })
+  expect(screen.getByText('Очікуємо підтвердження')).toBeVisible()
+  await act(async () => {
+    vi.advanceTimersByTime(5_000)
+    await Promise.resolve()
+  })
+  expect(screen.getByText('Підключено')).toBeVisible()
+  expect(integrationsApi.connectTracking).not.toHaveBeenCalled()
+})
+
 it('connects without a key and calls it connected only when the server does', async () => {
   vi.useFakeTimers()
   vi.mocked(integrationsApi.trackingSubscription)
@@ -175,33 +204,18 @@ it('connects without a key and calls it connected only when the server does', as
   expect(screen.getByRole('button', { name: 'Відключити' })).toBeVisible()
 })
 
-it('asks for a key only after Core says there is none stored', async () => {
-  vi.mocked(integrationsApi.connectTracking).mockRejectedValueOnce(
-    problem('validation', 'tracking_credentials_required'),
+it('uses the primary connection to recover credentials without a second key form', async () => {
+  vi.mocked(integrationsApi.trackingSubscription).mockResolvedValue(
+    status({ state: 'NeedsCredentials', reasonCode: 'provider_unauthorized' }),
   )
-  const user = userEvent.setup()
-
   renderPanel()
-  await user.click(await screen.findByRole('button', { name: 'Підключити' }))
-
-  const field = screen.getByLabelText('API-ключ Нової пошти')
-  expect(field).toHaveAttribute('type', 'password')
-  expect(screen.getByText(/Потрібен API-ключ Нової пошти/)).toBeVisible()
-
-  await user.click(screen.getByRole('button', { name: 'Показати ключ' }))
-  expect(screen.getByLabelText('API-ключ Нової пошти')).toHaveAttribute(
-    'type',
-    'text',
+  const link = await screen.findByRole('link', {
+    name: 'Перевірити підключення НП',
+  })
+  expect(link).toHaveAttribute(
+    'href',
+    '/app/koval/settings/integrations/integration-1/connect',
   )
-
-  await user.type(screen.getByLabelText('API-ключ Нової пошти'), '  np-key  ')
-  await user.click(screen.getByRole('button', { name: 'Підключити' }))
-
-  expect(integrationsApi.connectTracking).toHaveBeenLastCalledWith(
-    'integration-1',
-    'np-key',
-  )
-  // Accepted: the form closes and the key is not kept anywhere.
   expect(
     screen.queryByLabelText('API-ключ Нової пошти'),
   ).not.toBeInTheDocument()
@@ -274,7 +288,9 @@ it('does not offer connecting where the environment has no public callback', asy
   expect(
     await screen.findByText(/автоматичні оновлення ще не налаштовані/),
   ).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Підключити' })).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Підключити' }),
+  ).not.toBeInTheDocument()
   // The yard is never asked for a callback address of its own.
   expect(screen.queryByLabelText(/адрес/i)).not.toBeInTheDocument()
 })
@@ -300,27 +316,23 @@ it('counts the waybills still queued and the ones the carrier never confirmed', 
   expect(screen.getByText(/Періодична перевірка продовжується/)).toBeVisible()
 })
 
-it('carries neither the typed key nor the previous answer into another yard', async () => {
-  vi.mocked(integrationsApi.trackingSubscription).mockResolvedValue(
-    status({ state: 'NeedsCredentials', reasonCode: 'provider_unauthorized' }),
+it('does not carry a previous error into another yard', async () => {
+  vi.mocked(integrationsApi.connectTracking).mockRejectedValueOnce(
+    problem('conflict', 'tracking_busy'),
   )
   const user = userEvent.setup()
-
   const view = renderPanel()
-  await user.click(await screen.findByRole('button', { name: 'Ввести ключ' }))
-  await user.type(screen.getByLabelText('API-ключ Нової пошти'), 'first-yard')
-
-  const other: Tenant = { ...tenant, id: 'tenant-2', slug: 'other' }
-  vi.mocked(useCabinet).mockReturnValue(cabinet(other))
+  await user.click(await screen.findByRole('button', { name: 'Підключити' }))
+  expect(screen.getByText(/Ця дія вже виконується/)).toBeVisible()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet({ ...tenant, id: 'tenant-2', slug: 'other' }),
+  )
   view.rerender(
     <ToastProvider>
       <TrackingSubscriptionPanel integrationId="integration-1" />
     </ToastProvider>,
   )
-
-  expect(
-    screen.queryByLabelText('API-ключ Нової пошти'),
-  ).not.toBeInTheDocument()
+  expect(screen.queryByText(/Ця дія вже виконується/)).not.toBeInTheDocument()
   expect(screen.getByText('Читаємо стан підписки…')).toBeVisible()
 })
 
@@ -377,36 +389,15 @@ it('waits for the server to confirm a disconnection', async () => {
   expect(screen.queryByText('Не підключено')).not.toBeInTheDocument()
 })
 
-it('can be driven from the keyboard alone, reveal toggle included', async () => {
+it('provides keyboard access to the primary connection recovery link', async () => {
   vi.mocked(integrationsApi.trackingSubscription).mockResolvedValue(
-    status({ state: 'NeedsCredentials', reasonCode: 'provider_unauthorized' }),
+    status({ state: 'NeedsCredentials' }),
   )
   const user = userEvent.setup()
-
   renderPanel()
-  const open = await screen.findByRole('button', { name: 'Ввести ключ' })
-  open.focus()
-  await user.keyboard('{Enter}')
-
-  const field = screen.getByLabelText('API-ключ Нової пошти')
+  const link = await screen.findByRole('link', {
+    name: 'Перевірити підключення НП',
+  })
   await user.tab()
-  expect(field).toHaveFocus()
-  await user.keyboard('np-key')
-  await user.tab()
-  const reveal = screen.getByRole('button', { name: 'Показати ключ' })
-  expect(reveal).toHaveFocus()
-  await user.keyboard(' ')
-  expect(screen.getByLabelText('API-ключ Нової пошти')).toHaveAttribute(
-    'type',
-    'text',
-  )
-
-  await user.tab()
-  expect(screen.getByRole('button', { name: 'Підключити' })).toHaveFocus()
-  await user.keyboard('{Enter}')
-
-  expect(integrationsApi.connectTracking).toHaveBeenCalledWith(
-    'integration-1',
-    'np-key',
-  )
+  expect(link).toHaveFocus()
 })

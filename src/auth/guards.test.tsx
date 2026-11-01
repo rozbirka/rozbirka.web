@@ -199,3 +199,25 @@ it('keeps a pre-created owner with their phone as display name on the name step'
 
   expect(screen.getByText('name step')).toBeInTheDocument()
 })
+
+it.each([RequireAuth, RedirectIfAuth])(
+  'keeps the saved light theme while authentication loads (%s)',
+  (Guard) => {
+    vi.mocked(useAuth).mockReturnValue(authValue('loading'))
+    localStorage.setItem('rozbirka.theme', 'light')
+    try {
+      render(
+        <MemoryRouter>
+          <Guard>
+            <p>Content</p>
+          </Guard>
+        </MemoryRouter>,
+      )
+      expect(document.body).toHaveAttribute('data-theme', 'light')
+      expect(screen.getByText('Завантаження…')).toHaveClass('bg-app-canvas')
+      expect(screen.queryByText('Content')).toBeNull()
+    } finally {
+      localStorage.removeItem('rozbirka.theme')
+    }
+  },
+)

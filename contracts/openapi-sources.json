@@ -1,7 +1,7 @@
 {
   "version": 1,
   "core": {
-    "uri": "gs://rozbirka-ci-openapi-contracts/core/4af27da7c8a1e1b98ed2638f0ae50d1c0541634d/rozbirka-core.json",
-    "sha256": "0fe142eb3633ccc528605199b8015cb622beefa1089dceb16611df706cb87bb6"
+    "uri": "gs://rozbirka-ci-openapi-contracts/core/d2dc6633b0029ebe23704c9b5ec0d05b1c56c0e1/rozbirka-core.json",
+    "sha256": "415834df62f78cc26448868feccb4fcd957442fc4d5dfd78d88160502086ca1c"
   }
 }

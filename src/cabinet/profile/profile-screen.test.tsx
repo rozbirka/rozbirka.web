@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { StrictMode } from 'react'
+import { StrictMode, type PropsWithChildren } from 'react'
+import { ToastProvider } from '@/components/app'
 import {
   act,
   fireEvent,
@@ -19,6 +20,14 @@ import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
 import type { TenantAccessSnapshot } from '../access-types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { ProfileScreen } from './profile-screen'
+
+function ProfileProviders({ children }: PropsWithChildren) {
+  return (
+    <MemoryRouter>
+      <ToastProvider>{children}</ToastProvider>
+    </MemoryRouter>
+  )
+}
 
 vi.mock('@/auth/AuthContext', () => {
   const useAuth = vi.fn()
@@ -121,7 +130,7 @@ beforeEach(() => {
 })
 
 it('renders the approved authenticated profile fields', () => {
-  const view = render(<ProfileScreen />, { wrapper: MemoryRouter })
+  const view = render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   expect(screen.getByRole('heading', { name: 'Профіль' })).toBeVisible()
   expect(screen.getByLabelText('Ім’я та прізвище')).toHaveValue('Олена')
@@ -133,7 +142,7 @@ it('renders the approved authenticated profile fields', () => {
 
 it('disables saving an unchanged or invalid display name', async () => {
   const user = userEvent.setup()
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   const input = screen.getByLabelText('Ім’я та прізвище')
   const save = screen.getByRole('button', { name: 'Зберегти' })
@@ -149,7 +158,7 @@ it('trims and saves the name once while the request is pending', async () => {
   const pending = deferred<void>()
   updateName.mockReturnValue(pending.promise)
   const user = userEvent.setup()
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   const input = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(input)
@@ -168,15 +177,15 @@ it('trims and saves the name once while the request is pending', async () => {
     pending.resolve()
     return pending.promise
   })
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Ім’я успішно оновлено.',
-  )
+  const confirmation = await screen.findByText('Ім’я успішно оновлено.')
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(confirmation.closest('.rz-notice')).toBeNull()
 })
 
 it('keeps the typed value and shows a retryable error when saving fails', async () => {
   updateName.mockRejectedValue(new Error('identity offline'))
   const user = userEvent.setup()
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   const input = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(input)
@@ -194,7 +203,7 @@ it('does not publish local completion state after unmount', async () => {
   const pending = deferred<void>()
   updateName.mockReturnValue(pending.promise)
   const user = userEvent.setup()
-  const view = render(<ProfileScreen />, { wrapper: MemoryRouter })
+  const view = render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   const input = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(input)
@@ -217,7 +226,7 @@ it('publishes save completion after the StrictMode effect replay', async () => {
     <StrictMode>
       <ProfileScreen />
     </StrictMode>,
-    { wrapper: MemoryRouter },
+    { wrapper: ProfileProviders },
   )
 
   const input = screen.getByLabelText('Ім’я та прізвище')
@@ -229,13 +238,13 @@ it('publishes save completion after the StrictMode effect replay', async () => {
     return pending.promise
   })
 
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Ім’я успішно оновлено.',
-  )
+  const confirmation = await screen.findByText('Ім’я успішно оновлено.')
+  expect(confirmation.closest('.rz-toast')).toHaveAttribute('role', 'status')
+  expect(confirmation.closest('.rz-notice')).toBeNull()
 })
 
 it('requires a second destructive confirmation before deleting the account', async () => {
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   fireEvent.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
   expect(
@@ -254,7 +263,7 @@ it('requires a second destructive confirmation before deleting the account', asy
 
 it('requires the exact deletion phrase and a five second delay', () => {
   vi.useFakeTimers()
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   fireEvent.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
   const phrase = screen.getByLabelText('Для підтвердження введіть ВИДАЛИТИ')
@@ -279,7 +288,7 @@ it('preserves the local session when account deletion fails', async () => {
   vi.mocked(profileApi.deleteAccount).mockRejectedValue(new Error('offline'))
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   fireEvent.click(unlockDeletionConfirmation())
 
@@ -295,7 +304,7 @@ it('clears local private state after deletion even when sign-out rejects', async
   signOut.mockRejectedValue(new Error('session unavailable'))
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   fireEvent.click(unlockDeletionConfirmation())
 
@@ -311,7 +320,7 @@ it('preserves private state after unmount until deletion is confirmed', async ()
   vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
-  const view = render(<ProfileScreen />, { wrapper: MemoryRouter })
+  const view = render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   fireEvent.click(unlockDeletionConfirmation())
   view.unmount()
@@ -328,7 +337,7 @@ it('preserves private state after unmount until deletion is confirmed', async ()
 it('does not offer cancellation after account deletion has been dispatched', async () => {
   const pending = deferred<void>()
   vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   fireEvent.click(unlockDeletionConfirmation())
 
@@ -345,7 +354,7 @@ it('does not offer cancellation after account deletion has been dispatched', asy
 it('does not clear private state when the profile merely unmounts', () => {
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
-  const view = render(<ProfileScreen />, { wrapper: MemoryRouter })
+  const view = render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   view.unmount()
 
@@ -358,7 +367,7 @@ it('resets for an in-place auth transition and ignores the prior update completi
   const pending = deferred<void>()
   updateName.mockReturnValue(pending.promise)
   const user = userEvent.setup()
-  const view = render(<ProfileScreen />, { wrapper: MemoryRouter })
+  const view = render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   await user.clear(screen.getByLabelText('Ім’я та прізвище'))
   await user.type(screen.getByLabelText('Ім’я та прізвище'), 'Старе імʼя')
@@ -390,7 +399,7 @@ it('resets for an in-place auth transition and ignores the prior update completi
 })
 
 it('groups personal details and access, with compact account actions', () => {
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   const personal = screen.getByRole('region', { name: 'Особисті дані' })
   expect(
@@ -434,7 +443,7 @@ it('does not clear a newer session after old-account deletion completes', async 
   const pending = deferred<void>()
   vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
   credentials.startSession('A')
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
   fireEvent.click(unlockDeletionConfirmation())
   credentials.startSession('B')
   await act(async () => {
@@ -461,7 +470,7 @@ it('keeps business document details available on demand', () => {
     retry: vi.fn(),
     switchTenant: vi.fn(),
   } satisfies CabinetContextValue)
-  render(<ProfileScreen />, { wrapper: MemoryRouter })
+  render(<ProfileScreen />, { wrapper: ProfileProviders })
 
   const settings = screen.getByRole('region', { name: 'Налаштування' })
   const disclosure = within(settings)

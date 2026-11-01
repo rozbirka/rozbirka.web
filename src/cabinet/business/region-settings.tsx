@@ -481,7 +481,7 @@ export function RegionSettings({
     <section
       aria-busy={pending || undefined}
       aria-labelledby={titleId}
-      className="rz-card min-w-0 scroll-mt-24"
+      className="rz-form-page rz-card min-w-0 scroll-mt-24"
       // Deep-link target: onboarding opens /settings/business#region.
       id={BUSINESS_SECTION_IDS.region}
     >

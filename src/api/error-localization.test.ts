@@ -111,3 +111,28 @@ describe('error localisation across screens', () => {
     ).toBe('Nie udało się wczytać katalogu samochodów.')
   })
 })
+
+it.each<[Locale, string]>([
+  [
+    'uk',
+    'Ви не можете змінювати власні права. Зверніться до власника розбірки.',
+  ],
+  [
+    'en-GB',
+    'You cannot change your own permissions. Contact the business owner.',
+  ],
+  [
+    'pl',
+    'Nie możesz zmieniać własnych uprawnień. Skontaktuj się z właścicielem firmy.',
+  ],
+])(
+  'localises the self-permission restriction in %s through repeated normalisation',
+  (locale, message) => {
+    requestLocale.set(locale)
+    const problem = normalizeApiProblem(
+      failure('VALIDATION_ERROR', 'Cannot change own permissions.'),
+    )
+    expect(problem.message).toBe(message)
+    expect(normalizeApiProblem(problem).message).toBe(message)
+  },
+)

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { billingApi } from '@/api/billing'
@@ -101,7 +101,7 @@ describe('Pricing destinations', () => {
         name: 'Почати 14 днів безкоштовно',
       }),
     ).toHaveAttribute('href', '/login?plan=pro_monthly')
-    expect(screen.getByText('20 авто, 2 000 запчастин')).toBeInTheDocument()
+    expect(screen.getByText('Інвентаризація')).toBeInTheDocument()
     expect(screen.queryByText(/API і мульти-локація/i)).toBeNull()
   })
 
@@ -128,7 +128,7 @@ describe('Pricing destinations', () => {
     ).toHaveAttribute('href', '/account?section=plans&plan=pro_monthly')
   })
 
-  it('renders every guest plan destination with a 44px minimum touch target', async () => {
+  it('renders every guest plan destination with a 56px touch target', async () => {
     render(
       <MemoryRouter>
         <Pricing />
@@ -138,10 +138,8 @@ describe('Pricing destinations', () => {
     const links = await screen.findAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
       '/login?plan=pro_monthly',
-      '/login?plan=enterprise_monthly',
     ])
-    expect(links).toHaveLength(2)
-    links.forEach((link) => expect(link).toHaveClass('min-h-11'))
+    links.forEach((link) => expect(link).toHaveClass('h-14'))
   })
 
   it('renders the complete fallback when the public API fails', async () => {
@@ -152,12 +150,12 @@ describe('Pricing destinations', () => {
       </MemoryRouter>,
     )
     expect(
-      await screen.findByText('20 авто, 2 000 запчастин'),
+      await screen.findByRole('heading', { level: 3, name: 'Pro' }),
     ).toBeInTheDocument()
-    expect(screen.getAllByRole('link')).toHaveLength(2)
+    expect(screen.getAllByRole('link')).toHaveLength(1)
   })
 
-  it('renders a stable full monthly period label beside every price', async () => {
+  it('renders the monthly period label beside the price', async () => {
     render(
       <MemoryRouter>
         <Pricing />
@@ -165,34 +163,26 @@ describe('Pricing destinations', () => {
     )
 
     const periods = await screen.findAllByText('/ місяць')
-    expect(periods).toHaveLength(2)
+    expect(periods).toHaveLength(1)
     periods.forEach((period) => {
-      expect(period).toHaveClass(
-        'font-visuelt',
-        'text-[14px]',
-        'leading-none',
-        'whitespace-nowrap',
-        'font-normal',
-        'tracking-normal',
-        'mb-[0.55em]',
-        'self-end',
-      )
+      expect(period.previousElementSibling?.textContent).toMatch(/^\$\d+$/)
     })
   })
 
-  it('renders the two plans in two columns on tablet and desktop', async () => {
-    const { container } = render(
+  it('offers only the Pro plan, without Enterprise', async () => {
+    render(
       <MemoryRouter>
         <Pricing />
       </MemoryRouter>,
     )
 
-    await screen.findByText('Enterprise')
-    const grid = container.querySelector('#pricing ul')
-    expect(grid).toHaveClass('md:grid-cols-2')
-    expect(grid).not.toHaveClass('lg:grid-cols-3')
-
-    const enterpriseCard = screen.getByText('Enterprise').closest('li')
-    expect(enterpriseCard).not.toHaveClass('md:col-span-2')
+    expect(await screen.findByText('Pro')).toBeInTheDocument()
+    expect(screen.queryByText('Enterprise')).toBeNull()
+    expect(screen.queryByText('$299')).toBeNull()
+    expect(screen.queryByText('Популярний')).toBeNull()
+    const included = screen.getByRole('heading', { name: 'Включено' })
+      .nextElementSibling as HTMLElement
+    expect(within(included).getAllByRole('listitem')).toHaveLength(13)
+    expect(within(included).getByText('Нова Пошта')).toBeInTheDocument()
   })
 })

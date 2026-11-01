@@ -16,6 +16,7 @@ export const teamMessages = defineMessages({
       'Дію виконано, але не вдалося оновити права. Натисніть «Оновити права», щоб продовжити роботу.',
     actionFailed: 'Не вдалося виконати дію. Спробуйте ще раз.',
     roleUpdated: 'Роль учасника оновлено.',
+    rolesLoadFailed: 'Не вдалося завантажити ролі. Спробуйте ще раз.',
     roleUpdateFailed:
       'Не вдалося змінити роль учасника. Перевірте зв’язок і спробуйте ще раз.',
     permissionsUpdated: 'Права учасника оновлено.',
@@ -199,6 +200,7 @@ export const teamMessages = defineMessages({
       'Done, but your permissions couldn’t be refreshed. Click “Refresh permissions” to carry on.',
     actionFailed: 'Couldn’t complete the action. Please try again.',
     roleUpdated: 'Member’s role updated.',
+    rolesLoadFailed: 'Couldn’t load roles. Please try again.',
     roleUpdateFailed:
       'Couldn’t change the member’s role. Check your connection and try again.',
     permissionsUpdated: 'Member’s permissions updated.',
@@ -365,6 +367,7 @@ export const teamMessages = defineMessages({
       'Gotowe, ale nie udało się odświeżyć uprawnień. Kliknij „Odśwież uprawnienia”, aby kontynuować.',
     actionFailed: 'Nie udało się wykonać czynności. Spróbuj ponownie.',
     roleUpdated: 'Rola członka zespołu zaktualizowana.',
+    rolesLoadFailed: 'Nie udało się wczytać ról. Spróbuj ponownie.',
     roleUpdateFailed:
       'Nie udało się zmienić roli. Sprawdź połączenie i spróbuj ponownie.',
     permissionsUpdated: 'Uprawnienia członka zespołu zaktualizowane.',

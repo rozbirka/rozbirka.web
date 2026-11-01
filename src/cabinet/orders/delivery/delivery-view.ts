@@ -10,7 +10,16 @@ import {
   type MessageKey,
   type MessageParams,
 } from '@/i18n'
-import { deliveryStage, uah } from './delivery-money'
+import { orderStatusPresentation } from '../order-labels'
+import {
+  hasDepositWaiver,
+  minimumPrepayment,
+  deliveryStage,
+  isFullyPaid,
+  uah,
+} from './delivery-money'
+import { orderChipKey } from './delivery-flow'
+import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
 
 const tr = (
@@ -37,6 +46,8 @@ export interface LifecycleStep {
   /** When it happened; empty for a step still ahead. */
   meta: string
   done: boolean
+  /** This milestone is cleared by an exception, not by money received. */
+  prepaymentNotRequired?: boolean
   /** The furthest step reached — the one the eye should land on. */
   current: boolean
 }
@@ -61,10 +72,8 @@ const stamp = (
 }
 
 /**
- * The four moments a delivery order passes through. Payment sits first because
- * that is the order a prepaid sale runs in, not because it gates anything: an
- * unpaid order reaches every later step just the same, and settles when the
- * carrier hands the post-payment back.
+ * The first milestone can be cleared by payment or by an active prepayment
+ * exception. An exception never settles the outstanding goods balance.
  */
 export function lifecycle(
   delivery: DeliveryOrder,
@@ -72,14 +81,17 @@ export function lifecycle(
   locale: Locale,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): LifecycleStep[] {
-  const paidAt =
-    delivery.outstandingUah > 0
-      ? null
-      : (delivery.payments
-          .filter((payment) => payment.refundedAt === null)
-          .map((payment) => payment.createdAt)
-          .sort()
-          .at(-1) ?? null)
+  const prepaymentNotRequired =
+    delivery.workflowState === 'Open' &&
+    !isFullyPaid(delivery) &&
+    (!delivery.depositRequired || hasDepositWaiver(delivery))
+  const paidAt = isFullyPaid(delivery)
+    ? (delivery.payments
+        .filter((payment) => payment.refundedAt === null)
+        .map((payment) => payment.createdAt)
+        .sort()
+        .at(-1) ?? null)
+    : null
   const waybillAt =
     shipment?.events.find((event) => event.code === 'Created')?.recordedAt ??
     (hasWaybill(shipment) ? (shipment?.quoteAt ?? null) : null)
@@ -92,8 +104,11 @@ export function lifecycle(
   }[] = [
     {
       key: 'paid',
-      label: tr(locale, 'stepPaid'),
-      done: delivery.outstandingUah === 0,
+      label: tr(
+        locale,
+        prepaymentNotRequired ? 'stepNoPrepayment' : 'stepPaid',
+      ),
+      done: isFullyPaid(delivery) || prepaymentNotRequired,
       at: paidAt,
     },
     {
@@ -121,11 +136,17 @@ export function lifecycle(
     label: step.label,
     meta: step.done ? stamp(step.at, locale, timeZone) : '',
     done: step.done,
+    ...(step.key === 'paid' && prepaymentNotRequired
+      ? { prepaymentNotRequired: true }
+      : {}),
     current: step.done && steps[index + 1]?.done !== true,
   }))
 }
 
-/** The order's own state, said the way the yard says it. */
+/**
+ * Share ordinary order status labels and colours; the return workflow keeps
+ * its delivery-specific presentation.
+ */
 export function orderChip(
   delivery: DeliveryOrder,
   locale: Locale,
@@ -133,13 +154,18 @@ export function orderChip(
   label: string
   tone: StatusTone
 } {
-  if (delivery.returnedAt !== null)
-    return { label: tr(locale, 'chipReturned'), tone: 'info' }
-  if (delivery.receivedAt !== null)
-    return { label: tr(locale, 'chipConfirmed'), tone: 'ok' }
-  return delivery.outstandingUah === 0
-    ? { label: tr(locale, 'chipPendingPaid'), tone: 'info' }
-    : { label: tr(locale, 'chipPendingDue'), tone: 'warn' }
+  const chip = orderChipKey(delivery)
+  if (chip.key === 'chipReturn')
+    return {
+      label: translate(deliveryFlowMessages, locale, 'chipReturn'),
+      tone: chip.tone,
+    }
+  const statuses = {
+    chipOpen: 'pending',
+    chipCompleted: 'confirmed',
+    chipCancelled: 'cancelled',
+  } as const
+  return orderStatusPresentation(statuses[chip.key], locale)
 }
 
 /** Where the parcel is, as the carrier record shows it. */
@@ -163,104 +189,6 @@ export function shipmentChip(
   return { label: tr(locale, 'shipNone'), tone: 'warn' }
 }
 
-export interface ShipmentFact {
-  key: string
-  label: string
-  value: string
-  note: string
-  tone: 'ink' | 'ok' | 'warn' | 'danger' | 'dim'
-}
-
-/**
- * The four facts a manager checks before touching anything. Post-payment is
- * the one that decides whether the waybill may be created at all: Core keeps
- * it equal to what the order still owes, and a mismatch is a refusal waiting
- * to happen.
- */
-export function shipmentFacts(
-  delivery: DeliveryOrder,
-  shipment: Shipment | null,
-  locale: Locale,
-): ShipmentFact[] {
-  const created = hasWaybill(shipment)
-  const parcels = shipment?.draft.parcels ?? []
-  const weight = parcels.reduce((sum, parcel) => sum + parcel.weightKg, 0)
-  const first = parcels[0]
-  const codMatches =
-    shipment?.codUah != null && shipment.codUah === delivery.outstandingUah
-
-  return [
-    {
-      key: 'waybill',
-      label: tr(locale, 'stepWaybill'),
-      value: created ? (shipment?.number ?? '—') : tr(locale, 'factNotCreated'),
-      note: created
-        ? ''
-        : delivery.outstandingUah > 0
-          ? tr(locale, 'factWithCod')
-          : tr(locale, 'factCanCreate'),
-      tone: created ? 'ink' : 'warn',
-    },
-    {
-      key: 'cod',
-      label: tr(locale, 'factCod'),
-      value: shipment?.codUah == null ? '—' : uah(shipment.codUah, locale),
-      note: !created
-        ? ''
-        : codMatches
-          ? tr(locale, 'factCodMatches')
-          : tr(locale, 'factCodMismatch'),
-      tone: !created ? 'dim' : codMatches ? 'ok' : 'danger',
-    },
-    {
-      key: 'parcels',
-      label: tr(locale, 'factParcel'),
-      value:
-        parcels.length === 0
-          ? '—'
-          : tr(locale, 'factParcelValue', {
-              count: parcels.length,
-              weight,
-            }),
-      note:
-        first === undefined
-          ? ''
-          : tr(locale, 'factDimensions', {
-              length: first.lengthCm,
-              width: first.widthCm,
-              height: first.heightCm,
-            }),
-      tone: parcels.length === 0 ? 'dim' : 'ink',
-    },
-    {
-      key: 'deposit',
-      label: tr(locale, 'factDeposit'),
-      value:
-        delivery.requiredDepositUah <= 0
-          ? '—'
-          : uah(delivery.requiredDepositUah, locale),
-      note: !delivery.depositRequired
-        ? tr(locale, 'depositNotRequired')
-        : delivery.depositWaived
-          ? tr(locale, 'depositWaivedTrusted')
-          : delivery.requiredDepositUah <= 0
-            ? tr(locale, 'depositAfterQuote')
-            : delivery.depositSatisfied
-              ? tr(locale, 'depositPaid')
-              : tr(locale, 'depositShort', {
-                  amount: uah(delivery.depositShortfallUah, locale),
-                }),
-      tone: !delivery.depositRequired
-        ? 'dim'
-        : delivery.depositWaived || delivery.depositSatisfied
-          ? 'ok'
-          : delivery.requiredDepositUah <= 0
-            ? 'dim'
-            : 'warn',
-    },
-  ]
-}
-
 /**
  * How far the money has got. «Частково» has to mean what it says: an order
  * nobody has paid anything against is not partly paid, and calling it that
@@ -273,65 +201,13 @@ export function paymentStanding(
   label: string
   tone: 'ok' | 'warn' | 'dim'
 } {
-  if (delivery.outstandingUah === 0)
+  if (delivery.agreedTotalUah <= 0)
+    return { label: tr(locale, 'standingUnknown'), tone: 'dim' }
+  if (isFullyPaid(delivery))
     return { label: tr(locale, 'standingFull'), tone: 'ok' }
   return delivery.appliedUah > 0
     ? { label: tr(locale, 'standingPartial'), tone: 'warn' }
     : { label: tr(locale, 'standingNone'), tone: 'dim' }
-}
-
-export interface PrimaryAction {
-  kind: 'pay' | 'create' | 'dispatch' | 'receive' | 'return' | null
-  label: string
-  hint: string
-}
-
-/**
- * The one move the order is waiting for. Only ever one: the lifecycle is
- * strictly ordered in Core, and offering a later step early is offering a
- * refusal.
- */
-export function primaryAction(
-  delivery: DeliveryOrder,
-  shipment: Shipment | null,
-  locale: Locale,
-): PrimaryAction {
-  if (delivery.returnedAt !== null)
-    return {
-      kind: null,
-      label: '',
-      hint: tr(locale, 'returnedHint'),
-    }
-  // Money no longer gates the parcel: whatever is still owed travels as the
-  // post-payment, so the waybill is the next move even on an unpaid order.
-  if (!hasWaybill(shipment))
-    return {
-      kind: 'create',
-      label: tr(locale, 'actionCreate'),
-      hint:
-        delivery.outstandingUah > 0
-          ? tr(locale, 'createHintCod', {
-              amount: uah(delivery.outstandingUah, locale),
-            })
-          : tr(locale, 'createHintPaid'),
-    }
-  if (delivery.dispatchedAt === null)
-    return {
-      kind: 'dispatch',
-      label: tr(locale, 'actionDispatch'),
-      hint: tr(locale, 'dispatchHint'),
-    }
-  if (delivery.receivedAt === null)
-    return {
-      kind: 'receive',
-      label: tr(locale, 'shipReceived'),
-      hint: tr(locale, 'receiveHint'),
-    }
-  return {
-    kind: 'return',
-    label: tr(locale, 'actionReturn'),
-    hint: tr(locale, 'returnHint'),
-  }
 }
 
 export interface ReadinessCheck {
@@ -388,24 +264,31 @@ export function readiness(
       // Said as a shortfall it reads «бракує 0,00 ₴», which is not a fact.
       state: !delivery.depositRequired
         ? tr(locale, 'depositStateNotRequired')
-        : delivery.depositWaived
+        : hasDepositWaiver(delivery)
           ? tr(locale, 'depositStateWaived')
-          : delivery.requiredDepositUah <= 0
+          : minimumPrepayment(delivery) <= 0
             ? tr(locale, 'depositAfterQuote')
             : delivery.depositSatisfied
-              ? uah(delivery.requiredDepositUah, locale)
+              ? isFullyPaid(delivery)
+                ? tr(locale, 'depositNoAdditional')
+                : tr(locale, 'depositCovered', {
+                    amount: uah(minimumPrepayment(delivery), locale),
+                  })
               : tr(locale, 'depositShort', {
                   amount: uah(delivery.depositShortfallUah, locale),
                 }),
       ok:
         !delivery.depositRequired ||
-        delivery.depositWaived ||
-        (delivery.requiredDepositUah > 0 && delivery.depositSatisfied),
-      // Before the quote there is no figure to pay at all.
+        hasDepositWaiver(delivery) ||
+        (minimumPrepayment(delivery) > 0 && delivery.depositSatisfied),
+      // Before the quote there is no figure to pay at all, and a deposit
+      // still owed is paid in the order, not in the integration's settings:
+      // neither keeps the order off the confirmation, which says why it
+      // cannot create the waybill yet.
       pending:
         delivery.depositRequired &&
-        !delivery.depositWaived &&
-        delivery.requiredDepositUah <= 0,
+        !hasDepositWaiver(delivery) &&
+        (minimumPrepayment(delivery) <= 0 || !delivery.depositSatisfied),
     },
     {
       key: 'quote',

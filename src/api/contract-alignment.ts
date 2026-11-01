@@ -28,6 +28,9 @@ import type { ConfirmPayment } from './orders'
 import type { ImportMapping, ImportRule } from './part-imports'
 import type { CreatePartRequest } from './parts'
 import type { UpdateLanguageRequest } from './types'
+import type { LateCarrierPayment } from './delivery'
+import type { NovaPoshtaSetupConfiguration } from './nova-poshta-setup'
+import type { ShipmentDraft } from './shipping'
 
 type Schemas = components['schemas']
 
@@ -87,4 +90,20 @@ export type ContractAlignment = [
     >
   >,
   Check<Fits<UpdateLanguageRequest, Schemas['UpdateLanguageRequest']>>,
+  Check<
+    Same<
+      Unknown<
+        NovaPoshtaSetupConfiguration,
+        Schemas['NovaPoshtaSetupConfiguration']
+      >,
+      never
+    >
+  >,
+  Check<Same<Unknown<ShipmentDraft, Schemas['ShipmentDraftRequest']>, never>>,
+  Check<
+    Same<
+      Unknown<LateCarrierPayment, Schemas['RecordLateCarrierPaymentRequest']>,
+      never
+    >
+  >,
 ]

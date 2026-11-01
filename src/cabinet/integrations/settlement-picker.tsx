@@ -1,6 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Field, TextInput } from '@/components/app'
-import { integrationsApi, type NovaPoshtaSettlement } from '@/api/integrations'
+import {
+  integrationsApi,
+  type NovaPoshtaPage,
+  type NovaPoshtaSettlement,
+} from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
 import { useLocale, useT } from '@/i18n'
 import { integrationProblemMessage } from './integration-labels'
@@ -27,19 +31,31 @@ const prohibited = (
  * it, so the field only accepts what the list returned.
  */
 export function SettlementPicker({
+  error,
   integrationId,
   label,
   onPick,
   picked,
   savedHint,
+  search,
   use,
 }: {
+  /** A form's own verdict on the field, e.g. «Оберіть населений пункт». */
+  error?: string | undefined
   integrationId: string
   label?: string
   onPick: (settlement: NovaPoshtaSettlement | null) => void
   picked: NovaPoshtaSettlement | null
   /** Shown while a stored settlement stands and nothing new is typed. */
   savedHint?: string | undefined
+  /**
+   * Where the catalogue is read from. Defaults to the stored key; the
+   * connection wizard reads through its setup session instead.
+   */
+  search?: (
+    term: string,
+    signal: AbortSignal,
+  ) => Promise<NovaPoshtaPage<NovaPoshtaSettlement>>
   use: SettlementUse
 }) {
   const { locale } = useLocale()
@@ -54,6 +70,11 @@ export function SettlementPicker({
   } | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   const boxRef = useRef<HTMLDivElement | null>(null)
+  // Kept in a ref: a caller's inline function must not restart the search.
+  const searchRef = useRef(search)
+  useLayoutEffect(() => {
+    searchRef.current = search
+  }, [search])
 
   const term = query.trim()
   const options = term.length >= 2 && found?.term === term ? found.items : []
@@ -65,21 +86,24 @@ export function SettlementPicker({
     if (term.length < 2 || matched) return
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
-      void integrationsApi
-        .settlements(integrationId, term, 1, { signal: controller.signal })
-        .then(
-          (page) => {
-            if (controller.signal.aborted) return
-            setFound({ term, items: page.items })
-            setFailure(null)
-          },
-          (problem) => {
-            if (!controller.signal.aborted)
-              setFailure(
-                integrationProblemMessage(normalizeApiProblem(problem), locale),
-              )
-          },
-        )
+      const read =
+        searchRef.current?.(term, controller.signal) ??
+        integrationsApi.settlements(integrationId, term, 1, {
+          signal: controller.signal,
+        })
+      void read.then(
+        (page) => {
+          if (controller.signal.aborted) return
+          setFound({ term, items: page.items })
+          setFailure(null)
+        },
+        (problem) => {
+          if (!controller.signal.aborted)
+            setFailure(
+              integrationProblemMessage(normalizeApiProblem(problem), locale),
+            )
+        },
+      )
     }, 300)
     return () => {
       controller.abort()
@@ -110,7 +134,7 @@ export function SettlementPicker({
   return (
     <div ref={boxRef}>
       <Field
-        error={failure ?? undefined}
+        error={failure ?? error ?? undefined}
         hint={
           term === '' && savedHint !== undefined
             ? savedHint

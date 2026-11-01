@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Minus, X } from 'lucide-react'
-import { inventoryApi } from '@/api/inventory'
+import { inventoryApi, type PartPlacementJob } from '@/api/inventory'
 import type { PartSearchItem } from '@/api/parts'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
@@ -10,10 +10,13 @@ import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { LocationSelect } from '../inventory/LocationSelect'
 import { Resource } from '../inventory/InventoryResource'
+import { PlacementFieldsSkeleton } from '../inventory/PlacementSkeleton'
 import { useLoad } from '../inventory/use-stock-resource'
 import { unassignedMessages } from './unassigned-messages'
 import { placementMessages } from '../inventory/placement-messages'
 import { locationContentsMessages } from '../inventory/location-contents-messages'
+import { useCabinet } from '../CabinetContext'
+import { BulkPlacementJobSheet } from './BulkPlacementJobSheet'
 import { hasPlacementStock } from './placement-availability'
 import { PlacementPartInfo } from './PlacementPartInfo'
 
@@ -23,8 +26,22 @@ interface Outcome {
   message?: string
 }
 
-/** Existing per-part writes, with an explicit result and retry set. */
-export function BulkPlacementSheet({
+/** Single placement keeps its existing confirmation; bulk placement is a worker job. */
+export function BulkPlacementSheet(
+  props: Parameters<typeof PerPartPlacementSheet>[0],
+) {
+  const { snapshot } = useCabinet()
+  return props.single ? (
+    <PerPartPlacementSheet {...props} />
+  ) : (
+    <BulkPlacementJobSheet
+      key={`${snapshot?.tenantId}:${snapshot?.userId}:${snapshot?.generation}:${props.sourceZoneId}`}
+      {...props}
+    />
+  )
+}
+
+function PerPartPlacementSheet({
   warehouseId,
   sourceZoneId,
   parts,
@@ -36,8 +53,14 @@ export function BulkPlacementSheet({
   sourceZoneId: string
   parts: readonly PartSearchItem[]
   onClose: () => void
-  onApplied: (ids: ReadonlySet<string>, placedIds: ReadonlySet<string>) => void
+  onApplied: (
+    ids: ReadonlySet<string>,
+    placedIds: ReadonlySet<string>,
+    jobId?: string,
+  ) => void
   single?: boolean
+  onJobStarted?: (job: PartPlacementJob) => void
+  onCompleted?: (job: PartPlacementJob) => void
 }) {
   const t = useT(unassignedMessages)
   const tc = useT(commonMessages)
@@ -79,7 +102,6 @@ export function BulkPlacementSheet({
   const remaining = attempted
     ? outcomes.filter((item) => item.kind === 'failed').map((item) => item.part)
     : parts
-  const placed = outcomes.filter((item) => item.kind === 'placed').length
   const warehouse = resource.state.kind === 'ready' ? resource.state.data : null
   const zones = warehouse?.isActive
     ? warehouse.zones.filter(
@@ -254,14 +276,24 @@ export function BulkPlacementSheet({
         </>
       }
     >
-      <div className="grid gap-4">
+      <div
+        className="grid gap-4"
+        data-placement-parts={parts.map((part) => part.id).join(',')}
+      >
         <div className="grid gap-1.5">
           <h3 className="rz-h-card">
             {t('selectedCount', { count: parts.length })}
           </h3>
           <p className="text-app-muted m-0 text-pretty">{t('bulkHint')}</p>
         </div>
-        <Resource state={resource.state} retry={resource.reload} framed={false}>
+        <Resource
+          state={resource.state}
+          retry={resource.reload}
+          framed={false}
+          loadingContent={
+            <PlacementFieldsSkeleton fields={['zone', 'section', 'shelf']} />
+          }
+        >
           {() => (
             <>
               {!zones.length ? (
@@ -289,6 +321,9 @@ export function BulkPlacementSheet({
                       state={sectionResource.state}
                       retry={sectionResource.reload}
                       framed={false}
+                      loadingContent={
+                        <PlacementFieldsSkeleton fields={['section']} />
+                      }
                     >
                       {() => (
                         <div className="grid gap-1.5 mt-3">
@@ -310,6 +345,9 @@ export function BulkPlacementSheet({
                               state={shelfResource.state}
                               retry={shelfResource.reload}
                               framed={false}
+                              loadingContent={
+                                <PlacementFieldsSkeleton fields={['shelf']} />
+                              }
                             >
                               {() => (
                                 <div className="grid gap-1.5 mt-3">
@@ -336,11 +374,6 @@ export function BulkPlacementSheet({
             </>
           )}
         </Resource>
-        {attempted ? (
-          <Notice tone={placed === parts.length ? 'ok' : 'info'}>
-            {t('bulkResult', { count: placed, total: parts.length })}
-          </Notice>
-        ) : null}
         {outcomes.map((item) =>
           item.kind === 'failed' ? (
             <Notice key={item.part.id} tone="danger">

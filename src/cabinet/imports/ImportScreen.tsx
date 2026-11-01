@@ -676,7 +676,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       <CabinetLoadingScreen module="parts" label={t('loadingSettings')} />
     )
   return (
-    <div className="grid min-w-0 content-start">
+    <div className="rz-form-page grid min-w-0 content-start">
       <header className="rz-topbar min-h-topbar h-auto flex-wrap justify-between gap-y-1.5 py-1.5">
         <p className="rz-crumbs m-0 min-w-0">
           <Link to={cabinetPath(cabinet.targetTenant!.slug, 'parts')}>

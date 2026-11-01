@@ -1,158 +1,91 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, render, screen, within } from '@testing-library/react'
+import { renderToString } from 'react-dom/server'
+import { describe, expect, it } from 'vitest'
 import { Features } from './features'
 
-describe('Features carousel', () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockReturnValue({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    )
-  })
+const modules = [
+  'Авто',
+  'Партії',
+  'Запчастини',
+  'Склади',
+  'Інвентаризація',
+  'Стікери',
+  'Замовлення',
+  'Клієнти',
+  'Каси',
+  'Звіти',
+  'Команда',
+  'Нова Пошта',
+  'OLX',
+]
 
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.unstubAllGlobals()
-  })
-
-  it('exposes previous, next, and persistent pause controls', async () => {
-    const user = userEvent.setup()
+describe('Features scroll story', () => {
+  it('lists all thirteen modules as headings with their lead', () => {
     render(<Features />)
     expect(
-      screen.getByRole('button', { name: 'Попередня' }),
+      screen.getByRole('heading', {
+        level: 2,
+        name: '13 модулів в одній системі',
+      }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Наступна' })).toBeInTheDocument()
-    const pause = screen.getByRole('button', { name: 'Зупинити автопрокрутку' })
-    await user.click(pause)
     expect(
-      screen.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-    ).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('starts paused when reduced motion is requested', () => {
-    vi.stubGlobal(
-      'matchMedia',
-      vi.fn().mockReturnValue({
-        matches: true,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    )
-    render(<Features />)
+      screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent),
+    ).toEqual(['Облік і склад', 'Продажі й гроші', 'Інтеграції'])
     expect(
-      screen.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-    ).toHaveAttribute('aria-pressed', 'true')
+      screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent),
+    ).toEqual(modules)
+
+    const steps = within(screen.getByRole('list')).getAllByRole('listitem')
+    expect(steps).toHaveLength(13)
+    expect(
+      within(steps[1]!).getByText(
+        'Купив запчастини партією — заводиш її як джерело і кладеш туди всі деталі',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(steps[10]!).getByText(
+        'Додаєш співробітників — кожному своя роль і доступ',
+      ),
+    ).toBeInTheDocument()
   })
 
-  it('does not advertise unsupported analytics or export capabilities', () => {
-    render(<Features />)
-    expect(screen.queryByText('Аналітика')).not.toBeInTheDocument()
-    expect(screen.queryByText(/Динаміка продажів/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Експорт у PDF/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Десять модулів/)).not.toBeInTheDocument()
-  })
+  it('server HTML shows module 1 active in a decorative window', () => {
+    const html = renderToString(<Features />)
+    for (const name of modules) expect(html).toContain(name)
+    expect(html).toContain('rozbirka.pro/cars')
+    expect(html).toContain('01 / 13')
+    expect(html).toContain('Окупність · Tesla Model Y 2021')
+    expect(html).not.toContain('animation:lp-story-in')
 
-  it('pauses autoplay while a carousel control is focused', () => {
-    vi.useFakeTimers()
     const { container } = render(<Features />)
-    const scroller = container.querySelector<HTMLUListElement>(
-      '#features ul.overflow-x-auto',
-    )!
-    const scroll = vi.fn()
-    scroller.scrollBy = scroll
-    scroller.scrollTo = scroll
-
-    const next = screen.getByRole('button', { name: 'Наступна' })
-    fireEvent.focusIn(next)
-    act(() => {
-      vi.advanceTimersByTime(3500)
-    })
-
-    expect(scroll).not.toHaveBeenCalled()
-
-    fireEvent.focusOut(next, { relatedTarget: document.body })
-    act(() => {
-      vi.advanceTimersByTime(3500)
-    })
-    expect(scroll).toHaveBeenCalledOnce()
+    const mock = container.querySelector('[data-story-window]')!
+    expect(mock).toHaveAttribute('aria-hidden', 'true')
+    expect(mock).toHaveTextContent('LIVE')
+    expect(mock).toHaveTextContent('Прозорий прибуток по кожному кузову')
+    expect(
+      within(screen.getByRole('list'))
+        .getAllByRole('listitem')
+        .map((step) => step.hasAttribute('data-active')),
+    ).toEqual(modules.map((_, index) => index === 0))
   })
 
-  it('stays interaction-paused when user pause is toggled off on a focused control', () => {
-    vi.useFakeTimers()
+  it('switches the window to the step nearest the middle of the screen', async () => {
     const { container } = render(<Features />)
-    const scroller = container.querySelector<HTMLUListElement>(
-      '#features ul.overflow-x-auto',
-    )!
-    const scroll = vi.fn()
-    scroller.scrollBy = scroll
-    scroller.scrollTo = scroll
-    const pause = screen.getByRole('button', {
-      name: 'Зупинити автопрокрутку',
+    const steps = within(screen.getByRole('list')).getAllByRole('listitem')
+    steps.forEach((step, index) => {
+      step.getBoundingClientRect = () =>
+        ({ top: (index - 2) * 400 + 200, height: 400 }) as DOMRect
     })
-
-    fireEvent.focusIn(pause)
-    fireEvent.click(pause)
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-    )
-    act(() => {
-      vi.advanceTimersByTime(3500)
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'))
+      await new Promise((resolve) => setTimeout(resolve, 50))
     })
-
-    expect(scroll).not.toHaveBeenCalled()
-  })
-
-  it('pauses autoplay while a control is hovered and resumes after leaving', () => {
-    vi.useFakeTimers()
-    const { container } = render(<Features />)
-    const scroller = container.querySelector<HTMLUListElement>(
-      '#features ul.overflow-x-auto',
-    )!
-    const scroll = vi.fn()
-    scroller.scrollBy = scroll
-    scroller.scrollTo = scroll
-    const next = screen.getByRole('button', { name: 'Наступна' })
-
-    fireEvent.mouseOver(next)
-    act(() => {
-      vi.advanceTimersByTime(3500)
-    })
-    expect(scroll).not.toHaveBeenCalled()
-
-    fireEvent.mouseOut(next, { relatedTarget: document.body })
-    act(() => {
-      vi.advanceTimersByTime(3500)
-    })
-    expect(scroll).toHaveBeenCalledOnce()
-  })
-
-  it('stays interaction-paused when user pause is toggled off on a hovered control', () => {
-    vi.useFakeTimers()
-    const { container } = render(<Features />)
-    const scroller = container.querySelector<HTMLUListElement>(
-      '#features ul.overflow-x-auto',
-    )!
-    const scroll = vi.fn()
-    scroller.scrollBy = scroll
-    scroller.scrollTo = scroll
-    const pause = screen.getByRole('button', {
-      name: 'Зупинити автопрокрутку',
-    })
-
-    fireEvent.mouseOver(pause)
-    fireEvent.click(pause)
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-    )
-    act(() => {
-      vi.advanceTimersByTime(3500)
-    })
-
-    expect(scroll).not.toHaveBeenCalled()
+    // Without IntersectionObserver in jsdom the listener is always on.
+    const mock = container.querySelector('[data-story-window]')!
+    expect(mock).toHaveTextContent('rozbirka.pro/parts')
+    expect(mock).toHaveTextContent('03 / 13')
+    expect(mock).toHaveTextContent('Веб + iPhone')
+    expect(mock).toHaveTextContent('942 поз.')
+    expect(steps[2]).toHaveAttribute('data-active')
   })
 })

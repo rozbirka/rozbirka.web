@@ -22,6 +22,7 @@ for (const locale of SUPPORTED_LOCALES) {
   }
 }
 knownText.set('Required', 'NOTEMPTYVALIDATOR')
+knownText.set('Cannot change own permissions.', 'CANNOT_CHANGE_OWN_PERMISSIONS')
 knownText.set(
   'A customer with this phone already exists.',
   'CUSTOMER_PHONE_EXISTS',
@@ -56,9 +57,15 @@ export function localizeApiError(
     const state = partEditStates.get(problem.message ?? '') ?? 'unavailable'
     return translate(partEditErrorMessages, locale, state)
   }
+  const messageCode = problem.message
+    ? knownText.get(problem.message)
+    : undefined
   const code =
+    (problem.code?.toUpperCase() === 'VALIDATION_ERROR'
+      ? messageCode
+      : undefined) ??
     (problem.code ? codes.get(problem.code.toUpperCase()) : undefined) ??
-    (problem.message ? knownText.get(problem.message) : undefined)
+    messageCode
   if (code) return translate(errorMessages, locale, code)
   if (problem.status === 429)
     return translate(errorMessages, locale, 'RATE_LIMIT_EXCEEDED')

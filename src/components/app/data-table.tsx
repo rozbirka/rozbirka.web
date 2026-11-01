@@ -13,6 +13,8 @@ export interface DataColumn<Row> {
   variant?: 'primary' | 'default'
   /** Action columns whose header is a label only for assistive technology. */
   headerHidden?: boolean
+  /** Left out of the card layout below 768px, where another cell sums it up. */
+  hideNarrow?: boolean
 }
 
 export interface DataTableSelection<Row> {
@@ -36,6 +38,8 @@ export interface DataTableProps<Row> {
   /** Shown instead of the body when there is nothing to list. */
   empty?: ReactNode
   onRowClick?: (row: Row) => void
+  /** Extra classes for one row, e.g. dimming a record that is over. */
+  rowClassName?: (row: Row) => string | undefined
   /** The row whose record is open beside the list (peek): brand edge. */
   activeKey?: string | null
   footer?: ReactNode
@@ -60,6 +64,7 @@ export function DataTable<Row>({
   rowKey,
   empty,
   onRowClick,
+  rowClassName,
   activeKey = null,
   footer,
   selection,
@@ -138,7 +143,10 @@ export function DataTable<Row>({
               )}
               {columns.map((column) => (
                 <th
-                  className={cn(column.align === 'end' && 'rz-num')}
+                  className={cn(
+                    column.align === 'end' && 'rz-num',
+                    column.hideNarrow && 'max-md:hidden',
+                  )}
                   key={column.key}
                   role="columnheader"
                   scope="col"
@@ -164,7 +172,10 @@ export function DataTable<Row>({
                 <tr
                   {...(picked ? { 'aria-selected': true } : {})}
                   {...(activeKey === id ? { 'data-active': 'true' } : {})}
-                  className={cn(clickable && 'cursor-pointer')}
+                  className={cn(
+                    clickable && 'cursor-pointer',
+                    rowClassName?.(row),
+                  )}
                   key={id}
                   onClick={
                     clickable
@@ -221,7 +232,10 @@ export function DataTable<Row>({
                     const Cell = isPrimary ? 'th' : 'td'
                     return (
                       <Cell
-                        className={cn(column.align === 'end' && 'rz-num')}
+                        className={cn(
+                          column.align === 'end' && 'rz-num',
+                          column.hideNarrow && 'max-md:hidden',
+                        )}
                         data-label={
                           isPrimary || column.headerHidden
                             ? undefined

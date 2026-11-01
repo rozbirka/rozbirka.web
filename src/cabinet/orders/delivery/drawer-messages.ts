@@ -21,12 +21,6 @@ export const deliveryDrawerMessages = defineMessages({
     receiveConfirm: 'Зафіксувати отримання',
     receiveNote:
       'Післяплату в касу інтеграція не зараховує — це окрема дія в касі.',
-    returnTitle: 'Оформити повернення',
-    returnDescription:
-      'Позиції повертаються на склад, замовлення отримує статус «Повернено». Кошти при цьому не повертаються — повернення грошей оформлюється окремо по кожному платежу в касі.',
-    returnConfirm: 'Підтвердити повернення',
-    returnNote:
-      'Сервіс приймає лише повне повернення без пошкоджень. Часткове або пошкоджене він відхиляє й нічого на склад не повертає — такий випадок розбирається вручну.',
 
     // Booking
     bookingTitle: 'Оформлення відправлення',
@@ -86,23 +80,22 @@ export const deliveryDrawerMessages = defineMessages({
       '. Врахуйте це в післяплаті, щоб клієнт не заплатив удруге.',
     goodsError: 'Вкажіть суму в гривнях або лишіть поле порожнім.',
     goodsHint:
-      'Скільки клієнт має за це замовлення в гривні. Ціни позицій живуть окремо, у валюті замовлення.',
-    goodsLabel: 'Погоджено за доставку, UAH',
-    alreadyPaid: 'Уже сплачено',
+      'Погоджена вартість товарів у гривнях. Послуги Нової пошти розраховуються окремо.',
+    goodsLabel: 'Погоджена сума замовлення, грн',
+    alreadyPaid: 'Отримано від клієнта',
     codOnWaybill: 'Післяплата в накладній',
     codNothing: 'Нічого утримувати — посилка їде як оплачена.',
     codNote:
       'Нова пошта утримає цю суму з отримувача й перекаже вам. Комісію переказу платить отримувач.',
     deliveryThere: 'Доставка туди',
     deliveryBack: 'Зворотна доставка',
-    prepaymentNeeded: 'Необхідна передоплата',
+    prepaymentNeeded: 'Мінімальна передоплата',
     fillForm: 'Заповніть отримувача, посилки й суми.',
     quoteExplained:
-      'Обидві суми порахувала Нова пошта. Депозит покриває ризик розбірки: якщо посилку не заберуть, ви заплатите за обидві дороги.',
+      'Мінімальна передоплата враховує розрахунок доставки та оцінку повернення. Отримані кошти зараховуються в оплату замовлення; розрахунок не підтверджує оплату послуг Нової пошти.',
 
     // Waybill drawers
     partCheck: 'перевірка перед ТТН',
-    partWaybill: 'накладна',
     partLabel: 'етикетка',
     readinessContinue: 'Далі — отримувач, посилка й розрахунок',
     readinessBlocked: 'Перешкод: {count}',
@@ -113,27 +106,6 @@ export const deliveryDrawerMessages = defineMessages({
     readinessChecks: 'Що сервіс перевіряє сам',
     readinessLastRow:
       'Останній рядок — не перевірка: маршрут і габарити Нова пошта оцінює сама під час створення, тож відмова можлива навіть після зеленого списку.',
-    rowNumber: 'Номер',
-    rowCreated: 'Створена',
-    rowSenderBranch: 'Відділення відправника',
-    rowRecipient: 'Отримувач',
-    rowBranchChosen: 'відділення обрано',
-    rowCod: 'Післяплата в накладній',
-    rowBalance: 'Залишок за замовленням',
-    rowDeclared: 'Оголошена вартість',
-    rowParcel: 'Посилка',
-    rowParcelValue: {
-      one: '{count} місце · {weight} кг',
-      few: '{count} місця · {weight} кг',
-      many: '{count} місць · {weight} кг',
-      other: '{count} місця · {weight} кг',
-    },
-    rowCarrierStatus: 'Статус перевізника',
-    rowNoStatus: 'ще не надходив',
-    waybillTitle: 'Дані накладної',
-    codMismatch:
-      'Післяплата в накладній розійшлася із залишком за замовленням. Нова пошта видасть посилку за сумою в накладній — розбіжність доведеться вирішувати вручну.',
-    shipmentStatuses: 'Статуси відправлення',
     attachDescription:
       'Накладна, створена в кабінеті Нової пошти, стає накладною цього замовлення.',
     attachSubmit: 'Прив’язати до замовлення',
@@ -155,6 +127,8 @@ export const deliveryDrawerMessages = defineMessages({
     partPayment: 'оплата',
     feeError: 'Комісія має бути числом у гривнях, не більше двох знаків.',
     amountError: 'Вкажіть суму в гривнях, не більше двох знаків після коми.',
+    recordOverLimit: 'Сума оплати не може перевищувати {amount}.',
+    recordNoUahTills: 'Для доставки потрібна активна каса з валютою UAH.',
     feeTooHigh: 'Комісія не може дорівнювати сумі платежу або перевищувати її.',
     pickReceipt: 'Виберіть надходження зі списку каси.',
     pickTill: 'Виберіть касу.',
@@ -190,7 +164,7 @@ export const deliveryDrawerMessages = defineMessages({
       'Замовленню зараховується сума транзакції плюс комісія — тут формула протилежна до внесення платежу.',
     linkCredited: 'Замовленню зарахується {amount}.',
     transactionFee: 'Комісія транзакції',
-    agreed: 'Погоджено за доставку',
+    agreed: 'Погоджена сума замовлення, грн',
     due: 'До сплати',
     thisPayment: 'Цей платіж',
     outcomeOverTitle: 'Переплата — запис відмовить',
@@ -223,12 +197,6 @@ export const deliveryDrawerMessages = defineMessages({
     receiveConfirm: 'Record receipt',
     receiveNote:
       'The integration doesn’t put cash on delivery into the till — that’s a separate action in the till.',
-    returnTitle: 'Process return',
-    returnDescription:
-      'The items go back to stock and the order gets the “Returned” status. No money is refunded here — refunds are made separately for each payment in the till.',
-    returnConfirm: 'Confirm return',
-    returnNote:
-      'Only a full, undamaged return is accepted. A partial or damaged one is refused and nothing goes back to stock — such cases are handled manually.',
 
     bookingTitle: 'Book shipment',
     bookingDescription: 'Within Ukraine, branch to branch.',
@@ -284,22 +252,21 @@ export const deliveryDrawerMessages = defineMessages({
       '. Take it into account in the cash on delivery so the customer doesn’t pay twice.',
     goodsError: 'Enter an amount in hryvnia or leave the field empty.',
     goodsHint:
-      'What the customer owes for this order in hryvnia. Item prices are kept separately, in the order currency.',
-    goodsLabel: 'Agreed for delivery, UAH',
-    alreadyPaid: 'Already paid',
+      'Agreed price of the goods in hryvnias. Nova Poshta services are quoted separately.',
+    goodsLabel: 'Agreed order total, UAH',
+    alreadyPaid: 'Received from customer',
     codOnWaybill: 'Cash on delivery on the waybill',
     codNothing: 'Nothing to collect — the parcel travels as paid.',
     codNote:
       'Nova Poshta will collect this amount from the recipient and transfer it to you. The recipient pays the transfer fee.',
     deliveryThere: 'Delivery out',
     deliveryBack: 'Return delivery',
-    prepaymentNeeded: 'Prepayment required',
+    prepaymentNeeded: 'Minimum prepayment',
     fillForm: 'Fill in the recipient, parcels and amounts.',
     quoteExplained:
-      'Both amounts come from Nova Poshta. The deposit covers the business’s risk: if the parcel isn’t collected, you pay for both ways.',
+      'The minimum prepayment accounts for the delivery quote and return estimate. Money received counts towards the order; the quote does not confirm payment for Nova Poshta services.',
 
     partCheck: 'pre-waybill check',
-    partWaybill: 'waybill',
     partLabel: 'label',
     readinessContinue: 'Next: recipient, parcel and quote',
     readinessBlocked: {
@@ -313,25 +280,6 @@ export const deliveryDrawerMessages = defineMessages({
     readinessChecks: 'What the service checks itself',
     readinessLastRow:
       'The last row isn’t a check: Nova Poshta assesses the route and dimensions itself on creation, so it may refuse even after an all-green list.',
-    rowNumber: 'Number',
-    rowCreated: 'Created',
-    rowSenderBranch: 'Sender branch',
-    rowRecipient: 'Recipient',
-    rowBranchChosen: 'branch selected',
-    rowCod: 'Cash on delivery on the waybill',
-    rowBalance: 'Order balance',
-    rowDeclared: 'Declared value',
-    rowParcel: 'Parcel',
-    rowParcelValue: {
-      one: '{count} piece · {weight} kg',
-      other: '{count} pieces · {weight} kg',
-    },
-    rowCarrierStatus: 'Carrier status',
-    rowNoStatus: 'none received yet',
-    waybillTitle: 'Waybill details',
-    codMismatch:
-      'The cash on delivery on the waybill no longer matches the order balance. Nova Poshta will hand over the parcel for the amount on the waybill — the difference will have to be sorted out manually.',
-    shipmentStatuses: 'Shipment statuses',
     attachDescription:
       'A waybill created in the Nova Poshta account becomes this order’s waybill.',
     attachSubmit: 'Link to order',
@@ -352,6 +300,9 @@ export const deliveryDrawerMessages = defineMessages({
     partPayment: 'payment',
     feeError: 'The fee must be an amount in hryvnia with up to two decimals.',
     amountError: 'Enter an amount in hryvnia with up to two decimals.',
+    recordOverLimit: 'The payment cannot exceed {amount}.',
+    recordNoUahTills:
+      'Delivery payments require an active till that supports UAH.',
     feeTooHigh: 'The fee can’t equal or exceed the payment amount.',
     pickReceipt: 'Choose a receipt from the till list.',
     pickTill: 'Choose a till.',
@@ -386,7 +337,7 @@ export const deliveryDrawerMessages = defineMessages({
       'The order is credited with the transaction amount plus the fee — the opposite of recording a payment.',
     linkCredited: 'The order will be credited with {amount}.',
     transactionFee: 'Transaction fee',
-    agreed: 'Agreed for delivery',
+    agreed: 'Agreed order total, UAH',
     due: 'To pay',
     thisPayment: 'This payment',
     outcomeOverTitle: 'Overpayment — the record will be refused',
@@ -419,12 +370,6 @@ export const deliveryDrawerMessages = defineMessages({
     receiveConfirm: 'Zapisz odbiór',
     receiveNote:
       'Integracja nie księguje pobrania w kasie — to osobne działanie w kasie.',
-    returnTitle: 'Przyjmij zwrot',
-    returnDescription:
-      'Pozycje wracają na stan, zamówienie otrzymuje status „Zwrócone”. Pieniądze nie są przy tym zwracane — zwrot środków robi się osobno dla każdej płatności w kasie.',
-    returnConfirm: 'Potwierdź zwrot',
-    returnNote:
-      'Przyjmowany jest tylko pełny zwrot bez uszkodzeń. Częściowy lub uszkodzony zostanie odrzucony i nic nie wróci na stan — taki przypadek rozwiązuje się ręcznie.',
 
     bookingTitle: 'Nadanie przesyłki',
     bookingDescription: 'Na terenie Ukrainy, z oddziału do oddziału.',
@@ -486,22 +431,21 @@ export const deliveryDrawerMessages = defineMessages({
       '. Uwzględnij to w pobraniu, aby klient nie zapłacił dwa razy.',
     goodsError: 'Podaj kwotę w hrywnach lub zostaw pole puste.',
     goodsHint:
-      'Ile klient płaci za to zamówienie w hrywnach. Ceny pozycji są osobno, w walucie zamówienia.',
-    goodsLabel: 'Uzgodniono za dostawę, UAH',
-    alreadyPaid: 'Już zapłacono',
+      'Uzgodniona wartość towarów w hrywnach. Usługi Nova Poshta są wyceniane osobno.',
+    goodsLabel: 'Uzgodniona kwota zamówienia, UAH',
+    alreadyPaid: 'Otrzymano od klienta',
     codOnWaybill: 'Pobranie w liście przewozowym',
     codNothing: 'Nie ma czego pobierać — przesyłka jedzie jako opłacona.',
     codNote:
       'Nova Poshta pobierze tę kwotę od odbiorcy i przekaże ją firmie. Prowizję za przekaz płaci odbiorca.',
     deliveryThere: 'Dostawa w jedną stronę',
     deliveryBack: 'Dostawa zwrotna',
-    prepaymentNeeded: 'Wymagana przedpłata',
+    prepaymentNeeded: 'Minimalna przedpłata',
     fillForm: 'Uzupełnij odbiorcę, paczki i kwoty.',
     quoteExplained:
-      'Obie kwoty wyliczyła Nova Poshta. Kaucja pokrywa ryzyko firmy: jeśli przesyłka nie zostanie odebrana, płacisz za obie drogi.',
+      'Minimalna przedpłata uwzględnia wycenę dostawy i szacunek zwrotu. Otrzymane środki zaliczamy na poczet zamówienia; wycena nie potwierdza opłacenia usług Nova Poshta.',
 
     partCheck: 'kontrola przed listem przewozowym',
-    partWaybill: 'list przewozowy',
     partLabel: 'etykieta',
     readinessContinue: 'Dalej — odbiorca, paczka i wycena',
     readinessBlocked: 'Przeszkody: {count}',
@@ -512,27 +456,6 @@ export const deliveryDrawerMessages = defineMessages({
     readinessChecks: 'Co serwis sprawdza sam',
     readinessLastRow:
       'Ostatni wiersz to nie kontrola: trasę i wymiary Nova Poshta ocenia sama przy tworzeniu, więc odmowa jest możliwa nawet po zielonej liście.',
-    rowNumber: 'Numer',
-    rowCreated: 'Utworzono',
-    rowSenderBranch: 'Oddział nadawcy',
-    rowRecipient: 'Odbiorca',
-    rowBranchChosen: 'oddział wybrany',
-    rowCod: 'Pobranie w liście przewozowym',
-    rowBalance: 'Saldo zamówienia',
-    rowDeclared: 'Wartość deklarowana',
-    rowParcel: 'Przesyłka',
-    rowParcelValue: {
-      one: '{count} paczka · {weight} kg',
-      few: '{count} paczki · {weight} kg',
-      many: '{count} paczek · {weight} kg',
-      other: '{count} paczki · {weight} kg',
-    },
-    rowCarrierStatus: 'Status przewoźnika',
-    rowNoStatus: 'jeszcze nie otrzymano',
-    waybillTitle: 'Dane listu przewozowego',
-    codMismatch:
-      'Pobranie w liście przewozowym różni się od salda zamówienia. Nova Poshta wyda przesyłkę za kwotę z listu — różnicę trzeba będzie rozwiązać ręcznie.',
-    shipmentStatuses: 'Statusy przesyłki',
     attachDescription:
       'List przewozowy utworzony na koncie Nova Poshta staje się listem tego zamówienia.',
     attachSubmit: 'Powiąż z zamówieniem',
@@ -553,6 +476,9 @@ export const deliveryDrawerMessages = defineMessages({
     partPayment: 'płatność',
     feeError:
       'Prowizja musi być kwotą w hrywnach, maksymalnie z dwoma miejscami po przecinku.',
+    recordOverLimit: 'Płatność nie może przekraczać {amount}.',
+    recordNoUahTills:
+      'Płatności za dostawę wymagają aktywnej kasy obsługującej UAH.',
     amountError:
       'Podaj kwotę w hrywnach, maksymalnie z dwoma miejscami po przecinku.',
     feeTooHigh:
@@ -591,7 +517,7 @@ export const deliveryDrawerMessages = defineMessages({
       'Zamówieniu zalicza się kwotę transakcji plus prowizję — odwrotnie niż przy dodawaniu płatności.',
     linkCredited: 'Zamówieniu zostanie zaliczone {amount}.',
     transactionFee: 'Prowizja transakcji',
-    agreed: 'Uzgodniono za dostawę',
+    agreed: 'Uzgodniona kwota zamówienia, UAH',
     due: 'Do zapłaty',
     thisPayment: 'Ta płatność',
     outcomeOverTitle: 'Nadpłata — zapis zostanie odrzucony',

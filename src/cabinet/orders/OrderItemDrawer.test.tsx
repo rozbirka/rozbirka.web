@@ -133,7 +133,8 @@ it('offers only free stock, closes after selection and enforces its quantity lim
   expect(
     screen.queryByRole('option', { name: /У резерві|Продано/ }),
   ).not.toBeInTheDocument()
-  expect(within(option).getByText('2 в наявності')).toBeVisible()
+  expect(within(option).getByText('В наявності')).toBeVisible()
+  expect(within(option).getByText('2 шт')).toBeVisible()
   await user.click(option)
   expect(
     screen.queryByRole('dialog', { name: 'Результати пошуку запчастин' }),
@@ -157,14 +158,15 @@ it('offers only free stock, closes after selection and enforces its quantity lim
   ).toBeDisabled()
 })
 
-it('shows the same car, code and price presentation as the new-order picker', async () => {
+it('shows the same code, separate stock quantity and price as the new-order picker', async () => {
   partsApi.search.mockResolvedValue(page([part()]))
   const user = userEvent.setup()
   renderDrawer()
   await user.type(screen.getByRole('searchbox'), 'фара')
   const option = await screen.findByRole('option', { name: /Фара ліва/ })
-  expect(within(option).getByText('Tesla Model Y · 2023')).toBeVisible()
   expect(within(option).getByText('OEM-123')).toBeVisible()
+  expect(within(option).getByText('В наявності')).toBeVisible()
+  expect(within(option).getByText('2 шт')).toBeVisible()
   expect(await within(option).findByText(/100,00 USD/)).toBeVisible()
 })
 

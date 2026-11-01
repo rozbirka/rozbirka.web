@@ -89,6 +89,17 @@ beforeEach(() => {
   vi.mocked(businessApi.update).mockResolvedValue(tenant)
 })
 
+it('uses the same numbered badge for the business details as the following sections', async () => {
+  render(
+    <MemoryRouter>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
+  await waitFor(() =>
+    expect(screen.getByText('01')).toHaveClass('rz-code', 'rz-code--sm'),
+  )
+})
+
 it('uses accessible secondary text on the dark business surface', () => {
   const view = render(
     <MemoryRouter initialEntries={['/app/koval/settings/business']}>

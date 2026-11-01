@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   Archive,
   ArrowRight,
   ClipboardCheck,
   ClipboardList,
-  Pause,
   Plus,
 } from 'lucide-react'
 import {
@@ -19,6 +26,8 @@ import {
   FormDialog,
   Notice,
   SearchInput,
+  SectionPanel,
+  Sheet,
   StatusPill,
   TextArea,
   Toolbar,
@@ -43,12 +52,14 @@ import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { Crumbs, RedesignShell } from '../redesign-shell'
 import { formatNumber, useT } from '@/i18n'
+import { commonMessages } from '@/i18n/common-messages'
 import { auditChange, auditTitle, type AuditKey } from './audit-labels'
 import { auditMessages } from './audit-messages'
 import { useInventoryFormat } from './inventory-format'
 import { journalMessages } from './journal-messages'
 import { inventoryMessages } from './messages'
 import { newSessionMessages } from './new-session-messages'
+import { InventorySessionSkeleton } from './InventorySessionSkeleton'
 import { overviewMessages } from './overview-messages'
 import { resultsMessages } from './results-messages'
 import { sessionMessages } from './session-messages'
@@ -63,7 +74,6 @@ import { InventoryRefreshStatus } from './InventoryRefreshStatus'
 import { InventoryTeamStatus } from './InventoryTeamStatus'
 import { useInventoryTeam } from './use-inventory-team'
 import { StockStat } from './StockStat'
-import { Step } from './StockStep'
 
 /** How many journal rows to show before the reader asks for more. */
 const JOURNAL_PAGE = 25
@@ -72,18 +82,39 @@ export function InventoryScreen({
   definition: _definition,
 }: CabinetModuleScreenProps) {
   const { pathname } = useLocation()
+  const ti = useT(inventoryMessages)
+  const overviewFocusTarget = useRef<HTMLElement | null>(null)
+  const newSessionTrigger = useRef<HTMLAnchorElement | null>(null)
   const segments = pathname.split('/').filter(Boolean)
   const route = segments[0] === 'app' ? segments.slice(2) : segments
   const tail = route[0] === 'inventory' ? route.slice(1) : []
-  if (tail[0] === 'sessions' && tail[1] === 'new') return <NewSessionView />
+  const isNewSession = tail[0] === 'sessions' && tail[1] === 'new'
   if (tail[0] === 'sessions' && tail[1] && tail[2] === 'results')
     return <ResultsView id={tail[1]} />
   if (tail[0] === 'sessions' && tail[1] && tail[2] === 'audit')
     return <AuditView id={tail[1]} />
   if (tail[0] === 'sessions' && tail[1] && tail[2] === 'journal' && tail[3])
     return <JournalView id={tail[1]} zoneId={tail[3]} />
-  if (tail[0] === 'sessions' && tail[1]) return <SessionView id={tail[1]} />
-  return <Overview />
+  if (tail[0] === 'sessions' && tail[1] && !isNewSession)
+    return <SessionView id={tail[1]} />
+  return (
+    <>
+      <section
+        aria-label={ti('crumbInventory')}
+        className="min-w-0"
+        ref={overviewFocusTarget}
+        tabIndex={-1}
+      >
+        <Overview newSessionTrigger={newSessionTrigger} />
+      </section>
+      {isNewSession ? (
+        <NewSessionView
+          newSessionTrigger={newSessionTrigger}
+          overviewFocusTarget={overviewFocusTarget}
+        />
+      ) : null}
+    </>
+  )
 }
 
 /** The trail shown while a session screen is still loading or has failed. */
@@ -133,7 +164,11 @@ interface OverviewData {
   since: number
 }
 
-function Overview() {
+function Overview({
+  newSessionTrigger,
+}: {
+  newSessionTrigger: RefObject<HTMLAnchorElement | null>
+}) {
   const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
   const { date, day, sessionStatus, locale } = useInventoryFormat()
@@ -161,7 +196,11 @@ function Overview() {
   const crumb = <Crumbs items={[ti('crumbWarehouse'), ti('crumbInventory')]} />
   const newSession = canManage ? (
     <Button asChild variant="primary">
-      <Link to={`${base}/sessions/new`}>
+      <Link
+        ref={newSessionTrigger}
+        state={{ inventoryNewSessionFrom: base }}
+        to={`${base}/sessions/new`}
+      >
         <Plus aria-hidden />
         {ti('newSession')}
       </Link>
@@ -462,8 +501,17 @@ interface NewSessionData {
   byZone: Map<string, number> | null
 }
 
-function NewSessionView() {
+function NewSessionView({
+  newSessionTrigger,
+  overviewFocusTarget,
+}: {
+  newSessionTrigger: RefObject<HTMLAnchorElement | null>
+  overviewFocusTarget: RefObject<HTMLElement | null>
+}) {
   const t = useT(newSessionMessages)
+  const tc = useT(commonMessages)
+  const location = useLocation()
+  const formId = useId()
   const ti = useT(inventoryMessages)
   const base = useInventoryBase()
   const navigate = useNavigate()
@@ -540,138 +588,160 @@ function NewSessionView() {
     }
   }
 
+  const { warehouses, zones, byZone } =
+    resource.state.kind === 'ready'
+      ? resource.state.data
+      : { warehouses: [], zones: [], byZone: null }
+  const countable = zones.filter(
+    (zone) => zone.isActive && !zone.isSystemUnassigned,
+  )
+  /* A yard whose warehouse list came back empty still has zones, and
+     every zone names its warehouse. */
+  const houses: { id: string; name: string }[] =
+    warehouses.length > 0
+      ? warehouses.map((item) => ({ id: item.id, name: item.name }))
+      : [
+          ...new Map(
+            countable.map((zone) => [
+              zone.warehouseId,
+              { id: zone.warehouseId, name: zone.warehouseName },
+            ]),
+          ).values(),
+        ]
+  const house =
+    houses.find((item) => item.id === warehouseId)?.id ?? houses[0]?.id ?? null
+  const inHouse = countable.filter((zone) => zone.warehouseId === house)
+  const selected =
+    type === 'full'
+      ? inHouse.map((zone) => zone.id)
+      : picked.filter((id) => inHouse.some((zone) => zone.id === id))
+  const partsIn = (zoneId: string) =>
+    byZone === null ? null : (byZone.get(zoneId) ?? 0)
+  const houseName =
+    houses.find((item) => item.id === house)?.name ?? t('fallbackWarehouse')
+  const typeName = type === 'full' ? t('summaryFull') : t('summaryZones')
+  const ready = selected.length > 0 && canManage
+
+  const close = () => {
+    if (creatingSession.current) return
+    const from = (
+      location.state as { inventoryNewSessionFrom?: unknown } | null
+    )?.inventoryNewSessionFrom
+    if (from === base) void navigate(-1)
+    else void navigate(base, { replace: true })
+  }
+
   return (
-    <Resource
-      crumb={<SessionCrumb />}
-      layout="record"
-      retry={resource.reload}
-      state={resource.state}
-    >
-      {({ warehouses, zones, byZone }: NewSessionData) => {
-        const countable = zones.filter(
-          (zone) => zone.isActive && !zone.isSystemUnassigned,
-        )
-        /* A yard whose warehouse list came back empty still has zones, and
-           every zone names its warehouse. */
-        const houses: { id: string; name: string }[] =
-          warehouses.length > 0
-            ? warehouses.map((item) => ({ id: item.id, name: item.name }))
-            : [
-                ...new Map(
-                  countable.map((zone) => [
-                    zone.warehouseId,
-                    { id: zone.warehouseId, name: zone.warehouseName },
-                  ]),
-                ).values(),
-              ]
-        const house =
-          houses.find((item) => item.id === warehouseId)?.id ??
-          houses[0]?.id ??
-          null
-        const inHouse = countable.filter((zone) => zone.warehouseId === house)
-        const selected =
-          type === 'full'
-            ? inHouse.map((zone) => zone.id)
-            : picked.filter((id) => inHouse.some((zone) => zone.id === id))
-        const partsIn = (zoneId: string) =>
-          byZone === null ? null : (byZone.get(zoneId) ?? 0)
-        const houseName =
-          houses.find((item) => item.id === house)?.name ??
-          t('fallbackWarehouse')
-        const typeName = type === 'full' ? t('summaryFull') : t('summaryZones')
-        const ready = selected.length > 0 && canManage
-
-        return (
-          <RedesignShell
-            crumb={
-              <Crumbs
-                items={[
-                  ti('crumbWarehouse'),
-                  <Link key="inventory" to={base}>
-                    {ti('crumbInventory')}
-                  </Link>,
-                  ti('newSession'),
-                ]}
-              />
-            }
-            actions={
-              <>
-                <Button
-                  disabled={!ready || busy !== null}
-                  onClick={() => void create(selected, false)}
-                >
-                  {busy === 'draft' ? t('saving') : t('saveDraft')}
-                </Button>
-                <Button
-                  disabled={!ready || busy !== null}
-                  onClick={() => void create(selected, true)}
-                  variant="primary"
-                >
-                  {busy === 'start' ? t('starting') : t('start')}
-                </Button>
-              </>
-            }
+    <Sheet
+      description={t('intro')}
+      footer={
+        <>
+          <Button disabled={busy !== null} onClick={close}>
+            {tc('cancel')}
+          </Button>
+          <Button
+            disabled={!ready || busy !== null}
+            onClick={() => void create(selected, false)}
           >
-            <div className="min-w-0">
-              <h1 className="rz-h-page break-words">{t('title')}</h1>
-              <p className="rz-caption mt-1">{t('intro')}</p>
-            </div>
+            {busy === 'draft' ? t('saving') : t('saveDraft')}
+          </Button>
+          <Button
+            aria-busy={busy === 'start'}
+            disabled={!ready || busy !== null}
+            form={formId}
+            type="submit"
+            variant="primary"
+          >
+            {busy === 'start' ? t('starting') : t('start')}
+          </Button>
+        </>
+      }
+      onCloseAutoFocus={(event) => {
+        const target = [
+          newSessionTrigger.current,
+          overviewFocusTarget.current,
+        ].find((element) => element?.isConnected)
+        if (target) {
+          event.preventDefault()
+          target.focus()
+        }
+      }}
+      onOpenChange={(open) => {
+        if (!open) close()
+      }}
+      open
+      size="lg"
+      title={t('title')}
+    >
+      <Resource
+        framed={false}
+        loadingContent={<InventorySessionSkeleton />}
+        retry={resource.reload}
+        state={resource.state}
+      >
+        {() => (
+          <form
+            id={formId}
+            onSubmit={(event) => {
+              event.preventDefault()
+              void create(selected, true)
+            }}
+          >
+            <fieldset
+              aria-busy={busy !== null}
+              className="grid min-w-0 gap-4 border-0 p-0"
+              disabled={busy !== null || !canManage}
+            >
+              {!canManage ? (
+                <Notice tone="danger">{t('noPermission')}</Notice>
+              ) : null}
+              {operationError ? (
+                <Notice tone="danger">{operationError}</Notice>
+              ) : null}
 
-            {!canManage ? (
-              <Notice tone="danger">{t('noPermission')}</Notice>
-            ) : null}
-            {operationError ? (
-              <Notice tone="danger">{operationError}</Notice>
-            ) : null}
-
-            <div className="flex flex-wrap items-start gap-6">
-              <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
-                <Step hint={t('typeHint')} number="01" title={t('typeTitle')}>
+              <div className="grid min-w-0">
+                <SectionPanel
+                  description={t('typeHint')}
+                  title={t('typeTitle')}
+                  variant="plain"
+                >
                   <div
                     aria-label={t('typeTitle')}
                     className="flex flex-wrap gap-2"
                     role="radiogroup"
                   >
-                    {SESSION_TYPES.map((option) => {
-                      const active = option.value === type
-                      return (
-                        <button
-                          aria-checked={active}
-                          className={cn(
-                            'focus-visible:outline-brand min-h-[70px] flex-[1_1_10rem] rounded-panel border px-4 py-3.5 text-left',
-                            active
-                              ? 'border-app-line-2 bg-app-hover'
-                              : 'border-app-line bg-transparent',
-                            'cursor-pointer hover:border-app-line-2',
-                          )}
-                          key={option.value}
-                          onClick={() => setType(option.value)}
-                          role="radio"
-                          type="button"
-                        >
-                          <span
-                            className={cn(
-                              'block text-title font-bold',
-                              active ? 'text-app-ink' : 'text-app-muted',
-                            )}
-                          >
+                    {SESSION_TYPES.map((option) => (
+                      <label
+                        className="rz-choice-card min-w-0 flex-[1_1_10rem]"
+                        key={option.value}
+                      >
+                        <input
+                          checked={option.value === type}
+                          className="rz-radio mt-0.5 shrink-0"
+                          name={`${formId}-type`}
+                          onChange={() => setType(option.value)}
+                          type="radio"
+                          value={option.value}
+                        />
+                        <span className="grid min-w-0 gap-1">
+                          <span className="font-semibold text-app-strong">
                             {t(option.label)}
                           </span>
-                          <span className="text-app-muted mt-1.5 block text-caption leading-[1.4] font-medium">
+                          <span className="rz-caption text-pretty">
                             {t(option.hint)}
                           </span>
-                        </button>
-                      )
-                    })}
+                        </span>
+                      </label>
+                    ))}
                   </div>
-                </Step>
+                </SectionPanel>
 
-                <Step
-                  hint={
+                <SectionPanel
+                  description={
                     type === 'full' ? t('zonesHintFull') : t('zonesHintPick')
                   }
-                  number="02"
                   title={t('zonesTitle')}
+                  variant="plain"
                 >
                   {houses.length > 1 ? (
                     <div
@@ -679,32 +749,30 @@ function NewSessionView() {
                       className="flex flex-wrap gap-1.5"
                       role="radiogroup"
                     >
-                      {houses.map((item) => {
-                        const active = item.id === house
-                        return (
-                          <button
-                            aria-checked={active}
-                            className={cn(
-                              'focus-visible:outline-brand min-h-control cursor-pointer rounded-control border px-4 text-body font-semibold',
-                              active
-                                ? 'border-app-line-2 text-app-strong bg-app-selected'
-                                : 'border-app-line text-app-muted hover:border-app-line-2',
-                            )}
-                            key={item.id}
-                            onClick={() => {
+                      {houses.map((item) => (
+                        <label
+                          className="rz-choice-card min-w-0 items-center"
+                          key={item.id}
+                        >
+                          <input
+                            checked={item.id === house}
+                            className="rz-radio shrink-0"
+                            name={`${formId}-warehouse`}
+                            onChange={() => {
                               setWarehouseId(item.id)
                               setPicked([])
                             }}
-                            role="radio"
-                            type="button"
-                          >
+                            type="radio"
+                            value={item.id}
+                          />
+                          <span className="font-semibold text-app-strong">
                             {item.name}
-                          </button>
-                        )
-                      })}
+                          </span>
+                        </label>
+                      ))}
                     </div>
                   ) : null}
-                  <ul className="mt-4 grid gap-2">
+                  <ul className="grid gap-2">
                     {inHouse.length === 0 ? (
                       <li className="text-app-muted text-sm">
                         {t('noActiveZones')}
@@ -717,18 +785,15 @@ function NewSessionView() {
                         <li key={zone.id}>
                           <label
                             className={cn(
-                              'flex w-full flex-wrap items-center gap-x-3.5 gap-y-1 rounded-panel border px-4 py-3.5',
-                              on
-                                ? 'border-app-line-2 bg-app-hover'
-                                : 'border-app-line bg-app-canvas',
+                              'rz-choice-card w-full flex-wrap items-center gap-x-3.5 gap-y-1',
                               type === 'full'
                                 ? 'cursor-not-allowed'
-                                : 'cursor-pointer hover:border-app-line-2',
+                                : 'cursor-pointer',
                             )}
                           >
                             <input
                               checked={on}
-                              className="accent-brand size-5 shrink-0"
+                              className="rz-check shrink-0"
                               disabled={type === 'full' || !canManage}
                               onChange={() =>
                                 setPicked((value) =>
@@ -742,7 +807,7 @@ function NewSessionView() {
                             <span className="min-w-0 flex-[1_1_8rem]">
                               <span
                                 className={cn(
-                                  'block text-title font-bold',
+                                  'block font-semibold',
                                   type === 'full'
                                     ? 'text-app-muted'
                                     : 'text-app-ink',
@@ -766,54 +831,38 @@ function NewSessionView() {
                       )
                     })}
                   </ul>
-                </Step>
-              </div>
+                </SectionPanel>
 
-              <section
-                aria-label={t('scopeTitle')}
-                className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-panel border px-5.5 pt-[22px] pb-6"
-              >
-                <h2 className="text-app-dim font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
-                  {t('scopeTitle')}
-                </h2>
-                <div className="border-app-line bg-app-canvas mt-4 rounded-panel border p-4">
-                  <p className="text-title font-bold tracking-[-0.015em] text-app-strong">
-                    {houseName} · {typeName}
+                <SectionPanel title={t('scopeTitle')} variant="plain">
+                  <div className="rz-inset grid gap-2">
+                    <p className="font-semibold text-app-strong">
+                      {houseName} · {typeName}
+                    </p>
+                    <p className="rz-caption">
+                      {selected.length === 0
+                        ? t('noZonesPicked')
+                        : inHouse
+                            .filter((zone) => selected.includes(zone.id))
+                            .map((zone) => zone.name)
+                            .join(', ')}
+                    </p>
+                    <dl className="flex items-baseline justify-between gap-3">
+                      <dt className="rz-caption">{t('zonesCount')}</dt>
+                      <dd className="font-mono text-app-strong tabular-nums">
+                        {selected.length}
+                      </dd>
+                    </dl>
+                  </div>
+                  <p className="rz-caption text-pretty">
+                    {selected.length === 0 ? t('pickOne') : t('afterStart')}
                   </p>
-                  <p className="text-app-muted mt-1 text-body">
-                    {selected.length === 0
-                      ? t('noZonesPicked')
-                      : inHouse
-                          .filter((zone) => selected.includes(zone.id))
-                          .map((zone) => zone.name)
-                          .join(', ')}
-                  </p>
-                </div>
-                <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                  <dt className="text-app-muted text-body font-semibold">
-                    {t('zonesCount')}
-                  </dt>
-                  <dd className="font-mono text-title text-app-strong tabular-nums">
-                    {selected.length}
-                  </dd>
-                </dl>
-                <Button
-                  className="mt-5.5 min-h-control-lg w-full text-title font-bold"
-                  disabled={!ready || busy !== null}
-                  onClick={() => void create(selected, true)}
-                  variant="primary"
-                >
-                  {busy === 'start' ? t('starting') : t('start')}
-                </Button>
-                <p className="text-app-dim mt-3 text-caption leading-[1.5]">
-                  {selected.length === 0 ? t('pickOne') : t('afterStart')}
-                </p>
-              </section>
-            </div>
-          </RedesignShell>
-        )
-      }}
-    </Resource>
+                </SectionPanel>
+              </div>
+            </fieldset>
+          </form>
+        )}
+      </Resource>
+    </Sheet>
   )
 }
 
@@ -1030,10 +1079,6 @@ function SessionView({ id }: { id: string }) {
                     </Link>
                   </Button>
                 )}
-                {/* Counting happens in the mobile app; the cabinet watches it. */}
-                <Button disabled title={t('scanUnavailable')} variant="primary">
-                  {t('scan')}
-                </Button>
                 <ActionMenu
                   actions={[
                     {
@@ -1042,14 +1087,6 @@ function SessionView({ id }: { id: string }) {
                       icon: <ClipboardList aria-hidden />,
                       onSelect: () =>
                         void navigate(`${base}/sessions/${id}/audit`),
-                    },
-                    {
-                      key: 'pause',
-                      label: t('pause'),
-                      icon: <Pause aria-hidden />,
-                      disabled: true,
-                      title: t('pauseUnavailable'),
-                      onSelect: () => undefined,
                     },
                     ...(canManage &&
                     session.status !== 'completed' &&
@@ -1801,9 +1838,6 @@ function ResultsView({ id }: { id: string }) {
                 <Button asChild>
                   <Link to={`${base}/sessions/${id}/audit`}>{t('audit')}</Link>
                 </Button>
-                <Button disabled title={t('exportUnavailable')}>
-                  {t('export')}
-                </Button>
               </>
             }
           >
@@ -2352,9 +2386,6 @@ function AuditView({ id }: { id: string }) {
                   onClick={() => setRaw((value) => !value)}
                 >
                   {raw ? t('hideRaw') : t('showRaw')}
-                </Button>
-                <Button disabled title={t('exportUnavailable')}>
-                  {t('export')}
                 </Button>
               </>
             }

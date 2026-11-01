@@ -16,7 +16,7 @@ import {
 import { overviewMessages } from '../inventory/overview-messages'
 import { inventoryMessages } from '../inventory/messages'
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 15
 
 export function WarehouseBrowser({
   warehouses,
@@ -156,7 +156,7 @@ export function WarehouseBrowser({
           },
         ]}
       />
-      {totalPages > 1 ? (
+      {visible.length > 0 ? (
         <div className="location-browser__pagination">
           <Pagination
             label={t('warehousePagination')}

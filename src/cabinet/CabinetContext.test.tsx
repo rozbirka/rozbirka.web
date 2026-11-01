@@ -244,6 +244,39 @@ afterEach(() => {
   tenantPreference.clear()
 })
 
+it('retains the saved light theme during access loading and tenant switching', async () => {
+  const accessA = deferred<MePermissionsDto>()
+  const accessB = deferred<MePermissionsDto>()
+  vi.mocked(accessApi.get).mockImplementation(() =>
+    tenantPreference.get() === tenantB.id ? accessB.promise : accessA.promise,
+  )
+  localStorage.setItem('rozbirka.theme', 'light')
+  try {
+    renderCabinet('/app/a/dashboard')
+    await waitFor(() => expect(accessApi.get).toHaveBeenCalled())
+    expect(document.body).toHaveAttribute('data-theme', 'light')
+    await act(async () => {
+      accessA.resolve(access('a'))
+      await accessA.promise
+    })
+    await screen.findByText('tenant:a access:a')
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Розбірка B' }))
+    expect(
+      screen.getByRole('status', { name: 'Перемикання розбірки' }),
+    ).toBeVisible()
+    expect(document.body).toHaveAttribute('data-theme', 'light')
+    await act(async () => {
+      accessB.resolve(access('b'))
+      await accessB.promise
+    })
+    expect(await screen.findByText('tenant:b access:b')).toBeVisible()
+  } finally {
+    localStorage.removeItem('rozbirka.theme')
+  }
+})
+
 it('renders no A children after switching begins and commits B atomically', async () => {
   const accessB = deferred<MePermissionsDto>()
   vi.mocked(accessApi.get).mockImplementation(() => {

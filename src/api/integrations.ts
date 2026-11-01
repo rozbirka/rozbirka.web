@@ -31,6 +31,28 @@ export interface Integration {
   verifiedAt: string | null
   lastErrorCode: string | null
   settings: NovaPoshtaPublicSettings | null
+  /** Set while the integration is switched off: when, and by whom. */
+  deactivatedAt: string | null
+  deactivatedBy: string | null
+}
+
+/**
+ * What switching Nova Poshta off leaves behind: waybills still on the road.
+ * The post-payment part is null without the finance permission.
+ */
+export interface IntegrationDeactivationImpact {
+  inTransitCount: number
+  codCount: number | null
+  expectedCodUah: number | null
+}
+
+/** One switch of the integration on or off, newest first. */
+export interface IntegrationLifecycleEvent {
+  id: string
+  /** `deactivated` today; kept open for actions added later. */
+  action: string
+  occurredAt: string
+  actorName: string
 }
 
 /**
@@ -172,6 +194,8 @@ const withNulls = (integration: Integration): Integration => ({
   verifiedAt: integration.verifiedAt ?? null,
   lastErrorCode: integration.lastErrorCode ?? null,
   settings: integration.settings ?? null,
+  deactivatedAt: integration.deactivatedAt ?? null,
+  deactivatedBy: integration.deactivatedBy ?? null,
 })
 
 /** The same for a diagnostics run, whose checks Core omits when it made none. */
@@ -244,9 +268,42 @@ export const integrationsApi = {
       (await apiClient.post<Integration>(`${endpoint(id)}/activate`)).data,
     )
   },
+  /**
+   * Switches the integration off. Waybills, history and settings stay; every
+   * call that reaches the carrier stops until it is switched on again.
+   */
   async deactivate(id: string): Promise<Integration> {
     return withNulls(
       (await apiClient.post<Integration>(`${endpoint(id)}/deactivate`)).data,
+    )
+  },
+  async deactivationImpact(
+    id: string,
+    options: RequestOptions = {},
+  ): Promise<IntegrationDeactivationImpact> {
+    const data = (
+      await apiClient.get<IntegrationDeactivationImpact>(
+        `${endpoint(id)}/shipping/deactivation-impact`,
+        requestConfig(options),
+      )
+    ).data
+    return {
+      ...data,
+      codCount: data.codCount ?? null,
+      expectedCodUah: data.expectedCodUah ?? null,
+    }
+  },
+  async history(
+    id: string,
+    options: RequestOptions = {},
+  ): Promise<IntegrationLifecycleEvent[]> {
+    return (
+      (
+        await apiClient.get<IntegrationLifecycleEvent[] | null>(
+          `${endpoint(id)}/history`,
+          requestConfig(options),
+        )
+      ).data ?? []
     )
   },
   async dispatchPoints(
@@ -434,12 +491,11 @@ export const integrationsApi = {
     id: string,
     options: RequestOptions = {},
   ): Promise<NovaPoshtaWebhookStatus> {
-    return (
-      await apiClient.get<NovaPoshtaWebhookStatus>(
-        `${endpoint(id)}/webhook`,
-        requestConfig(options),
-      )
-    ).data
+    const { data } = await apiClient.get<NovaPoshtaWebhookStatus>(
+      `${endpoint(id)}/webhook`,
+      requestConfig(options),
+    )
+    return { ...data, oldestPendingAt: data.oldestPendingAt ?? null }
   },
   /** A null secret turns the feed off; Core never returns a stored one. */
   async configureWebhook(id: string, secret: string | null): Promise<void> {

@@ -205,7 +205,9 @@ it('keeps the customer drawer open while creation is pending', async () => {
 
 it('uses browser-native contact links and opens a new order over the customer card', async () => {
   const user = userEvent.setup()
-  const writeText = vi.spyOn(navigator.clipboard, 'writeText')
+  const writeText = vi
+    .spyOn(navigator.clipboard, 'writeText')
+    .mockRejectedValueOnce(new Error('clipboard denied'))
   customerMocks.getById.mockResolvedValue({
     id: 'customer-1',
     name: 'Ірина',
@@ -249,6 +251,12 @@ it('uses browser-native contact links and opens a new order over the customer ca
   const average = screen.getByText('Середній чек').closest('div')
   // v2 KPI: the figure large, the ISO code as its unit.
   expect(average).toHaveTextContent(/1\s167,00\s*USD/)
+  await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
+  const failure = await screen.findByText('Не вдалося скопіювати телефон.')
+  const failureToast = failure.closest<HTMLElement>('.rz-toast')!
+  expect(failureToast).toHaveAttribute('role', 'alert')
+  expect(failure.closest('.rz-notice')).toBeNull()
+  await user.click(within(failureToast).getByRole('button'))
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
 

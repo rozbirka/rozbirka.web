@@ -7,6 +7,7 @@ import type { BillingState, PublicPlanDto } from '@/api/types'
 import { useFormat, useLocale, useT, type MessageKey } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { accessMessages } from '../access-messages'
+import { evaluateModuleAccess } from '../policy'
 import { featureLabel } from '../billing/billing-vocabulary'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
@@ -220,6 +221,13 @@ export function SubscriptionStateScreen({
 }) {
   const { targetTenant, snapshot } = useCabinet()
   const subscription = snapshot?.subscription ?? null
+  const canViewBilling =
+    snapshot !== null &&
+    evaluateModuleAccess(
+      cabinetModules.billing,
+      { status: 'ready', snapshot, error: null },
+      'view',
+    ).kind === 'allowed'
   const { locale } = useLocale()
   const format = useFormat()
   const t = useT(accessMessages)
@@ -251,7 +259,9 @@ export function SubscriptionStateScreen({
     <div className="rz-page max-w-[1240px]">
       <div className="grid gap-2" role="alert">
         <div className="rz-page-head items-center">
-          <h1 className="rz-h-page">{copy.title}</h1>
+          <h1 className="rz-h-page">
+            {canViewBilling ? copy.title : copy.chip}
+          </h1>
           <StatusPill tone={tone}>{copy.chip}</StatusPill>
         </div>
         <p className="rz-muted m-0 max-w-[64ch] text-pretty">
@@ -260,77 +270,87 @@ export function SubscriptionStateScreen({
         </p>
       </div>
 
-      <section className="rz-card">
-        <dl className="rz-kpis m-0 rounded-none border-0">
-          <div className="rz-kpi">
-            <dt className="rz-kpi__label">{t('amountDue')}</dt>
-            <dd className="rz-kpi__value m-0">
-              <span className="rz-display">
-                {typeof subscription?.amount === 'number' ? (
-                  <Amount
-                    currency={subscription.currency}
-                    value={subscription.amount}
-                  />
-                ) : (
-                  <span className="rz-dim">—</span>
-                )}
-              </span>
-            </dd>
-            <dd className="rz-kpi__meta m-0">
-              {subscription?.planName ?? t('planNotSet')}
-            </dd>
+      {canViewBilling ? (
+        <section className="rz-card">
+          <dl className="rz-kpis m-0 rounded-none border-0">
+            <div className="rz-kpi">
+              <dt className="rz-kpi__label">{t('amountDue')}</dt>
+              <dd className="rz-kpi__value m-0">
+                <span className="rz-display">
+                  {typeof subscription?.amount === 'number' ? (
+                    <Amount
+                      currency={subscription.currency}
+                      value={subscription.amount}
+                    />
+                  ) : (
+                    <span className="rz-dim">—</span>
+                  )}
+                </span>
+              </dd>
+              <dd className="rz-kpi__meta m-0">
+                {subscription?.planName ?? t('planNotSet')}
+              </dd>
+            </div>
+            <div className="rz-kpi">
+              <dt className="rz-kpi__label">{t('nextCharge')}</dt>
+              <dd className="rz-kpi__value m-0">
+                <span className="rz-display">
+                  {subscription?.nextChargeAt === null ||
+                  subscription?.nextChargeAt === undefined ? (
+                    <span className="rz-dim" title={noRetryDate}>
+                      —
+                    </span>
+                  ) : (
+                    format.date(subscription.nextChargeAt)
+                  )}
+                </span>
+              </dd>
+              <dd className="rz-kpi__meta m-0">{noRetryDate}</dd>
+            </div>
+            <div className="rz-kpi">
+              <dt className="rz-kpi__label">{t('accessUntil')}</dt>
+              <dd className="rz-kpi__value m-0">
+                <span className="rz-display">
+                  {subscription?.currentPeriodEnd === null ||
+                  subscription?.currentPeriodEnd === undefined ? (
+                    <span className="rz-dim">—</span>
+                  ) : (
+                    format.date(subscription.currentPeriodEnd)
+                  )}
+                </span>
+              </dd>
+              <dd className="rz-kpi__meta m-0">{t('noRetention')}</dd>
+            </div>
+          </dl>
+          {targetTenant === null ? null : (
+            <div className="rz-card__foot flex-wrap justify-start">
+              <Button asChild variant="primary">
+                <Link to={cabinetPath(targetTenant.slug, 'billing')}>
+                  {t('toSubscription')}
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link to={cabinetPath(targetTenant.slug, 'plans')}>
+                  {t('comparePlans')}
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link to={cabinetPath(targetTenant.slug, 'payments')}>
+                  {t('paymentHistory')}
+                </Link>
+              </Button>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="rz-card">
+          <div className="rz-card__body">
+            <p className="rz-muted m-0 text-pretty">
+              {t('renewalRequiresPermission')}
+            </p>
           </div>
-          <div className="rz-kpi">
-            <dt className="rz-kpi__label">{t('nextCharge')}</dt>
-            <dd className="rz-kpi__value m-0">
-              <span className="rz-display">
-                {subscription?.nextChargeAt === null ||
-                subscription?.nextChargeAt === undefined ? (
-                  <span className="rz-dim" title={noRetryDate}>
-                    —
-                  </span>
-                ) : (
-                  format.date(subscription.nextChargeAt)
-                )}
-              </span>
-            </dd>
-            <dd className="rz-kpi__meta m-0">{noRetryDate}</dd>
-          </div>
-          <div className="rz-kpi">
-            <dt className="rz-kpi__label">{t('accessUntil')}</dt>
-            <dd className="rz-kpi__value m-0">
-              <span className="rz-display">
-                {subscription?.currentPeriodEnd === null ||
-                subscription?.currentPeriodEnd === undefined ? (
-                  <span className="rz-dim">—</span>
-                ) : (
-                  format.date(subscription.currentPeriodEnd)
-                )}
-              </span>
-            </dd>
-            <dd className="rz-kpi__meta m-0">{t('noRetention')}</dd>
-          </div>
-        </dl>
-        {targetTenant === null ? null : (
-          <div className="rz-card__foot flex-wrap justify-start">
-            <Button asChild variant="primary">
-              <Link to={cabinetPath(targetTenant.slug, 'billing')}>
-                {t('toSubscription')}
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link to={cabinetPath(targetTenant.slug, 'plans')}>
-                {t('comparePlans')}
-              </Link>
-            </Button>
-            <Button asChild>
-              <Link to={cabinetPath(targetTenant.slug, 'payments')}>
-                {t('paymentHistory')}
-              </Link>
-            </Button>
-          </div>
-        )}
-      </section>
+        </section>
+      )}
 
       <section className="rz-card">
         <header className="rz-card__head">
@@ -367,7 +387,13 @@ export function SubscriptionStateScreen({
 
       <p className="rz-muted m-0">
         {t('paymentQuestions')}{' '}
-        <a href={`mailto:${SUPPORT_MAIL}`}>{SUPPORT_MAIL}</a>.
+        <a
+          className="underline underline-offset-2"
+          href={`mailto:${SUPPORT_MAIL}`}
+        >
+          {SUPPORT_MAIL}
+        </a>
+        .
       </p>
     </div>
   )

@@ -13,6 +13,7 @@ import {
   ReceiptText,
   ScanLine,
   Sticker,
+  Truck,
   UserRoundCog,
   Users,
   WalletCards,
@@ -34,6 +35,7 @@ export type CabinetModuleKey =
   | 'warehouses'
   | 'inventory'
   | 'orders'
+  | 'waybills'
   | 'customers'
   | 'cash'
   | 'team'
@@ -86,6 +88,12 @@ export interface CabinetModuleDefinition {
   requiredFeature?: FeatureCode
   allowedSubscriptionStates?: readonly BillingState[]
   quotaResource?: QuotaResource
+  /**
+   * Shown only where Nova Poshta exists: in a country Core serves it in and,
+   * when the account can tell, for a tenant that has connected it. Routes
+   * stay reachable; the screen says why it is empty.
+   */
+  requiresNovaPoshta?: boolean
   navigation?: CabinetNavigationItem
 }
 
@@ -180,6 +188,21 @@ export const cabinetModules: Readonly<
       placement: 'primary',
       group: 'sales',
       mobilePriority: 3,
+    },
+  },
+  waybills: {
+    key: 'waybills',
+    routeSegment: '/sales/waybills',
+    viewPermission: 'orders.view',
+    mutationPermission: 'orders.manage',
+    allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
+    requiresNovaPoshta: true,
+    navigation: {
+      label: 'Накладні НП',
+      icon: Truck,
+      placement: 'primary',
+      group: 'sales',
+      mobilePriority: 9,
     },
   },
   customers: {

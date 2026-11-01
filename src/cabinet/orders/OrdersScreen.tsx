@@ -23,9 +23,9 @@ import {
   ChevronRight,
   RefreshCw,
   Undo2,
+  Ban,
   ClipboardList,
   Plus,
-  Printer,
   SearchX,
   Trash2,
   X,
@@ -87,7 +87,12 @@ import {
   OrderTimeline,
 } from './OrderDetailCards'
 import { DeliveryConfigureCard } from './delivery/DeliveryConfigureCard'
-import { DeliveryOrderBody } from './delivery/DeliveryOrderBody'
+import {
+  DeliveryOrderBody,
+  type DeliveryIntent,
+} from './delivery/DeliveryOrderBody'
+import { orderActions } from './delivery/delivery-flow'
+import { deliveryFlowMessages } from './delivery/flow-messages'
 import { orderChip } from './delivery/delivery-view'
 import {
   INTEGRATION_COUNTRY_UNAVAILABLE,
@@ -114,6 +119,7 @@ import { useCabinet } from '../CabinetContext'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
+import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
   customerPhoneForSave,
@@ -348,7 +354,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     if (value) next.set(name, value)
     else next.delete(name)
     next.set('page', '1')
-    setParams(next)
+    setParams(next, { flushSync: name === 'q' })
   }
   const goToPage = (nextPage: number) => {
     const next = new URLSearchParams(params)
@@ -1136,6 +1142,15 @@ function OrderDetailScreen({
     null,
   )
   const [customerOpen, setCustomerOpen] = useState(false)
+  // A header action of a delivery order; the body opens its dialog (§10).
+  const [deliveryIntent, setDeliveryIntent] = useState<DeliveryIntent | null>(
+    null,
+  )
+  const [deliveryEntry, setDeliveryEntry] = useState<{
+    orderId: string
+    action: 'form' | 'attach'
+  } | null>(null)
+  const tf = useT(deliveryFlowMessages)
   const historyTitleId = useId()
   const guard = useFirstPriceGuard()
   const currency = guard.currency
@@ -1325,6 +1340,15 @@ function OrderDetailScreen({
     cabinet.snapshot?.permissions.has('team.manage') === true
       ? `${moduleBase}/settings/integrations`
       : null
+  const waybillsPath = `${moduleBase}${cabinetModules.waybills.routeSegment}`
+  const financePath =
+    cabinet.snapshot?.permissions.has('finance.view') === true
+      ? `${moduleBase}${cabinetModules.cash.routeSegment}`
+      : null
+  const deliveryActions =
+    deliveryMoney === null
+      ? null
+      : orderActions(deliveryMoney, mutationsAllowed)
   const summary = orderMoney(order)
   /**
    * Sale prices are accounting prices: the first-price check applies. Runs
@@ -1517,10 +1541,43 @@ function OrderDetailScreen({
     <RedesignShell
       actions={
         <>
-          <Button disabled title={t('printUnavailable')}>
-            <Printer aria-hidden />
-            {t('print')}
-          </Button>
+          {deliveryActions === null ? null : (
+            <>
+              {deliveryActions.startReturn === 'menu' ? (
+                <ActionMenu
+                  actions={[
+                    {
+                      key: 'start-return',
+                      label: tf('startReturn'),
+                      icon: <Undo2 aria-hidden />,
+                      onSelect: () => setDeliveryIntent('startReturn'),
+                    },
+                  ]}
+                  label={t('moreActions')}
+                />
+              ) : null}
+              {deliveryActions.cancel === null ? null : (
+                <Button
+                  disabled={deliveryActions.cancel === 'disabled'}
+                  onClick={() => setDeliveryIntent('cancelOrder')}
+                  title={
+                    deliveryActions.cancel === 'disabled'
+                      ? tf('sentReason')
+                      : undefined
+                  }
+                >
+                  <Ban aria-hidden />
+                  {t('cancelOrder')}
+                </Button>
+              )}
+              {deliveryActions.startReturn === 'button' ? (
+                <Button onClick={() => setDeliveryIntent('startReturn')}>
+                  <Undo2 aria-hidden />
+                  {tf('startReturn')}
+                </Button>
+              ) : null}
+            </>
+          )}
           {orderEditable ? (
             <ActionMenu
               actions={[
@@ -1565,32 +1622,32 @@ function OrderDetailScreen({
     >
       <div className="grid gap-1.5">
         <div className="rz-page-head">
-          <h1 className="rz-h-page">
-            {t('orderTitle', { number: String(order.number) })}
-          </h1>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+            <h1 className="rz-h-page">
+              {t('orderTitle', { number: String(order.number) })}
+            </h1>
+            <StatusPill
+              tone={
+                deliveryMoney === null
+                  ? status.tone
+                  : orderChip(deliveryMoney, locale).tone
+              }
+            >
+              {deliveryMoney === null
+                ? status.label
+                : orderChip(deliveryMoney, locale).label}
+            </StatusPill>
+          </div>
           {deliveryMoney === null ? (
             <OrderSteps steps={orderSteps(order, formatTimestamp, locale)} />
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <StatusPill
-            tone={
-              deliveryMoney === null
-                ? status.tone
-                : orderChip(deliveryMoney, locale).tone
-            }
-          >
-            {deliveryMoney === null
-              ? status.label
-              : orderChip(deliveryMoney, locale).label}
-          </StatusPill>
-          <p className="rz-caption m-0">
-            {t('createdBy', {
-              when: formatTimestamp(order.createdAt),
-              who: order.createdByName,
-            })}
-          </p>
-        </div>
+        <p className="rz-caption m-0">
+          {t('createdBy', {
+            when: formatTimestamp(order.createdAt),
+            who: order.createdByName,
+          })}
+        </p>
       </div>
 
       {deliveryMoney === null ? null : (
@@ -1605,14 +1662,23 @@ function OrderDetailScreen({
             customerPath={customerPath}
             delivery={deliveryMoney}
             financeAllowed={financeAllowed}
+            financePath={financePath}
             integrationsPath={integrationsPath}
+            initialAction={
+              deliveryEntry?.orderId === order.id
+                ? deliveryEntry.action
+                : undefined
+            }
+            intent={deliveryIntent}
             load={deliveryLoad}
             mutationsAllowed={mutationsAllowed}
             novaPoshtaAvailable={novaPoshta.available}
+            notes={notesCard}
+            onIntentHandled={() => setDeliveryIntent(null)}
             order={order}
             partsPath={partsPath}
+            waybillsPath={waybillsPath}
           />
-          {notesCard}
         </>
       )}
 
@@ -1623,6 +1689,17 @@ function OrderDetailScreen({
       {deliveryOrder ? null : (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid min-w-0 gap-3.5">
+            {deliveryLoad.state !== null && order.status === 'pending' ? (
+              <DeliveryConfigureCard
+                mutationsAllowed={mutationsAllowed}
+                novaPoshtaAvailable={novaPoshta.available}
+                onConfigured={(next, action) => {
+                  setDeliveryEntry({ orderId: order.id, action })
+                  deliveryLoad.setMoney(next)
+                }}
+                orderId={order.id}
+              />
+            ) : null}
             {itemsEditable ? (
               <SectionPanel
                 aside={
@@ -1902,18 +1979,6 @@ function OrderDetailScreen({
               onChange={orderEditable ? () => setCustomerOpen(true) : undefined}
               to={customerPath ?? '#'}
             />
-
-            {/* Whether an order ships is Core's decision, not the carrier's:
-                offering it only while Nova Poshta answers made the order's
-                kind depend on an integration that has nothing to do with it. */}
-            {deliveryLoad.state !== null && order.status === 'pending' ? (
-              <DeliveryConfigureCard
-                mutationsAllowed={mutationsAllowed}
-                novaPoshtaAvailable={novaPoshta.available}
-                onConfigured={deliveryLoad.setMoney}
-                orderId={order.id}
-              />
-            ) : null}
 
             {notesCard}
           </aside>

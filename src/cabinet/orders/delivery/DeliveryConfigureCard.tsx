@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Truck } from 'lucide-react'
+import { Link2, Truck } from 'lucide-react'
 import { Button, Card, Notice } from '@/components/app'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { useLocale, useT } from '@/i18n'
 import { deliveryMessages } from './messages'
+import { ShipmentCard } from './DeliveryOrderCard'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 
 /**
@@ -26,7 +27,7 @@ export function DeliveryConfigureCard({
   mutationsAllowed: boolean
   /** False for a business outside Ukraine, where Core has no Nova Poshta. */
   novaPoshtaAvailable?: boolean
-  onConfigured: (delivery: DeliveryOrder) => void
+  onConfigured: (delivery: DeliveryOrder, action: 'form' | 'attach') => void
   orderId: string
 }) {
   const { locale } = useLocale()
@@ -34,13 +35,13 @@ export function DeliveryConfigureCard({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const configure = () => {
+  const configure = (action: 'form' | 'attach') => {
     if (busy) return
     setBusy(true)
     setError(null)
     void deliveryApi
       .configure(orderId)
-      .then(onConfigured)
+      .then((delivery) => onConfigured(delivery, action))
       .catch((problem: unknown) => {
         setError(deliveryProblemMessage(problem, locale))
       })
@@ -55,28 +56,33 @@ export function DeliveryConfigureCard({
     )
 
   return (
-    <Card
-      aside={
+    <ShipmentCard
+      actions={
         mutationsAllowed ? (
-          <Button
-            aria-busy={busy}
-            className="relative after:absolute after:-inset-2 after:content-['']"
-            disabled={busy}
-            onClick={configure}
-            size="sm"
-          >
-            <Truck aria-hidden />
-            {t('startDelivery')}
-          </Button>
-        ) : undefined
+          <>
+            <Button
+              aria-busy={busy}
+              disabled={busy}
+              onClick={() => configure('form')}
+              variant="primary"
+            >
+              <Truck aria-hidden />
+              {t('startDelivery')}
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => configure('attach')}
+              variant="quiet"
+            >
+              <Link2 aria-hidden />
+              {t('attachWaybill')}
+            </Button>
+          </>
+        ) : null
       }
-      headerClassName="py-2"
-      title={t('tabShipping')}
-    >
-      <div className="grid gap-3">
-        <p className="text-app-muted m-0">{t('configureNote')}</p>
-        {error === null ? null : <Notice tone="danger">{error}</Notice>}
-      </div>
-    </Card>
+      facts={null}
+      hint={t('configureNote')}
+      notices={error === null ? null : <Notice tone="danger">{error}</Notice>}
+    />
   )
 }

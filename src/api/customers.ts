@@ -52,6 +52,11 @@ export interface CustomerDetail extends Partial<CustomerAddress> {
   phone: string | null
   notes: string | null
   isActive: boolean
+  /** Absent on an older API: do not infer trust from order counts. */
+  isTrustedForDelivery?: boolean
+  deliveryTrustUpdatedBy?: string | null
+  deliveryTrustUpdatedAt?: string | null
+  deliveryTrustReason?: string | null
   createdAt: string
   ordersCount: number | null
   totalAmount: number | null
@@ -211,6 +216,18 @@ export const readCustomerPhoneConflict = (
 }
 
 export const customersApi = {
+  async setDeliveryTrust(
+    id: string,
+    input: { isTrusted: boolean; reason: string },
+    options: RequestOptions = {},
+  ): Promise<CustomerDetail> {
+    await apiClient.put(
+      `${endpoint(id)}/delivery-trust`,
+      input,
+      requestConfig(options),
+    )
+    return customersApi.getById(id, options)
+  },
   async directory(
     params: CustomerDirectoryParams,
     options: RequestOptions = {},

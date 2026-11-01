@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { commonMessages, useT } from '@/i18n'
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 import { useAuth } from './AuthContext'
 import { needsOwnerName } from './owner-name'
 import { resolvePostLoginDestination } from './post-login'
 
 function FullScreenLoader() {
+  useDesignSystemRoot()
   const tc = useT(commonMessages)
   return (
-    <div className="bg-background grid min-h-screen place-items-center text-[14px] text-neutral-500">
+    <div className="bg-app-canvas text-app-muted grid min-h-dvh place-items-center text-sm">
       {tc('loading')}
     </div>
   )

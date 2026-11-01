@@ -126,6 +126,33 @@ describe('PartSearchPicker', () => {
     )
   })
 
+  it.each([true, false])(
+    'keeps search in one loading state until results replace its row placeholders (compact=%s)',
+    async (compact) => {
+      let resolveSearch!: (value: ReturnType<typeof page>) => void
+      partMocks.search.mockReturnValue(
+        new Promise((resolve) => {
+          resolveSearch = resolve
+        }),
+      )
+      render(<Harness compact={compact} />)
+      fireEvent.change(screen.getByRole('searchbox'), {
+        target: { value: 'Інвертор' },
+      })
+      await waitFor(() => expect(partMocks.search).toHaveBeenCalled())
+      const status = screen.getByRole('status')
+      expect(status).toHaveTextContent('Шукаємо')
+      expect(status.closest('[data-part-search-loading]')).not.toBeNull()
+      expect(screen.queryByRole('option')).not.toBeInTheDocument()
+      await act(async () => {
+        resolveSearch(page([part('ready')]))
+        await Promise.resolve()
+      })
+      expect(await screen.findByRole('option', { name: /ready/ })).toBeVisible()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    },
+  )
+
   it('requests only parts with free stock without loading redundant status counts', async () => {
     const user = userEvent.setup()
     render(<Harness />)

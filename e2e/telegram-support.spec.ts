@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import { telegramSupportHref } from '../src/lib/telegram-support'
 
 for (const [path, label] of [

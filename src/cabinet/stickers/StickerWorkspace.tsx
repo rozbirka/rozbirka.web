@@ -1,6 +1,30 @@
-import type { ReactNode } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useLocale, useT } from '@/i18n'
+import { navigationGroupLabel } from '../module-messages'
+import { stickersMessages } from './messages'
+
+export const STICKER_LIST_PAGE_SIZE = 10
+
+/** Both sticker modes share the same heading, description and breadcrumb. */
+export function StickerPageWorkspace(
+  props: Omit<
+    ComponentProps<typeof StickerWorkspace>,
+    'title' | 'subtitle' | 'crumb'
+  >,
+) {
+  const t = useT(stickersMessages)
+  const { locale } = useLocale()
+  return (
+    <StickerWorkspace
+      {...props}
+      title={t('title')}
+      subtitle={t('subtitle')}
+      crumb={navigationGroupLabel('stock', locale)}
+    />
+  )
+}
 
 /** Shared desktop print workspace: selection on the left, sheet on the right. */
 export function StickerWorkspace({
@@ -17,6 +41,7 @@ export function StickerWorkspace({
   showHeader = true,
   embedded = false,
   className,
+  navigation,
 }: {
   title: string
   subtitle: ReactNode
@@ -33,6 +58,7 @@ export function StickerWorkspace({
   showHeader?: boolean
   embedded?: boolean
   className?: string | undefined
+  navigation?: ReactNode
 }) {
   const workspace = (
     <>
@@ -61,6 +87,7 @@ export function StickerWorkspace({
             <p className="rz-muted m-0 max-w-[72ch]">{subtitle}</p>
           </div>
         ) : null}
+        {navigation}
         {workspace}
       </section>
     )
@@ -95,6 +122,7 @@ export function StickerWorkspace({
             <p className="rz-muted m-0 max-w-[72ch]">{subtitle}</p>
           </div>
         ) : null}
+        {navigation}
         {workspace}
       </div>
     </section>

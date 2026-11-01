@@ -213,6 +213,7 @@ function OpenOrderItemDrawer({
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
       <PartSearchPicker
+        compact
         currency={currency}
         disabled={busy}
         onClear={reset}

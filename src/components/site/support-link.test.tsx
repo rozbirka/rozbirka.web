@@ -22,21 +22,10 @@ describe('public Telegram support links', () => {
     vi.stubEnv('VITE_TELEGRAM_SUPPORT_BOT', '')
     render(
       <LocaleOverride locale="uk">
-        <SupportLink floating />
+        <SupportLink />
       </LocaleOverride>,
     )
     expect(screen.queryByRole('link')).toBeNull()
-  })
-  it('leaves no empty footer item when support is disabled', () => {
-    vi.stubEnv('VITE_TELEGRAM_SUPPORT_BOT', '')
-    render(
-      <LocaleOverride locale="uk">
-        <ul>
-          <SupportLink asListItem />
-        </ul>
-      </LocaleOverride>,
-    )
-    expect(screen.queryByRole('listitem')).toBeNull()
   })
   it.each([
     ['uk', 'Написати в підтримку'],
@@ -48,11 +37,10 @@ describe('public Telegram support links', () => {
       vi.stubEnv('VITE_TELEGRAM_SUPPORT_BOT', 'rozbirka_support_bot')
       render(
         <LocaleOverride locale={locale}>
-          <SupportLink floating />
+          <SupportLink />
         </LocaleOverride>,
       )
-      const link = screen.getByRole('link')
-      expect(link.textContent).toContain(label)
+      const link = screen.getByRole('link', { name: new RegExp(label) })
       expect(link.getAttribute('href')).toBe(
         'https://t.me/rozbirka_support_bot',
       )

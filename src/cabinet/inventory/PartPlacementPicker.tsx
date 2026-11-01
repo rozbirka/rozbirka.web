@@ -1,5 +1,6 @@
 import { Button } from '@/components/app'
 import { LocationSelect } from './LocationSelect'
+import { PlacementFieldsSkeleton } from './PlacementSkeleton'
 import { useT } from '@/i18n'
 import { placementMessages } from './part-placement-messages'
 import type { PartPlacement, PlacementOptions } from './part-placement-state'
@@ -35,12 +36,7 @@ export function PartPlacementPicker({
   )
   const systemZone = warehouseZones.find((zone) => zone.isSystemUnassigned)
 
-  if (options.loading)
-    return (
-      <p className="text-app-muted text-sm" role="status">
-        {t('loading')}
-      </p>
-    )
+  if (options.loading) return <PlacementFieldsSkeleton inline />
   if (options.error)
     return (
       <div className="flex items-center gap-3">

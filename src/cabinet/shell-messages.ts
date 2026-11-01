@@ -3,6 +3,9 @@ import { defineMessages } from '@/i18n'
 /** Cabinet frame: navigation, tenant switching, Cmd+K and shell states. */
 export const shellMessages = defineMessages({
   uk: {
+    'theme.light': 'Світла тема',
+    'theme.toLight': 'Увімкнути світлу тему',
+    'theme.toDark': 'Увімкнути темну тему',
     'nav.desktop': 'Навігація кабінету',
     'nav.tablet': 'Навігація планшета',
     'nav.mobile': 'Мобільна навігація',
@@ -16,6 +19,11 @@ export const shellMessages = defineMessages({
     'nav.logout': 'Вийти',
     'tenant.switch': 'Перемкнути розбірку',
     'tenant.switching': 'Перемикаємо…',
+    'tenant.join': 'Приєднатися до іншої розбірки',
+    'tenant.joinHint':
+      'Введіть код від власника іншої розбірки. Перед приєднанням ви побачите назву розбірки та свою роль.',
+    'tenant.invitationCode': 'Код запрошення',
+    'tenant.previewInvitation': 'Переглянути запрошення',
     'palette.title': 'Пошук по кабінету',
     'palette.placeholder': 'Розділ, деталь, авто, клієнт або замовлення',
     'palette.typeMore': 'Наберіть принаймні дві літери.',
@@ -66,6 +74,9 @@ export const shellMessages = defineMessages({
     'shell.toActive': 'До активної розбірки',
   },
   'en-GB': {
+    'theme.light': 'Light theme',
+    'theme.toLight': 'Switch to light theme',
+    'theme.toDark': 'Switch to dark theme',
     'nav.desktop': 'Cabinet navigation',
     'nav.tablet': 'Tablet navigation',
     'nav.mobile': 'Mobile navigation',
@@ -79,6 +90,11 @@ export const shellMessages = defineMessages({
     'nav.logout': 'Log out',
     'tenant.switch': 'Switch business',
     'tenant.switching': 'Switching…',
+    'tenant.join': 'Join another business',
+    'tenant.joinHint':
+      'Enter the code from the other business owner. You’ll see the business name and your role before joining.',
+    'tenant.invitationCode': 'Invitation code',
+    'tenant.previewInvitation': 'View invitation',
     'palette.title': 'Search the cabinet',
     'palette.placeholder': 'Section, part, car, customer or order',
     'palette.typeMore': 'Type at least two letters.',
@@ -128,6 +144,9 @@ export const shellMessages = defineMessages({
     'shell.toActive': 'Go to active business',
   },
   pl: {
+    'theme.light': 'Jasny motyw',
+    'theme.toLight': 'Włącz jasny motyw',
+    'theme.toDark': 'Włącz ciemny motyw',
     'nav.desktop': 'Nawigacja panelu',
     'nav.tablet': 'Nawigacja tabletu',
     'nav.mobile': 'Nawigacja mobilna',
@@ -141,6 +160,11 @@ export const shellMessages = defineMessages({
     'nav.logout': 'Wyloguj',
     'tenant.switch': 'Przełącz firmę',
     'tenant.switching': 'Przełączanie…',
+    'tenant.join': 'Dołącz do innej firmy',
+    'tenant.joinHint':
+      'Wpisz kod od właściciela innej firmy. Przed dołączeniem zobaczysz nazwę firmy i swoją rolę.',
+    'tenant.invitationCode': 'Kod zaproszenia',
+    'tenant.previewInvitation': 'Zobacz zaproszenie',
     'palette.title': 'Szukaj w panelu',
     'palette.placeholder': 'Sekcja, część, auto, klient lub zamówienie',
     'palette.typeMore': 'Wpisz co najmniej dwie litery.',

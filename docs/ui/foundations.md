@@ -13,7 +13,7 @@
 | Геометрія кабінету | `rounded-rz-xs` 4, `rounded-control` 6, `rounded-panel` 8, `rounded-sheet` 12; висоти `h-control` 28/32, `h-touch` 44, `h-glove` 56                                              |
 | Semantic UI tokens | `background`, `foreground`, `primary`, `muted`, `border`, `ring` через `@theme inline`; `primary` не тотожний `brand`                                                            |
 
-Темна тема за замовчуванням. Токени v2 мають і світлу (`data-theme="light"`) та щільність (`data-density`), але перемикача в інтерфейсі поки немає.
+Темна тема за замовчуванням. Світла тема використовує `data-theme="light"`; щільність — `data-density`. Перемикач теми є біля профілю внизу бокового меню, у згорнутому меню та в мобільному «Ще». Вибір зберігається в браузері й синхронізується між вкладками через [useTheme](../../src/components/app/theme-preference.ts). [useDesignSystemRoot](../../src/components/app/use-design-system-root.ts) застосовує тему також до діалогів і меню в порталах та відновлює попередній стан після виходу з продуктової оболонки. Корінь кабінету використовує `bg-app-canvas`, щоб фон змінювався разом із токенами теми.
 
 ## Типографіка
 

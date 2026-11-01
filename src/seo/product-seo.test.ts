@@ -27,14 +27,23 @@ describe('product SEO registry', () => {
     expect(getProductSeo('/oblik-prodazhiv-avtozapchastyn')).toBeUndefined()
   })
 
-  it('keeps the Ukrainian homepage metadata unchanged', () => {
+  it('targets CRM, ERP and software queries on the Ukrainian homepage', () => {
     expect(landingSeoFor('uk')).toMatchObject({
       path: '/',
       canonical: 'https://rozbirka.pro/',
       ogLocale: 'uk_UA',
-      title:
-        'Програма для авторозбірки — облік запчастин і продажів | rozbirka',
+      title: 'Програма для авторозбірки: CRM і ERP для запчастин | rozbirka',
+      primaryQuery: 'програма для авторозбірки',
     })
+    expect(landingSeoFor('uk').supportingQueries).toEqual(
+      expect.arrayContaining(['CRM для авторозбірки', 'ERP для авторозбірки']),
+    )
+    for (const entry of productSeoEntries) {
+      expect(entry.title).toMatch(/CRM/)
+      expect(entry.title).toMatch(/ERP/)
+      expect(entry.description).toMatch(/CRM/)
+      expect(entry.description.length).toBeLessThanOrEqual(160)
+    }
   })
 
   it('provides complete canonical and social metadata', () => {

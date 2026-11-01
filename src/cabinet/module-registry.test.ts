@@ -11,6 +11,7 @@ describe('integrated cabinet module release registry', () => {
     'stickers',
     'customers',
     'orders',
+    'waybills',
     'cash',
     'team',
     'reports',
@@ -25,6 +26,16 @@ describe('integrated cabinet module release registry', () => {
       viewPermission: 'inventory.view',
       mutationPermission: 'inventory.manage',
       navigation: { label: 'Інвентаризація', group: 'stock' },
+    })
+  })
+
+  it('puts Nova Poshta waybills under sales behind the orders rights', () => {
+    expect(cabinetModules.waybills).toMatchObject({
+      routeSegment: '/sales/waybills',
+      viewPermission: 'orders.view',
+      mutationPermission: 'orders.manage',
+      requiresNovaPoshta: true,
+      navigation: { label: 'Накладні НП', group: 'sales' },
     })
   })
 })
