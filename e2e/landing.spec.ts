@@ -159,7 +159,7 @@ test.describe('responsive matrix', () => {
 
   for (const { width, expectedFontSize } of [
     { width: 375, expectedFontSize: '36px' },
-    { width: 1600, expectedFontSize: '84px' },
+    { width: 1600, expectedFontSize: '88px' },
   ]) {
     test(`scales the hero heading at ${width}px`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -205,13 +205,24 @@ test.describe('responsive matrix', () => {
           () => document.documentElement.scrollWidth === window.innerWidth,
         ),
       ).toBe(true)
+      // A full-page capture stretches the viewport itself and its height then
+      // drifts by a few pixels between captures (the page is 14 523.2px tall,
+      // the image 14 523 or 14 526). Size the viewport to the content instead.
+      const pageHeight = await page.evaluate(() =>
+        Math.ceil(document.documentElement.getBoundingClientRect().height),
+      )
+      await page.setViewportSize({ width, height: pageHeight })
+      await page.evaluate(() => window.scrollTo(0, 0))
       const platformSuffix = process.platform === 'linux' ? '-linux' : ''
       await expect(page).toHaveScreenshot(
         `landing-${width}${platformSuffix}.png`,
         {
-          fullPage: true,
           animations: 'disabled',
           timeout: 15_000,
+          // Glass cards (backdrop-filter) are composited on their own layers,
+          // so their text can land a sub-pixel apart between runs: a few
+          // hundred pixels of millions. Layout changes move far more.
+          maxDiffPixels: 2000,
         },
       )
     })

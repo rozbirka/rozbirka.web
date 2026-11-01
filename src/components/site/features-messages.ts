@@ -1,12 +1,19 @@
 import { defineMessages } from '@/i18n/messages'
 
-/** Landing «Можливості» grid: heading and one card per module. */
+/** Landing «Можливості»: heading, three module groups, one card per module. */
 export const featuresMessages = defineMessages({
   uk: {
     eyebrow: 'Можливості',
     title: '13 модулів в одній системі',
     intro:
       'Усі модулі в одному інтерфейсі: від обліку авто до фінансів і команди.',
+
+    group1Title: 'Облік і склад',
+    group1Sub: 'Від закупівлі авто до деталі на полиці',
+    group2Title: 'Продажі й гроші',
+    group2Sub: 'Замовлення, клієнти, каси, звіти і команда',
+    group3Title: 'Інтеграції',
+    group3Sub: 'Доставка й оголошення без ручної роботи',
 
     carsTitle: 'Авто',
     cars1: 'Розбирай авто — система рахує кожну деталь',
@@ -99,6 +106,13 @@ export const featuresMessages = defineMessages({
     title: '13 modules in one system',
     intro:
       'All modules in one interface: from tracking cars to finances and your team.',
+
+    group1Title: 'Records and stock',
+    group1Sub: 'From buying a car to the part on the shelf',
+    group2Title: 'Sales and money',
+    group2Sub: 'Orders, customers, tills, reports and your team',
+    group3Title: 'Integrations',
+    group3Sub: 'Delivery and listings without manual work',
 
     carsTitle: 'Cars',
     cars1: 'Strip a car — the system counts every part',
@@ -193,6 +207,13 @@ export const featuresMessages = defineMessages({
     title: '13 modułów w jednym systemie',
     intro:
       'Wszystkie moduły w jednym interfejsie: od ewidencji aut po finanse i zespół.',
+
+    group1Title: 'Ewidencja i magazyn',
+    group1Sub: 'Od zakupu auta po część na półce',
+    group2Title: 'Sprzedaż i pieniądze',
+    group2Sub: 'Zamówienia, klienci, kasy, raporty i zespół',
+    group3Title: 'Integracje',
+    group3Sub: 'Wysyłka i ogłoszenia bez ręcznej pracy',
 
     carsTitle: 'Auta',
     cars1: 'Rozbierasz auto — system liczy każdą część',

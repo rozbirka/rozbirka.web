@@ -5,9 +5,9 @@ import { Hero, IntegrationsTicker } from '@/components/site/hero'
 import { Reviews } from '@/components/site/reviews'
 import { Pains } from '@/components/site/pains'
 import { HowItWorks } from '@/components/site/how-it-works'
+import { CarsSpotlight } from '@/components/site/cars-demo'
+import { OrdersSpotlight } from '@/components/site/orders-demo'
 import {
-  CarsSpotlight,
-  OrdersSpotlight,
   StockSpotlight,
   TeamSpotlight,
   TrialBand,
@@ -65,7 +65,16 @@ function App() {
       >
         {t('skipToContent')}
       </a>
-      <div className="bg-lp-bg text-lp-ink font-onest relative isolate min-h-dvh overflow-x-clip leading-[normal] antialiased">
+      <div className="text-lp-ink font-onest relative isolate min-h-dvh overflow-x-clip bg-[#0a0706] leading-[normal] antialiased">
+        {/* Glass theme: warm glows behind the page, drifting with --sy. */}
+        <div
+          className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+          aria-hidden
+        >
+          <span className="absolute -top-[25vw] -left-[20vw] size-[70vw] translate-x-[calc(var(--sy,0)*3px)] translate-y-[calc(var(--sy,0)*4px)] rounded-full bg-[radial-gradient(circle,rgba(255,106,26,0.15),transparent_62%)]" />
+          <span className="absolute top-[30vh] -right-[22vw] size-[60vw] translate-x-[calc(var(--sy,0)*-3px)] translate-y-[calc(var(--sy,0)*-5px)] rounded-full bg-[radial-gradient(circle,rgba(255,160,70,0.09),transparent_62%)]" />
+          <span className="absolute -bottom-[20vw] left-[30vw] size-[40vw] translate-y-[calc(var(--sy,0)*-3px)] rounded-full bg-[radial-gradient(circle,rgba(255,90,20,0.08),transparent_62%)]" />
+        </div>
         <SiteHeader />
         <SupportLink />
         <main id="main">

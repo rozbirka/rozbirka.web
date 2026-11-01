@@ -36,7 +36,7 @@ export function FAQ() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label={t('supportAria')}
-            className="text-lp-ink hover:text-lp-accent-hover flex h-11 items-center gap-2.5 self-start rounded-full border border-white/16 pr-[18px] pl-2.5 text-[15px]"
+            className="text-lp-ink hover:text-lp-accent-hover flex h-11 items-center gap-2.5 self-start rounded-full border border-white/16 pr-[18px] pl-2.5 text-[15px] whitespace-nowrap"
           >
             <TelegramIcon />
             {t('support')}

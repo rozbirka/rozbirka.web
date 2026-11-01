@@ -57,7 +57,7 @@ export function Pricing() {
               <h3 className="font-unbounded m-0 text-[24px] font-semibold">
                 {plan.name}
               </h3>
-              <span className="bg-lp-accent text-lp-bg rounded-full px-3 py-1.5 text-[13px] font-semibold">
+              <span className="bg-lp-accent text-lp-bg rounded-full px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap">
                 {t('pricingTrial', { count: plan.trialDays })}
               </span>
             </div>
@@ -73,7 +73,7 @@ export function Pricing() {
             <div className="mt-auto flex flex-col gap-3">
               <Link
                 to={destination}
-                className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover flex h-14 items-center justify-center rounded-full px-7 text-center text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97]"
+                className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover lp-btn-glow flex h-14 items-center justify-center rounded-full px-7 text-center text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97]"
               >
                 {plan.ctaLabel}
               </Link>
