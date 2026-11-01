@@ -61,7 +61,7 @@ export function Eyebrow({
     >
       <span
         className={cn(
-          'size-2 rounded-[2px]',
+          'size-2 rounded-full shadow-[0_0_8px_1px_rgba(255,106,26,0.5)]',
           tone === 'dark' ? 'bg-lp-accent' : 'bg-lp-accent-deep',
         )}
         aria-hidden
@@ -111,7 +111,7 @@ export function PrimaryLink({
     <Link
       to={to}
       className={cn(
-        'bg-lp-accent hover:bg-lp-accent-hover text-lp-bg flex items-center justify-center rounded-full font-semibold transition-transform duration-150 ease-out active:scale-[0.97]',
+        'bg-lp-accent hover:bg-lp-accent-hover text-lp-bg lp-btn-glow flex items-center justify-center rounded-full font-semibold transition-transform duration-150 ease-out active:scale-[0.97]',
         size === 'lg' ? 'h-14 px-7 text-[17px]' : 'h-11 px-5 text-[15px]',
         className,
       )}

@@ -23,17 +23,13 @@ export function Reviews() {
   const l = useT(landingMessages)
   const labels = listOf(l('trust'))
   return (
-    <section
-      id="reviews"
-      data-reveal=""
-      className="bg-lp-surface border-t border-white/[0.07]"
-    >
+    <section id="reviews" data-reveal="" data-tone="light" className="lp-light">
       <SectionInner>
         <div className="flex max-w-[760px] flex-col gap-5">
           <Eyebrow>{l('reviewsEyebrow')}</Eyebrow>
           <SectionTitle>{l('reviewsTitle')}</SectionTitle>
         </div>
-        <dl className="m-0 grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-4 max-[1071px]:grid-cols-2 max-sm:gap-x-4 max-sm:gap-y-2">
+        <dl className="m-0 grid grid-cols-4 gap-x-6 gap-y-4 max-[960px]:grid-cols-2 max-sm:gap-x-4 max-sm:gap-y-2">
           {trustFigures.map((figure, index) => (
             <div
               key={labels[index]}
@@ -53,14 +49,14 @@ export function Reviews() {
           aria-label={t('navReviews')}
           tabIndex={0}
           className={cn(
-            'grid grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4',
+            'grid grid-cols-3 gap-4 max-[960px]:grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]',
             phoneCarousel,
           )}
         >
           {reviewKeys.map(([quote, name, role]) => (
             <figure
               key={quote}
-              className="bg-lp-bg m-0 flex flex-col gap-7 rounded-3xl border border-white/[0.08] p-7"
+              className="lp-glass m-0 flex flex-col gap-7 rounded-3xl p-7"
             >
               <blockquote className="text-lp-ink m-0 text-[18px] leading-[1.5] text-pretty">
                 «{l(quote)}»

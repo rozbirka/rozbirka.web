@@ -50,6 +50,22 @@ export const faqMessages = defineMessages({
   },
 })
 
+/** Copy around the accordion: the «didn't find an answer?» card. */
+export const faqAskMessages = defineMessages({
+  uk: {
+    title: 'Не знайшов відповідь?',
+    body: 'Напиши в Telegram — відповімо і покажемо, як це працює на твоїх даних.',
+  },
+  'en-GB': {
+    title: 'Didn’t find your answer?',
+    body: 'Message us on Telegram — we’ll answer and show you how it works with your own data.',
+  },
+  pl: {
+    title: 'Nie znalazłeś odpowiedzi?',
+    body: 'Napisz na Telegramie — odpowiemy i pokażemy, jak to działa na Twoich danych.',
+  },
+})
+
 export interface FaqEntry {
   question: string
   answer: string

@@ -125,7 +125,7 @@ function StartForm() {
       <button
         type="submit"
         disabled={status === 'sending'}
-        className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover mt-1 flex h-14 cursor-pointer items-center justify-center rounded-full text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97] disabled:cursor-wait disabled:opacity-70"
+        className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover lp-btn-glow mt-1 flex h-14 cursor-pointer items-center justify-center rounded-full text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97] disabled:cursor-wait disabled:opacity-70"
       >
         {status === 'sending' ? l('formSending') : l('formSubmit')}
       </button>

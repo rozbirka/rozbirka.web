@@ -1,7 +1,13 @@
-import { render, screen, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/auth/AuthContext'
 import { SiteHeader } from './header'
 
@@ -115,5 +121,83 @@ describe('SiteHeader mobile menu', () => {
       'href',
       'https://apps.apple.com/ua/app/rozbirka/id6762130912',
     )
+  })
+})
+
+describe('SiteHeader page tracking', () => {
+  const added: HTMLElement[] = []
+
+  function addSection(
+    attrs: Record<string, string>,
+    top: number,
+    bottom: number,
+  ) {
+    const element = document.createElement('section')
+    for (const [name, value] of Object.entries(attrs))
+      element.setAttribute(name, value)
+    element.getBoundingClientRect = () =>
+      ({ top, bottom, height: bottom - top }) as DOMRect
+    document.body.append(element)
+    added.push(element)
+    return element
+  }
+
+  function renderHeader() {
+    render(
+      <MemoryRouter>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+    return screen.getByRole('banner')
+  }
+
+  beforeEach(() => {
+    vi.mocked(useAuth).mockReturnValue({
+      status: 'guest',
+      user: null,
+      tenant: null,
+      tenants: [],
+      hydrate: vi.fn(),
+      commitTenant: vi.fn(),
+      updateName: vi.fn(),
+      signOut: vi.fn(),
+    })
+  })
+
+  afterEach(() => {
+    for (const element of added.splice(0)) element.remove()
+    vi.unstubAllGlobals()
+  })
+
+  it('starts dark with no current section at the top of the page', () => {
+    const header = renderHeader()
+    expect(header).toHaveAttribute('data-hdrtone', 'dark')
+    const nav = screen.getByRole('navigation', { name: 'Головна навігація' })
+    expect(within(nav).queryByRole('link', { current: 'location' })).toBeNull()
+  })
+
+  it('turns light over a light section and dark again past it', async () => {
+    const light = addSection({ 'data-tone': 'light' }, -200, 600)
+    const header = renderHeader()
+    expect(header).toHaveAttribute('data-hdrtone', 'light')
+
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(0), 0),
+    )
+    light.getBoundingClientRect = () =>
+      ({ top: 300, bottom: 900, height: 600 }) as DOMRect
+    fireEvent.scroll(window)
+    await waitFor(() => expect(header).toHaveAttribute('data-hdrtone', 'dark'))
+  })
+
+  it('highlights the section that has scrolled into view', () => {
+    addSection({ id: 'reviews' }, -900, -100)
+    addSection({ id: 'how' }, 100, 800)
+    addSection({ id: 'features' }, 2000, 2800)
+    renderHeader()
+    const nav = screen.getByRole('navigation', { name: 'Головна навігація' })
+    expect(
+      within(nav).getByRole('link', { current: 'location' }),
+    ).toHaveTextContent('Як це працює')
   })
 })

@@ -96,6 +96,41 @@ export function useLandingMotion(numberLocale: string) {
       return () => document.removeEventListener('pointermove', onMove)
     }
 
+    // Orange buttons lean towards the pointer.
+    let magnet: HTMLElement | null = null
+    const onMagnet = (event: PointerEvent) => {
+      const button =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>('.lp-btn-glow')
+          : null
+      if (magnet && magnet !== button) {
+        magnet.style.translate = ''
+        magnet = null
+      }
+      if (!button) return
+      const rect = button.getBoundingClientRect()
+      const x = (event.clientX - rect.left - rect.width / 2) * 0.18
+      const y = (event.clientY - rect.top - rect.height / 2) * 0.3
+      button.style.translate = `${x.toFixed(1)}px ${y.toFixed(1)}px`
+      magnet = button
+    }
+    document.addEventListener('pointermove', onMagnet)
+
+    // The background glows drift with the scroll position (0–100).
+    let frame = 0
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        const max = document.documentElement.scrollHeight - innerHeight
+        document.documentElement.style.setProperty(
+          '--sy',
+          ((scrollY / Math.max(1, max)) * 100).toFixed(2),
+        )
+      })
+    }
+    addEventListener('scroll', onScroll, { passive: true })
+
     const timers: number[] = []
     const observer = new IntersectionObserver(
       (entries) =>
@@ -140,6 +175,11 @@ export function useLandingMotion(numberLocale: string) {
 
     return () => {
       document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointermove', onMagnet)
+      removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(frame)
+      if (magnet) magnet.style.translate = ''
+      document.documentElement.style.removeProperty('--sy')
       observer.disconnect()
       timers.forEach((timer) => window.clearTimeout(timer))
       // Blocks still waiting for the observer go back to their final state.

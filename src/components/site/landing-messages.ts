@@ -15,8 +15,6 @@ export const landingMessages = defineMessages({
 
     heroBadge: 'Програма для авторозбірки — CRM і ERP',
     heroDemo: 'Не готовий реєструватись? Покажемо демо в Telegram за 10 хвилин',
-    heroStats:
-      '14 днів=безкоштовно|13 модулів=в одному інтерфейсі|Веб + iOS=версія і застосунок',
     cardStatus: 'Профіль авто · онлайн',
     cardPaidOff: 'Окупилось',
     invested: 'Вклав',
@@ -25,7 +23,6 @@ export const landingMessages = defineMessages({
     soldOf: '{sold} з {total}',
     heroSales: 'Двигун N47D20|Капот|Фара ліва',
     stickerPart: 'Фара ліва',
-    stickerShelf: 'Полиця B3',
 
     ticker:
       'Нова Пошта=ТТН з замовлення|OLX=оголошення з картки деталі|Telegram=сповіщення про продажі|QR-стікери=друк на будь-якому принтері|Excel=імпорт складу|App Store=склад у телефоні',
@@ -49,28 +46,17 @@ export const landingMessages = defineMessages({
 
     painEyebrow: 'Знайомо?',
     painTitle: 'Коли облік у зошиті й Excel, гроші губляться разом з деталями',
-    painNow: 'Як зараз',
-    painWith: 'З rozbirka',
     pains:
       'Все записано в зошиті, а зошит лишився на складі=Фото, документи, історія — без папок і Excel|Розібрав Пассат, а чи він відбився — хто зна=Точно знаєш скільки вклав і скільки забрав|Клієнт на телефоні, а я пів години шукаю фару по полицях=Кожна деталь на своєму місці — знаходиш за секунди|Долари в шухляді, гривні на ФОП — в кінці місяця не сходиться=Кілька кас на різні валюти й рахунки — не плутаєш|Продавець знає, за скільки я купив, і дає знижки як хоче=Без зайвих очей: продавець не бачить собівартість|Деталь зникла, і ніхто не знає, хто її продав=Бачиш хто і що зробив — повний журнал дій',
     trialNote: '14 днів на тарифі Pro',
 
-    howTitle: 'Від VIN до останньої гайки — все в одному профілі',
-    howIntro: 'Фото, документи, історія — без папок і Excel.',
+    howTitle: 'Шлях однієї деталі — від VIN до прибутку',
+    howIntro: 'Один приклад: BMW 320d E90 і його ліва фара.',
     steps:
-      'Партія=Закупив і додав=Закупив партію — додав одним рухом, без переписування|Авто=Розібрав=Розбирай авто — система рахує кожну деталь|Стікер=Наклеїв QR=Друкуєш стікер на кожну деталь: QR + назва|Продаж=Продав=Збираєш замовлення в кілька кліків: клієнт, деталь, ціна',
+      'Авто=Привіз BMW E90=Додав авто за VIN і вказав, скільки за нього віддав|Стікер=Зняв ліву фару=Надрукував QR #A-0142 і поклав деталь на полицю B3|Продаж=Клієнт купив фару=Відсканував QR — фара вже в замовленні #1048|Прибуток=Авто окупилось=ROI по BMW оновився одразу після продажу',
 
-    carsEyebrow: 'Авто та партії',
+    carsEyebrow: 'Авто',
     carsTitle: 'Прозорий прибуток по кожному кузову',
-    carsPoints:
-      'Точно знаєш скільки вклав і скільки забрав|Бачиш, яке авто окупилось найкраще|Прибуток по партії окремо — точно, без здогадок|Розумієш, який постачальник приніс найбільше',
-    chartLabel: 'Чистий прибуток · 6 місяців',
-    months: 'Тра|Чер|Лип|Сер|Вер|Жов',
-    carsList: 'Авто на розбірці',
-    currencyLabel: 'Валюта обліку · {code}',
-    carInvested: 'Вклав {amount}',
-    carEarned: 'Забрав {amount}',
-    carParts: '{sold} з {total} деталей',
 
     stockEyebrow: 'Склад і стікери',
     stockTitle: 'Кожна деталь на своєму місці — знаходиш за секунди',
@@ -83,44 +69,28 @@ export const landingMessages = defineMessages({
 
     ordersEyebrow: 'Замовлення і каси',
     ordersTitle: 'Оплата гнучка: кілька платежів, різні валюти й рахунки',
-    orderTitle: 'Замовлення #1048',
-    orderCustomer: 'Олег К.',
-    orderReserved: '✓ Резерв',
-    orderPaid: 'Оплачено',
-    orderShipping: 'Відвантаження',
-    orderLines: 'Фара ліва BMW E90|Дзеркало праве|Блок ABS',
-    orderTotal: 'Разом',
-    cashTitle: 'Каси',
-    cashRows: 'Готівка|Рахунок ФОП|Готівка',
-    cashNote: 'Бачиш баланс кожної каси в реальному часі',
-    orderPoints:
-      'Бачиш статус від резерву до відвантаження|Оплата автоматично заходить у потрібну касу|Переміщуєш гроші між касами в один клік|Клієнт привʼязаний — вся історія покупок під рукою|Швидкі чеки й накладні — без ручної рутини',
 
     teamEyebrow: 'Команда',
-    teamTitle: 'Без зайвих очей: продавець не бачить собівартість',
+    teamTitle: 'Розбірка працює, навіть коли тебе немає на місці',
+    teamLead: 'Кожен у команді бачить свою частину роботи. Ти бачиш усе.',
     teamPoints:
-      'Додаєш співробітників — кожному своя роль і доступ|Бачиш хто і що зробив — повний журнал дій|Розумієш хто скільки продав і заробив',
-    permAccess: 'Доступ',
-    permRoles: 'Власник|Менеджер|Продавець',
-    permRows: 'Собівартість|Ціни продажу|Каси|Звіти|Журнал дій',
-    permYes: '✓ Так',
-    permNo: '— Ні',
+      'Додаєш співробітників і даєш кожному доступ лише до потрібного|Кожна дія в журналі: хто додав деталь, продав, змінив ціну чи зробив повернення|Видно, хто скільки продав за день і за місяць',
+    teamLogTitle: 'Журнал дій · сьогодні',
+    teamOnline: 'онлайн',
+    teamLog:
+      '09:12=Прийняв BMW 320d E90, наклеїв 46 стікерів=Олег · Майстер|10:40=Замовлення #1048 оплачено · {paid}=Ірина · Менеджер|11:05=Змінила ціну: Фара ліва {from} → {to}=Ірина · Менеджер|13:30=Двигун N47D20 → полиця C-04=Олег · Майстер|15:10=ТТН Нова Пошта для #1048=Ірина · Менеджер',
+    teamSales: 'Продажі Ірини сьогодні',
 
-    midTitle: 'Перевір на своїй розбірці — 14 днів безкоштовно',
+    trialTitle: 'Перевір на своїй розбірці —',
+    trialAccent: '14 днів безкоштовно',
     midBody: 'Додай перше авто, наклей стікери, проведи перше замовлення.',
     startFree: 'Почати безкоштовно',
     orderDemo: 'Замовити демо',
 
-    compareEyebrow: 'Порівняння',
-    compareTitle: 'Чому не Excel і не універсальна програма для автомагазину',
-    compareCols: 'Excel / зошит|Універсальна ERP',
-    compare:
-      'Прибуток і ROI по кожному авто=Рахуєш вручну=Немає=Автоматично|Партії й собівартість деталі=Формули ламаються=Частково=З коробки|QR-стікер на кожну деталь=Немає=Штрих-коди товарів=QR + полиця + авто|Робота з телефону=Незручно=Складський додаток=Весь бізнес у телефоні|Приховати собівартість від продавця=Неможливо=Залежить від тарифу=Ролі й права|Створено саме для розбірки=Ні=Один із сегментів=Так',
-
     pricingEyebrow: 'Тариф',
     pricingIncluded: 'Включено',
     pricingModules:
-      'Авто|Партії|Склад|Стікери|Замовлення|Клієнти|Каси|Звіти|Команда|Інвентаризація|Склади|Нова Пошта|OLX',
+      'Авто|Партії|Запчастини|Стікери|Замовлення|Клієнти|Каси|Звіти|Команда|Інвентаризація|Склади|Нова Пошта|OLX',
     pricingAsk: 'Є питання — напиши в Telegram →',
     faqTitle: 'Поширені питання',
 
@@ -164,8 +134,6 @@ export const landingMessages = defineMessages({
     heroBadge: 'Software for car breakers — CRM and ERP',
     heroDemo:
       'Not ready to sign up? We’ll show you a demo on Telegram in 10 minutes',
-    heroStats:
-      '14 days=free|13 modules=in one interface|Web + iOS=web app and iPhone app',
     cardStatus: 'Car profile · live',
     cardPaidOff: 'Paid off',
     invested: 'Invested',
@@ -174,7 +142,6 @@ export const landingMessages = defineMessages({
     soldOf: '{sold} of {total}',
     heroSales: 'N47D20 engine|Bonnet|Left headlight',
     stickerPart: 'Left headlight',
-    stickerShelf: 'Shelf B3',
 
     ticker:
       'Nova Poshta=waybills from orders|OLX=listings from the part card|Telegram=sales notifications|QR stickers=print on any printer|Excel=stock import|App Store=your stock on your phone',
@@ -199,28 +166,17 @@ export const landingMessages = defineMessages({
     painEyebrow: 'Sound familiar?',
     painTitle:
       'When your books live in a notebook and Excel, money goes missing along with the parts',
-    painNow: 'Today',
-    painWith: 'With rozbirka',
     pains:
       'It’s all in the notebook, and the notebook is back at the yard=Photos, documents, history — no folders, no Excel|I stripped the Passat, but did it pay off? Who knows=You know exactly what you put in and what you got out|A customer is on the phone and I spend half an hour hunting for a headlight=Every part in its place — found in seconds|Dollars in the drawer, hryvnias in the bank — nothing adds up at month end=Several tills for different currencies and accounts — no mix-ups|The salesperson knows what I paid and hands out discounts at will=No prying eyes: salespeople don’t see the cost price|A part went missing and nobody knows who sold it=See who did what — a full activity log',
     trialNote: '14 days on the Pro plan',
 
-    howTitle: 'From VIN to the last nut — all in one profile',
-    howIntro: 'Photos, documents, history — no folders, no Excel.',
+    howTitle: 'The path of one part — from VIN to profit',
+    howIntro: 'One example: a BMW 320d E90 and its left headlight.',
     steps:
-      'Batch=Bought and added=Bought a batch — add it in one go, no retyping|Car=Stripped=Strip a car — the system counts every part|Sticker=QR stuck on=Print a sticker for every part: QR + name|Sale=Sold=Build an order in a few clicks: customer, part, price',
+      'Car=Brought in a BMW E90=Added the car by VIN and entered what you paid for it|Sticker=Took off the left headlight=Printed QR #A-0142 and put the part on shelf B3|Sale=A customer bought it=Scanned the QR — the headlight is already in order #1048|Profit=The car paid off=The BMW’s ROI updated right after the sale',
 
-    carsEyebrow: 'Cars and batches',
+    carsEyebrow: 'Cars',
     carsTitle: 'Clear profit on every car',
-    carsPoints:
-      'You know exactly what you put in and what you got out|See which car paid off best|Profit per batch on its own — exact, no guesswork|Find out which supplier made you the most',
-    chartLabel: 'Net profit · 6 months',
-    months: 'May|Jun|Jul|Aug|Sep|Oct',
-    carsList: 'Cars being stripped',
-    currencyLabel: 'Accounting currency · {code}',
-    carInvested: 'In {amount}',
-    carEarned: 'Out {amount}',
-    carParts: '{sold} of {total} parts',
 
     stockEyebrow: 'Stock and stickers',
     stockTitle: 'Every part in its place — found in seconds',
@@ -234,44 +190,29 @@ export const landingMessages = defineMessages({
     ordersEyebrow: 'Orders and tills',
     ordersTitle:
       'Flexible payment: several payments, different currencies and accounts',
-    orderTitle: 'Order #1048',
-    orderCustomer: 'Oleh K.',
-    orderReserved: '✓ Reserved',
-    orderPaid: 'Paid',
-    orderShipping: 'Shipping',
-    orderLines: 'Left headlight BMW E90|Right mirror|ABS unit',
-    orderTotal: 'Total',
-    cashTitle: 'Tills',
-    cashRows: 'Cash|Business account|Cash',
-    cashNote: 'See every till’s balance in real time',
-    orderPoints:
-      'Track status from reservation to shipping|Payments land in the right till automatically|Move money between tills in one click|The customer is linked — their whole purchase history at hand|Quick receipts and invoices — no manual busywork',
 
     teamEyebrow: 'Team',
-    teamTitle: 'No prying eyes: salespeople don’t see the cost price',
+    teamTitle: 'Your yard keeps running even when you’re not there',
+    teamLead:
+      'Everyone on the team sees their part of the work. You see it all.',
     teamPoints:
-      'Add staff — each with their own role and access|See who did what — a full activity log|Know who sold and earned how much',
-    permAccess: 'Access',
-    permRoles: 'Owner|Manager|Salesperson',
-    permRows: 'Cost price|Sale prices|Tills|Reports|Activity log',
-    permYes: '✓ Yes',
-    permNo: '— No',
+      'Add staff and give each of them access only to what they need|Every action is logged: who added a part, sold it, changed a price or made a return|See who sold how much today and this month',
+    teamLogTitle: 'Activity log · today',
+    teamOnline: 'online',
+    teamLog:
+      '09:12=Took in a BMW 320d E90, put on 46 stickers=Oleh · Mechanic|10:40=Order #1048 paid · {paid}=Iryna · Manager|11:05=Changed a price: Left headlight {from} → {to}=Iryna · Manager|13:30=N47D20 engine → shelf C-04=Oleh · Mechanic|15:10=Nova Poshta waybill for #1048=Iryna · Manager',
+    teamSales: 'Iryna’s sales today',
 
-    midTitle: 'Try it at your own yard — 14 days free',
+    trialTitle: 'Try it at your own yard —',
+    trialAccent: '14 days free',
     midBody: 'Add your first car, stick on the stickers, run your first order.',
     startFree: 'Start for free',
     orderDemo: 'Book a demo',
 
-    compareEyebrow: 'Comparison',
-    compareTitle: 'Why not Excel or a generic auto parts shop system',
-    compareCols: 'Excel / notebook|Generic ERP',
-    compare:
-      'Profit and ROI per car=Worked out by hand=No=Automatic|Batches and cost per part=Formulas break=Partly=Out of the box|QR sticker on every part=No=Product barcodes=QR + shelf + car|Working from a phone=Awkward=Warehouse app=Your whole business on your phone|Hide cost price from salespeople=Impossible=Depends on the plan=Roles and permissions|Built for car breakers=No=One of many segments=Yes',
-
     pricingEyebrow: 'Plan',
     pricingIncluded: 'Included',
     pricingModules:
-      'Cars|Batches|Stock|Labels|Orders|Customers|Tills|Reports|Team|Stocktaking|Warehouses|Nova Poshta|OLX',
+      'Cars|Batches|Parts|Labels|Orders|Customers|Tills|Reports|Team|Stocktaking|Warehouses|Nova Poshta|OLX',
     pricingAsk: 'Questions? Message us on Telegram →',
     faqTitle: 'Frequently asked questions',
 
@@ -314,8 +255,6 @@ export const landingMessages = defineMessages({
     heroBadge: 'Program do demontażu aut — CRM i ERP',
     heroDemo:
       'Nie chcesz się jeszcze rejestrować? Pokażemy demo na Telegramie w 10 minut',
-    heroStats:
-      '14 dni=za darmo|13 modułów=w jednym interfejsie|Web + iOS=wersja przeglądarkowa i aplikacja',
     cardStatus: 'Profil auta · online',
     cardPaidOff: 'Zwróciło się',
     invested: 'Włożone',
@@ -324,7 +263,6 @@ export const landingMessages = defineMessages({
     soldOf: '{sold} z {total}',
     heroSales: 'Silnik N47D20|Maska|Lewy reflektor',
     stickerPart: 'Lewy reflektor',
-    stickerShelf: 'Półka B3',
 
     ticker:
       'Nova Poshta=listy przewozowe z zamówienia|OLX=ogłoszenia z karty części|Telegram=powiadomienia o sprzedaży|Naklejki QR=druk na dowolnej drukarce|Excel=import magazynu|App Store=magazyn w telefonie',
@@ -350,28 +288,17 @@ export const landingMessages = defineMessages({
     painEyebrow: 'Znasz to?',
     painTitle:
       'Gdy ewidencja jest w zeszycie i Excelu, pieniądze giną razem z częściami',
-    painNow: 'Teraz',
-    painWith: 'Z rozbirka',
     pains:
       'Wszystko jest w zeszycie, a zeszyt został w magazynie=Zdjęcia, dokumenty, historia — bez teczek i Excela|Rozebrałem Passata, ale czy się zwrócił — kto wie=Dokładnie wiesz, ile włożyłeś i ile odzyskałeś|Klient czeka na telefonie, a ja pół godziny szukam reflektora po półkach=Każda część na swoim miejscu — znajdujesz w kilka sekund|Dolary w szufladzie, hrywny na koncie — pod koniec miesiąca nic się nie zgadza=Kilka kas na różne waluty i konta — nic się nie myli|Sprzedawca wie, za ile kupiłem, i daje rabaty, jak chce=Bez zbędnych oczu: sprzedawca nie widzi kosztu zakupu|Część zniknęła i nikt nie wie, kto ją sprzedał=Widzisz, kto co zrobił — pełny dziennik działań',
     trialNote: '14 dni na planie Pro',
 
-    howTitle: 'Od VIN po ostatnią śrubkę — wszystko w jednym profilu',
-    howIntro: 'Zdjęcia, dokumenty, historia — bez teczek i Excela.',
+    howTitle: 'Droga jednej części — od VIN do zysku',
+    howIntro: 'Jeden przykład: BMW 320d E90 i jego lewy reflektor.',
     steps:
-      'Partia=Kupiłeś i dodałeś=Kupiłeś partię — dodajesz jednym ruchem, bez przepisywania|Auto=Rozebrałeś=Rozbierasz auto — system liczy każdą część|Naklejka=Nakleiłeś QR=Drukujesz naklejkę na każdą część: QR + nazwa|Sprzedaż=Sprzedałeś=Składasz zamówienie w kilka kliknięć: klient, część, cena',
+      'Auto=Przywiozłeś BMW E90=Dodałeś auto po VIN i wpisałeś, ile za nie zapłaciłeś|Naklejka=Zdjąłeś lewy reflektor=Wydrukowałeś QR #A-0142 i odłożyłeś część na półkę B3|Sprzedaż=Klient kupił reflektor=Zeskanowałeś QR — reflektor jest już w zamówieniu #1048|Zysk=Auto się zwróciło=ROI dla BMW zaktualizował się zaraz po sprzedaży',
 
-    carsEyebrow: 'Auta i partie',
+    carsEyebrow: 'Auta',
     carsTitle: 'Przejrzysty zysk z każdego auta',
-    carsPoints:
-      'Dokładnie wiesz, ile włożyłeś i ile odzyskałeś|Widzisz, które auto zwróciło się najlepiej|Zysk z partii osobno — dokładnie, bez zgadywania|Wiesz, który dostawca przyniósł najwięcej',
-    chartLabel: 'Zysk netto · 6 miesięcy',
-    months: 'Maj|Cze|Lip|Sie|Wrz|Paź',
-    carsList: 'Auta w demontażu',
-    currencyLabel: 'Waluta rozliczeniowa · {code}',
-    carInvested: 'Włożone {amount}',
-    carEarned: 'Odzyskane {amount}',
-    carParts: '{sold} z {total} części',
 
     stockEyebrow: 'Magazyn i naklejki',
     stockTitle: 'Każda część na swoim miejscu — znajdujesz w kilka sekund',
@@ -384,46 +311,29 @@ export const landingMessages = defineMessages({
 
     ordersEyebrow: 'Zamówienia i kasy',
     ordersTitle: 'Elastyczna płatność: kilka wpłat, różne waluty i konta',
-    orderTitle: 'Zamówienie #1048',
-    orderCustomer: 'Ołeh K.',
-    orderReserved: '✓ Rezerwacja',
-    orderPaid: 'Opłacone',
-    orderShipping: 'Wysyłka',
-    orderLines: 'Lewy reflektor BMW E90|Prawe lusterko|Moduł ABS',
-    orderTotal: 'Razem',
-    cashTitle: 'Kasy',
-    cashRows: 'Gotówka|Konto firmowe|Gotówka',
-    cashNote: 'Widzisz saldo każdej kasy na bieżąco',
-    orderPoints:
-      'Widzisz status od rezerwacji do wysyłki|Płatność automatycznie trafia do właściwej kasy|Przenosisz pieniądze między kasami jednym kliknięciem|Klient jest przypisany — cała historia zakupów pod ręką|Szybkie paragony i faktury — bez ręcznej rutyny',
 
     teamEyebrow: 'Zespół',
-    teamTitle: 'Bez zbędnych oczu: sprzedawca nie widzi kosztu zakupu',
+    teamTitle: 'Twój demontaż działa, nawet gdy cię nie ma na miejscu',
+    teamLead: 'Każdy w zespole widzi swoją część pracy. Ty widzisz wszystko.',
     teamPoints:
-      'Dodajesz pracowników — każdy ma swoją rolę i dostęp|Widzisz, kto co zrobił — pełny dziennik działań|Wiesz, kto ile sprzedał i zarobił',
-    permAccess: 'Dostęp',
-    permRoles: 'Właściciel|Menedżer|Sprzedawca',
-    permRows: 'Koszt zakupu|Ceny sprzedaży|Kasy|Raporty|Dziennik działań',
-    permYes: '✓ Tak',
-    permNo: '— Nie',
+      'Dodajesz pracowników i dajesz każdemu dostęp tylko do tego, czego potrzebuje|Każde działanie w dzienniku: kto dodał część, sprzedał, zmienił cenę albo przyjął zwrot|Widać, kto ile sprzedał w ciągu dnia i miesiąca',
+    teamLogTitle: 'Dziennik działań · dziś',
+    teamOnline: 'online',
+    teamLog:
+      '09:12=Przyjął BMW 320d E90, nakleił 46 naklejek=Ołeh · Mechanik|10:40=Zamówienie #1048 opłacone · {paid}=Iryna · Menedżerka|11:05=Zmieniła cenę: Lewy reflektor {from} → {to}=Iryna · Menedżerka|13:30=Silnik N47D20 → półka C-04=Ołeh · Mechanik|15:10=List przewozowy Nova Poshta do #1048=Iryna · Menedżerka',
+    teamSales: 'Sprzedaż Iryny dziś',
 
-    midTitle: 'Sprawdź u siebie — 14 dni za darmo',
+    trialTitle: 'Sprawdź u siebie —',
+    trialAccent: '14 dni za darmo',
     midBody:
       'Dodaj pierwsze auto, naklej naklejki, zrealizuj pierwsze zamówienie.',
     startFree: 'Zacznij za darmo',
     orderDemo: 'Zamów demo',
 
-    compareEyebrow: 'Porównanie',
-    compareTitle:
-      'Dlaczego nie Excel i nie uniwersalny program dla sklepu motoryzacyjnego',
-    compareCols: 'Excel / zeszyt|Uniwersalny ERP',
-    compare:
-      'Zysk i ROI z każdego auta=Liczysz ręcznie=Brak=Automatycznie|Partie i koszt części=Formuły się psują=Częściowo=Od razu|Naklejka QR na każdą część=Brak=Kody kreskowe towarów=QR + półka + auto|Praca z telefonu=Niewygodnie=Aplikacja magazynowa=Cały biznes w telefonie|Ukrycie kosztu zakupu przed sprzedawcą=Niemożliwe=Zależy od planu=Role i uprawnienia|Stworzony dla demontażu aut=Nie=Jeden z segmentów=Tak',
-
     pricingEyebrow: 'Plan',
     pricingIncluded: 'W cenie',
     pricingModules:
-      'Auta|Partie|Magazyn|Naklejki|Zamówienia|Klienci|Kasy|Raporty|Zespół|Inwentaryzacja|Magazyny|Nova Poshta|OLX',
+      'Auta|Partie|Części|Naklejki|Zamówienia|Klienci|Kasy|Raporty|Zespół|Inwentaryzacja|Magazyny|Nova Poshta|OLX',
     pricingAsk: 'Masz pytania? Napisz na Telegramie →',
     faqTitle: 'Najczęstsze pytania',
 

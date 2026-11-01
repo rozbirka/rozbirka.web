@@ -26,7 +26,7 @@ for (const entry of [
       'data-app-hydrated',
       'true',
     )
-    const mobile = (page.viewportSize()?.width ?? 1280) < 1024
+    const mobile = (page.viewportSize()?.width ?? 1280) < 900
     if (mobile) {
       await page.getByRole('button', { name: 'Відкрити меню' }).click()
       await page.getByRole('link', { name: entry.name, exact: true }).click()

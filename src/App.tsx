@@ -5,9 +5,9 @@ import { Hero, IntegrationsTicker } from '@/components/site/hero'
 import { Reviews } from '@/components/site/reviews'
 import { Pains } from '@/components/site/pains'
 import { HowItWorks } from '@/components/site/how-it-works'
+import { CarsSpotlight } from '@/components/site/cars-demo'
+import { OrdersSpotlight } from '@/components/site/orders-demo'
 import {
-  CarsSpotlight,
-  OrdersSpotlight,
   StockSpotlight,
   TeamSpotlight,
   TrialBand,
@@ -65,7 +65,7 @@ function App() {
       >
         {t('skipToContent')}
       </a>
-      <div className="bg-lp-bg text-lp-ink font-onest relative isolate min-h-dvh overflow-x-clip leading-[normal] antialiased">
+      <div className="text-lp-ink font-onest relative isolate min-h-dvh overflow-x-clip bg-lp-bg leading-[normal] antialiased">
         <SiteHeader />
         <SupportLink />
         <main id="main">

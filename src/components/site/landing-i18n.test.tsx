@@ -95,10 +95,10 @@ describe('localized landing', () => {
     for (const title of [
       'Already on board',
       'Sound familiar?',
-      'From VIN to the last nut — all in one profile',
+      'The path of one part — from VIN to profit',
       'Clear profit on every car',
       'Every part in its place — found in seconds',
-      'No prying eyes: salespeople don’t see the cost price',
+      'Your yard keeps running even when you’re not there',
       '13 modules in one system',
       'Why not Excel or a generic auto parts shop system',
       'One plan — every module',
@@ -107,7 +107,7 @@ describe('localized landing', () => {
       expect(screen.getAllByText(title).length).toBeGreaterThan(0)
     }
     expect(
-      screen.getByRole('heading', { level: 3, name: 'Tills' }),
+      screen.getByRole('heading', { level: 4, name: 'Tills' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('heading', {

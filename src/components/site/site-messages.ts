@@ -9,10 +9,8 @@ import { defineMessages } from '@/i18n/messages'
 export const siteMessages = defineMessages({
   uk: {
     heroTitle: 'Знаєш, де кожна деталь і де твої гроші',
-    heroTitleStart: 'Знаєш, де кожна деталь і де',
-    heroTitleAccent: 'твої гроші',
-    heroSub:
-      'Бачиш, яке авто окупилось, знаходиш будь-яку деталь за секунди і не губиш жодного замовлення.',
+    heroTitleStart: 'Знаєш, де кожна деталь',
+    heroTitleAccent: 'і де твої гроші',
     navHow: 'Як це працює',
     navReviews: 'Відгуки',
     support: 'Написати в підтримку',
@@ -26,6 +24,7 @@ export const siteMessages = defineMessages({
     account: 'Кабінет',
     navFeatures: 'Можливості',
     navPricing: 'Тарифи',
+    navPricingShort: 'Тариф',
     navFaq: 'FAQ',
     logoLabel: 'rozbirka — на головну',
     siteLang: 'Мова сайту',
@@ -46,10 +45,8 @@ export const siteMessages = defineMessages({
   },
   'en-GB': {
     heroTitle: 'Know where every part is and where your money is',
-    heroTitleStart: 'Know where every part is and where',
-    heroTitleAccent: 'your money is',
-    heroSub:
-      'See which car paid off, find any part in seconds and never lose an order.',
+    heroTitleStart: 'Know where every part is',
+    heroTitleAccent: 'and where your money is',
     navHow: 'How it works',
     navReviews: 'Reviews',
     support: 'Contact support',
@@ -63,6 +60,7 @@ export const siteMessages = defineMessages({
     account: 'Account',
     navFeatures: 'Features',
     navPricing: 'Pricing',
+    navPricingShort: 'Pricing',
     navFaq: 'FAQ',
     logoLabel: 'rozbirka — home',
     siteLang: 'Site language',
@@ -81,10 +79,8 @@ export const siteMessages = defineMessages({
   },
   pl: {
     heroTitle: 'Wiesz, gdzie każda część i gdzie są Twoje pieniądze',
-    heroTitleStart: 'Wiesz, gdzie każda część i gdzie są',
-    heroTitleAccent: 'Twoje pieniądze',
-    heroSub:
-      'Widzisz, które auto się zwróciło, znajdujesz każdą część w kilka sekund i nie gubisz żadnego zamówienia.',
+    heroTitleStart: 'Wiesz, gdzie każda część',
+    heroTitleAccent: 'i gdzie są Twoje pieniądze',
     navHow: 'Jak to działa',
     navReviews: 'Opinie',
     support: 'Napisz do wsparcia',
@@ -98,6 +94,7 @@ export const siteMessages = defineMessages({
     account: 'Konto',
     navFeatures: 'Funkcje',
     navPricing: 'Cennik',
+    navPricingShort: 'Cennik',
     navFaq: 'FAQ',
     logoLabel: 'rozbirka — strona główna',
     siteLang: 'Język strony',
