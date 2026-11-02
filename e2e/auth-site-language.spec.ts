@@ -26,10 +26,19 @@ for (const entry of [
       'data-app-hydrated',
       'true',
     )
-    const mobile = (page.viewportSize()?.width ?? 1280) < 1024
+    const mobile = (page.viewportSize()?.width ?? 1280) < 900
+    // The switch has finished once the new landing has moved focus to its
+    // H1. A click before that can race the switch's own navigation in
+    // WebKit and leave the page on the landing.
+    const switched = async () => {
+      await expect(page).toHaveURL(entry.locale === 'pl' ? /\/pl$/ : /\/en$/)
+      await expect(page.locator('html')).toHaveAttribute('lang', entry.locale)
+      await expect(page.locator('#main h1')).toBeFocused()
+    }
     if (mobile) {
       await page.getByRole('button', { name: 'Відкрити меню' }).click()
       await page.getByRole('link', { name: entry.name, exact: true }).click()
+      await switched()
       await page
         .getByRole('button', {
           name: entry.locale === 'pl' ? 'Otwórz menu' : 'Open menu',
@@ -38,12 +47,14 @@ for (const entry of [
     } else {
       await page.getByRole('button', { name: 'Мова сайту: українська' }).click()
       await page.getByRole('menuitemradio', { name: entry.name }).click()
+      await switched()
     }
     await page
       .getByRole('link', { name: entry.login, exact: true })
       .filter({ visible: true })
       .first()
       .click()
+    await expect(page).toHaveURL(/\/login$/)
     await expect(page.getByRole('heading', { name: entry.title })).toBeVisible()
     await expect(page.locator('html')).toHaveAttribute('lang', entry.locale)
     await page.reload()

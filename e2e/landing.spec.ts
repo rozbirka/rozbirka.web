@@ -54,9 +54,6 @@ test('landing interactions work without serious accessibility violations', async
     'true',
   )
   await expect(
-    page.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-  ).toBeDisabled()
-  await expect(
     page.getByRole('heading', {
       name: 'Усе для щоденної роботи авторозбірки',
     }),
@@ -68,61 +65,50 @@ test('landing interactions work without serious accessibility violations', async
     ),
   ).toEqual([])
 
-  await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await expect(
-    page.getByRole('button', { name: 'Зупинити автопрокрутку' }),
-  ).toBeEnabled()
-  await page.getByRole('button', { name: 'Наступна' }).click()
-  await page.getByRole('button', { name: 'Зупинити автопрокрутку' }).click()
-  await expect(
-    page.getByRole('button', { name: 'Увімкнути автопрокрутку' }),
-  ).toHaveAttribute('aria-pressed', 'true')
+  const second = page.getByRole('button', {
+    name: 'Як швидко я можу почати працювати після реєстрації?',
+  })
+  await second.click()
+  await expect(second).toHaveAttribute('aria-expanded', 'true')
   await expect(
     page.getByRole('link', { name: 'Почати 14 днів безкоштовно' }),
   ).toHaveAttribute('href', '/login?plan=pro_monthly')
 })
 
-test('hero content is immediately visible with reduced motion', async ({
+test('landing content is immediately visible with reduced motion', async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
+  await expect(page.locator('#root')).toHaveAttribute(
+    'data-app-hydrated',
+    'true',
+  )
 
-  const animatedHeroNodes = [
-    page.getByText('Знаєш', { exact: true }),
-    page.getByText('де кожна', { exact: true }),
-    page.getByText('деталь і де', { exact: true }),
-    page.getByText('твої гроші', { exact: true }),
-    page.getByText(
-      "Застосунок, який об'єднує фінанси, функції та управління в одному інтерфейсі.",
-    ),
-    page.getByRole('link', { name: 'Спробувати безкоштовно' }).locator('..'),
-  ]
-
-  for (const node of animatedHeroNodes) {
-    await expect(node).toBeVisible()
-    await expect(node).toHaveCSS('animation-name', 'none')
-    await expect(node).toHaveCSS('opacity', '1')
-    await expect(node).toHaveCSS('transform', 'none')
+  for (const id of ['top', 'reviews', 'features', 'pricing', 'faq']) {
+    const section = page.locator(`#${id}`)
+    await section.scrollIntoViewIfNeeded()
+    await expect(section).toHaveCSS('opacity', '1')
+    await expect(section).toHaveCSS('transform', 'none')
   }
+  await expect(page.locator('#top [data-count]').first()).toHaveText(
+    /^\$3\s200$/,
+  )
 })
 
-test('hero LCP line is visible from initial paint while later lines stagger', async ({
+test('blocks below the fold fade in when scrolled into view', async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
-
-  const firstHeroLine = page.getByText('Знаєш', { exact: true })
-  await expect(firstHeroLine).toBeVisible()
-  await expect(firstHeroLine).toHaveCSS('opacity', '1')
-  await expect(firstHeroLine).toHaveCSS('transform', 'none')
-  await expect(firstHeroLine).toHaveCSS('animation-name', 'none')
-
-  await expect(page.getByText('де кожна', { exact: true })).toHaveCSS(
-    'animation-name',
-    'fade-up',
+  await page.goto('/')
+  await expect(page.locator('#root')).toHaveAttribute(
+    'data-app-hydrated',
+    'true',
   )
+
+  const faq = page.locator('#faq')
+  await faq.scrollIntoViewIfNeeded()
+  await expect(faq).toHaveCSS('opacity', '1')
 })
 
 test('direct SPA deep links mount one matching page without hydration warnings', async ({
@@ -149,69 +135,41 @@ test('direct SPA deep links mount one matching page without hydration warnings',
   await expect(
     page.getByRole('heading', {
       level: 1,
-      name: 'Знаєш де кожна деталь і де твої гроші',
+      name: /Знаєш, де кожна деталь і де твої гроші/,
     }),
   ).toHaveCount(0)
   expect(hydrationWarnings).toEqual([])
 })
 
 test.describe('responsive matrix', () => {
-  test('uses the Visuelt Pro footer typography on the landing page', async ({
+  test('uses the Unbounded and Onest typography of the mock-up', async ({
     page,
   }) => {
     await page.goto('/')
     await page.evaluate(() => document.fonts.ready)
 
-    const wordmark = page.locator('footer p').filter({ hasText: /^rozbirka$/ })
-    const fontFamily = await wordmark.evaluate(
-      (element) => getComputedStyle(element).fontFamily,
-    )
-
-    expect(fontFamily).toContain('Visuelt Pro')
+    const fonts = await page.evaluate(() => ({
+      heading: getComputedStyle(document.querySelector('h1 > span:last-child')!)
+        .fontFamily,
+      body: getComputedStyle(document.querySelector('#top p')!).fontFamily,
+    }))
+    expect(fonts.heading).toContain('Unbounded')
+    expect(fonts.body).toContain('Onest')
   })
 
   for (const { width, expectedFontSize } of [
-    { width: 375, expectedFontSize: '44px' },
-    { width: 768, expectedFontSize: '64px' },
-    { width: 1440, expectedFontSize: '88px' },
+    { width: 375, expectedFontSize: '36px' },
+    { width: 1600, expectedFontSize: '72px' },
   ]) {
-    test(`uses compact hero typography at ${width}px`, async ({ page }) => {
+    test(`scales the hero heading at ${width}px`, async ({ page }) => {
       await page.emulateMedia({ reducedMotion: 'reduce' })
       await page.setViewportSize({ width, height: 1000 })
       await page.goto('/')
 
-      await expect(page.getByRole('heading', { level: 1 })).toHaveCSS(
+      await expect(page.locator('h1 > span').last()).toHaveCSS(
         'font-size',
         expectedFontSize,
       )
-    })
-  }
-
-  for (const width of [375, 768, 1440]) {
-    test(`shows the complete shared footer wordmark at ${width}px`, async ({
-      page,
-    }) => {
-      await page.emulateMedia({ reducedMotion: 'reduce' })
-      await page.setViewportSize({ width, height: 1000 })
-      await page.goto('/')
-
-      const footer = page.locator('footer')
-      const wordmark = footer.locator('p').filter({ hasText: /^rozbirka$/ })
-      await expect(wordmark).toBeVisible()
-      await wordmark.scrollIntoViewIfNeeded()
-
-      const isFullyVisible = await wordmark.evaluate((element) => {
-        const wordmarkRect = element.getBoundingClientRect()
-        const containerRect = element.parentElement?.getBoundingClientRect()
-
-        return (
-          containerRect !== undefined &&
-          wordmarkRect.top >= containerRect.top &&
-          wordmarkRect.bottom <= containerRect.bottom
-        )
-      })
-
-      expect(isFullyVisible, `homepage at ${width}px`).toBe(true)
     })
   }
 
@@ -226,6 +184,12 @@ test.describe('responsive matrix', () => {
       await page.emulateMedia({ reducedMotion: 'reduce' })
       await page.setViewportSize({ width, height: 1000 })
       await page.goto('/', { waitUntil: 'networkidle' })
+      await expect(page.locator('#root')).toHaveAttribute(
+        'data-app-hydrated',
+        'true',
+      )
+      // Settle font metrics before Playwright measures the full-page height.
+      await page.evaluate(() => document.fonts.ready)
       await page
         .locator('img')
         .evaluateAll(async (images: HTMLImageElement[]) => {
@@ -241,12 +205,46 @@ test.describe('responsive matrix', () => {
           () => document.documentElement.scrollWidth === window.innerWidth,
         ),
       ).toBe(true)
+      // A full-page capture stretches the viewport itself and its height then
+      // drifts by a few pixels between captures (the page is 14 523.2px tall,
+      // the image 14 523 or 14 526). Size the viewport to the content instead.
+      // The capture sizes the viewport to the whole page. Sizes set in vh
+      // (the modules story steps and window) would then grow with it, so pin
+      // them to their pixel values at the normal viewport first.
+      await page.evaluate(() => {
+        for (const element of document.querySelectorAll<HTMLElement>(
+          '[class*="vh"]',
+        )) {
+          const style = getComputedStyle(element)
+          element.style.minHeight = style.minHeight
+          element.style.height = style.height
+          element.style.top = style.top
+        }
+      })
+      // scrollHeight, not the root's box: `html` is 100% of the viewport.
+      const pageHeight = await page.evaluate(
+        () => document.documentElement.scrollHeight,
+      )
+      await page.setViewportSize({ width, height: pageHeight })
+      await page.evaluate(() => window.scrollTo(0, 0))
+      // Let observers and scroll-driven state react to the resize.
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      )
+      await page.waitForTimeout(500)
       const platformSuffix = process.platform === 'linux' ? '-linux' : ''
       await expect(page).toHaveScreenshot(
         `landing-${width}${platformSuffix}.png`,
         {
-          fullPage: true,
           animations: 'disabled',
+          timeout: 15_000,
+          // Glass cards (backdrop-filter) are composited on their own layers,
+          // so their text can land a sub-pixel apart between runs: a few
+          // hundred pixels of millions. Layout changes move far more.
+          maxDiffPixels: 2000,
         },
       )
     })

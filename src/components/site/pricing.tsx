@@ -1,40 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowUpRight, Check } from 'lucide-react'
 import { Link } from 'react-router'
 import { billingApi } from '@/api/billing'
 import { useAuth } from '@/auth/AuthContext'
-import { resolveLandingPlans, type LandingPlan } from '@/lib/landing-plans'
-import { cn } from '@/lib/utils'
+import { resolveLandingPlans } from '@/lib/landing-plans'
 import { accountPathForPlan, loginPathForPlan } from '@/lib/plan-selection'
-import { Section } from '@/components/layout/section'
-import { PageContainer } from '@/components/layout/page-container'
 import { useLocale, useT } from '@/i18n'
+import { Eyebrow, SectionInner, SectionTitle } from './landing-ui'
+import { useSupportHref } from './landing-hooks'
+import { landingMessages, listOf } from './landing-messages'
 import { siteMessages } from './site-messages'
-
-const variantStyles: Record<
-  LandingPlan['variant'],
-  { card: string; pill: string; description: string; cta: string; perk: string }
-> = {
-  pro: {
-    card: 'bg-brand text-brand-foreground',
-    pill: 'bg-black/15 text-black ring-1 ring-black/10',
-    description: 'text-black/70',
-    cta: 'text-black',
-    perk: 'text-black/80',
-  },
-  enterprise: {
-    card: 'bg-surface-1 ring-1 ring-white/[0.05] text-white',
-    pill: 'bg-white/[0.06] text-white ring-1 ring-white/10',
-    description: 'text-neutral-400',
-    cta: 'text-white',
-    perk: 'text-neutral-300',
-  },
-}
-
 export function Pricing() {
   const { status } = useAuth()
   const { locale } = useLocale()
   const t = useT(siteMessages)
+  const l = useT(landingMessages)
+  const supportHref = useSupportHref()
   // Raw API catalog; `null` (not loaded or failed) renders the fallback plans.
   const [catalog, setCatalog] = useState<unknown>(null)
   const plans = useMemo(
@@ -57,117 +37,81 @@ export function Pricing() {
     }
   }, [])
 
-  return (
-    <Section id="pricing" className="py-16 lg:py-24">
-      <PageContainer width="md">
-        <div className="mx-auto max-w-[1100px]">
-          <h2 className="mb-12 text-[40px] leading-[1] font-light tracking-[-0.02em] lg:mb-16 lg:text-[56px]">
-            {t('pricingTitle')}
-          </h2>
-          <ul role="list" className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {plans.map((plan) => {
-              const destination =
-                status === 'authenticated'
-                  ? accountPathForPlan(plan.code)
-                  : loginPathForPlan(plan.code)
+  // The landing sells one plan (Pro); see `landing-plans`.
+  const plan = plans[0]!
+  const destination =
+    status === 'authenticated'
+      ? accountPathForPlan(plan.code)
+      : loginPathForPlan(plan.code)
 
-              return (
-                <PlanCard
-                  key={plan.name}
-                  plan={plan}
-                  destination={destination}
-                />
-              )
-            })}
-          </ul>
+  return (
+    <section id="pricing" data-reveal="" data-tone="light" className="lp-light">
+      <SectionInner className="gap-12 max-sm:gap-10">
+        <div className="flex max-w-[760px] flex-col gap-4">
+          <Eyebrow tone="paper">{l('pricingEyebrow')}</Eyebrow>
+          <SectionTitle>{t('pricingTitle')}</SectionTitle>
         </div>
-      </PageContainer>
-    </Section>
-  )
-}
-
-function PlanCard({
-  plan,
-  destination,
-}: {
-  plan: LandingPlan
-  destination: string
-}) {
-  const t = useT(siteMessages)
-  const styles = variantStyles[plan.variant]
-  const isPro = plan.variant === 'pro'
-
-  return (
-    <li
-      className={cn(
-        'group rounded-(--radius-card) relative flex min-h-[440px] flex-col gap-6 p-8 transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-2xl motion-reduce:transition-none motion-reduce:hover:translate-y-0 lg:p-10',
-        styles.card,
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className={cn(
-            'inline-flex w-fit items-center rounded-full px-3.5 py-1.5 text-[12px] tracking-[0.02em]',
-            styles.pill,
-          )}
-        >
-          {plan.name}
-        </span>
-        {isPro && (
-          <span className="text-[11px] tracking-[0.1em] text-black/70 uppercase">
-            {t('pricingPopular')}
-          </span>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <p className="flex items-end gap-2 font-light tracking-[-0.04em]">
-          <span className="text-[64px] leading-[0.9] lg:text-[80px]">
-            {plan.price}
-          </span>
-          <span className="font-visuelt mb-[0.55em] self-end whitespace-nowrap text-[14px] leading-none font-normal tracking-normal opacity-70">
-            / {plan.period}
-          </span>
-        </p>
-        {isPro && (
-          <p className="text-[13px] font-medium opacity-80">
-            {t('pricingTrial', { count: plan.trialDays })}
-          </p>
-        )}
-      </div>
-
-      <p className={cn('text-[13px] lg:text-[14px]', styles.description)}>
-        {plan.description}
-      </p>
-
-      <ul role="list" className="flex flex-col gap-2.5">
-        {plan.perks.map((perk) => (
-          <li
-            key={perk}
-            className={cn(
-              'flex items-start gap-2.5 text-[13px] leading-[1.4]',
-              styles.perk,
-            )}
-          >
-            <Check className="mt-0.5 size-4 shrink-0 opacity-70" aria-hidden />
-            <span>{perk}</span>
-          </li>
-        ))}
-      </ul>
-
-      <Link
-        to={destination}
-        className={cn(
-          'mt-auto inline-flex min-h-11 items-center gap-2 py-2 text-[13px] font-normal tracking-[0.02em] uppercase transition-opacity hover:opacity-70',
-          styles.cta,
-        )}
-      >
-        <span>{plan.ctaLabel}</span>
-        <ArrowUpRight
-          className="size-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-          aria-hidden
-        />
-      </Link>
-    </li>
+        <article className="bg-lp-bg grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] overflow-hidden rounded-[32px] max-sm:rounded-3xl">
+          <div className="flex flex-col gap-7 bg-[radial-gradient(120%_90%_at_0%_0%,rgba(255,106,26,0.22),transparent_60%)] p-12 max-sm:px-[22px] max-sm:py-7">
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="font-unbounded m-0 text-[24px] font-semibold">
+                {plan.name}
+              </h3>
+              <span className="bg-lp-accent text-lp-bg rounded-full px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap">
+                {t('pricingTrial', { count: plan.trialDays })}
+              </span>
+            </div>
+            <p className="m-0 flex flex-wrap items-baseline gap-2.5">
+              <span className="font-unbounded text-[clamp(64px,8vw,104px)] leading-[0.95] font-semibold tracking-[-0.05em] tabular-nums">
+                {plan.price}
+              </span>
+              <span className="text-lp-muted text-[18px]">/ {plan.period}</span>
+            </p>
+            <p className="text-lp-muted m-0 max-w-[380px] text-[17px] leading-[1.5] text-pretty">
+              {plan.description}
+            </p>
+            <div className="mt-auto flex flex-col gap-3">
+              <Link
+                to={destination}
+                className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover lp-btn-glow flex h-14 items-center justify-center rounded-full px-7 text-center text-[17px] font-semibold transition-transform duration-150 ease-out active:scale-[0.97]"
+              >
+                {plan.ctaLabel}
+              </Link>
+              {supportHref && (
+                <a
+                  href={supportHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-lp-muted hover:text-lp-accent-hover flex min-h-11 items-center justify-center text-center text-[15px]"
+                >
+                  {l('pricingAsk')}
+                </a>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col justify-center gap-4 border-l border-white/[0.08] p-12 max-[847px]:border-t max-[847px]:border-l-0 max-sm:px-[22px] max-sm:py-7">
+            <h4 className="text-lp-dim m-0 text-[14px] font-normal">
+              {l('pricingIncluded')}
+            </h4>
+            <ul
+              role="list"
+              className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,150px),1fr))] gap-x-6 gap-y-3.5 p-0 max-sm:grid-cols-2 max-sm:gap-x-4 max-sm:gap-y-3"
+            >
+              {listOf(l('pricingModules')).map((module) => (
+                <li
+                  key={module}
+                  className="text-lp-soft flex items-baseline gap-3 text-[17px] leading-[1.4] max-sm:text-[15px]"
+                >
+                  <span className="text-lp-accent flex-none" aria-hidden>
+                    ✓
+                  </span>
+                  {module}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </article>
+      </SectionInner>
+    </section>
   )
 }

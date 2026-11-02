@@ -1,82 +1,96 @@
-import { useEffect, useRef } from 'react'
-import { ArrowUp } from 'lucide-react'
-import { useLocation } from 'react-router'
-import { PageContainer } from '@/components/layout/page-container'
-import { BrandLogo } from '@/components/site/brand-logo'
-import { NavLinks } from '@/components/site/nav-links'
+import { navDestination, navItems } from '@/components/site/nav-items'
 import { useLocale, useT } from '@/i18n'
-import { landingLocaleForPath, landingPathFor } from '@/seo/landing-locales'
-import { SupportLink } from './support-link'
+import { landingPathFor } from '@/seo/landing-locales'
+import { LandingLogo, TelegramIcon } from './landing-ui'
+import { useSupportHref } from './landing-hooks'
+import { landingMessages } from './landing-messages'
 import { siteMessages } from './site-messages'
+import { APP_STORE_URL } from '@/lib/app-store'
+
+const footerNav = navItems.filter((item) => item.href !== '#reviews')
 
 export function SiteFooter() {
-  const { pathname } = useLocation()
-  const reducedMotion = useRef(false)
   const { locale } = useLocale()
   const t = useT(siteMessages)
-  const activeNavProps =
-    landingLocaleForPath(pathname) !== null ? { activeHref: '#top' } : {}
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    reducedMotion.current = mq.matches
-    const handler = (e: MediaQueryListEvent) => {
-      reducedMotion.current = e.matches
-    }
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-
-  const scrollToTop = () => {
-    window.scrollTo({
-      top: 0,
-      behavior: reducedMotion.current ? 'auto' : 'smooth',
-    })
-  }
+  const l = useT(landingMessages)
+  const supportHref = useSupportHref()
+  const landingPath = landingPathFor(locale)
+  const link = 'text-lp-soft min-h-6 text-[15px]'
 
   return (
-    <footer className="font-visuelt bg-background px-6 pt-12 pb-0">
-      <PageContainer>
-        <nav
-          aria-label={t('footerNav')}
-          className="flex flex-wrap items-center justify-between gap-6"
-        >
-          <div className="flex flex-wrap items-center gap-6">
-            <BrandLogo href={landingPathFor(locale)} />
-            <NavLinks {...activeNavProps} />
+    <footer className="border-t border-white/[0.07]">
+      <div className="mx-auto flex max-w-[1240px] flex-col gap-14 px-6 pt-[72px] pb-10">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-10 max-sm:grid-cols-2 max-sm:gap-x-5 max-sm:gap-y-8 max-sm:[&>*:nth-child(3)]:col-span-full">
+          <div className="flex flex-col gap-[18px]">
+            <LandingLogo className="gap-2 text-[22px]" markSize={26} />
+            <span className="text-lp-muted max-w-[260px] text-[15px] leading-[1.5]">
+              {l('footerTagline')}
+            </span>
           </div>
-
-          <div className="flex flex-wrap items-center gap-6">
-            <ul role="list" className="flex flex-wrap items-center gap-6">
-              <SupportLink asListItem />
-              <li>
-                {/* The privacy policy is a Ukrainian legal text only. */}
-                <a
-                  href="/privacy"
-                  hrefLang={locale === 'uk' ? undefined : 'uk'}
-                  className="inline-flex min-h-11 items-center text-[15px] text-neutral-300 hover:text-white"
-                >
-                  {t('privacyPolicy')}
-                </a>
-              </li>
-            </ul>
-            <button
-              type="button"
-              onClick={scrollToTop}
-              aria-label={t('backToTop')}
-              className="grid size-14 place-items-center rounded-full text-white ring-1 ring-white/15 transition-colors hover:bg-white/[0.04]"
+          <nav
+            aria-label={l('footerProduct')}
+            className="flex flex-col gap-3.5"
+          >
+            <span className="text-lp-dim text-[14px]">
+              {l('footerProduct')}
+            </span>
+            {footerNav.map((item) => (
+              <a
+                key={item.href}
+                href={navDestination(item, landingPath)}
+                className={link}
+              >
+                {t(item.label)}
+              </a>
+            ))}
+          </nav>
+          <div className="flex flex-col gap-3.5">
+            <span className="text-lp-dim text-[14px]">
+              {l('footerSupport')}
+            </span>
+            {supportHref && (
+              <a
+                href={supportHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={t('supportAria')}
+                className="text-lp-ink hover:border-lp-telegram hover:text-lp-ink flex h-12 items-center gap-2.5 self-start rounded-full border border-white/16 pr-5 pl-3 text-[15px] font-semibold whitespace-nowrap"
+              >
+                <TelegramIcon size={26} />@{supportHref.split('/').pop()}
+              </a>
+            )}
+            <span className="text-lp-muted text-[14px] leading-[1.5]">
+              {l('footerSupportHint')}
+            </span>
+          </div>
+          <div className="flex flex-col gap-3.5">
+            <span className="text-lp-dim text-[14px]">
+              {l('footerPlatform')}
+            </span>
+            <a href="/login" className={link}>
+              {l('footerWeb')}
+            </a>
+            <a
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noreferrer"
+              className={link}
             >
-              <ArrowUp className="size-5" aria-hidden />
-            </button>
+              App Store
+            </a>
           </div>
-        </nav>
-      </PageContainer>
-
-      <div className="mt-16 overflow-hidden" aria-hidden>
-        <p className="text-brand text-center text-[clamp(80px,22vw,420px)] leading-[0.9] font-bold tracking-tight whitespace-nowrap select-none">
-          rozbirka
-        </p>
+        </div>
+        <div className="text-lp-dim flex flex-wrap justify-between gap-x-6 gap-y-4 border-t border-white/[0.07] pt-6 text-[14px]">
+          <span>© 2026 rozbirka</span>
+          {/* The privacy policy is a Ukrainian legal text only. */}
+          <a
+            href="/privacy"
+            hrefLang={locale === 'uk' ? undefined : 'uk'}
+            className="text-lp-dim"
+          >
+            {t('privacyPolicy')}
+          </a>
+        </div>
       </div>
     </footer>
   )

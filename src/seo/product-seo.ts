@@ -69,11 +69,15 @@ export const productSeoEntries: readonly ProductSeoEntry[] = [
     locale: 'uk',
     canonical: 'https://rozbirka.pro/',
     ogLocale: OG_LOCALES.uk,
-    title: 'Програма для авторозбірки — облік запчастин і продажів | rozbirka',
+    title: 'Програма для авторозбірки: CRM і ERP для запчастин | rozbirka',
     description:
-      'rozbirka — програма для авторозбірки: облік авто й запчастин, склад, замовлення, каси, клієнти, QR-стікери та робота команди.',
+      'rozbirka — програма для авторозбірки: CRM і ERP для обліку авто й запчастин, складу з QR-стікерами, замовлень, кас і команди. Веб і iOS.',
     primaryQuery: 'програма для авторозбірки',
-    supportingQueries: ['CRM для авторозбірки', 'програма для розборки авто'],
+    supportingQueries: [
+      'CRM для авторозбірки',
+      'ERP для авторозбірки',
+      'програма для розборки авто',
+    ],
   },
   {
     ...landingDefaults,
@@ -81,11 +85,13 @@ export const productSeoEntries: readonly ProductSeoEntry[] = [
     locale: 'en-GB',
     canonical: 'https://rozbirka.pro/en',
     ogLocale: OG_LOCALES['en-GB'],
-    title: 'Software for car breakers — parts stock and sales | rozbirka',
+    title: 'Software for car breakers: CRM and ERP for parts | rozbirka',
     description:
-      'rozbirka is software for car breakers: track cars and parts, stock, orders, tills, customers, QR labels and your team in one place.',
+      'rozbirka is software for car breakers: CRM and ERP for cars and parts, stock with QR labels, orders, tills and your team. Web and iOS.',
     primaryQuery: 'software for car breakers',
     supportingQueries: [
+      'CRM for car breakers',
+      'ERP for car breakers',
       'car breakers management system',
       'vehicle dismantler software',
     ],
@@ -96,11 +102,13 @@ export const productSeoEntries: readonly ProductSeoEntry[] = [
     locale: 'pl',
     canonical: 'https://rozbirka.pro/pl',
     ogLocale: OG_LOCALES.pl,
-    title: 'Program do demontażu aut — ewidencja części i sprzedaży | rozbirka',
+    title: 'Program do demontażu aut: CRM i ERP dla części | rozbirka',
     description:
-      'rozbirka to program dla stacji demontażu pojazdów: ewidencja aut i części, magazyn, zamówienia, kasy, klienci, naklejki QR i praca zespołu.',
+      'rozbirka to program do demontażu aut: CRM i ERP do ewidencji aut i części, magazynu z naklejkami QR, zamówień, kas i zespołu. Web i iOS.',
     primaryQuery: 'program do demontażu aut',
     supportingQueries: [
+      'CRM dla demontażu aut',
+      'ERP dla demontażu aut',
       'program dla stacji demontażu pojazdów',
       'program do szrotu',
     ],
