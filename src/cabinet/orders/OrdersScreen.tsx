@@ -121,6 +121,7 @@ import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { useVisibleRefresh } from '../use-visible-refresh'
 import {
   customerPhoneForSave,
   newCustomerPhoneDraft,
@@ -319,8 +320,16 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const status = params.get('status') ?? undefined
   const customerId = params.get('customerId') ?? undefined
   const page = Number(params.get('page') ?? 1) || 1
+  const queryKey = JSON.stringify([customerId, page, search, status])
+  const requestInFlight = useRef(false)
+  const lastSuccessfulQuery = useRef<string | null>(null)
+  const refresh = useCallback(() => {
+    if (!requestInFlight.current) setAttempt((value) => value + 1)
+  }, [])
+  useVisibleRefresh(refresh)
   useEffect(() => {
     const controller = new AbortController()
+    requestInFlight.current = true
     void ordersApi
       .list(
         {
@@ -332,19 +341,30 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         { signal: controller.signal },
       )
       .then((result) => {
+        if (controller.signal.aborted) return
         setOrders(result.items)
         setTotalPages(result.totalPages)
         setTotal(result.total)
         setPageSize(result.pageSize)
         setError(null)
         setLoaded(true)
+        lastSuccessfulQuery.current = queryKey
       })
       .catch((error) => {
         if (controller.signal.aborted) return
-        setError(errorMessage(error))
+        const kind = normalizeApiProblem(error).kind
+        const connectionFailure = kind === 'network' || kind === 'timeout'
+        if (lastSuccessfulQuery.current !== queryKey || !connectionFailure)
+          setError(errorMessage(error))
         setLoaded(true)
       })
-    return () => controller.abort()
+      .finally(() => {
+        if (!controller.signal.aborted) requestInFlight.current = false
+      })
+    return () => {
+      controller.abort()
+      requestInFlight.current = false
+    }
     // The message is chosen when the request fails, not re-run per locale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, page, search, status, attempt])

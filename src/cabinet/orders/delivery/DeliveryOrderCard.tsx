@@ -9,6 +9,7 @@ import { deliveryFlowMessages } from './flow-messages'
 import { waybillMessages } from './waybill-messages'
 import { OrderCard } from '../OrderDetailCards'
 import { shipmentStatePresentation } from './delivery-labels'
+import { orderClosing } from './delivery-flow'
 import {
   lifecycle,
   paymentKindLabel,
@@ -149,8 +150,9 @@ export function DeliveryTabs({
     {
       key: 'sales',
       label: t('tabSales'),
-      meta:
-        delivery.agreedTotalUah <= 0
+      meta: orderClosing(delivery)
+        ? t('milestonePaymentStopped')
+        : delivery.agreedTotalUah <= 0
           ? t('standingUnknown')
           : isFullyPaid(delivery)
             ? t('tabPaid')
@@ -264,8 +266,13 @@ export function ShipmentCard({
 
   return (
     <section aria-labelledby="np-delivery-block" className="rz-card">
-      <header className="rz-card__head min-h-0 border-b-0 px-4 pt-3.5 pb-0">
-        <div className="grid min-w-0 gap-0.5">
+      <header
+        className={cn(
+          'rz-card__head min-h-0 border-b-0 px-4 pt-3.5',
+          facts === null && !hasForm ? 'pb-4' : 'pb-0',
+        )}
+      >
+        <div className="grid min-w-0 gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="rz-h-card" id="np-delivery-block">
               {t('blockTitle')}

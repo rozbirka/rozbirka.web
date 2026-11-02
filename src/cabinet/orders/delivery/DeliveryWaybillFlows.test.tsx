@@ -421,9 +421,11 @@ it('blocks creation on a stale quote until it is taken again (4.8)', async () =>
 })
 
 it('keeps the draft after a known refusal (4.10)', async () => {
-  vi.mocked(shippingApi.create).mockRejectedValue(
-    problem('nova_poshta_rejected', 'validation', 422),
-  )
+  vi.mocked(shippingApi.create).mockRejectedValue({
+    ...problem('nova_poshta_rejected', 'validation', 422),
+    message:
+      'Нова пошта відхилила запит. Перевірте отримувача та параметри посилки. Некоректний номер телефону отримувача.',
+  })
   vi.mocked(shippingApi.get).mockResolvedValue(shipment())
   const { user, block } = await renderFlow({ initial: shipment() })
   await user.click(
@@ -437,6 +439,7 @@ it('keeps the draft after a known refusal (4.10)', async () => {
 
   expect(await within(sheet).findByText('ТТН не створено')).toBeVisible()
   expect(sheet).toHaveTextContent('Дані збережено')
+  expect(sheet).toHaveTextContent('Некоректний номер телефону отримувача.')
   expect(
     within(sheet).getByRole('button', { name: 'Створити ТТН' }),
   ).toBeEnabled()
@@ -1046,4 +1049,124 @@ it('locks every close control while Nova Poshta creates the waybill (4.9)', asyn
   expect(sheet).toBeVisible()
   finish(created())
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+})
+
+it('keeps the edited weight when background tracking advances the waybill version', async () => {
+  const initial = created()
+  vi.mocked(shippingApi.update)
+    .mockReset()
+    .mockRejectedValueOnce(problem('shipment_preview_stale'))
+    .mockRejectedValueOnce(problem('shipment_recreate_required'))
+  vi.mocked(shippingApi.get).mockResolvedValue({
+    ...initial,
+    version: 'v-tracked',
+    trackingCode: '1',
+    lastTrackedAt: '2026-11-02T12:26:51Z',
+  })
+  const { user, block } = await renderFlow({ initial })
+  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
+  await user.clear(within(sheet).getByLabelText('Вага'))
+  await user.type(within(sheet).getByLabelText('Вага'), '2')
+  await user.click(
+    within(sheet).getByRole('button', { name: 'Зберегти зміни' }),
+  )
+
+  expect(
+    await screen.findByRole('dialog', { name: 'Потрібна нова ТТН' }),
+  ).toBeVisible()
+  expect(shippingApi.update).toHaveBeenNthCalledWith(
+    2,
+    'int-1',
+    'order-1',
+    'v-tracked',
+    expect.objectContaining({
+      parcels: [{ lengthCm: 60, widthCm: 40, heightCm: 30, weightKg: 2 }],
+    }),
+  )
+  expect(shippingApi.cancel).not.toHaveBeenCalled()
+  expect(shippingApi.create).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['another waybill', { id: 'ship-other' }],
+  ['another number', { number: '20451200987732' }],
+  ['another connection', { connectionId: 'connection-other' }],
+  ['another COD amount', { codUah: 4100 }],
+  [
+    'changed recipient',
+    {
+      draft: {
+        ...created().draft,
+        recipient: { ...created().draft.recipient, phone: '+380672145509' },
+      },
+    },
+  ],
+  [
+    'carrier dispatch',
+    { dispatchedAt: '2026-11-02T12:27:00Z', trackingCode: '4' },
+  ],
+  ['carrier deletion', { trackingCode: '2' }],
+  ['cancellation', { state: 'Cancelled' }],
+] satisfies [string, Partial<Shipment>][])(
+  'preserves the entered weight without retrying an edit against %s',
+  async (_, change) => {
+    const initial = created()
+    vi.mocked(shippingApi.update)
+      .mockReset()
+      .mockRejectedValue(problem('shipment_preview_stale'))
+    vi.mocked(shippingApi.get).mockResolvedValue({
+      ...initial,
+      ...change,
+      version: 'v-other',
+    })
+    const { user, block } = await renderFlow({ initial })
+    await user.click(
+      within(block()).getByRole('button', { name: 'Редагувати' }),
+    )
+    const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
+    await user.clear(within(sheet).getByLabelText('Вага'))
+    await user.type(within(sheet).getByLabelText('Вага'), '2')
+    await user.click(
+      within(sheet).getByRole('button', { name: 'Зберегти зміни' }),
+    )
+
+    expect(
+      await within(sheet).findByText(
+        'Стан накладної змінився. Перевірте її ще раз.',
+      ),
+    ).toBeVisible()
+    expect(within(sheet).getByLabelText('Вага')).toHaveValue('2')
+    expect(shippingApi.update).toHaveBeenCalledTimes(1)
+    expect(shippingApi.cancel).not.toHaveBeenCalled()
+  },
+)
+
+it('stops after one retry if the waybill version changes again', async () => {
+  const initial = created()
+  vi.mocked(shippingApi.update)
+    .mockReset()
+    .mockRejectedValue(problem('shipment_preview_stale'))
+  vi.mocked(shippingApi.get).mockResolvedValue({
+    ...initial,
+    version: 'v-tracked',
+    trackingCode: '1',
+  })
+  const { user, block } = await renderFlow({ initial })
+  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
+  await user.clear(within(sheet).getByLabelText('Вага'))
+  await user.type(within(sheet).getByLabelText('Вага'), '2')
+  await user.click(
+    within(sheet).getByRole('button', { name: 'Зберегти зміни' }),
+  )
+
+  expect(
+    await within(sheet).findByText(
+      'Стан накладної змінився. Перевірте її ще раз.',
+    ),
+  ).toBeVisible()
+  expect(within(sheet).getByLabelText('Вага')).toHaveValue('2')
+  expect(shippingApi.update).toHaveBeenCalledTimes(2)
+  expect(shippingApi.get).toHaveBeenCalledTimes(1)
 })

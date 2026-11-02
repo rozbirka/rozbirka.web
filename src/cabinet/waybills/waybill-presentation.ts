@@ -1,5 +1,6 @@
 import type { StatusTone } from '@/components/app'
 import type { Shipment, ShippingContact } from '@/api/shipping'
+import type { DeliveryOrder } from '@/api/delivery'
 import { translate, type Locale, type MessageKey } from '@/i18n'
 import { deliveryMessages } from '../orders/delivery/messages'
 import { waybillsMessages } from './waybills-messages'
@@ -30,6 +31,8 @@ export const DELIVERY_FILTERS = [
   { code: '5', key: 'deliveryMoving' },
   { code: '7', key: 'deliveryArrived' },
   { code: '9', key: 'deliveryReceived' },
+  { code: '102', key: 'deliveryRefused' },
+  { code: '103', key: 'deliveryReturning' },
 ] as const satisfies readonly { code: string; key: Key }[]
 
 const UNRESOLVED = new Set([
@@ -56,6 +59,10 @@ export function trackingSignal(
   if (state === 'Draft') return null
   if (state === 'Cancelled' || (code !== null && DELETED.has(code)))
     return { label: tr(locale, 'deliveryCancelled'), tone: 'neutral' }
+  if (code === '102')
+    return { label: tr(locale, 'deliveryRefused'), tone: 'warn' }
+  if (code === '103')
+    return { label: tr(locale, 'deliveryReturning'), tone: 'danger' }
   if (receivedAt !== null || (code !== null && RECEIVED.has(code)))
     return { label: tr(locale, 'deliveryReceived'), tone: 'ok' }
   if (code !== null && ARRIVED.has(code))
@@ -120,7 +127,40 @@ export function cardPaymentSignal(
   shipment: Pick<Shipment, 'state' | 'paymentState' | 'codUah'>,
   outstandingUah: number | null,
   locale: Locale,
+  settlement?: Pick<
+    DeliveryOrder,
+    | 'workflowState'
+    | 'refundDueUah'
+    | 'retainedDeliveryCostUah'
+    | 'refundAllocations'
+  > | null,
 ): Signal {
+  // A late carrier payout still needs attention after the original return settled.
+  switch (shipment.paymentState) {
+    case 'NeedsReconciliation':
+      return { label: tr(locale, 'payReconcile'), tone: 'warn' }
+    case 'CashRegisterRequired':
+    case 'PermissionRequired':
+      return { label: tr(locale, 'payManual'), tone: 'warn' }
+    case 'LatePaymentNeedsRefund':
+    case 'LateRefundRequired':
+      return { label: tr(locale, 'payRefund'), tone: 'warn' }
+  }
+  if (
+    settlement !== null &&
+    settlement !== undefined &&
+    ['AwaitingGoods', 'AwaitingRefund', 'Cancelled'].includes(
+      settlement.workflowState,
+    )
+  ) {
+    if (settlement.refundDueUah > 0)
+      return { label: tr(locale, 'payRefund'), tone: 'warn' }
+    if ((settlement.retainedDeliveryCostUah ?? 0) > 0)
+      return { label: tr(locale, 'payRetained'), tone: 'neutral' }
+    if (settlement.refundAllocations.length > 0)
+      return { label: tr(locale, 'payRefunded'), tone: 'neutral' }
+    return { label: tr(locale, 'payNotApplicable'), tone: 'neutral' }
+  }
   if (shipment.state === 'Draft')
     return { label: tr(locale, 'payUnpaid'), tone: 'neutral' }
   if (shipment.paymentState === 'DeliveryCostsRetained')
@@ -130,14 +170,6 @@ export function cardPaymentSignal(
   switch (shipment.paymentState) {
     case 'Reconciled':
       return { label: tr(locale, 'payPaid'), tone: 'ok' }
-    case 'NeedsReconciliation':
-      return { label: tr(locale, 'payReconcile'), tone: 'warn' }
-    case 'CashRegisterRequired':
-    case 'PermissionRequired':
-      return { label: tr(locale, 'payManual'), tone: 'warn' }
-    case 'LatePaymentNeedsRefund':
-    case 'LateRefundRequired':
-      return { label: tr(locale, 'payRefund'), tone: 'warn' }
     case 'LateRefunded':
       return { label: tr(locale, 'payRefunded'), tone: 'neutral' }
   }

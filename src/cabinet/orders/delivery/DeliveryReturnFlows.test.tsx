@@ -11,6 +11,7 @@ import { integrationsApi } from '@/api/integrations'
 import type { OrderDetail } from '@/api/orders'
 import { shippingApi, type Shipment } from '@/api/shipping'
 import { DeliveryOrderBody, type DeliveryIntent } from './DeliveryOrderBody'
+import { DeliveryTabs } from './DeliveryOrderCard'
 import type {
   DeliveryOrderLoad,
   DeliveryOrderState,
@@ -258,6 +259,29 @@ beforeEach(() => {
     senderContactRef: null,
   })
 })
+
+it.each(['AwaitingGoods', 'AwaitingRefund', 'Cancelled'] as const)(
+  'does not present the goods balance as collectible in the sales tab during %s',
+  (workflowState) => {
+    render(
+      <DeliveryTabs
+        delivery={delivery({
+          agreedTotalUah: 500,
+          appliedUah: 0,
+          outstandingUah: 500,
+          workflowState,
+        })}
+        onChange={() => undefined}
+        shipment={shipment()}
+        tab="sales"
+      />,
+    )
+
+    const salesTab = screen.getByRole('tab', { name: /^Продажі/ })
+    expect(salesTab).toHaveTextContent('Оплату не очікуємо')
+    expect(salesTab).not.toHaveTextContent('залишок')
+  },
+)
 
 it('keeps «received» and «paid» apart while the post-payment travels (9.2)', async () => {
   const user = userEvent.setup()

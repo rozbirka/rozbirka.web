@@ -12,9 +12,17 @@ describe('waybill delivery signal', () => {
     ['Created', '1', null, 'Створено', 'info'],
     ['Created', '5', null, 'Прямує', 'info'],
     ['Created', '7', null, 'Прибула', 'info'],
-    ['Created', '9', null, 'Отримано', 'ok'],
-    ['Created', null, '2026-10-26T10:00:00Z', 'Отримано', 'ok'],
-    ['Created', '102', null, 'Відправлено', 'info'],
+    ['Created', '9', null, 'Підтверджено', 'ok'],
+    ['Created', null, '2026-10-26T10:00:00Z', 'Підтверджено', 'ok'],
+    ['Created', '102', null, 'Відмова від отримання', 'warn'],
+    ['Created', '103', null, 'Повернення відправнику', 'danger'],
+    [
+      'Created',
+      '103',
+      '2026-10-26T10:00:00Z',
+      'Повернення відправнику',
+      'danger',
+    ],
     ['Cancelled', '1', null, 'Скасовано', 'neutral'],
     ['CancelUnknown', '1', null, 'Невідомо', 'warn'],
   ])('reads %s / code %s as %s', (state, code, receivedAt, label, tone) => {
@@ -91,5 +99,30 @@ it.each([
         locale,
       ),
     ).toEqual({ label, tone: 'neutral' })
+  },
+)
+
+it.each([
+  ['LatePaymentNeedsRefund', 'Потрібне повернення'],
+  ['LateRefundRequired', 'Потрібне повернення'],
+  ['NeedsReconciliation', 'Потрібна звірка'],
+  ['CashRegisterRequired', 'Внесіть вручну'],
+  ['PermissionRequired', 'Внесіть вручну'],
+])(
+  'keeps late carrier payout %s visible after settling a return',
+  (paymentState, label) => {
+    expect(
+      cardPaymentSignal(
+        { state: 'Created', paymentState, codUah: 200 },
+        0,
+        'uk',
+        {
+          workflowState: 'Cancelled',
+          refundDueUah: 0,
+          retainedDeliveryCostUah: 186,
+          refundAllocations: [],
+        },
+      ),
+    ).toEqual({ label, tone: 'warn' })
   },
 )

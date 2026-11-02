@@ -27,6 +27,30 @@ const decimal = (value: string): number | null => {
     : null
 }
 
+// Tracking updates share the optimistic version with edits. Only a change to
+// tracking metadata may rebase an unsaved form; its business snapshot must match.
+const editSnapshot = (shipment: Shipment) =>
+  JSON.stringify([
+    shipment.id,
+    shipment.integrationId,
+    shipment.orderId,
+    shipment.dispatchPointId,
+    shipment.connectionId,
+    shipment.state,
+    shipment.number,
+    shipment.sender,
+    shipment.draft,
+    shipment.quoteUah,
+    shipment.returnEstimateUah,
+    shipment.codUah,
+    shipment.quoteAt,
+    shipment.relatedNumbers,
+    shipment.dispatchedAt,
+    shipment.receivedAt,
+    shipment.paymentState,
+    shipment.trackingEnabled,
+  ])
+
 /**
  * «Редагувати ТТН» (5.2–5.4): the fields a created waybill may still change
  * before hand-over — the recipient's name and phone and the parcel. The new
@@ -118,14 +142,29 @@ export function WaybillEditSheet({
     setError(null)
     const next = draft()
     try {
-      onSaved(
-        await shippingApi.update(
-          integrationId,
-          orderId,
-          shipment.version,
-          next,
-        ),
-      )
+      const update = (version: string) =>
+        shippingApi.update(integrationId, orderId, version, next)
+      let updated: Shipment
+      try {
+        updated = await update(shipment.version)
+      } catch (problem) {
+        if (!isProblemCode(problem, 'shipment_preview_stale')) throw problem
+        const latest = await shippingApi.get(integrationId, orderId)
+        if (
+          latest === null ||
+          latest.version === shipment.version ||
+          latest.state !== 'Created' ||
+          latest.dispatchedAt !== null ||
+          latest.receivedAt !== null ||
+          (latest.trackingCode !== null && latest.trackingCode !== '1') ||
+          editSnapshot(latest) !== editSnapshot(shipment)
+        )
+          throw problem
+        // The conflict rejected the first request before mutation. Retry once
+        // with the fresh version and the user's unchanged input, never a cancel.
+        updated = await update(latest.version)
+      }
+      onSaved(updated)
     } catch (problem) {
       if (isProblemCode(problem, 'shipment_recreate_required'))
         onRecreate(next, 'refused')

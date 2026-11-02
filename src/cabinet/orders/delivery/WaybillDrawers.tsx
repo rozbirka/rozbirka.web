@@ -185,7 +185,7 @@ export function WaybillLabelDrawer({
       description={tw('labelDescription', { number: String(orderNumber) })}
       footer={
         <>
-          <p className="rz-muted m-0 min-w-0 flex-1 font-mono">
+          <p className="rz-muted m-0 w-full min-w-0 font-mono sm:w-auto sm:flex-1">
             {waybillNumber}
           </p>
           <Button onClick={onClose}>{tc('close')}</Button>
