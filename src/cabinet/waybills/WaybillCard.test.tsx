@@ -228,7 +228,7 @@ it('keeps a received waybill to print and refresh only (8.3)', async () => {
   renderCard()
 
   await screen.findByRole('heading', { name: `ТТН ${TTN}` })
-  expect(within(header()).getByText('Отримано')).toBeVisible()
+  expect(within(header()).getByText('Підтверджено')).toBeVisible()
   expect(screen.getAllByRole('button', { name: 'Друк' })[0]).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Редагувати' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Скасувати ТТН' })).toBeNull()
@@ -336,7 +336,7 @@ it('keeps the last known status when refreshing fails (8.7)', async () => {
     }),
   )
   expect(shippingApi.refresh).toHaveBeenCalledWith('int-1', 'order-1')
-  expect(await within(header()).findByText('Отримано')).toBeVisible()
+  expect(await within(header()).findByText('Підтверджено')).toBeVisible()
 })
 
 it('shows the waybill read-only without order management (8.8)', async () => {
@@ -452,3 +452,28 @@ it('says when the waybill does not exist', async () => {
 
   expect(await screen.findByText('Накладну не знайдено')).toBeVisible()
 })
+
+it.each([
+  ['Cancelled', 186, 0, 'Утримано за доставку'],
+  ['AwaitingRefund', 0, 300, 'Потрібне повернення'],
+] as const)(
+  'uses the order settlement %s when the shipment has no payout state',
+  async (workflowState, retainedDeliveryCostUah, refundDueUah, label) => {
+    vi.mocked(shippingApi.byId).mockResolvedValue(
+      shipment({ trackingCode: '103', codUah: 200, paymentState: null }),
+    )
+    vi.mocked(deliveryApi.get).mockResolvedValue({
+      ...delivery,
+      outstandingUah: 0,
+      workflowState,
+      retainedDeliveryCostUah,
+      refundDueUah,
+      refundAllocations: [],
+    })
+    renderCard()
+    const payment = await screen.findByRole('region', { name: 'Оплата' })
+    expect(within(payment).getByText(label)).toBeVisible()
+    expect(within(payment).queryByText('Очікуємо післяплату')).toBeNull()
+    expect(within(payment).queryByText('Оплачено')).toBeNull()
+  },
+)

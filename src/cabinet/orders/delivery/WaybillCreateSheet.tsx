@@ -235,6 +235,12 @@ export function WaybillCreateSheet({
         return
       }
       if (isProblemCode(problem, 'nova_poshta_rejected')) {
+        const refusal = normalizeApiProblem(problem)
+        setError(
+          refusal.message && refusal.message !== refusal.code
+            ? refusal.message
+            : null,
+        )
         setPhase('refused')
         window.requestAnimationFrame(() => alertRef.current?.focus())
         return
@@ -261,6 +267,7 @@ export function WaybillCreateSheet({
     ) : phase === 'refused' ? (
       <TitledNotice title={t('refusedTitle')} tone="danger">
         {t('refusedText')}
+        {error === null ? null : <span className="mt-1 block">{error}</span>}
       </TitledNotice>
     ) : error !== null ? (
       <Notice tone="danger">{error}</Notice>

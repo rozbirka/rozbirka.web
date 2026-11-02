@@ -275,7 +275,12 @@ export function WaybillPaymentCard({
           )
           .reduce((sum, payment) => sum + payment.amountUah, 0)
   const signal = finance
-    ? cardPaymentSignal(shipment, delivery?.outstandingUah ?? null, locale)
+    ? cardPaymentSignal(
+        shipment,
+        delivery?.outstandingUah ?? null,
+        locale,
+        delivery,
+      )
     : null
   return (
     <TitledCard

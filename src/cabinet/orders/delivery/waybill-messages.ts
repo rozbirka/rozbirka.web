@@ -57,7 +57,7 @@ export const waybillMessages = defineMessages({
     cancelledToast: 'ТТН скасовано. Замовлення залишилося відкритим.',
     recreateTitle: 'Залишився один крок',
     recreateText:
-      'Стару ТТН скасовано. Зміну відділення ще не завершено — створіть нову накладну в замовленні.',
+      'Стару ТТН скасовано. Щоб застосувати зміни, створіть нову накладну в замовленні.',
     sentNotice:
       'Посилку вже відправлено. Отримувача, адресу й післяплату в Rozbirka змінити не можна — зробіть це в кабінеті або застосунку Нової пошти.',
     cancelWaybill: 'Скасувати ТТН',
@@ -143,13 +143,13 @@ export const waybillMessages = defineMessages({
     // Edit (5.2–5.6)
     editTitle: 'Редагувати ТТН',
     editDescription:
-      '{number} · до відправлення. Номер накладної не зміниться.',
+      '{number} · до відправлення. Зміни оформлюються через нову ТТН з новим номером.',
     changedWas: 'Змінено · було …{tail}',
     changed: 'Змінено',
     editLimits:
       'Місто чи відділення отримання, відправника й післяплату в цій ТТН змінити не можна. Для цього потрібна нова накладна.',
     editLimitsCaption:
-      'Змінити місто чи відділення → «Створити нову ТТН замість цієї».',
+      'Щоб змінити місто чи відділення, натисніть «Потрібна нова ТТН».',
     needNewWaybill: 'Потрібна нова ТТН',
     saveChanges: 'Зберегти зміни',
     saving: 'Зберігаємо…',
@@ -159,7 +159,7 @@ export const waybillMessages = defineMessages({
     recreateBranchText:
       'Відділення отримання в цій накладній змінити не можна.',
     recreateRefusedText:
-      'Нова пошта не змінює ці дані в чинній накладній — потрібна нова ТТН.',
+      'Змінені дані буде застосовано в новій накладній з новим номером.',
     recreateConfirm: 'Скасувати стару й продовжити',
     recreateStepCancel:
       'Спершу скасуємо ТТН {number} у Новій пошті й дочекаємося підтвердження.',
@@ -292,7 +292,7 @@ export const waybillMessages = defineMessages({
     cancelledToast: 'Waybill cancelled. The order is still open.',
     recreateTitle: 'One step left',
     recreateText:
-      'The old waybill has been cancelled. The branch change is not finished yet — create a new waybill in the order.',
+      'The old waybill has been cancelled. To apply the changes, create a new waybill in the order.',
     sentNotice:
       'The parcel has already been sent. The recipient, address and cash on delivery cannot be changed in Rozbirka — do it in the Nova Poshta account or app.',
     cancelWaybill: 'Cancel waybill',
@@ -374,13 +374,13 @@ export const waybillMessages = defineMessages({
 
     editTitle: 'Edit waybill',
     editDescription:
-      '{number} · before dispatch. The waybill number will not change.',
+      '{number} · before dispatch. Changes require a new waybill with a new number.',
     changedWas: 'Changed · was …{tail}',
     changed: 'Changed',
     editLimits:
       'The delivery town or branch, the sender and the cash on delivery cannot be changed on this waybill. That needs a new waybill.',
     editLimitsCaption:
-      'Change town or branch → “Create a new waybill instead of this one”.',
+      'To change the town or branch, choose “New waybill needed”.',
     needNewWaybill: 'New waybill needed',
     saveChanges: 'Save changes',
     saving: 'Saving…',
@@ -390,7 +390,7 @@ export const waybillMessages = defineMessages({
     recreateBranchText:
       'The delivery branch on this waybill cannot be changed.',
     recreateRefusedText:
-      'Nova Poshta does not change these details on an existing waybill — a new waybill is needed.',
+      'The changed details will be applied to a new waybill with a new number.',
     recreateConfirm: 'Cancel the old one and continue',
     recreateStepCancel:
       'First we cancel waybill {number} at Nova Poshta and wait for confirmation.',
@@ -518,7 +518,7 @@ export const waybillMessages = defineMessages({
     cancelledToast: 'List anulowano. Zamówienie pozostało otwarte.',
     recreateTitle: 'Został jeden krok',
     recreateText:
-      'Stary list anulowano. Zmiana oddziału nie jest jeszcze zakończona — utwórz nowy list w zamówieniu.',
+      'Stary list anulowano. Aby zastosować zmiany, utwórz nowy list w zamówieniu.',
     sentNotice:
       'Paczka została już wysłana. Odbiorcy, adresu i pobrania nie można zmienić w Rozbirka — zrób to na koncie lub w aplikacji Nova Poshta.',
     cancelWaybill: 'Anuluj list',
@@ -599,13 +599,14 @@ export const waybillMessages = defineMessages({
       'Nova Poshta odmówiła utworzenia listu. Dane są zapisane — sprawdź je lub skontaktuj się z pomocą Nova Poshta.',
 
     editTitle: 'Edytuj list',
-    editDescription: '{number} · przed wysyłką. Numer listu się nie zmieni.',
+    editDescription:
+      '{number} · przed wysyłką. Zmiany wymagają nowego listu z nowym numerem.',
     changedWas: 'Zmieniono · było …{tail}',
     changed: 'Zmieniono',
     editLimits:
       'Miejscowości ani oddziału odbioru, nadawcy i pobrania w tym liście zmienić nie można. Do tego potrzebny jest nowy list.',
     editLimitsCaption:
-      'Zmiana miejscowości lub oddziału → „Utwórz nowy list zamiast tego”.',
+      'Aby zmienić miejscowość lub oddział, wybierz „Potrzebny nowy list”.',
     needNewWaybill: 'Potrzebny nowy list',
     saveChanges: 'Zapisz zmiany',
     saving: 'Zapisujemy…',
@@ -614,7 +615,7 @@ export const waybillMessages = defineMessages({
     recreateBranchTitle: 'Zmienić oddział przez nowy list?',
     recreateBranchText: 'Oddziału odbioru w tym liście zmienić nie można.',
     recreateRefusedText:
-      'Nova Poshta nie zmienia tych danych w istniejącym liście — potrzebny jest nowy list.',
+      'Zmienione dane zostaną zastosowane w nowym liście z nowym numerem.',
     recreateConfirm: 'Anuluj stary i kontynuuj',
     recreateStepCancel:
       'Najpierw anulujemy list {number} w Nova Poshta i poczekamy na potwierdzenie.',

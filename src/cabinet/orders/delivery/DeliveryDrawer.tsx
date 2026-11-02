@@ -364,7 +364,7 @@ export function DeliveryDrawer({
       description={t('formDescription', { number: String(orderNumber) })}
       footer={
         <>
-          <p className="text-app-muted m-0 min-w-0 flex-1">
+          <p className="text-app-muted m-0 w-full min-w-0 sm:w-auto sm:flex-1">
             {missing.length > 0 ? '' : t('formNote')}
           </p>
           <Button disabled={busy} onClick={onClose}>

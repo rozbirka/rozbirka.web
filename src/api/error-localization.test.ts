@@ -25,6 +25,25 @@ const failure = (code: string, message: string, details?: unknown) =>
 afterEach(() => requestLocale.set(null))
 
 describe('error localisation across screens', () => {
+  it.each([
+    'Нова пошта відхилила запит. Перевірте отримувача та параметри посилки.',
+    'nova_poshta_rejected',
+    'nova_poshta_outcomeunknown',
+  ])('keeps the carrier refusal detail after the prefix %s', (prefix) => {
+    const error = failure(
+      'nova_poshta_rejected',
+      `${prefix} Некоректний номер телефону отримувача.`,
+    )
+    const normalized = normalizeApiProblem(error)
+    expect(normalized.message).toContain(
+      'Некоректний номер телефону отримувача.',
+    )
+    requestLocale.set('en-GB')
+    expect(normalizeApiProblem(normalized).message).toBe(
+      'Nova Poshta rejected the request. Check recipient and parcel details. Некоректний номер телефону отримувача.',
+    )
+  })
+
   it.each<[Locale, string]>([
     ['uk', 'Клієнт із таким номером телефону вже існує.'],
     ['en-GB', 'A customer with this phone number already exists.'],

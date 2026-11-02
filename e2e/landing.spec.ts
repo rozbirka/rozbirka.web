@@ -208,12 +208,33 @@ test.describe('responsive matrix', () => {
       // A full-page capture stretches the viewport itself and its height then
       // drifts by a few pixels between captures (the page is 14 523.2px tall,
       // the image 14 523 or 14 526). Size the viewport to the content instead.
+      // The capture sizes the viewport to the whole page. Sizes set in vh
+      // (the modules story steps and window) would then grow with it, so pin
+      // them to their pixel values at the normal viewport first.
+      await page.evaluate(() => {
+        for (const element of document.querySelectorAll<HTMLElement>(
+          '[class*="vh"]',
+        )) {
+          const style = getComputedStyle(element)
+          element.style.minHeight = style.minHeight
+          element.style.height = style.height
+          element.style.top = style.top
+        }
+      })
       // scrollHeight, not the root's box: `html` is 100% of the viewport.
       const pageHeight = await page.evaluate(
         () => document.documentElement.scrollHeight,
       )
       await page.setViewportSize({ width, height: pageHeight })
       await page.evaluate(() => window.scrollTo(0, 0))
+      // Let observers and scroll-driven state react to the resize.
+      await page.evaluate(
+        () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      )
+      await page.waitForTimeout(500)
       const platformSuffix = process.platform === 'linux' ? '-linux' : ''
       await expect(page).toHaveScreenshot(
         `landing-${width}${platformSuffix}.png`,

@@ -200,6 +200,7 @@ async function openInlineCustomerForm(
 afterEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue(cabinet())
@@ -3288,4 +3289,181 @@ it('does not carry an open confirmation into another order', async () => {
   expect(
     await screen.findByRole('dialog', { name: 'Підтвердити замовлення #2?' }),
   ).toBeVisible()
+})
+
+const refreshedDirectory = (status: string) => ({
+  items: [
+    {
+      id: 'order-368',
+      number: 368,
+      status,
+      customerName: 'Тестовий клієнт',
+      itemCount: 1,
+      partNames: ['Запчастина'],
+      paymentAccountNames: status === 'confirmed' ? ['Nova Pay'] : [],
+      totalAmount: 10,
+      createdAt: '2026-10-30T10:00:00Z',
+    },
+  ],
+  page: 2,
+  pageSize: 20,
+  total: 21,
+  totalPages: 2,
+})
+
+it('refreshes background order status and payments while preserving list filters', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  orderMocks.list.mockResolvedValueOnce(refreshedDirectory('pending'))
+  orderMocks.list.mockResolvedValue(refreshedDirectory('confirmed'))
+  await act(async () => {
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders?q=368&page=2']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await Promise.resolve()
+  })
+  expect(screen.getByRole('link', { name: '#368' })).toBeVisible()
+  expect(
+    within(screen.getByRole('row', { name: /#368/ })).getByText('Очікує'),
+  ).toBeVisible()
+  expect(screen.getByText('платежів ще немає')).toBeVisible()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10_000)
+  })
+  expect(screen.getByText('Nova Pay')).toBeVisible()
+  expect(
+    within(screen.getByRole('row', { name: /#368/ })).getByText('Підтверджено'),
+  ).toBeVisible()
+  expect(screen.getByLabelText('Пошук замовлень')).toHaveValue('368')
+  expect(orderMocks.list).toHaveBeenLastCalledWith(
+    { search: '368', page: 2 },
+    expect.any(Object),
+  )
+})
+
+it('pauses directory refresh in hidden tabs and refreshes when returning online', async () => {
+  vi.useFakeTimers()
+  const visibility = vi
+    .spyOn(document, 'visibilityState', 'get')
+    .mockReturnValue('visible')
+  orderMocks.list.mockResolvedValue(refreshedDirectory('pending'))
+  let view: ReturnType<typeof render>
+  await act(async () => {
+    view = render(
+      <MemoryRouter initialEntries={['/app/garage/orders']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await Promise.resolve()
+  })
+  visibility.mockReturnValue('hidden')
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(20_000)
+  })
+  expect(orderMocks.list).toHaveBeenCalledTimes(1)
+  visibility.mockReturnValue('visible')
+  orderMocks.list.mockResolvedValue(refreshedDirectory('confirmed'))
+  await act(async () => {
+    fireEvent(document, new Event('visibilitychange'))
+    await Promise.resolve()
+  })
+  expect(screen.getByText('Nova Pay')).toBeVisible()
+  await act(async () => {
+    fireEvent(window, new Event('online'))
+    await Promise.resolve()
+  })
+  expect(orderMocks.list).toHaveBeenCalledTimes(3)
+  view!.unmount()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(20_000)
+  })
+  expect(orderMocks.list).toHaveBeenCalledTimes(3)
+})
+
+it('does not overlap directory requests or discard loaded rows on a refresh failure', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  let resolve!: (value: ReturnType<typeof refreshedDirectory>) => void
+  orderMocks.list.mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done
+    }),
+  )
+  await act(async () => {
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await vi.advanceTimersByTimeAsync(20_000)
+  })
+  expect(orderMocks.list).toHaveBeenCalledTimes(1)
+  await act(async () => {
+    resolve(refreshedDirectory('pending'))
+    await Promise.resolve()
+  })
+  orderMocks.list.mockRejectedValueOnce({
+    kind: 'network',
+    message: 'Network unavailable',
+  })
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10_000)
+  })
+  expect(orderMocks.list).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole('link', { name: '#368' })).toBeVisible()
+  orderMocks.list.mockResolvedValue(refreshedDirectory('confirmed'))
+  await act(async () => {
+    fireEvent(window, new Event('focus'))
+    await Promise.resolve()
+  })
+  expect(screen.getByText('Nova Pay')).toBeVisible()
+})
+
+it('ignores an old directory response after search changes during a request', async () => {
+  let resolve!: (value: ReturnType<typeof refreshedDirectory>) => void
+  orderMocks.list.mockReturnValueOnce(
+    new Promise((done) => {
+      resolve = done
+    }),
+  )
+  orderMocks.list.mockResolvedValue(refreshedDirectory('confirmed'))
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await userEvent.type(screen.getByLabelText('Пошук замовлень'), '368')
+  expect(await screen.findByText('Nova Pay')).toBeVisible()
+  await act(async () => {
+    resolve(refreshedDirectory('pending'))
+    await Promise.resolve()
+  })
+  expect(screen.getByText('Nova Pay')).toBeVisible()
+  expect(screen.queryByText('платежів ще немає')).not.toBeInTheDocument()
+})
+
+it('hides previously loaded order rows when a background refresh loses permission', async () => {
+  vi.useFakeTimers()
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+  orderMocks.list.mockResolvedValueOnce(refreshedDirectory('pending'))
+  orderMocks.list.mockRejectedValue({
+    kind: 'forbidden',
+    status: 403,
+    message: 'Forbidden',
+  })
+  await act(async () => {
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await Promise.resolve()
+  })
+  expect(screen.getByRole('link', { name: '#368' })).toBeVisible()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10_000)
+  })
+  expect(screen.queryByRole('link', { name: '#368' })).not.toBeInTheDocument()
 })

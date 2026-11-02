@@ -66,6 +66,23 @@ export function localizeApiError(
       : undefined) ??
     (problem.code ? codes.get(problem.code.toUpperCase()) : undefined) ??
     messageCode
+  if (code === 'NOVA_POSHTA_REJECTED') {
+    // Core appends the carrier's bounded, actionable refusal to this reviewed
+    // prefix. Preserve that detail while translating the prefix itself.
+    const prefixes = [
+      ...SUPPORTED_LOCALES.map((item) => translate(errorMessages, item, code)),
+      // Core's legacy missing-resource fallback can use either resource key.
+      'nova_poshta_rejected',
+      'nova_poshta_outcomeunknown',
+    ]
+    for (const prefix of prefixes) {
+      if (problem.message?.startsWith(prefix + ' '))
+        return (
+          translate(errorMessages, locale, code) +
+          problem.message.slice(prefix.length)
+        )
+    }
+  }
   if (code) return translate(errorMessages, locale, code)
   if (problem.status === 429)
     return translate(errorMessages, locale, 'RATE_LIMIT_EXCEEDED')
