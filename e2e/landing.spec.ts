@@ -208,8 +208,9 @@ test.describe('responsive matrix', () => {
       // A full-page capture stretches the viewport itself and its height then
       // drifts by a few pixels between captures (the page is 14 523.2px tall,
       // the image 14 523 or 14 526). Size the viewport to the content instead.
-      const pageHeight = await page.evaluate(() =>
-        Math.ceil(document.documentElement.getBoundingClientRect().height),
+      // scrollHeight, not the root's box: `html` is 100% of the viewport.
+      const pageHeight = await page.evaluate(
+        () => document.documentElement.scrollHeight,
       )
       await page.setViewportSize({ width, height: pageHeight })
       await page.evaluate(() => window.scrollTo(0, 0))
