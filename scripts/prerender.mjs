@@ -77,7 +77,29 @@ if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedE
   requestAnimationFrame(() => requestAnimationFrame(hydrate));
 }
 </script>`
+// Google Tag Manager and Google Analytics, only on the prerendered landing
+// pages: the app shell (login, account, cabinet) stays without them.
+const googleTagManager = `<script async src="https://www.googletagmanager.com/gtm.js?id=GTM-MV5L2BBG"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+</script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-D35DJ28PLE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-D35DJ28PLE');
+</script>`
+const charsetMeta = '<meta charset="UTF-8" />'
+if (!appShell.includes(charsetMeta)) {
+  throw new Error('Charset meta was not found in dist/index.html')
+}
 const template = appShell
+  .replace(charsetMeta, `${charsetMeta}\n${googleTagManager}`)
   .replace(stylesheetPattern, `<style>${criticalCss}</style>`)
   .replace(entryScript, '')
   .replace(/<link rel="modulepreload"[^>]*>/g, '')
