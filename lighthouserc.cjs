@@ -6,6 +6,9 @@ module.exports = {
       numberOfRuns: 3,
       settings: {
         onlyCategories: ['performance', 'accessibility', 'seo'],
+        // The budgets measure our own code: Google Tag Manager and Analytics
+        // on the landing pages would add hundreds of ms of blocking time.
+        blockedUrlPatterns: ['*googletagmanager.com*'],
       },
     },
     assert: {
