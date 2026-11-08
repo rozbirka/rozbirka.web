@@ -3,7 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { supportApi } from '@/api/support'
+import { trackLandingLead } from '@/lib/marketing-events'
 import { StartCta } from './start-cta'
+
+vi.mock('@/lib/marketing-events', () => ({ trackLandingLead: vi.fn() }))
 
 vi.mock('@/api/support', () => ({ supportApi: { createLead: vi.fn() } }))
 
@@ -33,6 +36,7 @@ async function fillAndSubmit() {
 describe('landing lead form', () => {
   beforeEach(() => {
     createLead.mockReset()
+    vi.mocked(trackLandingLead).mockClear()
   })
 
   it('sends the lead to Core and thanks the visitor', async () => {
@@ -47,6 +51,7 @@ describe('landing lead form', () => {
       locale: 'uk',
       website: '',
     })
+    expect(trackLandingLead).toHaveBeenCalledExactlyOnceWith()
     expect(await screen.findByRole('status')).toHaveTextContent('Дякуємо!')
   })
 
@@ -61,6 +66,19 @@ describe('landing lead form', () => {
     )
     expect(screen.getByLabelText("Ім'я")).toHaveValue('Олег')
     expect(screen.queryByText('Дякуємо!')).toBeNull()
+    expect(trackLandingLead).not.toHaveBeenCalled()
+  })
+
+  it('does not count a honeypot response as a lead', async () => {
+    createLead.mockResolvedValue(undefined)
+    renderForm()
+    const honeypot = document.querySelector<HTMLInputElement>(
+      'input[name="website"]',
+    )!
+    honeypot.value = 'bot.example'
+    await fillAndSubmit()
+    expect(await screen.findByRole('status')).toHaveTextContent('Дякуємо!')
+    expect(trackLandingLead).not.toHaveBeenCalled()
   })
 
   it('asks only for a name and a contact', () => {
