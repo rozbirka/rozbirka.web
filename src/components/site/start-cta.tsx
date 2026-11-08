@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
+import { trackLandingLead } from '@/lib/marketing-events'
 import { supportApi } from '@/api/support'
 import { useLocale, useT } from '@/i18n'
 import { Eyebrow, PrimaryLink, SectionTitle } from './landing-ui'
@@ -39,6 +40,7 @@ function StartForm() {
         locale,
         website: field('website'),
       })
+      if (!field('website').trim()) trackLandingLead()
       setStatus('sent')
     } catch {
       setStatus('error')
