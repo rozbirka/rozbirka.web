@@ -8,6 +8,8 @@ const stacks = Array.from({ length: workers }, (_, index) => e2ePorts(index))
 
 export default defineConfig({
   testDir: './e2e',
+  // This cross-repository fixture has its own explicit local Core host config.
+  testIgnore: 'landing-lead-real-core.spec.ts',
   snapshotPathTemplate:
     '{testDir}/{testFilePath}-snapshots/{arg}-{projectName}{ext}',
   // Tests spread over workers one by one, not file by file: most of them live

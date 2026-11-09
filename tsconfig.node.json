@@ -27,6 +27,7 @@
   "include": [
     "vite.config.ts",
     "playwright.config.ts",
+    "playwright.lead.config.ts",
     "e2e/**/*.ts",
     "scripts/**/*.mjs",
     "scripts/**/*.test.ts",
