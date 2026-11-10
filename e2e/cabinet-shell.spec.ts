@@ -270,6 +270,7 @@ async function installCabinetApiBoundary(
     }
 
     const isTenantScoped =
+      path === '/api/v1/shipping/tracking-attention' ||
       path === '/api/v1/me/permissions' ||
       path === '/api/v1/billing/subscription' ||
       path === '/api/v1/billing/payments' ||
@@ -310,6 +311,21 @@ async function installCabinetApiBoundary(
         )
         return
       }
+    }
+
+    if (
+      path === '/api/v1/shipping/tracking-attention' &&
+      request.method() === 'GET'
+    ) {
+      await fulfillData(route, {
+        items: [],
+        page: 1,
+        pageSize: 10,
+        total: 0,
+        pausedCount: 0,
+        delayedCount: 0,
+      })
+      return
     }
 
     if (path === '/api/v1/me/permissions' && request.method() === 'GET') {
@@ -1028,7 +1044,7 @@ async function selectVisibleTenant(page: Page, tenantId: string) {
     .getByRole('combobox', { name: 'Перемкнути розбірку' })
     .filter({ visible: true })
   if ((await switcher.count()) === 0) {
-    await page.getByRole('button', { name: 'Ще' }).click()
+    await page.getByRole('button', { name: 'Ще', exact: true }).click()
     switcher = page
       .getByRole('dialog', { name: 'Меню кабінету' })
       .getByRole('combobox', { name: 'Перемкнути розбірку' })
@@ -1042,7 +1058,7 @@ async function clickVisibleCabinetLink(page: Page, name: string) {
     .filter({ visible: true })
     .getByRole('link', { name, exact: true })
   if ((await link.count()) === 0) {
-    await page.getByRole('button', { name: 'Ще' }).click()
+    await page.getByRole('button', { name: 'Ще', exact: true }).click()
     link = page
       .getByRole('dialog', { name: 'Меню кабінету' })
       .getByRole('link', { name, exact: true })
@@ -1347,7 +1363,7 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   ).not.toBeVisible()
   await expect(page.getByRole('link', { name: 'Підписка' })).not.toBeVisible()
   await page.setViewportSize({ width: 320, height: 900 })
-  const mobileMore = page.getByRole('button', { name: 'Ще' })
+  const mobileMore = page.getByRole('button', { name: 'Ще', exact: true })
   await expect(mobileMore).toBeVisible()
   await mobileMore.click()
   await expect(
@@ -2159,7 +2175,7 @@ test('opens More by keyboard, traps focus, and restores it on close @cabinet-smo
   await installCabinetApiBoundary(page)
   await loginFrom(page)
 
-  const more = page.getByRole('button', { name: 'Ще' })
+  const more = page.getByRole('button', { name: 'Ще', exact: true })
   const tabKey = ['webkit', 'ios'].includes(testInfo.project.name)
     ? 'Alt+Tab'
     : 'Tab'
@@ -2444,7 +2460,7 @@ test('visible mobile cabinet controls meet the 44px target minimum', async ({
   await page.setViewportSize({ width: 320, height: 900 })
   await installCabinetApiBoundary(page)
   await loginFrom(page)
-  await page.getByRole('button', { name: 'Ще' }).click()
+  await page.getByRole('button', { name: 'Ще', exact: true }).click()
 
   const controls = page
     .getByRole('navigation', { name: 'Мобільна навігація' })
