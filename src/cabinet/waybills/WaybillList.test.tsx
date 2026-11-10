@@ -123,7 +123,10 @@ it('lists delivery, cash on delivery and sync as three columns (7.1)', async () 
   expect(within(rows[1]!).getByText('Створено')).toBeVisible()
   expect(within(rows[1]!).getByText('очікуємо')).toBeVisible()
   expect(within(rows[1]!).getByText('Львів · №5')).toBeVisible()
-  expect(within(rows[2]!).getByText('Чернетка')).toBeVisible()
+  // Both the uncreated waybill and its delivery status explain the draft.
+  const draftLabels = within(rows[2]!).getAllByText('Чернетка')
+  expect(draftLabels).toHaveLength(2)
+  for (const label of draftLabels) expect(label).toBeVisible()
   expect(within(rows[2]!).getByText('не створено')).toBeVisible()
   // A failed sync keeps the last known delivery status beside it.
   expect(within(rows[3]!).getByText('Прибула')).toBeVisible()

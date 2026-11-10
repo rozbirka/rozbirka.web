@@ -34,6 +34,7 @@ import {
 import { orderEventTitle } from '../order-labels'
 import { orderMoney } from '../order-money'
 import { DeliveryDrawer } from './DeliveryDrawer'
+import { DeliveryConnectionCard } from './DeliveryConnectionCard'
 import {
   DeliveryLifecycle,
   DeliveryPaymentsCard,
@@ -51,6 +52,7 @@ import { DeliveryStepDrawer, type DeliveryStep } from './DeliveryStepDrawer'
 import { ExternalWaybillSheet } from './ExternalWaybillSheet'
 import { LatePaymentSheet } from './LatePaymentSheet'
 import { PaymentDrawer } from './PaymentDrawer'
+import { ProviderReturnPanel } from './ProviderReturnPanel'
 import { RefundSheet } from './RefundSheet'
 import { ReturnAcceptSheet } from './ReturnAcceptSheet'
 import { OrderCancelDialog, StartReturnDialog } from './ReturnDialogs'
@@ -152,7 +154,9 @@ export function DeliveryOrderBody({
   countryCode = null,
   accountingCurrency = null,
   customerPath,
+  customerEditPath = null,
   customerSearchAllowed = false,
+  customerChangeHint = null,
   delivery,
   financeAllowed,
   financePath = null,
@@ -164,6 +168,7 @@ export function DeliveryOrderBody({
   novaPoshtaAvailable = true,
   notes,
   onIntentHandled,
+  onCustomerChange,
   order,
   partsPath,
   waybillsPath = null,
@@ -173,7 +178,10 @@ export function DeliveryOrderBody({
   /** The order lines' currency; `null` when not chosen or not reported. */
   accountingCurrency?: string | null
   customerPath: string | null
+  customerEditPath?: string | null
   customerSearchAllowed?: boolean
+  customerChangeHint?: string | null
+  onCustomerChange?: (() => void) | undefined
   delivery: DeliveryOrder
   financeAllowed: boolean
   /** «Фінанси», where an ambiguous carrier payout is reconciled (9.6). */
@@ -236,6 +244,14 @@ export function DeliveryOrderBody({
   const [cancelled, setCancelled] = useState<CancelledWaybill | null>(null)
   const [nextDraft, setNextDraft] = useState<ShipmentDraft | null>(null)
   const [attachedAt, setAttachedAt] = useState<string | null>(null)
+  const hasDeliveryProgress =
+    shipment !== null ||
+    cancelled !== null ||
+    delivery.dispatchedAt !== null ||
+    delivery.receivedAt !== null ||
+    delivery.returnedAt !== null
+  const needsConnection =
+    novaPoshtaAvailable && integrationId === null && !hasDeliveryProgress
   const [waiting, setWaiting] = useState(false)
   const [flowDialog, setFlowDialog] = useState<DeliveryIntent | null>(null)
   const [flowPending, setFlowPending] = useState(false)
@@ -635,23 +651,27 @@ export function DeliveryOrderBody({
 
   return (
     <>
-      <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b pb-1">
-        <DeliveryTabs
-          tabListRef={tabListRef}
-          panelId={tabPanelId}
-          delivery={delivery}
-          onChange={setTab}
-          shipment={shipment}
-          tab={tab}
-        />
-      </div>
+      {needsConnection ? null : (
+        <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b pb-1">
+          <DeliveryTabs
+            tabListRef={tabListRef}
+            panelId={tabPanelId}
+            delivery={delivery}
+            onChange={setTab}
+            shipment={shipment}
+            tab={tab}
+          />
+        </div>
+      )}
 
-      <DeliveryLifecycle
-        paymentKnown={delivery.agreedTotalUah > 0}
-        paymentExpected={!closing}
-        waybillState={shipment?.state ?? null}
-        steps={lifecycle(delivery, shipment, locale, timeZone)}
-      />
+      {hasDeliveryProgress ? (
+        <DeliveryLifecycle
+          paymentKnown={delivery.agreedTotalUah > 0}
+          paymentExpected={!closing}
+          waybillState={shipment?.state ?? null}
+          steps={lifecycle(delivery, shipment, locale, timeZone)}
+        />
+      ) : null}
 
       {headerActions.sentNotice ? (
         <Notice block tone="info">
@@ -696,13 +716,22 @@ export function DeliveryOrderBody({
             }
           />
           <div
-            id={tabPanelId}
-            role="tabpanel"
-            aria-labelledby={`${tabPanelId}-${tab}`}
+            id={needsConnection ? undefined : tabPanelId}
+            role={needsConnection ? undefined : 'tabpanel'}
+            aria-labelledby={
+              needsConnection ? undefined : `${tabPanelId}-${tab}`
+            }
             className="grid min-w-0 gap-3.5"
           >
-            {tab === 'sales' ? (
+            {needsConnection || tab === 'sales' ? (
               <>
+                {needsConnection ? (
+                  <DeliveryConnectionCard
+                    carrier={carrier}
+                    disconnected={disconnected}
+                    integrationsPath={integrationsPath}
+                  />
+                ) : null}
                 <OrderItemsCard
                   addPath={null}
                   currency={accountingCurrency}
@@ -818,10 +847,28 @@ export function DeliveryOrderBody({
                   }
                 />
 
-                <DeliverySteps delivery={delivery} shipment={shipment} />
+                {hasDeliveryProgress ? (
+                  <DeliverySteps delivery={delivery} shipment={shipment} />
+                ) : null}
               </>
             )}
           </div>
+          {shipment?.number &&
+          shipment.state === 'Created' &&
+          (delivery.dispatchedAt !== null || shipment.dispatchedAt !== null) ? (
+            <ProviderReturnPanel
+              canManage={mutationsAllowed}
+              enabled={
+                novaPoshtaAvailable &&
+                shipment.trackingEnabled &&
+                disconnected === null &&
+                lost === null
+              }
+              integrationId={shipment.integrationId}
+              shipmentId={shipment.id}
+              sourceNumber={shipment.number}
+            />
+          ) : null}
           {notes}
         </div>
 
@@ -842,6 +889,10 @@ export function DeliveryOrderBody({
           />
           <OrderCustomerCard
             accountingCurrency={accountingCurrency}
+            changeHint={customerChangeHint}
+            editPath={customerEditPath}
+            explainActions
+            onChange={onCustomerChange}
             customerId={order.customerId}
             customerName={order.customerName}
             initials={initials(order.customerName ?? '—')}
@@ -860,6 +911,7 @@ export function DeliveryOrderBody({
           accountingCurrency={accountingCurrency}
           orderValue={orderMoney(order).value}
           codWaybill={drawer.cod ? (shipment?.number ?? '—') : null}
+          requireFullBalance={shipment?.state === 'Created'}
           delivery={delivery}
           mode={drawer.mode}
           onClose={() => setDrawer(null)}
@@ -1179,6 +1231,7 @@ export function DeliveryOrderBody({
       {drawer?.kind === 'step' && (
         <DeliveryStepDrawer
           delivery={delivery}
+          onCloseAutoFocus={restoreFocus}
           onClose={() => setDrawer(null)}
           onConfirm={() =>
             runMoney(() =>

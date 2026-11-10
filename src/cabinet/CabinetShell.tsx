@@ -7,6 +7,7 @@ import { CommandPalette } from './CommandPalette'
 import { ConnectionNotice } from './ConnectionNotice'
 import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 import { useCabinetActivity } from './use-cabinet-activity'
+import { ShippingTrackingAttention } from './shipping/ShippingTrackingAttention'
 
 export function CabinetShell() {
   const auth = useAuth()
@@ -39,6 +40,11 @@ export function CabinetShell() {
       <main className="rz-main cabinet-shell__content">
         <ToastProvider>
           <ConnectionNotice />
+          <ShippingTrackingAttention
+            scopeKey={`${cabinet.snapshot.userId}:${cabinet.snapshot.tenantId}:${cabinet.snapshot.generation}`}
+            tenantSlug={cabinet.targetTenant.slug}
+            enabled={cabinet.snapshot.permissions.has('orders.view')}
+          />
           <CommandPalette
             snapshot={cabinet.snapshot}
             tenant={cabinet.targetTenant}

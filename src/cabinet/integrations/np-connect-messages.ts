@@ -54,8 +54,9 @@ export const npConnectMessages = defineMessages({
     refreshList: 'Оновити список',
     // Step 3
     tillTitle: 'Каса для післяплати',
-    tillLead: 'Куди зараховувати післяплату, коли клієнт забере посилку.',
-    tillAuto: 'UAH · післяплата зарахується автоматично',
+    tillLead:
+      'Оберіть касу для підтвердження фактичного надходження післяплати.',
+    tillDefault: 'UAH · типова каса для підтвердження',
     tillCurrency: 'UAH',
     tillNone: 'Продовжити без каси',
     tillNoneHint: 'Вносити вручну',
@@ -146,8 +147,8 @@ export const npConnectMessages = defineMessages({
     refreshList: 'Refresh list',
     tillTitle: 'Till for cash on delivery',
     tillLead:
-      'Where cash on delivery goes once the customer collects the parcel.',
-    tillAuto: 'UAH · cash on delivery is booked automatically',
+      'Choose a till for confirming that the cash on delivery has actually arrived.',
+    tillDefault: 'UAH · default till for confirmation',
     tillCurrency: 'UAH',
     tillNone: 'Continue without a till',
     tillNoneHint: 'Record manually',
@@ -233,8 +234,8 @@ export const npConnectMessages = defineMessages({
       'Nadawca się zmienił, więc osoba kontaktowa została wyczyszczona. Wybierz kontakt nowego nadawcy.',
     refreshList: 'Odśwież listę',
     tillTitle: 'Kasa za pobranie',
-    tillLead: 'Gdzie księgować pobranie, gdy klient odbierze paczkę.',
-    tillAuto: 'UAH · pobranie zaksięguje się automatycznie',
+    tillLead: 'Wybierz kasę do potwierdzania faktycznego wpływu pobrania.',
+    tillDefault: 'UAH · domyślna kasa do potwierdzenia',
     tillCurrency: 'UAH',
     tillNone: 'Kontynuuj bez kasy',
     tillNoneHint: 'Wpisywać ręcznie',

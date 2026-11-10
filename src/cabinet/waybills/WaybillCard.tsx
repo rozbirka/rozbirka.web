@@ -1,3 +1,6 @@
+import { TrackingSyncDetails } from '../orders/delivery/TrackingSyncDetails'
+import { TrackingRetryNotice } from '../orders/delivery/TrackingRetryNotice'
+import { ProviderReturnPanel } from '../orders/delivery/ProviderReturnPanel'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import {
@@ -548,7 +551,13 @@ export function WaybillCard({
           {t('lostText')}
         </TitledNotice>
       )}
-      {!syncStale ? null : (
+      {live && lost === null && current.state === 'Created' ? (
+        <TrackingRetryNotice state={current} />
+      ) : null}
+      {lost === null && current.state === 'Created' ? (
+        <TrackingSyncDetails state={current} />
+      ) : null}
+      {!syncStale || current.trackingPaused ? null : (
         <Notice
           action={
             <Button
@@ -600,7 +609,7 @@ export function WaybillCard({
             shipment={current}
           />
         </div>
-        <div className="order-1 min-w-0 lg:order-none lg:col-start-1 lg:row-start-2">
+        <div className="order-1 grid min-w-0 gap-4 lg:order-none lg:col-start-1 lg:row-start-2">
           <WaybillDeliveryCard
             actions={off ? (offActions ?? undefined) : narrowActions}
             {...(off && lastKnownAt !== null
@@ -609,6 +618,8 @@ export function WaybillCard({
             notice={
               draft ? (
                 <Notice tone="info">{t('draftNotice')}</Notice>
+              ) : currentStage === 'sent' || currentStage === 'received' ? (
+                <p className="rz-caption m-0 text-pretty">{tw('sentHint')}</p>
               ) : undefined
             }
             shipment={current}
@@ -620,6 +631,15 @@ export function WaybillCard({
             )}
             stale={syncStale || lost !== null}
           />
+          {current.state === 'Created' && current.number ? (
+            <ProviderReturnPanel
+              canManage={rights.manage}
+              enabled={live && current.trackingEnabled && lost === null}
+              integrationId={current.integrationId}
+              shipmentId={current.id}
+              sourceNumber={current.number}
+            />
+          ) : null}
         </div>
         <div className="order-4 min-w-0 max-md:hidden lg:order-none lg:col-start-1 lg:row-start-3">
           <WaybillHistoryCard

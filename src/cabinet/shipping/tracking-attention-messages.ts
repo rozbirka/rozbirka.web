@@ -1,0 +1,96 @@
+import { defineMessages } from '@/i18n'
+
+export const messages = defineMessages({
+  uk: {
+    title: 'Потрібна увага до відстеження НП',
+    summary: 'Призупинено: {paused}. Із затримкою: {delayed}.',
+    description:
+      'Проблеми автоматичних перевірок. Останній відомий статус посилки зберігається.',
+    view: 'Переглянути ТТН',
+    error: 'Не вдалося оновити список. Показані дані можуть бути застарілими.',
+    retry: 'Спробувати ще раз',
+    previous: 'Назад',
+    next: 'Далі',
+    page: '{page} з {pages}',
+    close: 'Закрити',
+    loading: 'Оновлюємо список…',
+    count: 'Перевірок, що потребують уваги: {count}',
+    refresh: 'Оновити список',
+    empty: 'Проблемних перевірок більше немає.',
+    source: 'Відправлення',
+    return: 'Повернення',
+    paused: 'Призупинено',
+    delayed: 'Перевірка затримується',
+    waybill: 'ТТН {number}',
+    order: 'Замовлення #{number}',
+    since: 'Від {time}',
+    unknown: 'Номер уточнюється',
+    delayReason:
+      'Автоматична перевірка не завершилася понад 15 хвилин. Вона залишається в обробці; це не означає затримку доставки посилки.',
+    recovery:
+      'Усуньте причину, відкрийте накладну й натисніть «Оновити статус».',
+    open: 'Відкрити накладну',
+  },
+  'en-GB': {
+    title: 'Nova Poshta tracking needs attention',
+    summary: 'Paused: {paused}. Delayed: {delayed}.',
+    description:
+      'Issues with automatic checks. The last known parcel status is preserved.',
+    view: 'View waybills',
+    error:
+      'Could not refresh the list. Displayed information may be out of date.',
+    retry: 'Try again',
+    previous: 'Previous',
+    next: 'Next',
+    page: '{page} of {pages}',
+    close: 'Close',
+    loading: 'Refreshing the list…',
+    count: 'Checks requiring attention: {count}',
+    refresh: 'Refresh list',
+    empty: 'No checks currently need attention.',
+    source: 'Shipment',
+    return: 'Return',
+    paused: 'Paused',
+    delayed: 'Check delayed',
+    waybill: 'Waybill {number}',
+    order: 'Order #{number}',
+    since: 'Since {time}',
+    unknown: 'Number pending',
+    delayReason:
+      'The automatic check has been pending for over 15 minutes. Processing continues; this does not mean the parcel delivery is delayed.',
+    recovery:
+      'Resolve the cause, open the waybill and select “Refresh status”.',
+    open: 'Open waybill',
+  },
+  pl: {
+    title: 'Śledzenie Nova Poshta wymaga uwagi',
+    summary: 'Wstrzymane: {paused}. Opóźnione: {delayed}.',
+    description:
+      'Problemy z automatycznymi kontrolami. Ostatni znany status przesyłki zostaje zachowany.',
+    view: 'Zobacz listy przewozowe',
+    error:
+      'Nie udało się odświeżyć listy. Wyświetlane dane mogą być nieaktualne.',
+    retry: 'Spróbuj ponownie',
+    previous: 'Wstecz',
+    next: 'Dalej',
+    page: '{page} z {pages}',
+    close: 'Zamknij',
+    loading: 'Odświeżanie listy…',
+    count: 'Kontrole wymagające uwagi: {count}',
+    refresh: 'Odśwież listę',
+    empty: 'Nie ma już kontroli wymagających uwagi.',
+    source: 'Wysyłka',
+    return: 'Zwrot',
+    paused: 'Wstrzymano',
+    delayed: 'Opóźniona kontrola',
+    waybill: 'List przewozowy {number}',
+    order: 'Zamówienie #{number}',
+    since: 'Od {time}',
+    unknown: 'Numer w trakcie ustalania',
+    delayReason:
+      'Automatyczna kontrola nie zakończyła się od ponad 15 minut. Przetwarzanie trwa; nie oznacza to opóźnienia dostawy przesyłki.',
+    recovery:
+      'Usuń przyczynę, otwórz list przewozowy i wybierz „Odśwież status”.',
+    open: 'Otwórz list przewozowy',
+  },
+})

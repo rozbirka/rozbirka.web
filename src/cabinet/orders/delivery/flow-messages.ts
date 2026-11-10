@@ -7,6 +7,14 @@ import { defineMessages } from '@/i18n'
  */
 export const deliveryFlowMessages = defineMessages({
   uk: {
+    factNet: 'Надійшло в каси',
+    factFees: 'Комісія перевізника',
+    fullBalanceRequired:
+      'Після створення ТТН внесіть повний залишок: {amount}.',
+    actualReceiptWithWaybill:
+      'Внесіть повний фактично сплачений залишок. Оплата не змінює післяплату в ТТН: якщо клієнт заплатив напряму, зніміть її в Новій пошті перед отриманням посилки.',
+    actualReceiptHint:
+      'Внесіть оплату лише після фактичного надходження грошей і виберіть касу, яка їх отримала.',
     // Order pill
     chipReturn: 'Повернення',
     // «Оплата» block (§9)
@@ -23,7 +31,7 @@ export const deliveryFlowMessages = defineMessages({
     pillAwaitingRefund: 'Потрібен розрахунок',
     pillRefundedPart: 'Повернено частково',
     pillRefunded: 'Повернено',
-    pillLate: 'Потрібно повернути отримані кошти',
+    pillLate: 'Перевірте переказ після скасування',
     pillNotApplicable: 'Не застосовується',
     subDeposit: 'передоплата',
     subCod: 'післяплата',
@@ -31,20 +39,19 @@ export const deliveryFlowMessages = defineMessages({
     subRefunded: 'повернено {amount}',
     subLate: 'післяплата · після скасування',
     noteAwaitingCod:
-      'Нова пошта ще не переказала післяплату. Зазвичай це 1–2 робочі дні; зарахуємо автоматично в «{till}».',
+      'Посилку отримано. Перевірте надходження грошей і внесіть фактичну оплату у відповідну касу.',
     noteAwaitingCodBare:
-      'Нова пошта ще не переказала післяплату. Зазвичай це 1–2 робочі дні.',
-    noteAutoBooked:
-      'Післяплату {amount} зараховано автоматично в «{till}» {date}.',
+      'Посилку отримано. Перевірте надходження грошей і внесіть фактичну оплату у відповідну касу.',
+    noteAutoBooked: 'Оплату {amount} записано в «{till}» {date}.',
     noteNoTill:
-      'Для Нової пошти не обрано касу, тому післяплату не зараховано автоматично. Внесіть її вручну, коли кошти надійдуть.',
+      'Внесіть оплату лише після фактичного надходження грошей і виберіть касу, яка їх отримала.',
     noteAutoFailedTill:
-      'Не вдалося автоматично зарахувати післяплату: каса «{till}» архівована. Внесіть оплату вручну в активну касу.',
+      'Внесіть оплату лише після фактичного надходження грошей і виберіть касу, яка їх отримала.',
     noteAutoFailed:
-      'Не вдалося автоматично зарахувати післяплату. Внесіть оплату вручну в активну касу.',
-    reconcileTitle: 'Суми не збігаються',
+      'Нова пошта повідомила про переказ. Перевірте надходження грошей і внесіть оплату у фактичну касу.',
+    reconcileTitle: 'Перевірте надходження грошей',
     noteReconcile:
-      'Нова пошта повідомила про переказ, що не збігається із залишком {left}. Не позначаємо як оплачене, доки ви не звірите суму у «Фінансах».',
+      'Нова пошта повідомила про переказ. Перевірте виписку або отримання готівки та внесіть фактичну оплату. Залишок замовлення: {left}.',
     reconcileAction: 'Звірити у «Фінансах»',
     notePaidEarly:
       'Оплату отримано. Замовлення завершиться, коли посилку отримають.',
@@ -53,7 +60,7 @@ export const deliveryFlowMessages = defineMessages({
     savedToast: 'Оплату {amount} внесено.',
     savedCompletedToast: 'Оплату {amount} внесено. Замовлення завершено.',
     lateNote:
-      'Після скасування Нова пошта переказала {amount}. Зафіксуйте надходження й поверніть кошти клієнту. Замовлення лишається скасованим.',
+      'Нова пошта повідомила про переказ після скасування. Перевірте, чи кошти фактично надійшли. Після підтвердження зафіксуйте надходження й повернення клієнту.',
     lateRecord: 'Зафіксувати надходження',
     lateLink: 'Прив’язати операцію',
     refundAction: 'Завершити розрахунок',
@@ -247,6 +254,14 @@ export const deliveryFlowMessages = defineMessages({
     lateToast: 'Надходження зафіксовано. Поверніть кошти клієнту.',
   },
   'en-GB': {
+    factNet: 'Received in tills',
+    factFees: 'Carrier fee',
+    fullBalanceRequired:
+      'After a waybill is created, record the full balance: {amount}.',
+    actualReceiptWithWaybill:
+      'Record the full balance actually paid. Payment does not change the waybill COD: if paid directly, remove COD in Nova Poshta before collection.',
+    actualReceiptHint:
+      'Record payment only after the money arrives, and choose the till that received it.',
     chipReturn: 'Return',
     paymentTitle: 'Payment',
     factDue: 'Agreed order total, UAH',
@@ -261,7 +276,7 @@ export const deliveryFlowMessages = defineMessages({
     pillAwaitingRefund: 'Settlement needed',
     pillRefundedPart: 'Partly refunded',
     pillRefunded: 'Refunded',
-    pillLate: 'Money received must be returned',
+    pillLate: 'Check transfer after cancellation',
     pillNotApplicable: 'Not applicable',
     subDeposit: 'prepayment',
     subCod: 'cash on delivery',
@@ -269,20 +284,19 @@ export const deliveryFlowMessages = defineMessages({
     subRefunded: '{amount} refunded',
     subLate: 'cash on delivery · after cancellation',
     noteAwaitingCod:
-      'Nova Poshta has not transferred the cash on delivery yet. This usually takes 1–2 working days; we will book it automatically to “{till}”.',
+      'The parcel was received. Check that the money arrived and record actual payment in the correct till.',
     noteAwaitingCodBare:
-      'Nova Poshta has not transferred the cash on delivery yet. This usually takes 1–2 working days.',
-    noteAutoBooked:
-      'Cash on delivery of {amount} was booked automatically to “{till}” on {date}.',
+      'The parcel was received. Check that the money arrived and record actual payment in the correct till.',
+    noteAutoBooked: 'Payment of {amount} was recorded in “{till}” on {date}.',
     noteNoTill:
-      'No till is chosen for Nova Poshta, so the cash on delivery was not booked automatically. Record it manually once the money arrives.',
+      'Record payment only after the money arrives, and choose the till that received it.',
     noteAutoFailedTill:
-      'The cash on delivery could not be booked automatically: the till “{till}” is archived. Record the payment manually to an active till.',
+      'Record payment only after the money arrives, and choose the till that received it.',
     noteAutoFailed:
-      'The cash on delivery could not be booked automatically. Record the payment manually to an active till.',
-    reconcileTitle: 'Amounts do not match',
+      'Nova Poshta reported a transfer. Check the actual receipt and record payment in the correct till.',
+    reconcileTitle: 'Check that the money arrived',
     noteReconcile:
-      'Nova Poshta reported a transfer that does not match the balance of {left}. We will not mark it paid until you reconcile the amount in Finance.',
+      'Nova Poshta reported a transfer. Check the statement or cash receipt and record actual payment. Order balance: {left}.',
     reconcileAction: 'Reconcile in Finance',
     notePaidEarly:
       'Payment received. The order completes once the parcel is collected.',
@@ -291,7 +305,7 @@ export const deliveryFlowMessages = defineMessages({
     savedToast: 'Payment of {amount} recorded.',
     savedCompletedToast: 'Payment of {amount} recorded. Order completed.',
     lateNote:
-      'After cancellation Nova Poshta transferred {amount}. Record the receipt and refund the customer. The order stays cancelled.',
+      'Nova Poshta reported a transfer after cancellation. Check whether the money arrived, then record its receipt and refund to the customer.',
     lateRecord: 'Record receipt',
     lateLink: 'Link transaction',
     refundAction: 'Settle the order',
@@ -475,6 +489,13 @@ export const deliveryFlowMessages = defineMessages({
     lateToast: 'Receipt recorded. Refund the customer.',
   },
   pl: {
+    factNet: 'Wpłynęło do kas',
+    factFees: 'Prowizja przewoźnika',
+    fullBalanceRequired: 'Po utworzeniu listu zapisz całe saldo: {amount}.',
+    actualReceiptWithWaybill:
+      'Zapisz całe faktycznie opłacone saldo. Płatność nie zmienia pobrania na liście: po płatności bezpośredniej usuń pobranie w Nova Poshta przed odbiorem.',
+    actualReceiptHint:
+      'Zapisz płatność po faktycznym otrzymaniu pieniędzy i wybierz kasę, do której wpłynęły.',
     chipReturn: 'Zwrot',
     paymentTitle: 'Płatność',
     factDue: 'Uzgodniona kwota zamówienia, UAH',
@@ -489,7 +510,7 @@ export const deliveryFlowMessages = defineMessages({
     pillAwaitingRefund: 'Potrzebne rozliczenie',
     pillRefundedPart: 'Zwrócono częściowo',
     pillRefunded: 'Zwrócono',
-    pillLate: 'Trzeba zwrócić otrzymane środki',
+    pillLate: 'Sprawdź przelew po anulowaniu',
     pillNotApplicable: 'Nie dotyczy',
     subDeposit: 'przedpłata',
     subCod: 'pobranie',
@@ -497,20 +518,19 @@ export const deliveryFlowMessages = defineMessages({
     subRefunded: 'zwrócono {amount}',
     subLate: 'pobranie · po anulowaniu',
     noteAwaitingCod:
-      'Nowa Poczta nie przelała jeszcze pobrania. Zwykle trwa to 1–2 dni robocze; zaksięgujemy je automatycznie w kasie „{till}”.',
+      'Przesyłka została odebrana. Sprawdź wpływ pieniędzy i zapisz płatność we właściwej kasie.',
     noteAwaitingCodBare:
-      'Nowa Poczta nie przelała jeszcze pobrania. Zwykle trwa to 1–2 dni robocze.',
-    noteAutoBooked:
-      'Pobranie {amount} zaksięgowano automatycznie w kasie „{till}” {date}.',
+      'Przesyłka została odebrana. Sprawdź wpływ pieniędzy i zapisz płatność we właściwej kasie.',
+    noteAutoBooked: 'Płatność {amount} zapisano w „{till}” {date}.',
     noteNoTill:
-      'Dla Nowej Poczty nie wybrano kasy, więc pobranie nie zostało zaksięgowane automatycznie. Wprowadź je ręcznie, gdy środki wpłyną.',
+      'Zapisz płatność po faktycznym otrzymaniu pieniędzy i wybierz kasę, do której wpłynęły.',
     noteAutoFailedTill:
-      'Nie udało się automatycznie zaksięgować pobrania: kasa „{till}” jest zarchiwizowana. Wprowadź płatność ręcznie do aktywnej kasy.',
+      'Zapisz płatność po faktycznym otrzymaniu pieniędzy i wybierz kasę, do której wpłynęły.',
     noteAutoFailed:
-      'Nie udało się automatycznie zaksięgować pobrania. Wprowadź płatność ręcznie do aktywnej kasy.',
-    reconcileTitle: 'Kwoty się nie zgadzają',
+      'Nova Poshta zgłosiła przelew. Sprawdź faktyczny wpływ i zapisz płatność we właściwej kasie.',
+    reconcileTitle: 'Sprawdź wpływ pieniędzy',
     noteReconcile:
-      'Nowa Poczta zgłosiła przelew, który nie zgadza się z saldem {left}. Nie oznaczymy go jako opłacony, dopóki nie uzgodnisz kwoty w „Finansach”.',
+      'Nova Poshta zgłosiła przelew. Sprawdź wyciąg lub odbiór gotówki i zapisz faktyczną płatność. Saldo: {left}.',
     reconcileAction: 'Uzgodnij w „Finansach”',
     notePaidEarly:
       'Płatność otrzymana. Zamówienie zakończy się, gdy przesyłka zostanie odebrana.',
@@ -520,7 +540,7 @@ export const deliveryFlowMessages = defineMessages({
     savedCompletedToast:
       'Wprowadzono płatność {amount}. Zamówienie zakończone.',
     lateNote:
-      'Po anulowaniu Nowa Poczta przelała {amount}. Zaksięguj wpływ i zwróć środki klientowi. Zamówienie pozostaje anulowane.',
+      'Nova Poshta zgłosiła przelew po anulowaniu. Sprawdź wpływ pieniędzy, a następnie zapisz wpływ i zwrot klientowi.',
     lateRecord: 'Zaksięguj wpływ',
     lateLink: 'Powiąż operację',
     refundAction: 'Zakończ rozliczenie',

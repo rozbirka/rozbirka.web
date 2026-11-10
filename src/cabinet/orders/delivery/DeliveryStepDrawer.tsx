@@ -41,11 +41,13 @@ const COPY: Record<DeliveryStep, StepCopy> = {
 export function DeliveryStepDrawer({
   delivery,
   onClose,
+  onCloseAutoFocus,
   onConfirm,
   step,
 }: {
   delivery: DeliveryOrder
   onClose: () => void
+  onCloseAutoFocus?: (event: Event) => void
   onConfirm: () => Promise<void>
   step: DeliveryStep
 }) {
@@ -88,6 +90,7 @@ export function DeliveryStepDrawer({
           </Button>
         </div>
       }
+      onCloseAutoFocus={onCloseAutoFocus}
       onOpenChange={(open) => {
         if (!open && !pending) onClose()
       }}

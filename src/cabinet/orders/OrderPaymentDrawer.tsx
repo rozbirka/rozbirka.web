@@ -38,6 +38,8 @@ export type PaymentOutcome =
 export function OrderPaymentDrawer({
   accountingCurrency,
   allowedCurrencies,
+  allowCarrierFee = false,
+  paymentHint,
   busy,
   emptyTillsMessage,
   existing,
@@ -54,6 +56,9 @@ export function OrderPaymentDrawer({
   accountingCurrency: string | null
   /** Optional payment constraints for an endpoint that accepts fewer currencies. */
   allowedCurrencies?: readonly string[]
+  /** Delivery receipts may include a confirmed fee withheld by the carrier. */
+  allowCarrierFee?: boolean
+  paymentHint?: string
   emptyTillsMessage?: string
   validatePayment?: (payment: ConfirmPayment) => string | null
   onCloseAutoFocus?: ((event: Event) => void) | undefined
@@ -61,7 +66,11 @@ export function OrderPaymentDrawer({
   /** Payments the order already holds; the save replaces the whole set. */
   existing: readonly ConfirmPayment[]
   onOpenChange: (open: boolean) => void
-  onSave: (payments: ConfirmPayment[], added: ConfirmPayment) => void
+  onSave: (
+    payments: ConfirmPayment[],
+    added: ConfirmPayment,
+    feeUah?: number,
+  ) => void
   open: boolean
   orderNumber: number
   /** The order's value in the accounting currency. */
@@ -79,6 +88,8 @@ export function OrderPaymentDrawer({
   const [currency, setCurrency] = useState<string | null>(null)
   const [reselectFrom, setReselectFrom] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [hasFee, setHasFee] = useState(false)
+  const [feeDraft, setFeeDraft] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -137,12 +148,24 @@ export function OrderPaymentDrawer({
       ? (validatePayment?.({ accountId: till.id, amount, currency: active }) ??
         null)
       : null
+  const fee = allowCarrierFee && hasFee ? parseAmount(feeDraft) : 0
+  const feeError =
+    allowCarrierFee &&
+    hasFee &&
+    (fee === null ||
+      fee < 0 ||
+      amount === null ||
+      fee >= amount ||
+      amountPrecisionError(fee, 'UAH', locale) !== null)
+      ? t('feeInvalid')
+      : null
   const valid =
     till !== undefined &&
     active !== null &&
     amount !== null &&
     amount > 0 &&
     precision === null &&
+    feeError === null &&
     paymentError === null
 
   const pickTill = (next: CashRegister) => {
@@ -192,19 +215,18 @@ export function OrderPaymentDrawer({
                 amount,
                 currency: active,
               }
-              onSave(
-                [
-                  ...existing.map(
-                    ({ accountId, amount: sum, currency: code }) => ({
-                      accountId,
-                      amount: sum,
-                      currency: code,
-                    }),
-                  ),
-                  added,
-                ],
+              const payments = [
+                ...existing.map(
+                  ({ accountId, amount: sum, currency: code }) => ({
+                    accountId,
+                    amount: sum,
+                    currency: code,
+                  }),
+                ),
                 added,
-              )
+              ]
+              if (allowCarrierFee) onSave(payments, added, fee ?? 0)
+              else onSave(payments, added)
             }}
             variant="primary"
           >
@@ -271,6 +293,9 @@ export function OrderPaymentDrawer({
         <h3 className="rz-h-card m-0" id={`${groupId}-paid`}>
           {t('actualPayment')}
         </h3>
+        {paymentHint === undefined ? null : (
+          <p className="rz-muted m-0 text-pretty">{paymentHint}</p>
+        )}
         {loading ? (
           <SkeletonRows label={t('loadingTills')} rows={3} />
         ) : tills.length === 0 ? (
@@ -366,6 +391,7 @@ export function OrderPaymentDrawer({
             <Field
               error={precision ?? paymentError ?? undefined}
               label={t('amount')}
+              hint={allowCarrierFee ? t('customerGrossHint') : undefined}
             >
               <MoneyInput
                 className="h-12 text-page"
@@ -377,6 +403,50 @@ export function OrderPaymentDrawer({
                 value={draft}
               />
             </Field>
+            {allowCarrierFee ? (
+              <>
+                <label className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="rz-checkbox"
+                    checked={hasFee}
+                    disabled={busy}
+                    onChange={(event) => {
+                      setHasFee(event.target.checked)
+                      setFeeDraft('')
+                    }}
+                  />
+                  {t('carrierFee')}
+                </label>
+                {hasFee ? (
+                  <Field
+                    label={t('feeAmount')}
+                    error={feeError ?? undefined}
+                    hint={t('feeHint')}
+                  >
+                    <MoneyInput
+                      currency="UAH"
+                      inputMode="decimal"
+                      readOnly={busy}
+                      onChange={(event) => setFeeDraft(event.target.value)}
+                      placeholder="0"
+                      value={feeDraft}
+                    />
+                  </Field>
+                ) : null}
+                {amount !== null && amount > 0 && feeError === null ? (
+                  <p className="rz-inset m-0 text-pretty">
+                    {t('netReceipt', {
+                      amount:
+                        format.money(
+                          Math.round((amount - (fee ?? 0)) * 100) / 100,
+                          'UAH',
+                        ) ?? '',
+                    })}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
           </>
         )}
       </section>

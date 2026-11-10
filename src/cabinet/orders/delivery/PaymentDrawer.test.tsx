@@ -84,6 +84,7 @@ const renderDrawer = (
     accountingCurrency?: string | null
     orderValue?: number | null
     codWaybill?: string | null
+    requireFullBalance?: boolean
     onRecord?: (input: unknown) => Promise<void>
     onClose?: () => void
   } = {},
@@ -96,6 +97,7 @@ const renderDrawer = (
       accountingCurrency={options.accountingCurrency ?? null}
       orderValue={options.orderValue ?? null}
       codWaybill={options.codWaybill ?? null}
+      requireFullBalance={options.requireFullBalance ?? false}
       delivery={delivery(over)}
       mode={mode}
       onClose={onClose}
@@ -118,7 +120,7 @@ it('uses the ordinary payment drawer without delivery gross, fee, presets or cal
     /брутто|Комісія каси|Погоджено за доставку|Залишиться|Половина/,
   )
   expect(
-    screen.queryByRole('button', { name: 'Прив’язати транзакцію' }),
+    screen.queryByRole('button', { name: 'Прив’язати оплату з фінансів' }),
   ).not.toBeInTheDocument()
 })
 
@@ -376,4 +378,64 @@ it('compares a fractional deposit remainder in kopecks without rejecting its exa
     feeUah: 0,
     kind: 'prepayment',
   })
+})
+
+it('records the customer gross and confirmed carrier fee separately in the standard drawer', async () => {
+  const user = userEvent.setup()
+  const { onRecord } = renderDrawer(
+    'record',
+    {},
+    { codWaybill: '99000000000001' },
+  )
+  await user.type(await screen.findByLabelText('Сума'), '3600')
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Перевізник утримав комісію' }),
+  )
+  await user.type(screen.getByLabelText('Утримана комісія, грн'), '18')
+  expect(screen.getByText(/У касу надійшло:/)).toHaveTextContent(
+    /3\s582,00\sUAH/,
+  )
+  await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
+  expect(onRecord).toHaveBeenCalledWith({
+    accountId: 'cash-1',
+    amountUah: 3600,
+    feeUah: 18,
+    kind: 'cod',
+  })
+})
+
+it('refuses an invalid fee and clears it when the fee option is switched off', async () => {
+  const user = userEvent.setup()
+  const { onRecord } = renderDrawer()
+  await user.type(await screen.findByLabelText('Сума'), '100')
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Перевізник утримав комісію' }),
+  )
+  await user.type(screen.getByLabelText('Утримана комісія, грн'), '100')
+  expect(screen.getByRole('button', { name: 'Записати оплату' })).toBeDisabled()
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Перевізник утримав комісію' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
+  expect(onRecord).toHaveBeenCalledWith(
+    expect.objectContaining({ amountUah: 100, feeUah: 0 }),
+  )
+})
+
+it('requires the full remaining balance after creation and explains that recording does not change carrier COD', async () => {
+  const user = userEvent.setup()
+  const { onRecord } = renderDrawer('record', {}, { requireFullBalance: true })
+  const amount = await screen.findByLabelText('Сума')
+  expect(screen.getByRole('dialog')).toHaveTextContent(
+    'Оплата не змінює післяплату в ТТН',
+  )
+  await user.type(amount, '100')
+  expect(screen.getByRole('button', { name: 'Записати оплату' })).toBeDisabled()
+  expect(onRecord).not.toHaveBeenCalled()
+  await user.clear(amount)
+  await user.type(amount, '3600')
+  await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
+  expect(onRecord).toHaveBeenCalledWith(
+    expect.objectContaining({ amountUah: 3600 }),
+  )
 })

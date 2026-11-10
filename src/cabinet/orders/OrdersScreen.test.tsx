@@ -35,17 +35,24 @@ const partMocks = vi.hoisted(() => ({
   search: vi.fn(),
 }))
 const cashMocks = vi.hoisted(() => ({ list: vi.fn() }))
-const integrationMocks = vi.hoisted(() => ({ list: vi.fn() }))
-const deliveryMocks = vi.hoisted(() => ({ get: vi.fn() }))
+const integrationMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  dispatchPoints: vi.fn(),
+  preferences: vi.fn(),
+}))
+const shippingMocks = vi.hoisted(() => ({ get: vi.fn() }))
+const deliveryMocks = vi.hoisted(() => ({ get: vi.fn(), setCustomer: vi.fn() }))
 const customerMocks = vi.hoisted(() => ({
+  list: vi.fn(),
   search: vi.fn(),
   getById: vi.fn(),
   create: vi.fn(),
   activate: vi.fn(),
 }))
 vi.mock('@/api/integrations', () => ({
-  integrationsApi: { list: integrationMocks.list },
+  integrationsApi: integrationMocks,
 }))
+vi.mock('@/api/shipping', () => ({ shippingApi: shippingMocks }))
 /**
  * Whether an order ships is Core's answer, asked for every order now. An
  * ordinary one is refused with `order_invalid_status`, which the delivery
@@ -54,6 +61,7 @@ vi.mock('@/api/integrations', () => ({
 vi.mock('@/api/delivery', () => ({
   deliveryApi: {
     get: deliveryMocks.get,
+    setCustomer: deliveryMocks.setCustomer,
   },
 }))
 vi.mock('@/api/orders', () => ({ ordersApi: orderMocks }))
@@ -205,6 +213,15 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue(cabinet())
   integrationMocks.list.mockResolvedValue([])
+  integrationMocks.dispatchPoints.mockResolvedValue([])
+  integrationMocks.preferences.mockResolvedValue({ codCashRegisterId: null })
+  shippingMocks.get.mockResolvedValue(null)
+  customerMocks.list.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 6,
+    total: 0,
+  })
   deliveryMocks.get.mockRejectedValue({
     kind: 'conflict',
     // Core's own casing: the constant in `ErrorCodes` is UPPER_SNAKE.
@@ -337,6 +354,31 @@ it('does not offer delivery after an ordinary order is confirmed', async () => {
   expect(
     screen.queryByRole('heading', { name: 'Доставка' }),
   ).not.toBeInTheDocument()
+})
+
+it('keeps an ordinary order out of delivery mode until Nova Poshta is connected', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['orders.view', 'orders.manage', 'team.manage', 'finance.manage']),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  const entry = await screen.findByRole('region', {
+    name: 'Доставка Новою поштою',
+  })
+  expect(
+    within(entry).getByRole('link', { name: 'Підключити' }),
+  ).toHaveAttribute('href', '/app/garage/settings/integrations')
+  expect(screen.queryByRole('button', { name: 'Оформити доставку' })).toBeNull()
+  expect(screen.queryByRole('tablist')).toBeNull()
+  expect(
+    screen.queryByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeNull()
+  expect(screen.getByRole('region', { name: 'Клієнт' })).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Нотатки' })).toBeVisible()
 })
 
 it('prevents a duplicate canonical create while the first request is pending', async () => {
@@ -2964,6 +3006,252 @@ it.each(['confirmed', 'cancelled', 'refunded'])(
       { signal: expect.any(AbortSignal) as AbortSignal },
     )
     expect(orderMocks.updateItems).not.toHaveBeenCalled()
+  },
+)
+
+it('reuses the customer drawer after booking delivery and refreshes customer and prepayment policy', async () => {
+  integrationMocks.list.mockResolvedValue([
+    { id: 'int-1', code: 'nova_poshta', status: 'active' },
+  ])
+  const contact = {
+    name: 'Ірина',
+    phone: '+380501234567',
+    settlementRef: 'city-1',
+    warehouseRef: 'branch-1',
+  }
+  shippingMocks.get.mockResolvedValue({
+    id: 'ship-1',
+    integrationId: 'int-1',
+    orderId: 'order-1',
+    dispatchPointId: 'point-1',
+    state: 'Draft',
+    number: null,
+    sender: contact,
+    draft: {
+      recipient: contact,
+      parcels: [{ lengthCm: 20, widthCm: 15, heightCm: 10, weightKg: 1 }],
+      declaredValueUah: 500,
+      payerType: 'Recipient',
+      description: 'Тест',
+    },
+    quoteUah: 93,
+    returnEstimateUah: 93,
+    codUah: 500,
+    quoteAt: null,
+    trackingCode: null,
+    trackingStatus: null,
+    lastTrackedAt: null,
+    relatedNumbers: [],
+    connectionId: null,
+    version: 'v1',
+    dispatchedAt: null,
+    receivedAt: null,
+    paymentState: null,
+    syncProblem: null,
+    trackingEnabled: true,
+    events: [],
+  })
+  const old = {
+    ...((await orderMocks.getById()) as OrderDetail),
+    customerId: 'customer-1',
+    customerName: 'Ірина',
+  }
+  const updated = { ...old, customerId: 'customer-2', customerName: 'Олена' }
+  orderMocks.getById.mockResolvedValue(old)
+  const money = {
+    orderId: old.id,
+    agreedTotalUah: 500,
+    appliedUah: 0,
+    outstandingUah: 500,
+    netReceivedUah: 0,
+    feesUah: 0,
+    requiredDepositUah: 186,
+    depositShortfallUah: 0,
+    depositSatisfied: true,
+    depositWaived: true,
+    depositRequired: true,
+    customerTrusted: true,
+    dispatchedAt: null,
+    receivedAt: null,
+    returnedAt: null,
+    awaitingCodReconciliation: false,
+    payments: [],
+    workflowState: 'Open',
+    refundDueUah: 0,
+    refundAllocations: [],
+  }
+  deliveryMocks.get.mockResolvedValue(money)
+  deliveryMocks.setCustomer.mockImplementation(() => {
+    const saved = {
+      ...money,
+      customerTrusted: false,
+      depositWaived: false,
+      depositSatisfied: false,
+      depositShortfallUah: 186,
+    }
+    deliveryMocks.get.mockResolvedValue(saved)
+    orderMocks.getById.mockResolvedValue(updated)
+    customerMocks.getById.mockResolvedValue({
+      id: 'customer-2',
+      name: 'Олена',
+      phone: '+380501234567',
+      isActive: true,
+    })
+    return Promise.resolve(saved)
+  })
+  customerMocks.list.mockResolvedValue({
+    items: [
+      {
+        id: 'customer-2',
+        name: 'Олена',
+        phone: '+380501234567',
+        ordersCount: 0,
+      },
+    ],
+    page: 1,
+    pageSize: 6,
+    total: 1,
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await screen.findByRole('region', { name: 'Стан оплати та доставки' })
+  const card = screen.getByRole('region', { name: 'Клієнт' })
+  await user.click(
+    within(card).getByRole('button', { name: 'Обрати іншого клієнта' }),
+  )
+  const drawer = await screen.findByRole('dialog', { name: 'Змінити клієнта' })
+  await user.click(await within(drawer).findByRole('option', { name: /Олена/ }))
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Призначити клієнта' }),
+  )
+  await waitFor(() =>
+    expect(deliveryMocks.setCustomer).toHaveBeenCalledWith(
+      'order-1',
+      'customer-2',
+    ),
+  )
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: 'Змінити клієнта' }),
+    ).not.toBeInTheDocument(),
+  )
+  expect(card).toHaveTextContent('Олена')
+  expect(orderMocks.setCustomer).not.toHaveBeenCalled()
+  expect(deliveryMocks.get.mock.calls.length).toBeGreaterThan(1)
+  expect(
+    screen.getByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toHaveTextContent('Очікуємо оплату')
+  expect(
+    screen.getByRole('region', { name: 'Стан оплати та доставки' }),
+  ).not.toHaveTextContent('Без передоплати')
+})
+
+it.each([true, false])(
+  'keeps the carrier restriction separate from profile editing (customers.manage: %s)',
+  async (canEditProfile) => {
+    orderMocks.getById.mockResolvedValue({
+      ...confirmationOrder(),
+      customerId: 'customer-1',
+      customerName: 'Ірина',
+    })
+    if (!canEditProfile)
+      vi.mocked(useCabinet).mockReturnValue(
+        cabinet([
+          'orders.view',
+          'orders.manage',
+          'parts.view',
+          'customers.view',
+        ]),
+      )
+
+    deliveryMocks.get.mockResolvedValue({
+      orderId: 'order-1',
+      agreedTotalUah: 500,
+      appliedUah: 0,
+      outstandingUah: 500,
+      netReceivedUah: 0,
+      feesUah: 0,
+      requiredDepositUah: 186,
+      depositShortfallUah: 0,
+      depositSatisfied: true,
+      depositWaived: true,
+      depositRequired: true,
+      customerTrusted: true,
+      dispatchedAt: null,
+      receivedAt: null,
+      returnedAt: null,
+      awaitingCodReconciliation: false,
+      payments: [],
+      workflowState: 'Open',
+      refundDueUah: 0,
+      refundAllocations: [],
+    })
+    integrationMocks.list.mockResolvedValue([
+      { id: 'int-1', code: 'nova_poshta', status: 'active' },
+    ])
+    const contact = {
+      name: 'Отримувач',
+      phone: '+380501234567',
+      warehouseRef: 'branch-1',
+      settlementRef: 'city-1',
+    }
+    shippingMocks.get.mockResolvedValue({
+      id: 'ship-1',
+      integrationId: 'int-1',
+      orderId: 'order-1',
+      dispatchPointId: 'point-1',
+      state: 'Created',
+      number: '20450000000001',
+      sender: contact,
+      draft: {
+        recipient: contact,
+        parcels: [{ lengthCm: 20, widthCm: 15, heightCm: 10, weightKg: 1 }],
+        declaredValueUah: 500,
+        payerType: 'Recipient',
+        description: 'Тест',
+      },
+      quoteUah: 93,
+      returnEstimateUah: 93,
+      codUah: 500,
+      quoteAt: '2026-11-03T08:00:00Z',
+      trackingCode: '1',
+      trackingStatus: null,
+      lastTrackedAt: null,
+      relatedNumbers: [],
+      connectionId: null,
+      version: 'v1',
+      dispatchedAt: null,
+      receivedAt: null,
+      paymentState: null,
+      syncProblem: null,
+      trackingEnabled: true,
+      events: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    const card = await screen.findByRole('region', { name: 'Клієнт' })
+    expect(card).toHaveTextContent('спочатку скасуйте створену ТТН')
+    expect(
+      within(card).getByRole('button', { name: 'Обрати іншого клієнта' }),
+    ).toBeDisabled()
+    const edit = within(card).queryByRole('link', {
+      name: 'Редагувати дані клієнта',
+    })
+    if (canEditProfile)
+      expect(edit).toHaveAttribute(
+        'href',
+        '/app/garage/customers/customer-1/edit',
+      )
+    else expect(edit).toBeNull()
+    expect(deliveryMocks.setCustomer).not.toHaveBeenCalled()
+    expect(orderMocks.setCustomer).not.toHaveBeenCalled()
   },
 )
 

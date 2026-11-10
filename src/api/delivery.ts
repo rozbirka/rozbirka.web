@@ -144,6 +144,19 @@ export const normalizeDeliveryOrder = (
 })
 
 export const deliveryApi = {
+  /** A delivery order uses its own customer mutation and clears the old waiver. */
+  async setCustomer(
+    orderId: string,
+    customerId: string,
+  ): Promise<DeliveryOrder> {
+    return normalizeDeliveryOrder(
+      (
+        await apiClient.put<DeliveryOrder>(`${endpoint(orderId)}/customer`, {
+          customerId,
+        })
+      ).data,
+    )
+  },
   async get(
     orderId: string,
     options: RequestOptions = {},

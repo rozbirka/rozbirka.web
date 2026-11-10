@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router'
-import { ArrowUpRight, Link2, Plus, Undo2 } from 'lucide-react'
+import { Link2, Plus, Undo2 } from 'lucide-react'
 import { Button, Notice, StatusPill, type StatusTone } from '@/components/app'
 import type { DeliveryOrder, DeliveryPayment } from '@/api/delivery'
 import type { Shipment } from '@/api/shipping'
@@ -52,7 +51,6 @@ export function DeliveryPaymentBlock({
   canPay,
   codTill,
   delivery,
-  financePath,
   shipment,
   tillName,
 }: {
@@ -111,54 +109,33 @@ export function DeliveryPaymentBlock({
     late: { label: t('pillLate'), tone: 'danger' as const },
   }[state]
 
-  // Core books the carrier's payout as a `cod` payment; the newest is it.
-  const autoCod =
-    shipment?.paymentState === 'Reconciled'
-      ? (live.filter((payment) => payment.kind === 'cod').at(-1) ?? null)
-      : null
+  // A recorded receipt is a financial fact, separate from carrier tracking.
+  const recordedCod =
+    live.filter((payment) => payment.kind === 'cod').at(-1) ?? null
   const left = money(delivery.outstandingUah)
 
   let notice: ReactNode = null
   if (state === 'unpriced')
     notice = <Notice tone="info">{t('noteTotalUnknown')}</Notice>
-  else if (state === 'paid' && autoCod !== null)
+  else if (state === 'paid' && recordedCod !== null)
     notice = (
       <Notice tone="ok">
         {t('noteAutoBooked', {
-          amount: money(autoCod.amountUah),
-          till: tillName(autoCod.accountId) ?? tm('till'),
-          date: format.date(autoCod.createdAt) ?? autoCod.createdAt,
+          amount: money(recordedCod.amountUah),
+          till: tillName(recordedCod.accountId) ?? tm('till'),
+          date: format.date(recordedCod.createdAt) ?? recordedCod.createdAt,
         })}
       </Notice>
     )
   else if (state === 'paid' && open && delivery.receivedAt === null)
     notice = <Notice tone="info">{t('notePaidEarly')}</Notice>
   else if (state === 'awaitingCod')
-    notice =
-      codTill === null ? (
-        <Notice tone="warn">{t('noteNoTill')}</Notice>
-      ) : (
-        <Notice tone="info">
-          {codTill === undefined
-            ? t('noteAwaitingCodBare')
-            : t('noteAwaitingCod', { till: codTill.name })}
-        </Notice>
-      )
-  else if (state === 'manual') {
-    // Core says only that a till was needed: none chosen, or one archived.
-    const tillMissing = shipment?.paymentState === 'CashRegisterRequired'
+    notice = <Notice tone="info">{t('noteAwaitingCodBare')}</Notice>
+  else if (state === 'manual')
+    notice = <Notice tone="info">{t('noteAutoFailed')}</Notice>
+  else if (state === 'reconcile')
     notice = (
-      <Notice tone="warn">
-        {tillMissing && codTill === null
-          ? t('noteNoTill')
-          : tillMissing && codTill != null && !codTill.active
-            ? t('noteAutoFailedTill', { till: codTill.name })
-            : t('noteAutoFailed')}
-      </Notice>
-    )
-  } else if (state === 'reconcile')
-    notice = (
-      <TitledNotice title={t('reconcileTitle')} tone="warn">
+      <TitledNotice title={t('reconcileTitle')} tone="info">
         {t('noteReconcile', { left })}
       </TitledNotice>
     )
@@ -187,15 +164,7 @@ export function DeliveryPaymentBlock({
     if (state === 'manual' && open) buttons = recordButton(true)
     else if ((state === 'awaitingCod' || state === 'due') && open)
       buttons = recordButton(codTill === null && state === 'awaitingCod')
-    else if (state === 'reconcile' && financePath !== null)
-      buttons = (
-        <Button asChild variant="primary">
-          <Link to={financePath}>
-            <ArrowUpRight aria-hidden />
-            {t('reconcileAction')}
-          </Link>
-        </Button>
-      )
+    else if (state === 'reconcile' && open) buttons = recordButton(true)
     else if (state === 'late')
       buttons = (
         <>
@@ -242,13 +211,11 @@ export function DeliveryPaymentBlock({
       key: 'paid',
       label: t('factPaid'),
       value: money(
-        state === 'late'
-          ? (shipment?.codUah ?? 0)
-          : state === 'refundPartial' ||
-              state === 'refunded' ||
-              state === 'retained'
-            ? totals.booked
-            : delivery.appliedUah,
+        state === 'refundPartial' ||
+          state === 'refunded' ||
+          state === 'retained'
+          ? totals.booked
+          : delivery.appliedUah,
       ),
       sub:
         live.length === 0 && state !== 'late' && totals.refunded === 0
@@ -304,6 +271,16 @@ export function DeliveryPaymentBlock({
       value: money(totals.refunded),
     })
   }
+
+  if (delivery.feesUah > 0)
+    facts.push(
+      { key: 'fees', label: t('factFees'), value: money(delivery.feesUah) },
+      {
+        key: 'net',
+        label: t('factNet'),
+        value: money(delivery.netReceivedUah),
+      },
+    )
 
   return (
     <section aria-labelledby="np-payment-block" className="rz-card">

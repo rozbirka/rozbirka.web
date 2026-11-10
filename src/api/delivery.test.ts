@@ -6,6 +6,15 @@ afterEach(() => vi.restoreAllMocks())
 
 const summary = { orderId: 'order-1', agreedTotalUah: 4600 }
 
+it('changes a delivery customer through the delivery workflow and normalizes its summary', async () => {
+  const put = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: summary })
+  const result = await deliveryApi.setCustomer('order-1', 'customer-2')
+  expect(put).toHaveBeenCalledWith('/orders/order-1/delivery/customer', {
+    customerId: 'customer-2',
+  })
+  expect(result.payments).toEqual([])
+})
+
 it('fills in the payment list Core omits when the order has none', async () => {
   vi.spyOn(apiClient, 'get').mockResolvedValue({ data: summary })
 

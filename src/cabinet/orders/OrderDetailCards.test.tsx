@@ -248,3 +248,72 @@ it.each(['mouse', 'keyboard'])(
     )
   },
 )
+
+it('keeps editing the customer profile available while a live waybill blocks reassignment', () => {
+  customerMocks.getById.mockResolvedValue({
+    id: 'customer-1',
+    name: 'Владислав',
+    phone: '+380733182301',
+  })
+  render(
+    <MemoryRouter>
+      <OrderCustomerCard
+        accountingCurrency="USD"
+        customerId="customer-1"
+        customerName="Владислав"
+        initials="В"
+        to="/customers/customer-1"
+        editPath="/customers/customer-1/edit"
+        explainActions
+        changeHint="Спочатку скасуйте створену ТТН."
+      />
+    </MemoryRouter>,
+  )
+  expect(
+    screen.getByRole('link', { name: 'Редагувати дані клієнта' }),
+  ).toHaveAttribute('href', '/customers/customer-1/edit')
+  expect(
+    screen.getByRole('button', { name: 'Обрати іншого клієнта' }),
+  ).toBeDisabled()
+  expect(screen.getByText('Спочатку скасуйте створену ТТН.')).toBeVisible()
+  expect(
+    screen.getByText(
+      'Змінює спільну картку клієнта. Отримувач у створеній ТТН не зміниться.',
+    ),
+  ).toBeVisible()
+})
+
+it('opens the existing customer picker separately from editing profile details', async () => {
+  customerMocks.getById.mockResolvedValue({
+    id: 'customer-1',
+    name: 'Владислав',
+    phone: null,
+  })
+  const onChange = vi.fn()
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter>
+      <OrderCustomerCard
+        accountingCurrency="USD"
+        customerId="customer-1"
+        customerName="Владислав"
+        initials="В"
+        to="/customers/customer-1"
+        explainActions
+        onChange={onChange}
+      />
+    </MemoryRouter>,
+  )
+  expect(
+    screen.queryByRole('link', { name: 'Редагувати дані клієнта' }),
+  ).toBeNull()
+  await user.click(
+    screen.getByRole('button', { name: 'Обрати іншого клієнта' }),
+  )
+  expect(onChange).toHaveBeenCalledOnce()
+  expect(
+    screen.getByText(
+      'Змінює клієнта лише цього замовлення. Після заміни перевірте отримувача доставки.',
+    ),
+  ).toBeVisible()
+})

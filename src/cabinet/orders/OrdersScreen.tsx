@@ -93,7 +93,8 @@ import {
 } from './delivery/DeliveryOrderBody'
 import { orderActions } from './delivery/delivery-flow'
 import { deliveryFlowMessages } from './delivery/flow-messages'
-import { orderChip } from './delivery/delivery-view'
+import { customerChangeReason, orderChip } from './delivery/delivery-view'
+import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import {
   INTEGRATION_COUNTRY_UNAVAILABLE,
   useNovaPoshtaAvailability,
@@ -1310,6 +1311,24 @@ function OrderDetailScreen({
   const status = orderStatusPresentation(order.status, locale)
   const orderEditable =
     mutationsAllowed && order.status === 'pending' && !deliveryOrder
+  const customerSearchAllowed =
+    cabinet.status === 'ready' &&
+    cabinet.snapshot?.permissions.has('customers.view') === true
+  const deliveryCustomerBlock =
+    deliveryMoney === null
+      ? null
+      : customerChangeReason(
+          deliveryMoney,
+          deliveryLoad.state?.shipment ?? null,
+          locale,
+        )
+  const customerEditable =
+    orderEditable ||
+    (mutationsAllowed &&
+      customerSearchAllowed &&
+      order.status === 'pending' &&
+      deliveryOrder &&
+      deliveryCustomerBlock === null)
   const itemsEditable = orderEditable && editingItems
   const draftsTotal = itemDrafts.reduce((sum, item) => {
     const total = lineTotal(item.quantity, item.unitPrice)
@@ -1673,13 +1692,25 @@ function OrderDetailScreen({
       {deliveryMoney === null ? null : (
         <>
           <DeliveryOrderBody
-            customerSearchAllowed={
-              cabinet.status === 'ready' &&
-              cabinet.snapshot?.permissions.has('customers.view') === true
+            customerSearchAllowed={customerSearchAllowed}
+            customerChangeHint={
+              mutationsAllowed && customerSearchAllowed
+                ? deliveryCustomerBlock
+                : null
+            }
+            onCustomerChange={
+              customerEditable ? () => setCustomerOpen(true) : undefined
             }
             countryCode={novaPoshta.countryCode}
             accountingCurrency={currency}
             customerPath={customerPath}
+            customerEditPath={
+              customerPath !== null &&
+              customerSearchAllowed &&
+              canMutate(definition, cabinet, 'customers.manage')
+                ? `${customerPath}/edit`
+                : null
+            }
             delivery={deliveryMoney}
             financeAllowed={financeAllowed}
             financePath={financePath}
@@ -1711,6 +1742,8 @@ function OrderDetailScreen({
           <div className="grid min-w-0 gap-3.5">
             {deliveryLoad.state !== null && order.status === 'pending' ? (
               <DeliveryConfigureCard
+                connection={deliveryLoad.state}
+                integrationsPath={integrationsPath}
                 mutationsAllowed={mutationsAllowed}
                 novaPoshtaAvailable={novaPoshta.available}
                 onConfigured={(next, action) => {
@@ -2110,17 +2143,27 @@ function OrderDetailScreen({
         currentName={order.customerName}
         error={customerOpen ? error : null}
         onAssign={(customerId) => {
+          let savedDelivery: DeliveryOrder | null = null
           void transition(() =>
-            ordersApi.setCustomer(order.id, customerId),
+            deliveryOrder
+              ? deliveryApi.setCustomer(order.id, customerId).then((next) => {
+                  savedDelivery = next
+                  return ordersApi.getById(order.id)
+                })
+              : ordersApi.setCustomer(order.id, customerId),
           ).then((saved) => {
             if (saved) {
+              if (savedDelivery !== null) {
+                deliveryLoad.setMoney(savedDelivery)
+                deliveryLoad.reload()
+              }
               setCustomerOpen(false)
               toast?.show({ message: t('customerAssigned'), tone: 'ok' })
             }
           })
         }}
         onOpenChange={setCustomerOpen}
-        open={customerOpen && orderEditable}
+        open={customerOpen && customerEditable}
         orderNumber={order.number}
       />
 

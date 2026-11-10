@@ -11,6 +11,8 @@ export const waybillMessages = defineMessages({
   uk: {
     // Block
     blockTitle: 'Доставка · Нова пошта',
+    moreActions: 'Ще',
+    markDispatched: 'Позначити як передано',
     factRoute: 'Маршрут',
     factDestination: 'Куди',
     factSender: 'Відправник',
@@ -60,6 +62,8 @@ export const waybillMessages = defineMessages({
       'Стару ТТН скасовано. Щоб застосувати зміни, створіть нову накладну в замовленні.',
     sentNotice:
       'Посилку вже відправлено. Отримувача, адресу й післяплату в Rozbirka змінити не можна — зробіть це в кабінеті або застосунку Нової пошти.',
+    sentHint:
+      'Після відправлення зміни до накладної оформлюються через Нову пошту.',
     cancelWaybill: 'Скасувати ТТН',
     attachedToast: 'ТТН прив’язано до замовлення #{number}.',
     back: 'Назад',
@@ -245,6 +249,8 @@ export const waybillMessages = defineMessages({
   },
   'en-GB': {
     blockTitle: 'Delivery · Nova Poshta',
+    moreActions: 'More',
+    markDispatched: 'Mark as handed over',
     factRoute: 'Route',
     factDestination: 'To',
     factSender: 'Sender',
@@ -295,6 +301,8 @@ export const waybillMessages = defineMessages({
       'The old waybill has been cancelled. To apply the changes, create a new waybill in the order.',
     sentNotice:
       'The parcel has already been sent. The recipient, address and cash on delivery cannot be changed in Rozbirka — do it in the Nova Poshta account or app.',
+    sentHint:
+      'After dispatch, waybill changes are handled through Nova Poshta.',
     cancelWaybill: 'Cancel waybill',
     attachedToast: 'Waybill attached to order #{number}.',
     back: 'Back',
@@ -472,6 +480,8 @@ export const waybillMessages = defineMessages({
   },
   pl: {
     blockTitle: 'Dostawa · Nova Poshta',
+    moreActions: 'Więcej',
+    markDispatched: 'Oznacz jako przekazaną',
     factRoute: 'Trasa',
     factDestination: 'Dokąd',
     factSender: 'Nadawca',
@@ -521,6 +531,8 @@ export const waybillMessages = defineMessages({
       'Stary list anulowano. Aby zastosować zmiany, utwórz nowy list w zamówieniu.',
     sentNotice:
       'Paczka została już wysłana. Odbiorcy, adresu i pobrania nie można zmienić w Rozbirka — zrób to na koncie lub w aplikacji Nova Poshta.',
+    sentHint:
+      'Po nadaniu zmiany w liście przewozowym wprowadza się przez Nova Poshta.',
     cancelWaybill: 'Anuluj list',
     attachedToast: 'List powiązano z zamówieniem #{number}.',
     back: 'Wstecz',

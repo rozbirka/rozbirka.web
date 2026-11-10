@@ -8,6 +8,7 @@ import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { novaPoshtaSetupApi } from '@/api/nova-poshta-setup'
 import { ordersApi, type OrderDetail } from '@/api/orders'
 import { shippingApi, type Shipment } from '@/api/shipping'
+import { providerReturnApi } from '@/api/provider-return'
 import type { SwitchedOff } from './use-np-integration'
 import { WaybillCard } from './WaybillCard'
 import type { WaybillRights } from './WaybillsScreen'
@@ -21,6 +22,9 @@ vi.mock('@/api/shipping', () => ({
     update: vi.fn(),
     reconcile: vi.fn().mockReturnValue(new Promise(() => undefined)),
   },
+}))
+vi.mock('@/api/provider-return', () => ({
+  providerReturnApi: { get: vi.fn(), refresh: vi.fn() },
 }))
 vi.mock('@/api/orders', () => ({ ordersApi: { getById: vi.fn() } }))
 vi.mock('@/api/delivery', () => ({ deliveryApi: { get: vi.fn() } }))
@@ -133,6 +137,10 @@ const header = () =>
   screen.getByRole('heading', { level: 1 }).closest<HTMLElement>('.grid')!
 
 beforeEach(() => {
+  vi.mocked(providerReturnApi.get)
+    .mockReset()
+    .mockReturnValue(new Promise(() => undefined))
+  vi.mocked(providerReturnApi.refresh).mockReset()
   vi.mocked(shippingApi.byId).mockReset()
   vi.mocked(shippingApi.refresh).mockReset()
   vi.mocked(shippingApi.cancel).mockReset()
@@ -174,6 +182,9 @@ it('shows a created waybill with every action the matrix allows (8.2)', async ()
 
   const deliveryCard = screen.getByRole('region', { name: 'Доставка' })
   expect(within(deliveryCard).getByText('Створено')).toBeVisible()
+  expect(deliveryCard).not.toHaveTextContent(
+    'Після відправлення зміни до накладної оформлюються через Нову пошту.',
+  )
   expect(
     within(deliveryCard).getByText('Створено, очікує відправлення'),
   ).toBeVisible()
@@ -187,6 +198,26 @@ it('shows a created waybill with every action the matrix allows (8.2)', async ()
   const history = screen.getByRole('list', { name: 'Події накладної' })
   expect(within(history).getByText('ТТН створено')).toBeVisible()
 })
+
+it.each([
+  { dispatchedAt: '2026-10-25T18:05:00Z' },
+  { receivedAt: '2026-10-26T11:22:00Z' },
+])(
+  'explains where to change a waybill after dispatch or receipt: %j',
+  async (dates) => {
+    vi.mocked(shippingApi.byId).mockResolvedValue(shipment(dates))
+    renderCard()
+
+    await screen.findByRole('heading', { name: `ТТН ${TTN}` })
+    expect(
+      within(screen.getByRole('region', { name: 'Доставка' })).getByText(
+        'Після відправлення зміни до накладної оформлюються через Нову пошту.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Редагувати' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Скасувати ТТН' })).toBeNull()
+  },
+)
 
 it('continues a draft in its order, without print or tracking (8.1)', async () => {
   vi.mocked(shippingApi.byId).mockResolvedValue(
@@ -477,3 +508,56 @@ it.each([
     expect(within(payment).queryByText('Оплачено')).toBeNull()
   },
 )
+
+it('explains paused tracking without hiding the last carrier status', async () => {
+  vi.mocked(shippingApi.byId).mockResolvedValue(
+    shipment({
+      trackingCode: '7',
+      trackingStatus: 'Прибула у відділення',
+      dispatchedAt: '2026-10-25T18:05:00Z',
+      syncProblem: 'tracking_unavailable',
+      trackingPaused: true,
+      trackingFailures: 10,
+    }),
+  )
+  renderCard()
+  await screen.findByRole('heading', { name: `ТТН ${TTN}` })
+  expect(screen.getByText(/Автоматичні перевірки призупинено/)).toBeVisible()
+  expect(screen.getByText('Прибула у відділення')).toBeVisible()
+  expect(screen.getByText(/Невдалих спроб: 10/)).toBeVisible()
+})
+
+it('lets the tracking attention destination resume a paused reverse waybill independently of source tracking', async () => {
+  vi.mocked(shippingApi.byId).mockResolvedValue(
+    shipment({ trackingCode: '103', dispatchedAt: null }),
+  )
+  const reverse = {
+    sourceVersion: 'v1',
+    version: 'return-v1',
+    state: 'Accepted',
+    requestRef: 'return-ref',
+    requestNumber: 'return-request',
+    requestStatus: 'Accepted',
+    reverse: { number: 'REVERSE-TEST', status: 'В дорозі', statusAt: null },
+    capability: { canCreate: false, blockReason: null },
+    trackingPaused: true,
+    syncProblem: 'tracking_unauthorized',
+    trackingEnabled: true,
+  }
+  vi.mocked(providerReturnApi.get).mockResolvedValue(reverse)
+  vi.mocked(providerReturnApi.refresh).mockResolvedValue({
+    ...reverse,
+    trackingPaused: false,
+    syncProblem: null,
+  })
+  renderCard()
+  const panel = await screen.findByRole('region', {
+    name: 'Повернення посилки · Нова пошта',
+  })
+  expect(await within(panel).findByText('REVERSE-TEST')).toBeInTheDocument()
+  await userEvent.click(
+    within(panel).getByRole('button', { name: 'Оновити повернення' }),
+  )
+  expect(providerReturnApi.refresh).toHaveBeenCalledWith('int-1', 'ship-1')
+  expect(shippingApi.refresh).not.toHaveBeenCalled()
+})

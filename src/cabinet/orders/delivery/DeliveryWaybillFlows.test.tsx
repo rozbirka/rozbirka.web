@@ -85,6 +85,17 @@ const money = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
   ...over,
 })
 
+async function selectShipmentAction(
+  user: ReturnType<typeof userEvent.setup>,
+  block: HTMLElement,
+  name: string,
+) {
+  const direct = within(block).queryByRole('button', { name })
+  if (direct !== null) return user.click(direct)
+  await user.click(within(block).getByRole('button', { name: 'Ще' }))
+  await user.click(await screen.findByRole('menuitem', { name }))
+}
+
 const TTN = '20451200987731'
 
 const shipment = (over: Partial<Shipment> = {}): Shipment => ({
@@ -218,6 +229,7 @@ function Harness({
       mutationsAllowed={mutationsAllowed}
       order={order}
       partsPath={null}
+      waybillsPath="/app/koval/sales/waybills"
     />
   )
 }
@@ -257,7 +269,7 @@ it('starts with no delivery and offers the form or an external waybill (4.1)', a
 })
 
 it('hides create, edit, cancel and attach without the orders right', async () => {
-  const { block } = await renderFlow({
+  const { user, block } = await renderFlow({
     initial: created(),
     mutationsAllowed: false,
   })
@@ -269,6 +281,12 @@ it('hides create, edit, cancel and attach without the orders right', async () =>
   ).toBeNull()
   expect(
     within(block()).queryByRole('button', { name: 'Скасувати ТТН' }),
+  ).toBeNull()
+  await user.click(within(block()).getByRole('button', { name: 'Ще' }))
+  expect(screen.queryByRole('menuitem', { name: 'Редагувати' })).toBeNull()
+  expect(screen.queryByRole('menuitem', { name: 'Скасувати ТТН' })).toBeNull()
+  expect(
+    screen.queryByRole('menuitem', { name: 'Позначити як передано' }),
   ).toBeNull()
 })
 
@@ -301,9 +319,8 @@ it('creates a waybill from a quoted draft and lands on its number (4.4–4.12)',
   expect(await screen.findByText(`ТТН ${TTN} створено.`)).toBeVisible()
   await waitFor(() => expect(screen.getByText(TTN)).toHaveFocus())
   expect(block()).toHaveTextContent('Статус НП: Створено, очікує відправлення')
-  expect(
-    within(block()).getByRole('button', { name: 'Скасувати ТТН' }),
-  ).toBeVisible()
+  await user.click(within(block()).getByRole('button', { name: 'Ще' }))
+  expect(screen.getByRole('menuitem', { name: 'Скасувати ТТН' })).toBeVisible()
 })
 
 it.each([
@@ -562,9 +579,7 @@ it('asks the sender to be checked after the settings changed (2.9)', async () =>
 it('cancels a waybill after the consequences and keeps it on screen (5.7–5.8)', async () => {
   vi.mocked(shippingApi.cancel).mockResolvedValue()
   const { user, block } = await renderFlow({ initial: created() })
-  await user.click(
-    within(block()).getByRole('button', { name: 'Скасувати ТТН' }),
-  )
+  await selectShipmentAction(user, block(), 'Скасувати ТТН')
 
   const dialog = await screen
     .findByRole('alertdialog', {
@@ -596,7 +611,7 @@ it('replaces a waybill the carrier will not edit: cancel first, new one next (5.
   )
   vi.mocked(shippingApi.cancel).mockResolvedValue()
   const { user, block } = await renderFlow({ initial: created() })
-  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  await selectShipmentAction(user, block(), 'Редагувати')
   const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
   const phone = within(sheet).getByLabelText('Телефон')
   await user.clear(phone)
@@ -639,7 +654,7 @@ it('shows edited data only after Nova Poshta confirms it (5.2–5.4)', async () 
     }),
   )
   const { user, block } = await renderFlow({ initial: created() })
-  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  await selectShipmentAction(user, block(), 'Редагувати')
   const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
   const phone = within(sheet).getByLabelText('Телефон')
   await user.clear(phone)
@@ -669,7 +684,10 @@ it('keeps recipient, address and COD out of reach once the parcel is sent (5.9)'
     initial: created({ dispatchedAt: '2026-10-26T08:10:00Z' }),
   })
   expect(block()).toHaveTextContent('Відправлено')
-  expect(block()).toHaveTextContent('Посилку вже відправлено.')
+  expect(block()).not.toHaveTextContent('Посилку вже відправлено.')
+  expect(block()).not.toHaveTextContent(
+    'Після відправлення зміни до накладної оформлюються через Нову пошту.',
+  )
   expect(
     within(block()).queryByRole('button', { name: 'Редагувати' }),
   ).toBeNull()
@@ -677,6 +695,22 @@ it('keeps recipient, address and COD out of reach once the parcel is sent (5.9)'
     within(block()).queryByRole('button', { name: 'Скасувати ТТН' }),
   ).toBeNull()
 })
+
+it.each([
+  ['102', 'Повернення відправнику'],
+  ['103', 'Відмова від отримання'],
+  ['7', 'Прибула'],
+  ['106', 'Потребує уточнення'],
+  ['999', 'Потребує уточнення'],
+])(
+  'shows the same carrier outcome in the order for code %s',
+  async (trackingCode, label) => {
+    const { block } = await renderFlow({
+      initial: created({ trackingCode, dispatchedAt: '2026-10-26T08:10:00Z' }),
+    })
+    expect(block()).toHaveTextContent(label)
+  },
+)
 
 it('settles an unknown cancel through the result check (5.12–5.13)', async () => {
   vi.mocked(shippingApi.reconcile).mockResolvedValue(
@@ -930,7 +964,7 @@ it('keeps editing reachable to waive prepayment for a newly trusted customer on 
   expect(
     within(block()).getByRole('button', { name: 'Внести передоплату' }),
   ).toBeVisible()
-  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  await selectShipmentAction(user, block(), 'Редагувати')
   const drawer = await screen.findByRole('dialog', {
     name: 'Оформлення доставки',
   })
@@ -971,7 +1005,7 @@ it('edits recipient surname and given name separately before the parcel is dispa
       },
     },
   })
-  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  await selectShipmentAction(user, block(), 'Редагувати')
   const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
   const surname = within(sheet).getByLabelText('Прізвище')
   expect(surname).toHaveValue('Соболь')
@@ -1010,7 +1044,7 @@ it('blocks recreation with a missing given name instead of promoting the patrony
       },
     },
   })
-  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  await selectShipmentAction(user, block(), 'Редагувати')
   const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
   const given = within(sheet).getByLabelText('Ім’я')
   await user.clear(given)
@@ -1064,7 +1098,7 @@ it('keeps the edited weight when background tracking advances the waybill versio
     lastTrackedAt: '2026-11-02T12:26:51Z',
   })
   const { user, block } = await renderFlow({ initial })
-  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  await selectShipmentAction(user, block(), 'Редагувати')
   const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
   await user.clear(within(sheet).getByLabelText('Вага'))
   await user.type(within(sheet).getByLabelText('Вага'), '2')
@@ -1121,9 +1155,7 @@ it.each([
       version: 'v-other',
     })
     const { user, block } = await renderFlow({ initial })
-    await user.click(
-      within(block()).getByRole('button', { name: 'Редагувати' }),
-    )
+    await selectShipmentAction(user, block(), 'Редагувати')
     const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
     await user.clear(within(sheet).getByLabelText('Вага'))
     await user.type(within(sheet).getByLabelText('Вага'), '2')
@@ -1153,7 +1185,7 @@ it('stops after one retry if the waybill version changes again', async () => {
     trackingCode: '1',
   })
   const { user, block } = await renderFlow({ initial })
-  await user.click(within(block()).getByRole('button', { name: 'Редагувати' }))
+  await selectShipmentAction(user, block(), 'Редагувати')
   const sheet = await screen.findByRole('dialog', { name: 'Редагувати ТТН' })
   await user.clear(within(sheet).getByLabelText('Вага'))
   await user.type(within(sheet).getByLabelText('Вага'), '2')
