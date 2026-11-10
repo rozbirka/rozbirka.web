@@ -291,7 +291,7 @@ jobs:
 
           if [ "$wrangler_env" = "production" ]; then
             npm run check:artifact:prod
-            npm run check:routes -- https://qa.rozbirka.pro https://qaapi.rozbirka.pro
+            npm run check:routes -- https://rozbirka.pro https://api.rozbirka.pro
           else
             npm run check:artifact:qa
           fi
