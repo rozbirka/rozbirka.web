@@ -14,15 +14,9 @@ describe('waybill delivery signal', () => {
     ['Created', '7', null, 'Прибула', 'info'],
     ['Created', '9', null, 'Підтверджено', 'ok'],
     ['Created', null, '2026-10-26T10:00:00Z', 'Підтверджено', 'ok'],
-    ['Created', '102', null, 'Відмова від отримання', 'warn'],
-    ['Created', '103', null, 'Повернення відправнику', 'danger'],
-    [
-      'Created',
-      '103',
-      '2026-10-26T10:00:00Z',
-      'Повернення відправнику',
-      'danger',
-    ],
+    ['Created', '102', null, 'Повернення відправнику', 'danger'],
+    ['Created', '103', null, 'Відмова від отримання', 'warn'],
+    ['Created', '103', '2026-10-26T10:00:00Z', 'Відмова від отримання', 'warn'],
     ['Cancelled', '1', null, 'Скасовано', 'neutral'],
     ['CancelUnknown', '1', null, 'Невідомо', 'warn'],
   ])('reads %s / code %s as %s', (state, code, receivedAt, label, tone) => {
@@ -32,8 +26,53 @@ describe('waybill delivery signal', () => {
     })
   })
 
-  it('draws nothing for a draft or an unanswered create', () => {
-    expect(deliverySignal('Draft', null, null, 'uk')).toBeNull()
+  it.each(['104', '105', '106', '107', '111', '112', '999', 'new-code'])(
+    'does not invent an ordinary delivery outcome for code %s',
+    (code) => {
+      expect(deliverySignal('Created', code, null, 'uk')).toEqual({
+        label: 'Потребує уточнення',
+        tone: 'neutral',
+      })
+    },
+  )
+
+  it('preserves an explicit receipt fact when a later code is unmapped', () => {
+    expect(
+      trackingSignal('Created', '999', '2026-11-06T10:00:00Z', 'uk'),
+    ).toEqual({ label: 'Підтверджено', tone: 'ok' })
+  })
+
+  it.each([
+    ['uk', 'Повернення відправнику', 'Відмова від отримання'],
+    ['en-GB', 'Returning to sender', 'Delivery refused'],
+    ['pl', 'Zwrot do nadawcy', 'Odmowa odbioru'],
+  ] as const)(
+    'distinguishes ordered returns from refusals in %s',
+    (locale, returning, refused) => {
+      expect(trackingSignal('Created', '102', null, locale)).toEqual({
+        label: returning,
+        tone: 'danger',
+      })
+      expect(trackingSignal('Created', '103', null, locale)).toEqual({
+        label: refused,
+        tone: 'warn',
+      })
+    },
+  )
+
+  it.each([
+    ['uk', 'Чернетка'],
+    ['en-GB', 'Draft'],
+    ['pl', 'Szkic'],
+  ] as const)('labels a draft delivery neutrally in %s', (locale, label) => {
+    expect(deliverySignal('Draft', null, null, locale)).toEqual({
+      label,
+      tone: 'neutral',
+    })
+  })
+
+  it('does not invent a carrier status for a draft or an unanswered create', () => {
+    expect(trackingSignal('Draft', null, null, 'uk')).toBeNull()
     expect(trackingSignal('Unknown', null, null, 'uk')).toBeNull()
   })
 })

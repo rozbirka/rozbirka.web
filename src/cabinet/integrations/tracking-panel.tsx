@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { PlugZap } from 'lucide-react'
 import {
   Button,
-  appButtonVariants,
+  Field,
+  TextInput,
   ConfirmDialog,
   DateValue,
   Notice,
@@ -60,6 +61,7 @@ interface Session {
   error: string | null
   confirming: boolean
   confirmError: string | null
+  apiKey: string
 }
 
 const blank = (key: string): Session => ({
@@ -68,6 +70,7 @@ const blank = (key: string): Session => ({
   error: null,
   confirming: false,
   confirmError: null,
+  apiKey: '',
 })
 
 /**
@@ -81,6 +84,22 @@ const blank = (key: string): Session => ({
  * the server says `Connected`, disconnected only when it says `Disabled`.
  */
 export function TrackingSubscriptionPanel({
+  integrationId,
+}: {
+  integrationId: string
+}) {
+  const cabinet = useCabinet()
+  const scope = `${cabinet.snapshot?.generation ?? ''}:${cabinet.targetTenant?.id ?? ''}:${integrationId}`
+  // Remount on account/tenant changes so credentials cannot reappear on return.
+  return (
+    <ScopedTrackingSubscriptionPanel
+      key={scope}
+      integrationId={integrationId}
+    />
+  )
+}
+
+function ScopedTrackingSubscriptionPanel({
   integrationId,
 }: {
   integrationId: string
@@ -204,6 +223,7 @@ export function TrackingSubscriptionPanel({
         patch({
           busy: null,
           confirming: false,
+          ...(kind === 'connect' ? { apiKey: '' } : {}),
         })
       } catch (problem) {
         if (!mountedRef.current) return
@@ -225,10 +245,13 @@ export function TrackingSubscriptionPanel({
     [locale, patch, refresh, requireLatestMutation, t],
   )
 
-  const connect = () =>
+  const connect = () => {
+    const key = session.apiKey.trim()
+    if (key === '') return
     void run('connect', () =>
-      integrationsApi.connectTracking(integrationId, null),
+      integrationsApi.connectTracking(integrationId, key),
     )
+  }
 
   if (tenant === null) {
     return <p className="rz-muted m-0">{t('pickBusinessTracking')}</p>
@@ -324,28 +347,44 @@ export function TrackingSubscriptionPanel({
               </Notice>
             )}
 
+            {callbackReady &&
+              ['Disabled', 'NeedsCredentials'].includes(subscription.state) && (
+                <form
+                  className="grid max-w-xl gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    connect()
+                  }}
+                >
+                  <Field label={t('keyLabel')} hint={t('keyHint')} required>
+                    <TextInput
+                      type="password"
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      maxLength={4096}
+                      placeholder={t('keyPlaceholder')}
+                      value={session.apiKey}
+                      onChange={(event) =>
+                        patch({ apiKey: event.target.value })
+                      }
+                      disabled={busy !== null}
+                      required
+                    />
+                  </Field>
+                  <div className="rz-btn-row">
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      aria-busy={busy === 'connect'}
+                      disabled={busy !== null || session.apiKey.trim() === ''}
+                    >
+                      {busy === 'connect' ? t('connecting') : t('connect')}
+                    </Button>
+                  </div>
+                </form>
+              )}
+
             <div className="rz-btn-row">
-              {subscription.state === 'Disabled' && callbackReady && (
-                <Button
-                  aria-busy={busy === 'connect'}
-                  disabled={busy !== null || !callbackReady}
-                  onClick={connect}
-                  title={callbackReady ? undefined : t('callbackUnavailable')}
-                  variant="primary"
-                >
-                  {busy === 'connect' ? t('connecting') : t('connect')}
-                </Button>
-              )}
-
-              {subscription.state === 'NeedsCredentials' && (
-                <a
-                  className={appButtonVariants()}
-                  href={`/app/${tenant.slug}/settings/integrations/${integrationId}/connect`}
-                >
-                  {t('checkConnection')}
-                </a>
-              )}
-
               {subscription.canRetry && (
                 <Button
                   aria-busy={busy === 'retry'}

@@ -7,6 +7,11 @@ import { defineMessages } from '@/i18n'
  */
 export const deliveryMessages = defineMessages({
   uk: {
+    customerChangeClosed: 'У цьому стані замовлення змінити клієнта не можна.',
+    customerChangeUnresolved:
+      'Спочатку перевірте результат операції з ТТН. До цього клієнта замовлення змінити не можна.',
+    customerChangeWaybill:
+      'Щоб змінити клієнта замовлення, спочатку скасуйте створену ТТН. Після зміни клієнта перевірте отримувача й створіть нову накладну.',
     factReceived: 'Отримано від клієнта',
     prepaymentExplained:
       'Отримані кошти зараховуються в оплату замовлення. Розрахунок Нової пошти не підтверджує оплату її послуг.',
@@ -28,6 +33,9 @@ export const deliveryMessages = defineMessages({
     // Lifecycle
     stepPaid: 'Оплачено',
     stepNoPrepayment: 'Без передоплати',
+    stepPrepaymentReceived: 'Передоплату отримано',
+    notePrepaymentReceived:
+      'Передоплату отримано. Залишок замовлення буде сплачено окремо або післяплатою.',
     noteNoPrepayment:
       'Передоплата не потрібна. Несплачена сума замовлення залишається післяплатою.',
     stepWaybill: 'ТТН',
@@ -188,7 +196,10 @@ export const deliveryMessages = defineMessages({
       'Нова пошта утримає з отримувача {amount} — рівно залишок за замовленням — і перекаже їх вам. Комісію переказу платить отримувач.',
 
     // Body
-    linkTransaction: 'Прив’язати транзакцію',
+    linkTransaction: 'Прив’язати оплату з фінансів',
+    recordPaymentHint: 'Створює новий запис про отримані гроші в обраній касі.',
+    linkPaymentHint:
+      'Зараховує замовленню наявне надходження з каси. Повторно гроші не додаються.',
     npNotConnected: 'Нову пошту не підключено.',
     npUnavailable: 'Нова пошта недоступна: {status}.',
     npDownNote:
@@ -213,10 +224,22 @@ export const deliveryMessages = defineMessages({
     copyFailed: 'Не вдалося скопіювати номер ТТН.',
 
     // Configure card
+    connectionTitle: 'Доставка Новою поштою',
+    connectionNote:
+      'Підключіть інтеграцію, щоб створювати накладні із замовлення.',
+    connectionAskAdmin:
+      'Для підключення зверніться до адміністратора розбірки.',
+    connectIntegration: 'Підключити',
     configureNote:
       'Замовлення поки не їде поштою. Оформіть доставку — отримувача, посилку й післяплату вкажете на наступному кроці.',
   },
   'en-GB': {
+    customerChangeClosed:
+      'The customer cannot be changed in the current order state.',
+    customerChangeUnresolved:
+      'Check the waybill operation result first. The order customer cannot be changed until then.',
+    customerChangeWaybill:
+      'Cancel the existing waybill before changing the order customer. Then check the recipient and create a new waybill.',
     factReceived: 'Received from customer',
     prepaymentExplained:
       'Money received counts towards the order payment. A Nova Poshta quote does not confirm payment for its services.',
@@ -238,6 +261,9 @@ export const deliveryMessages = defineMessages({
 
     stepPaid: 'Paid',
     stepNoPrepayment: 'No prepayment required',
+    stepPrepaymentReceived: 'Prepayment received',
+    notePrepaymentReceived:
+      'The prepayment has been received. The remaining order balance will be paid separately or on delivery.',
     noteNoPrepayment:
       'No prepayment is required. The unpaid order balance remains cash on delivery.',
     stepWaybill: 'Waybill',
@@ -387,7 +413,10 @@ export const deliveryMessages = defineMessages({
     gateCodNote:
       'Nova Poshta will collect {amount} from the recipient — exactly the order balance — and transfer it to you. The recipient pays the transfer fee.',
 
-    linkTransaction: 'Link transaction',
+    linkTransaction: 'Link payment from Finance',
+    recordPaymentHint: 'Creates a new receipt in the selected till.',
+    linkPaymentHint:
+      'Credits the order with an existing till receipt without adding the money again.',
     npNotConnected: 'Nova Poshta is not connected.',
     npUnavailable: 'Nova Poshta is unavailable: {status}.',
     npDownNote:
@@ -411,10 +440,21 @@ export const deliveryMessages = defineMessages({
     numberCopied: 'Waybill number copied.',
     copyFailed: 'Couldn’t copy the waybill number.',
 
+    connectionTitle: 'Delivery with Nova Poshta',
+    connectionNote:
+      'Connect the integration to create waybills from the order.',
+    connectionAskAdmin: 'Ask your business administrator to connect it.',
+    connectIntegration: 'Connect',
     configureNote:
       'This order isn’t being shipped yet. Arrange delivery — you’ll add the recipient, parcel and cash on delivery at the next step.',
   },
   pl: {
+    customerChangeClosed:
+      'Nie można zmienić klienta w obecnym stanie zamówienia.',
+    customerChangeUnresolved:
+      'Najpierw sprawdź wynik operacji na liście przewozowym. Do tego czasu nie można zmienić klienta zamówienia.',
+    customerChangeWaybill:
+      'Przed zmianą klienta zamówienia anuluj istniejący list przewozowy. Następnie sprawdź odbiorcę i utwórz nowy list.',
     factReceived: 'Otrzymano od klienta',
     prepaymentExplained:
       'Otrzymane środki zaliczamy na poczet zamówienia. Wycena Nova Poshta nie potwierdza zapłaty za jej usługi.',
@@ -436,6 +476,9 @@ export const deliveryMessages = defineMessages({
 
     stepPaid: 'Opłacone',
     stepNoPrepayment: 'Bez wymaganej przedpłaty',
+    stepPrepaymentReceived: 'Przedpłata otrzymana',
+    notePrepaymentReceived:
+      'Otrzymano przedpłatę. Pozostała kwota zamówienia zostanie zapłacona osobno lub przy odbiorze.',
     noteNoPrepayment:
       'Przedpłata nie jest wymagana. Nieopłacona kwota zamówienia pozostaje do pobrania przy odbiorze.',
     stepWaybill: 'List przewozowy',
@@ -587,7 +630,11 @@ export const deliveryMessages = defineMessages({
     gateCodNote:
       'Nova Poshta pobierze od odbiorcy {amount} — dokładnie saldo zamówienia — i przekaże je firmie. Prowizję za przekaz płaci odbiorca.',
 
-    linkTransaction: 'Powiąż transakcję',
+    linkTransaction: 'Powiąż płatność z finansów',
+    recordPaymentHint:
+      'Tworzy nowy zapis otrzymanych pieniędzy w wybranej kasie.',
+    linkPaymentHint:
+      'Zalicza do zamówienia istniejący wpływ z kasy, bez ponownego dodawania pieniędzy.',
     npNotConnected: 'Nova Poshta nie jest podłączona.',
     npUnavailable: 'Nova Poshta jest niedostępna: {status}.',
     npDownNote:
@@ -611,6 +658,12 @@ export const deliveryMessages = defineMessages({
     numberCopied: 'Numer listu przewozowego skopiowany.',
     copyFailed: 'Nie udało się skopiować numeru listu przewozowego.',
 
+    connectionTitle: 'Dostawa przez Nova Poshta',
+    connectionNote:
+      'Połącz integrację, aby tworzyć listy przewozowe z zamówienia.',
+    connectionAskAdmin:
+      'Aby połączyć integrację, skontaktuj się z administratorem firmy.',
+    connectIntegration: 'Połącz',
     configureNote:
       'To zamówienie nie jest jeszcze wysyłane. Zorganizuj dostawę — odbiorcę, przesyłkę i pobranie podasz w następnym kroku.',
   },

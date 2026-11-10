@@ -452,7 +452,7 @@ export function TillStep({
     ...items.map((item) => ({
       key: item.id,
       label: item.name,
-      hint: till?.id === item.id ? t('tillAuto') : t('tillCurrency'),
+      hint: till?.id === item.id ? t('tillDefault') : t('tillCurrency'),
       value: item,
     })),
     { key: 'none', label: t('tillNone'), hint: t('tillNoneHint'), value: null },

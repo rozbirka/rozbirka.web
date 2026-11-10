@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import type { DeliveryOrder, DeliveryPayment } from '@/api/delivery'
 import type { Shipment } from '@/api/shipping'
 import {
+  customerChangeReason,
   lifecycle,
   orderChip,
   paymentStanding,
@@ -100,6 +101,45 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   ...over,
 })
 
+it.each(['Draft', 'Cancelled', null])(
+  'allows changing the customer after booking but before a live waybill: %s',
+  (state) => {
+    expect(
+      customerChangeReason(
+        delivery(),
+        state === null ? null : shipment({ state }),
+        'uk',
+      ),
+    ).toBeNull()
+  },
+)
+
+it('explains why a customer cannot be replaced after the carrier has a waybill', () => {
+  expect(customerChangeReason(delivery(), shipment(), 'uk')).toBe(
+    'Щоб змінити клієнта замовлення, спочатку скасуйте створену ТТН. Після зміни клієнта перевірте отримувача й створіть нову накладну.',
+  )
+})
+
+it.each(['Creating', 'Unknown', 'Cancelling', 'CancelUnknown'])(
+  'blocks customer replacement while the carrier outcome is unresolved: %s',
+  (state) => {
+    expect(customerChangeReason(delivery(), shipment({ state }), 'uk')).toBe(
+      'Спочатку перевірте результат операції з ТТН. До цього клієнта замовлення змінити не можна.',
+    )
+  },
+)
+
+it.each([
+  { dispatchedAt: '2026-11-03T08:00:00Z' },
+  { workflowState: 'Completed' },
+  { workflowState: 'AwaitingGoods' },
+  { workflowState: 'AwaitingRefund' },
+])('does not offer reassignment after dispatch or closing: %j', (over) => {
+  expect(customerChangeReason(delivery(over), null, 'uk')).toBe(
+    'У цьому стані замовлення змінити клієнта не можна.',
+  )
+})
+
 it('walks the lifecycle in Core order and marks the furthest step reached', () => {
   const steps = lifecycle(
     delivery({ dispatchedAt: '2026-09-22T08:04:00Z' }),
@@ -118,11 +158,84 @@ it('walks the lifecycle in Core order and marks the furthest step reached', () =
   expect(steps[3]?.meta).toBe('')
 })
 
-it('does not call an order paid while anything is still owed', () => {
-  const steps = lifecycle(delivery({ outstandingUah: 1200 }), null, 'uk')
+it('keeps the first milestone pending while the minimum prepayment is still owed', () => {
+  const steps = lifecycle(
+    delivery({
+      appliedUah: 100,
+      outstandingUah: 4500,
+      depositSatisfied: false,
+      depositShortfallUah: 260,
+      payments: [payment({ amountUah: 100, netUah: 100 })],
+    }),
+    null,
+    'uk',
+  )
 
   expect(steps[0]).toMatchObject({ done: false, meta: '' })
   expect(steps[0]?.current).toBe(false)
+})
+
+it.each([
+  ['uk', 'Передоплату отримано'],
+  ['en-GB', 'Prepayment received'],
+  ['pl', 'Przedpłata otrzymana'],
+] as const)(
+  'clears a covered prepayment without settling the remaining balance: %s',
+  (locale, label) => {
+    const prepaid = delivery({
+      agreedTotalUah: 40000,
+      appliedUah: 1800,
+      netReceivedUah: 1800,
+      outstandingUah: 38200,
+      requiredDepositUah: 1800,
+      payments: [payment({ amountUah: 1800, netUah: 1800 })],
+    })
+    expect(lifecycle(prepaid, shipment(), locale)[0]).toMatchObject({
+      label,
+      done: true,
+      prepaymentReceived: true,
+    })
+    expect(lifecycle(prepaid, shipment(), 'uk')[0]?.meta).toBe('21.09 · 14:02')
+    expect(paymentStanding(prepaid, 'uk')).toEqual({
+      label: 'Оплачено частково',
+      tone: 'warn',
+    })
+    expect(prepaid.outstandingUah).toBe(38200)
+  },
+)
+
+it.each([
+  { appliedUah: 0, requiredDepositUah: 360 },
+  { appliedUah: 100, requiredDepositUah: 0 },
+  { appliedUah: 100, requiredDepositUah: 360, depositSatisfied: false },
+])('does not invent a received minimum prepayment for %j', (over) => {
+  expect(
+    lifecycle(
+      delivery({ ...over, outstandingUah: 4500, payments: [] }),
+      null,
+      'uk',
+    )[0]?.done,
+  ).toBe(false)
+})
+
+it('shows voluntary prepayment instead of an unpaid waiver once money is received', () => {
+  expect(
+    lifecycle(
+      delivery({
+        customerTrusted: true,
+        depositWaived: true,
+        appliedUah: 100,
+        outstandingUah: 4500,
+        depositSatisfied: true,
+      }),
+      null,
+      'uk',
+    )[0],
+  ).toMatchObject({
+    label: 'Передоплату отримано',
+    done: true,
+    prepaymentReceived: true,
+  })
 })
 
 it.each([
@@ -200,6 +313,24 @@ it('names the order and the parcel separately', () => {
     shipmentChip(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').label,
   ).toBe('Передано перевізнику')
 })
+
+it.each([
+  ['102', 'Повернення відправнику', 'danger'],
+  ['103', 'Відмова від отримання', 'warn'],
+  ['7', 'Прибула', 'info'],
+  ['999', 'Потребує уточнення', 'neutral'],
+])(
+  'keeps the order summary aligned with carrier code %s',
+  (trackingCode, label, tone) => {
+    expect(
+      shipmentChip(
+        delivery({ dispatchedAt: '2026-11-06T10:00:00Z' }),
+        shipment({ trackingCode }),
+        'uk',
+      ),
+    ).toEqual({ label, tone })
+  },
+)
 
 it('does not treat an outstanding balance as an obstacle to a waybill', () => {
   const owing = readiness(

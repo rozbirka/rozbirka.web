@@ -142,7 +142,7 @@ it('observes automatic setup without sending a connect command', async () => {
   expect(
     screen.queryByRole('button', { name: 'Підключити' }),
   ).not.toBeInTheDocument()
-  expect(screen.getByText(/з тим самим API-ключем/)).toBeVisible()
+  expect(screen.getByText(/Нові накладні додаються автоматично/)).toBeVisible()
   await act(async () => {
     vi.advanceTimersByTime(5_000)
     await Promise.resolve()
@@ -156,7 +156,7 @@ it('observes automatic setup without sending a connect command', async () => {
   expect(integrationsApi.connectTracking).not.toHaveBeenCalled()
 })
 
-it('connects without a key and calls it connected only when the server does', async () => {
+it('connects with the independent v1 key and waits for callback confirmation', async () => {
   vi.useFakeTimers()
   vi.mocked(integrationsApi.trackingSubscription)
     .mockResolvedValueOnce(status())
@@ -172,15 +172,17 @@ it('connects without a key and calls it connected only when the server does', as
   })
   expect(screen.getByText('Не підключено')).toBeVisible()
 
+  fireEvent.change(screen.getByLabelText('API-ключ NovaPost v1'), {
+    target: { value: 'v1-test-key' },
+  })
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Підключити' }))
     await Promise.resolve()
   })
 
-  // No key is sent: Core reuses the one already stored for the integration.
   expect(integrationsApi.connectTracking).toHaveBeenCalledWith(
     'integration-1',
-    null,
+    'v1-test-key',
   )
   expect(
     screen.getByText(/Підключаємо оновлення — реєструємо підписку/),
@@ -204,21 +206,48 @@ it('connects without a key and calls it connected only when the server does', as
   expect(screen.getByRole('button', { name: 'Відключити' })).toBeVisible()
 })
 
-it('uses the primary connection to recover credentials without a second key form', async () => {
+it('repairs webhook credentials without reopening the v2 setup wizard', async () => {
   vi.mocked(integrationsApi.trackingSubscription).mockResolvedValue(
     status({ state: 'NeedsCredentials', reasonCode: 'provider_unauthorized' }),
   )
+  const user = userEvent.setup()
   renderPanel()
-  const link = await screen.findByRole('link', {
-    name: 'Перевірити підключення НП',
-  })
-  expect(link).toHaveAttribute(
-    'href',
-    '/app/koval/settings/integrations/integration-1/connect',
-  )
+  const input = await screen.findByLabelText('API-ключ NovaPost v1')
+  expect(input).toHaveAttribute('type', 'password')
   expect(
-    screen.queryByLabelText('API-ключ Нової пошти'),
+    screen.queryByRole('link', { name: 'Перевірити підключення НП' }),
   ).not.toBeInTheDocument()
+  const connect = screen.getByRole('button', { name: 'Підключити' })
+  expect(connect).toBeDisabled()
+  await user.type(input, ' independent-v1-key ')
+  await user.click(connect)
+  expect(integrationsApi.connectTracking).toHaveBeenCalledWith(
+    'integration-1',
+    'independent-v1-key',
+  )
+  expect(input).toHaveValue('')
+})
+
+it('discards a sensitive key when the tenant changes, including switching back', async () => {
+  const view = renderPanel()
+  const input = await screen.findByLabelText('API-ключ NovaPost v1')
+  fireEvent.change(input, { target: { value: 'private-key' } })
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet({ ...tenant, id: 'tenant-2', slug: 'other' }),
+  )
+  view.rerender(
+    <ToastProvider>
+      <TrackingSubscriptionPanel integrationId="integration-1" />
+    </ToastProvider>,
+  )
+  expect(await screen.findByLabelText('API-ключ NovaPost v1')).toHaveValue('')
+  vi.mocked(useCabinet).mockReturnValue(cabinet())
+  view.rerender(
+    <ToastProvider>
+      <TrackingSubscriptionPanel integrationId="integration-1" />
+    </ToastProvider>,
+  )
+  expect(await screen.findByLabelText('API-ключ NovaPost v1')).toHaveValue('')
 })
 
 it('sends one command however many times the button is clicked', async () => {
@@ -228,6 +257,9 @@ it('sends one command however many times the button is clicked', async () => {
 
   renderPanel()
   const connect = await screen.findByRole('button', { name: 'Підключити' })
+  fireEvent.change(screen.getByLabelText('API-ключ NovaPost v1'), {
+    target: { value: 'v1-test-key' },
+  })
   await user.click(connect)
   await user.click(connect)
   await user.click(connect)
@@ -243,6 +275,9 @@ it('explains a busy subscription in Ukrainian and re-reads the state', async () 
   const user = userEvent.setup()
 
   renderPanel()
+  fireEvent.change(await screen.findByLabelText('API-ключ NovaPost v1'), {
+    target: { value: 'v1-test-key' },
+  })
   await user.click(await screen.findByRole('button', { name: 'Підключити' }))
 
   expect(screen.getByText(/Ця дія вже виконується/)).toBeVisible()
@@ -257,6 +292,9 @@ it('names the conflict with a hand-configured webhook without touching it', asyn
   const user = userEvent.setup()
 
   renderPanel()
+  fireEvent.change(await screen.findByLabelText('API-ключ NovaPost v1'), {
+    target: { value: 'v1-test-key' },
+  })
   await user.click(await screen.findByRole('button', { name: 'Підключити' }))
 
   expect(screen.getByText(/вже налаштований ручний вебхук/)).toBeVisible()
@@ -322,6 +360,9 @@ it('does not carry a previous error into another yard', async () => {
   )
   const user = userEvent.setup()
   const view = renderPanel()
+  fireEvent.change(await screen.findByLabelText('API-ключ NovaPost v1'), {
+    target: { value: 'v1-test-key' },
+  })
   await user.click(await screen.findByRole('button', { name: 'Підключити' }))
   expect(screen.getByText(/Ця дія вже виконується/)).toBeVisible()
   vi.mocked(useCabinet).mockReturnValue(
@@ -343,6 +384,9 @@ it('checks the state instead of resending a command that lost its answer', async
   const user = userEvent.setup()
 
   renderPanel()
+  fireEvent.change(await screen.findByLabelText('API-ключ NovaPost v1'), {
+    target: { value: 'v1-test-key' },
+  })
   await user.click(await screen.findByRole('button', { name: 'Підключити' }))
 
   expect(integrationsApi.connectTracking).toHaveBeenCalledTimes(1)
@@ -389,15 +433,13 @@ it('waits for the server to confirm a disconnection', async () => {
   expect(screen.queryByText('Не підключено')).not.toBeInTheDocument()
 })
 
-it('provides keyboard access to the primary connection recovery link', async () => {
+it('provides keyboard access to the separate v1 credential form', async () => {
   vi.mocked(integrationsApi.trackingSubscription).mockResolvedValue(
     status({ state: 'NeedsCredentials' }),
   )
   const user = userEvent.setup()
   renderPanel()
-  const link = await screen.findByRole('link', {
-    name: 'Перевірити підключення НП',
-  })
+  const input = await screen.findByLabelText('API-ключ NovaPost v1')
   await user.tab()
-  expect(link).toHaveFocus()
+  expect(input).toHaveFocus()
 })

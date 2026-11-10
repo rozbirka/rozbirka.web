@@ -254,6 +254,7 @@ it('walks the five steps and applies everything only at the end', async () => {
   // Only hryvnia tills, the first one preselected.
   const till = await screen.findByRole('radio', { name: /Основна каса/ })
   expect(till).toBeChecked()
+  expect(till).toHaveAccessibleName(/типова каса для підтвердження/)
   expect(screen.queryByRole('radio', { name: /Доларова/ })).toBeNull()
   const progress = screen.getByRole('region', { name: 'Кроки підключення' })
   expect(within(progress).getByText('Олег Коваль · ТОВ')).toBeVisible()

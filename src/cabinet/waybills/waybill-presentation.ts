@@ -17,12 +17,12 @@ const tr = (locale: Locale, key: Key) =>
 
 /**
  * Nova Poshta's own tracking codes, grouped into the few words a clerk says
- * about a parcel. Codes the carrier adds later read «Відправлено»: the parcel
- * left, which is all the cabinet can tell.
+ * about a parcel. Unmapped codes must not invent a delivery outcome; the
+ * carrier's original description remains visible alongside this signal.
  */
-const RECEIVED = new Set(['9', '10', '11', '106'])
+const RECEIVED = new Set(['9', '10', '11'])
 const ARRIVED = new Set(['7', '8'])
-const MOVING = new Set(['4', '41', '5', '6', '101', '104', '112'])
+const MOVING = new Set(['4', '41', '5', '6', '101'])
 const DELETED = new Set(['2'])
 
 /** The «Доставка» filter: one carrier code per choice, as Core filters. */
@@ -31,8 +31,8 @@ export const DELIVERY_FILTERS = [
   { code: '5', key: 'deliveryMoving' },
   { code: '7', key: 'deliveryArrived' },
   { code: '9', key: 'deliveryReceived' },
-  { code: '102', key: 'deliveryRefused' },
-  { code: '103', key: 'deliveryReturning' },
+  { code: '102', key: 'deliveryReturning' },
+  { code: '103', key: 'deliveryRefused' },
 ] as const satisfies readonly { code: string; key: Key }[]
 
 const UNRESOLVED = new Set([
@@ -48,7 +48,7 @@ export const unresolvedState = (state: string) => UNRESOLVED.has(state)
 /**
  * The last known delivery status: the carrier's code where it gave one, the
  * waybill's own state otherwise. Null for a draft, which the carrier has
- * never seen (the design draws «—»).
+ * never seen.
  */
 export function trackingSignal(
   state: string,
@@ -60,9 +60,9 @@ export function trackingSignal(
   if (state === 'Cancelled' || (code !== null && DELETED.has(code)))
     return { label: tr(locale, 'deliveryCancelled'), tone: 'neutral' }
   if (code === '102')
-    return { label: tr(locale, 'deliveryRefused'), tone: 'warn' }
-  if (code === '103')
     return { label: tr(locale, 'deliveryReturning'), tone: 'danger' }
+  if (code === '103')
+    return { label: tr(locale, 'deliveryRefused'), tone: 'warn' }
   if (receivedAt !== null || (code !== null && RECEIVED.has(code)))
     return { label: tr(locale, 'deliveryReceived'), tone: 'ok' }
   if (code !== null && ARRIVED.has(code))
@@ -73,10 +73,10 @@ export function trackingSignal(
     if (state === 'Unknown' || state === 'Creating') return null
     return { label: tr(locale, 'deliveryCreated'), tone: 'info' }
   }
-  return { label: tr(locale, 'deliverySent'), tone: 'info' }
+  return { label: tr(locale, 'deliveryClarify'), tone: 'neutral' }
 }
 
-/** The «Доставка» column and card pill: unresolved operations read «Невідомо». */
+/** Local drafts read «Чернетка»; unresolved carrier operations read «Невідомо». */
 export function deliverySignal(
   state: string,
   code: string | null,
@@ -85,6 +85,7 @@ export function deliverySignal(
 ): Signal | null {
   if (unresolvedState(state))
     return { label: tr(locale, 'deliveryUnknown'), tone: 'warn' }
+  if (state === 'Draft') return { label: tr(locale, 'draft'), tone: 'neutral' }
   return trackingSignal(state, code, receivedAt, locale)
 }
 

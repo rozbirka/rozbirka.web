@@ -62,11 +62,13 @@ export function DeliveryLifecycle({
               ? t('milestonePaymentStopped')
               : step.prepaymentNotRequired
                 ? t('stepNoPrepayment')
-                : step.done
-                  ? t('standingFull')
-                  : paymentKnown
-                    ? t('milestoneAwaitPayment')
-                    : t('standingUnknown'),
+                : step.prepaymentReceived
+                  ? t('stepPrepaymentReceived')
+                  : step.done
+                    ? t('standingFull')
+                    : paymentKnown
+                      ? t('milestoneAwaitPayment')
+                      : t('standingUnknown'),
             waybill:
               waybillState !== null &&
               waybillState !== 'Draft' &&
@@ -220,6 +222,7 @@ export interface ShipmentFactRow {
   /** A short caption after the value: «створена …», «дорівнює залишку». */
   sub?: string
   mono?: boolean
+  action?: ReactNode
   tone?: 'strong' | 'dim' | 'warn' | 'ok' | 'danger'
 }
 
@@ -291,7 +294,13 @@ export function ShipmentCard({
           {facts.map((fact) => (
             <div key={fact.key}>
               <dt>{fact.label}</dt>
-              <dd>
+              <dd
+                className={
+                  fact.action == null
+                    ? undefined
+                    : 'flex flex-wrap items-center gap-x-2 gap-y-1'
+                }
+              >
                 <span
                   className={cn(
                     fact.mono === true ? 'rz-mono' : undefined,
@@ -303,6 +312,7 @@ export function ShipmentCard({
                 >
                   {fact.value}
                 </span>
+                {fact.action}
                 {fact.sub === undefined || fact.sub === '' ? null : (
                   <span className="rz-caption ml-2 font-mono">{fact.sub}</span>
                 )}
@@ -350,6 +360,24 @@ export function DeliveryPaymentsCard({
       count={String(visible.length)}
       aside={<div className="rz-btn-row gap-1.5">{actions}</div>}
     >
+      {actions === null || actions === undefined || actions === false ? null : (
+        <div className="grid gap-1 px-(--rz-card-p) py-3">
+          <p className="rz-caption m-0 text-pretty">
+            <span className="font-medium text-app-ink">
+              {t('recordPayment')}
+            </span>
+            {' — '}
+            {t('recordPaymentHint')}
+          </p>
+          <p className="rz-caption m-0 text-pretty">
+            <span className="font-medium text-app-ink">
+              {t('linkTransaction')}
+            </span>
+            {' — '}
+            {t('linkPaymentHint')}
+          </p>
+        </div>
+      )}
       {visible.length === 0 ? (
         <p className="rz-card__body text-app-muted m-0">{t('noPayments')}</p>
       ) : (
@@ -433,7 +461,13 @@ export function DeliverySteps({
   ]
   const [expanded, setExpanded] = useState(false)
   const notes: Record<string, string> = {
-    paid: t(steps[0]?.prepaymentNotRequired ? 'noteNoPrepayment' : 'notePaid'),
+    paid: t(
+      steps[0]?.prepaymentNotRequired
+        ? 'noteNoPrepayment'
+        : steps[0]?.prepaymentReceived
+          ? 'notePrepaymentReceived'
+          : 'notePaid',
+    ),
     waybill: t('noteWaybill'),
     dispatched: t('noteDispatched'),
     received: t('noteReceived'),

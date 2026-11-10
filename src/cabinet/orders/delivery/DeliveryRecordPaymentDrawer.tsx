@@ -21,6 +21,7 @@ export function DeliveryRecordPaymentDrawer({
   onRecord,
   orderNumber,
   orderValue = null,
+  requireFullBalance = false,
 }: {
   accountingCurrency?: string | null
   codWaybill?: string | null
@@ -30,6 +31,7 @@ export function DeliveryRecordPaymentDrawer({
   onRecord: (input: RecordDeliveryPayment) => Promise<void>
   orderNumber: number
   orderValue?: number | null
+  requireFullBalance?: boolean
 }) {
   const { locale } = useLocale()
   const t = useT(deliveryDrawerMessages)
@@ -46,7 +48,7 @@ export function DeliveryRecordPaymentDrawer({
             Math.round(delivery.appliedUah * 100),
         ) / 100
 
-  const record = async (payment: ConfirmPayment) => {
+  const record = async (payment: ConfirmPayment, feeUah: number) => {
     if (pending || payment.currency !== 'UAH' || payment.amount > ceiling)
       return
     setPending(true)
@@ -55,7 +57,7 @@ export function DeliveryRecordPaymentDrawer({
       await onRecord({
         accountId: payment.accountId,
         amountUah: payment.amount,
-        feeUah: 0,
+        feeUah,
         kind: codWaybill === null ? 'prepayment' : 'cod',
       })
       onClose()
@@ -77,6 +79,12 @@ export function DeliveryRecordPaymentDrawer({
     <OrderPaymentDrawer
       accountingCurrency={accountingCurrency}
       allowedCurrencies={UAH_ONLY}
+      allowCarrierFee
+      paymentHint={
+        requireFullBalance
+          ? tf('actualReceiptWithWaybill')
+          : tf('actualReceiptHint')
+      }
       busy={pending}
       emptyTillsMessage={t('recordNoUahTills')}
       existing={[]}
@@ -84,8 +92,8 @@ export function DeliveryRecordPaymentDrawer({
       onOpenChange={(open) => {
         if (!open && !pending) onClose()
       }}
-      onSave={(_payments, added) => {
-        void record(added)
+      onSave={(_payments, added, feeUah = 0) => {
+        void record(added, feeUah)
       }}
       open
       orderNumber={orderNumber}
@@ -94,7 +102,9 @@ export function DeliveryRecordPaymentDrawer({
       validatePayment={(payment) =>
         payment.amount > ceiling
           ? t('recordOverLimit', { amount: uah(ceiling, locale) })
-          : null
+          : requireFullBalance && payment.amount !== ceiling
+            ? tf('fullBalanceRequired', { amount: uah(ceiling, locale) })
+            : null
       }
     />
   )

@@ -25,7 +25,7 @@ export const npFormsMessages = defineMessages({
     tillNoneHint:
       'Без каси післяплату доведеться вносити вручну — замовлення чекатиме в черзі на звірку.',
     tillHint:
-      'Щойно клієнт забере посилку, післяплата зарахується в цю касу автоматично.',
+      'Ця каса підставляється під час підтвердження післяплати. Перевірте надходження коштів і підтвердьте оплату в замовленні.',
     tillLabel: 'Каса для післяплати',
     noUahTill: 'Немає активної каси з гривнею',
     manualEntry: 'Вносити вручну',
@@ -133,7 +133,7 @@ export const npFormsMessages = defineMessages({
     tillNoneHint:
       'Without a till, cash on delivery has to be entered by hand — the order will wait in the reconciliation queue.',
     tillHint:
-      'As soon as the customer collects the parcel, the cash on delivery is credited to this till automatically.',
+      'This till is preselected when confirming cash on delivery. Check that the funds have arrived and confirm the payment in the order.',
     tillLabel: 'Till for cash on delivery',
     noUahTill: 'No active till holding hryvnia',
     manualEntry: 'Enter by hand',
@@ -236,7 +236,7 @@ export const npFormsMessages = defineMessages({
     tillNoneHint:
       'Bez kasy płatność za pobraniem trzeba będzie wprowadzić ręcznie — zamówienie poczeka w kolejce do uzgodnienia.',
     tillHint:
-      'Gdy tylko klient odbierze paczkę, płatność za pobraniem trafi automatycznie do tej kasy.',
+      'Ta kasa jest domyślnie wybrana przy potwierdzaniu pobrania. Sprawdź wpływ środków i potwierdź płatność w zamówieniu.',
     tillLabel: 'Kasa dla płatności za pobraniem',
     noUahTill: 'Brak aktywnej kasy z hrywnami',
     manualEntry: 'Wprowadzać ręcznie',

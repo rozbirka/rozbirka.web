@@ -328,7 +328,7 @@ export function WaybillPaymentCard({
 const eventIcon = (event: ShipmentEvent) =>
   event.code === 'Created' ? (
     <FilePlus />
-  ) : ['9', '10', '11', '106'].includes(event.code) ? (
+  ) : ['9', '10', '11'].includes(event.code) ? (
     <PackageCheck />
   ) : event.code === '2' || event.code === 'Cancelled' ? (
     <Ban />

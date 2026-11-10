@@ -46,6 +46,7 @@ interface PaymentDrawerProps {
   accountingCurrency?: string | null
   orderValue?: number | null
   codWaybill?: string | null
+  requireFullBalance?: boolean
   delivery: DeliveryOrder
   mode: Mode
   onCloseAutoFocus?: ((event: Event) => void) | undefined
@@ -66,6 +67,7 @@ export function PaymentDrawer({ mode, ...props }: PaymentDrawerProps) {
 /** A receipt already in Finance is linked separately from recording a payment. */
 function LinkedPaymentDrawer({
   codWaybill = null,
+  requireFullBalance = false,
   delivery,
   onClose,
   onCloseAutoFocus,
@@ -166,6 +168,14 @@ function LinkedPaymentDrawer({
       fail(t('pickReceipt'))
       return
     }
+    if (requireFullBalance && gross !== delivery.outstandingUah) {
+      fail(
+        tf('fullBalanceRequired', {
+          amount: uah(delivery.outstandingUah, locale),
+        }),
+      )
+      return
+    }
     if (outcome.over) {
       fail(outcomeNote)
       return
@@ -250,6 +260,13 @@ function LinkedPaymentDrawer({
         }}
       >
         <p className="rz-caption m-0 text-pretty">{t('linkExplained')}</p>
+        <Notice tone="info">
+          {tf(
+            requireFullBalance
+              ? 'actualReceiptWithWaybill'
+              : 'actualReceiptHint',
+          )}
+        </Notice>
 
         {registers !== null && registers.length === 0 && (
           <Notice tone="warn">{t('noTills')}</Notice>

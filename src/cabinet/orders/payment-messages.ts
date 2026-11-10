@@ -6,6 +6,16 @@ import { defineMessages } from '@/i18n'
  */
 export const paymentMessages = defineMessages({
   uk: {
+    carrierFee: 'Перевізник утримав комісію',
+    feeAmount: 'Утримана комісія, грн',
+    feeHint:
+      'Вкажіть підтверджену комісію з виписки. Це витрата розбірки, а не борг клієнта.',
+    feeInvalid:
+      'Вкажіть невід’ємну комісію, меншу за суму оплати, до двох знаків після коми.',
+    customerGrossHint:
+      'Сума, яку клієнт сплатив за замовлення, до утримання комісії.',
+    netReceipt: 'У касу надійшло: {amount}',
+
     eyebrow: 'Замовлення #{number} · оплата',
     title: 'Додати платіж',
     orderValue: 'Вартість замовлення',
@@ -66,6 +76,16 @@ export const paymentMessages = defineMessages({
     and: ' і ',
   },
   'en-GB': {
+    carrierFee: 'The carrier withheld a fee',
+    feeAmount: 'Withheld fee, UAH',
+    feeHint:
+      'Enter the confirmed statement fee. It is the yard’s expense, not customer debt.',
+    feeInvalid:
+      'Enter a nonnegative fee smaller than the payment, with up to two decimal places.',
+    customerGrossHint:
+      'The amount the customer paid for the order before the fee was withheld.',
+    netReceipt: 'Received in the till: {amount}',
+
     eyebrow: 'Order #{number} · payment',
     title: 'Add payment',
     orderValue: 'Order value',
@@ -121,6 +141,16 @@ export const paymentMessages = defineMessages({
     and: ' and ',
   },
   pl: {
+    carrierFee: 'Przewoźnik potrącił prowizję',
+    feeAmount: 'Potrącona prowizja, UAH',
+    feeHint:
+      'Podaj potwierdzoną prowizję z wyciągu. To koszt firmy, a nie dług klienta.',
+    feeInvalid:
+      'Podaj nieujemną prowizję mniejszą od płatności, do dwóch miejsc po przecinku.',
+    customerGrossHint:
+      'Kwota zapłacona przez klienta za zamówienie przed potrąceniem prowizji.',
+    netReceipt: 'Wpłynęło do kasy: {amount}',
+
     eyebrow: 'Zamówienie #{number} · płatność',
     title: 'Dodaj płatność',
     orderValue: 'Wartość zamówienia',

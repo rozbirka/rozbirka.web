@@ -291,7 +291,7 @@ it('keeps «received» and «paid» apart while the post-payment travels (9.2)',
   expect(within(block).getByText('Очікуємо післяплату')).toBeVisible()
   expect(
     await within(block).findByText(
-      'Нова пошта ще не переказала післяплату. Зазвичай це 1–2 робочі дні; зарахуємо автоматично в «Основна каса».',
+      'Посилку отримано. Перевірте надходження грошей і внесіть фактичну оплату у відповідну касу.',
     ),
   ).toBeVisible()
   expect(
@@ -388,7 +388,7 @@ it('asks for the post-payment by hand without a till and books it as cod (9.4, 9
   const block = paymentBlock()
   expect(within(block).getByText('Внесіть вручну')).toBeVisible()
   expect(
-    await within(block).findByText(/Для Нової пошти не обрано касу/),
+    await within(block).findByText(/Перевірте надходження грошей/),
   ).toBeVisible()
   await user.click(within(block).getByRole('button', { name: 'Внести оплату' }))
 
@@ -417,17 +417,17 @@ it('asks for the post-payment by hand without a till and books it as cod (9.4, 9
   ).toBeVisible()
 })
 
-it('sends an ambiguous payout to Finance instead of marking it paid (9.6)', () => {
+it('requires actual payment confirmation after a carrier transfer report', () => {
   renderBody(
     load({ shipment: shipment({ paymentState: 'NeedsReconciliation' }) }),
   )
 
   const block = paymentBlock()
   expect(within(block).getByText('Потрібна звірка')).toBeVisible()
-  expect(within(block).getByText('Суми не збігаються')).toBeVisible()
+  expect(within(block).getByText('Перевірте надходження грошей')).toBeVisible()
   expect(
-    within(block).getByRole('link', { name: 'Звірити у «Фінансах»' }),
-  ).toHaveAttribute('href', '/app/koval/cash')
+    within(block).getByRole('button', { name: 'Внести оплату' }),
+  ).toBeVisible()
 })
 
 it('shows the money without buttons to a user without «Фінанси»', () => {
@@ -701,8 +701,11 @@ it('asks to book and refund money the carrier paid after cancellation (10.16)', 
   const card = screen.getByRole('region', { name: 'Повернення' })
   expect(card).toHaveTextContent('Замовлення скасованоз 30.10.2026')
   const block = paymentBlock()
+  const paid = within(block).getByText('Отримано від клієнта').closest('div')!
+  expect(paid).toHaveTextContent(/0,00\sUAH/)
+  expect(paid).not.toHaveTextContent(/4\s200,00\sUAH/)
   expect(
-    within(block).getByText('Потрібно повернути отримані кошти'),
+    within(block).getByText('Перевірте переказ після скасування'),
   ).toBeVisible()
   await user.click(
     within(block).getByRole('button', { name: 'Зафіксувати надходження' }),

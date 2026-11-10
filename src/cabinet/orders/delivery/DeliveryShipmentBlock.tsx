@@ -1,5 +1,7 @@
-import type { Ref } from 'react'
-import { Link } from 'react-router'
+import { TrackingSyncDetails } from './TrackingSyncDetails'
+import { TrackingRetryNotice } from './TrackingRetryNotice'
+import { useRef, type Ref } from 'react'
+import { Link, useNavigate } from 'react-router'
 import {
   Ban,
   Calculator,
@@ -19,13 +21,20 @@ import {
   ShieldCheck,
   Truck,
 } from 'lucide-react'
-import { Button, Notice, type StatusTone } from '@/components/app'
+import {
+  ActionMenu,
+  Button,
+  Notice,
+  type MenuAction,
+  type StatusTone,
+} from '@/components/app'
 import type { NovaPoshtaDispatchPoint } from '@/api/integrations'
 import type { DeliveryOrder } from '@/api/delivery'
 import type { Shipment } from '@/api/shipping'
 import { useFormat, useLocale, useT } from '@/i18n'
 import { npRecoveryMessages } from '../../integrations/np-recovery-messages'
 import { deliveryTrustMessages } from '../../customers/delivery-trust-messages'
+import { trackingSignal } from '../../waybills/waybill-presentation'
 import { ShipmentCard, type ShipmentFactRow } from './DeliveryOrderCard'
 import {
   hasDepositWaiver,
@@ -135,6 +144,8 @@ export function DeliveryShipmentBlock({
   /** The waybill card (module 46 §8); null when it cannot be opened. */
   waybillPath: string | null
 }) {
+  const navigate = useNavigate()
+  const menuRef = useRef<HTMLButtonElement>(null)
   const { locale } = useLocale()
   const format = useFormat()
   const t = useT(waybillMessages)
@@ -467,8 +478,25 @@ export function DeliveryShipmentBlock({
             time: format.time(shipment.lastTrackedAt) ?? '',
           })
 
-  const livePill = (): { label: string; tone: StatusTone } =>
-    stage === 'received'
+  const livePill = (): { label: string; tone: StatusTone } => {
+    if (
+      stage !== 'cancelling' &&
+      stage !== 'cancelUnknown' &&
+      shipment.trackingCode !== null
+    ) {
+      const signal = trackingSignal(
+        shipment.state,
+        shipment.trackingCode,
+        shipment.receivedAt ?? delivery.receivedAt,
+        locale,
+      )
+      if (
+        signal !== null &&
+        !(stage === 'received' && awaitingCod && signal.tone === 'ok')
+      )
+        return signal
+    }
+    return stage === 'received'
       ? awaitingCod
         ? { label: tf('deliveredAwaitingCod'), tone: 'warn' }
         : { label: tm('shipReceived'), tone: 'ok' }
@@ -481,6 +509,7 @@ export function DeliveryShipmentBlock({
             : attachedAt !== null
               ? { label: t('pillAttached'), tone: 'ok' }
               : { label: tm('stateCreated'), tone: 'ok' }
+  }
 
   // Switched off with a waybill (2.16): its last known state stays readable,
   // and the actions that would reach the carrier are shown, but disabled.
@@ -510,13 +539,16 @@ export function DeliveryShipmentBlock({
         facts={facts(shipment, numberFact)}
         hint={hint}
         notices={
-          <Notice tone="info">
-            {disconnected.at === null
-              ? tm('offWaybillNoDate')
-              : tm('offWaybill', {
-                  date: format.date(disconnected.at) ?? disconnected.at,
-                })}
-          </Notice>
+          <>
+            <Notice tone="info">
+              {disconnected.at === null
+                ? tm('offWaybillNoDate')
+                : tm('offWaybill', {
+                    date: format.date(disconnected.at) ?? disconnected.at,
+                  })}
+            </Notice>
+            <TrackingSyncDetails state={shipment} />
+          </>
         }
         numberRef={numberRef}
         pill={livePill()}
@@ -617,6 +649,61 @@ export function DeliveryShipmentBlock({
 
   const pill = livePill()
 
+  // Let the modal menu release focus before opening another modal surface.
+  const openFromMenu = (action: () => void) => {
+    const opener = menuRef.current
+    window.requestAnimationFrame(() => {
+      if (opener?.isConnected !== true) return
+      opener.focus()
+      action()
+    })
+  }
+  const moreActions: MenuAction[] = [
+    ...(waybillPath === null
+      ? []
+      : [
+          {
+            key: 'data',
+            label: tm('waybillData'),
+            icon: <FileText aria-hidden />,
+            disabled: busy,
+            onSelect: () => {
+              void navigate(waybillPath)
+            },
+          },
+        ]),
+    ...(manage && stage === 'created'
+      ? [
+          {
+            key: 'edit',
+            label: t('edit'),
+            icon: <Pencil aria-hidden />,
+            disabled: busy,
+            onSelect: () => openFromMenu(actions.editWaybill),
+          },
+          ...(delivery.dispatchedAt === null
+            ? [
+                {
+                  key: 'dispatch',
+                  label: t('markDispatched'),
+                  icon: <Truck aria-hidden />,
+                  disabled: busy,
+                  onSelect: () => openFromMenu(actions.dispatch),
+                },
+              ]
+            : []),
+          {
+            key: 'cancel',
+            label: t('cancelWaybill'),
+            icon: <Ban aria-hidden />,
+            disabled: busy,
+            destructive: true,
+            onSelect: () => openFromMenu(actions.cancelWaybill),
+          },
+        ]
+      : []),
+  ]
+
   return (
     <ShipmentCard
       actions={
@@ -626,14 +713,6 @@ export function DeliveryShipmentBlock({
               <Printer aria-hidden />
               {tm('printLabel')}
             </Button>
-            {waybillPath === null ? null : (
-              <Button asChild>
-                <Link to={waybillPath}>
-                  <FileText aria-hidden />
-                  {tm('waybillData')}
-                </Link>
-              </Button>
-            )}
             <Button
               aria-busy={busy}
               disabled={busy}
@@ -643,47 +722,45 @@ export function DeliveryShipmentBlock({
               <RefreshCw aria-hidden />
               {tm('refreshStatus')}
             </Button>
-            <Button disabled={busy} onClick={actions.copy} variant="quiet">
-              <Copy aria-hidden />
-              {tm('copyNumber')}
-            </Button>
-            {manage && stage === 'created' && delivery.dispatchedAt === null ? (
-              <Button disabled={busy} onClick={actions.dispatch}>
-                <Truck aria-hidden />
-                {tm('actionDispatch')}
-              </Button>
-            ) : null}
             {manage && stage === 'sent' && delivery.receivedAt === null ? (
               <Button disabled={busy} onClick={actions.receive}>
                 <PackageCheck aria-hidden />
                 {tm('shipReceived')}
               </Button>
             ) : null}
-            {manage && stage === 'created' ? (
-              <>
-                <Button disabled={busy} onClick={actions.editWaybill}>
-                  <Pencil aria-hidden />
-                  {t('edit')}
-                </Button>
-                <Button
-                  disabled={busy}
-                  onClick={actions.cancelWaybill}
-                  variant="quiet"
-                >
-                  <Ban aria-hidden />
-                  {t('cancelWaybill')}
-                </Button>
-              </>
-            ) : null}
+            <ActionMenu
+              actions={moreActions}
+              label={t('moreActions')}
+              triggerRef={menuRef}
+            />
           </>
         ) : null
       }
-      facts={facts(shipment, numberFact)}
+      facts={facts(shipment, numberFact).map((fact) =>
+        fact.key === 'number' && carrierReady && shipment.number !== null
+          ? {
+              ...fact,
+              action: (
+                <Button
+                  aria-label={tm('copyNumber')}
+                  title={tm('copyNumber')}
+                  disabled={busy}
+                  onClick={actions.copy}
+                  size="icon"
+                  variant="quiet"
+                >
+                  <Copy aria-hidden />
+                </Button>
+              ),
+            }
+          : fact,
+      )}
       hint={hint}
       notices={
-        stage === 'created' ? null : (
-          <Notice tone="info">{t('sentNotice')}</Notice>
-        )
+        <>
+          <TrackingRetryNotice state={shipment} />
+          <TrackingSyncDetails state={shipment} />
+        </>
       }
       numberRef={numberRef}
       pill={pill}

@@ -102,6 +102,14 @@ export interface Shipment {
   paymentState: string | null
   /** Why the last refresh did not land; the last known status still stands. */
   syncProblem: string | null
+  trackingLastSuccessAt?: string | null
+  trackingLastErrorAt?: string | null
+  trackingLastError?: string | null
+  nextTrackingAttemptAt?: string | null
+  trackingPending?: boolean
+  trackingCompleted?: boolean
+  trackingPaused?: boolean
+  trackingFailures?: number
   /**
    * False while the integration is switched off: the status is the last one
    * known and nothing that reaches the carrier is allowed.
@@ -213,6 +221,8 @@ const withCollections = (shipment: Shipment): Shipment => ({
   receivedAt: shipment.receivedAt ?? null,
   paymentState: shipment.paymentState ?? null,
   syncProblem: shipment.syncProblem ?? null,
+  trackingPaused: shipment.trackingPaused ?? false,
+  trackingFailures: shipment.trackingFailures ?? 0,
   trackingEnabled: shipment.trackingEnabled ?? true,
   number: shipment.number ?? null,
   quoteUah: shipment.quoteUah ?? null,

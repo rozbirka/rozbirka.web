@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -9,6 +9,7 @@ import type { Shipment } from '@/api/shipping'
 import { LocaleProvider } from '@/i18n'
 import { ToastProvider } from '@/components/app'
 import { novaPoshtaSetupApi } from '@/api/nova-poshta-setup'
+import { deliveryApi } from '@/api/delivery'
 import { DeliveryOrderBody } from './DeliveryOrderBody'
 import type {
   DeliveryOrderLoad,
@@ -304,7 +305,11 @@ it('offers the next step in the block that needs it (module 46 §9)', async () =
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
   const carrier = screen.getByRole('region', { name: 'Доставка · Нова пошта' })
   expect(
-    within(carrier).getByRole('button', { name: 'Передати перевізнику' }),
+    within(carrier).queryByRole('button', { name: 'Передати перевізнику' }),
+  ).toBeNull()
+  await user.click(within(carrier).getByRole('button', { name: 'Ще' }))
+  expect(
+    screen.getByRole('menuitem', { name: 'Позначити як передано' }),
   ).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Створити ТТН' })).toBeNull()
 })
@@ -319,6 +324,7 @@ it('does not claim payment was received before the hryvnia total is agreed', () 
         netReceivedUah: 0,
         payments: [],
       }),
+      shipment: draftShipment(),
     }),
   )
 
@@ -421,12 +427,100 @@ it('reuses a delivery payment key after an ambiguous failure and rotates it afte
   randomUUID.mockRestore()
 })
 
+it.each(['missing', 'draft'])(
+  'keeps an unconnected %s order focused on sales without empty shipping stages',
+  async (status) => {
+    const user = userEvent.setup()
+    renderBody(
+      load({
+        integrationId: null,
+        carrier: { status, errorCode: null },
+        money: delivery({
+          appliedUah: 0,
+          outstandingUah: 4600,
+          netReceivedUah: 0,
+          payments: [],
+        }),
+      }),
+      undefined,
+      'Перевірити комплектацію',
+    )
+
+    expect(
+      screen.getByRole('region', { name: 'Доставка Новою поштою' }),
+    ).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Позиції' })).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Платежі' })).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Клієнт' })).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Історія' })).toBeVisible()
+    expect(screen.getByText('Перевірити комплектацію')).toBeVisible()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(
+      screen.queryByRole('region', { name: 'Стан оплати та доставки' }),
+    ).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Порядок дій' })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Оформити доставку' }),
+    ).toBeNull()
+    expect(
+      within(screen.getByRole('region', { name: 'Оплата' })).getByRole(
+        'button',
+        { name: 'Внести оплату' },
+      ),
+    ).toBeVisible()
+    expect(screen.queryByRole('alert')).toBeNull()
+    await user.click(
+      within(screen.getByRole('region', { name: 'Оплата' })).getByRole(
+        'button',
+        { name: 'Внести оплату' },
+      ),
+    )
+    expect(await screen.findByLabelText('Сума')).toBeVisible()
+  },
+)
+
+it('shows delivery progress only after a parcel has been configured', async () => {
+  const user = userEvent.setup()
+  renderBody(load({ shipment: null }))
+  expect(
+    screen.queryByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeNull()
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(
+    screen.getByRole('button', { name: 'Оформити доставку' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('region', { name: 'Порядок дій' })).toBeNull()
+})
+
+it.each(['dispatchedAt', 'receivedAt'] as const)(
+  'preserves recorded %s history even when the shipment is unavailable',
+  (field) => {
+    renderBody(
+      load({
+        integrationId: null,
+        carrier: { status: 'inactive', errorCode: null },
+        money: delivery({ [field]: '2026-10-28T08:14:00Z' }),
+      }),
+    )
+    const progress = screen.getByRole('region', {
+      name: 'Стан оплати та доставки',
+    })
+    expect(progress).toHaveTextContent(
+      field === 'dispatchedAt' ? 'Передано перевізнику' : 'Отримано клієнтом',
+    )
+    expect(
+      screen.queryByRole('region', { name: 'Доставка Новою поштою' }),
+    ).toBeNull()
+  },
+)
+
 it('keeps the money half working while the carrier is out of reach', async () => {
   const user = userEvent.setup()
   renderBody(
     load({
       integrationId: null,
       carrier: { status: 'error', errorCode: 'integration_account_unverified' },
+      shipment: shipment(),
     }),
   )
 
@@ -434,6 +528,9 @@ it('keeps the money half working while the carrier is out of reach', async () =>
   expect(screen.getByRole('region', { name: 'Платежі' })).toBeVisible()
 
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(
+    screen.getByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeVisible()
   expect(screen.getByText(/Нова пошта недоступна/)).toBeVisible()
   expect(
     screen.getByRole('link', { name: 'Відкрити інтеграції' }),
@@ -471,8 +568,7 @@ it('keeps a waybill readable once Nova Poshta is switched off (2.16)', async () 
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
 })
 
-it('says how to arrange delivery once Nova Poshta is switched off (2.17)', async () => {
-  const user = userEvent.setup()
+it('offers reconnection without empty delivery stages when switched off before booking (2.17)', () => {
   renderBody(
     load({
       integrationId: null,
@@ -484,16 +580,19 @@ it('says how to arrange delivery once Nova Poshta is switched off (2.17)', async
 
   // The money half is Core's and stays as it was.
   expect(screen.getByRole('region', { name: 'Платежі' })).toBeVisible()
-  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
-  expect(screen.getByText('Замовлення поки не їде поштою.')).toBeVisible()
+  expect(
+    screen.getByRole('region', { name: 'Доставка Новою поштою' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('tablist')).toBeNull()
+  expect(
+    screen.queryByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeNull()
   expect(
     screen.getByText(
       'Інтеграцію з Новою поштою відключено. Щоб оформити доставку, підключіть її знову в налаштуваннях.',
     ),
   ).toBeVisible()
-  expect(
-    screen.getByRole('button', { name: 'Оформити доставку' }),
-  ).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Оформити доставку' })).toBeNull()
   expect(
     screen.getByRole('link', { name: 'Відкрити інтеграцію' }),
   ).toHaveAttribute('href', '/app/koval/settings/integrations/int-1')
@@ -580,13 +679,14 @@ it('speaks British English on both halves of the card', async () => {
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
   const carrier = screen.getByRole('region', { name: 'Delivery · Nova Poshta' })
+  await user.click(within(carrier).getByRole('button', { name: 'More' }))
   expect(
-    within(carrier).getByRole('button', { name: 'Hand to carrier' }),
+    screen.getByRole('menuitem', { name: 'Mark as handed over' }),
   ).toBeVisible()
   expect(within(carrier).getByText('Waybill created')).toBeVisible()
   expect(within(carrier).getByText('1 piece · 42 kg')).toBeVisible()
   expect(
-    within(carrier).getByRole('link', { name: 'Waybill details' }),
+    screen.getByRole('menuitem', { name: 'Waybill details' }),
   ).toBeVisible()
   expect(
     screen.queryByText(/[А-Яа-яІіЇїЄєҐґ]{4,}/u, { selector: 'button' }),
@@ -721,10 +821,8 @@ it('leaves a waybill of a working cabinet as it is', async () => {
   ).toBeVisible()
   expect(screen.queryByText('Немає доступу')).toBeNull()
   // «Дані ТТН» opens the waybill card (module 46 §8), not a sheet.
-  expect(screen.getByRole('link', { name: 'Дані ТТН' })).toHaveAttribute(
-    'href',
-    '/app/koval/sales/waybills/ship-1',
-  )
+  await user.click(screen.getByRole('button', { name: 'Ще' }))
+  expect(screen.getByRole('menuitem', { name: 'Дані ТТН' })).toBeVisible()
 })
 
 it.each(['form', 'attach'] as const)(
@@ -810,11 +908,53 @@ it('shows no-prepayment as complete in both progress views while the order still
   expect(within(steps).queryByText('Оплачено')).not.toBeInTheDocument()
 })
 
+it('marks the received minimum prepayment complete in both views and keeps the COD balance', async () => {
+  const user = userEvent.setup()
+  const base = delivery()
+  renderBody(
+    load({
+      money: delivery({
+        agreedTotalUah: 40000,
+        appliedUah: 1800,
+        netReceivedUah: 1800,
+        outstandingUah: 38200,
+        requiredDepositUah: 1800,
+        payments: [{ ...base.payments[0]!, amountUah: 1800, netUah: 1800 }],
+      }),
+      shipment: shipment({ codUah: 38200 }),
+    }),
+  )
+  const progress = screen.getByRole('region', {
+    name: 'Стан оплати та доставки',
+  })
+  const first = within(progress).getAllByRole('listitem')[0]!
+  expect(first).toHaveAttribute('data-state', 'done')
+  expect(first).toHaveTextContent('Передоплату отримано')
+  expect(first).toHaveTextContent('21.09 · 14:02')
+  expect(progress).not.toHaveTextContent('Оплачено повністю')
+  expect(progress).not.toHaveTextContent('Очікуємо оплату')
+  expect(screen.getByRole('region', { name: 'Оплата' })).toHaveTextContent(
+    'Оплачено частково',
+  )
+  expect(screen.getByRole('region', { name: 'Оплата' })).toHaveTextContent(
+    '38 200,00 UAH',
+  )
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  const steps = screen.getByRole('region', { name: 'Порядок дій' })
+  expect(within(steps).getByText('Передоплату отримано')).toBeVisible()
+  await user.click(within(steps).getByRole('button', { name: 'Докладніше' }))
+  expect(steps).toHaveTextContent(
+    'Передоплату отримано. Залишок замовлення буде сплачено окремо або післяплатою.',
+  )
+})
+
 it('explains payment and delivery independently when the parcel is received before COD', () => {
   renderBody(
     load({
       money: delivery({
         appliedUah: 186,
+        depositSatisfied: false,
+        depositShortfallUah: 174,
         outstandingUah: 314,
         receivedAt: '2026-10-30T11:00:00Z',
         dispatchedAt: '2026-10-30T10:00:00Z',
@@ -873,3 +1013,24 @@ it.each(['Cancelled', 'AwaitingGoods', 'AwaitingRefund'])(
     expect(progress).not.toHaveTextContent('Очікуємо оплату')
   },
 )
+
+it('keeps the manual stock-changing fallback behind confirmation and restores the menu opener', async () => {
+  const user = userEvent.setup()
+  renderBody(load({ shipment: shipment() }))
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  const menu = screen.getByRole('button', { name: 'Ще' })
+  await user.click(menu)
+  await user.click(
+    screen.getByRole('menuitem', { name: 'Позначити як передано' }),
+  )
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Передати перевізнику',
+  })
+  expect(deliveryApi.dispatch).not.toHaveBeenCalled()
+  expect(
+    within(drawer).getByRole('button', { name: 'Зафіксувати передачу' }),
+  ).toBeVisible()
+  await user.click(within(drawer).getByRole('button', { name: 'Скасувати' }))
+  await waitFor(() => expect(menu).toHaveFocus())
+  expect(deliveryApi.dispatch).not.toHaveBeenCalled()
+})

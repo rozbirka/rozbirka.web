@@ -137,12 +137,12 @@ export const deliveryDrawerMessages = defineMessages({
     savePayment: 'Зберегти платіж',
     saveLink: 'Зберегти прив’язку',
     recordPayment: 'Внести оплату',
-    linkTransaction: 'Прив’язати транзакцію',
+    linkTransaction: 'Прив’язати оплату з фінансів',
     paymentMethod: 'Спосіб оплати',
     recordExplained:
       'Брутто зменшує залишок за замовленням, у касу надходить брутто мінус комісія.',
     linkExplained:
-      'Платіж не створюється: замовленню зараховується сума транзакції плюс комісія.',
+      'Виберіть надходження, яке вже записане в касі у «Фінансах». Воно зарахується замовленню без повторного додавання грошей.',
     noTills:
       'У розбірці немає активної каси. Створіть касу, щоб приймати оплату.',
     recordInto: 'Куди зараховуємо',
@@ -311,12 +311,12 @@ export const deliveryDrawerMessages = defineMessages({
     savePayment: 'Save payment',
     saveLink: 'Save link',
     recordPayment: 'Record payment',
-    linkTransaction: 'Link transaction',
+    linkTransaction: 'Link payment from Finance',
     paymentMethod: 'Payment method',
     recordExplained:
       'The gross amount reduces the order balance; the till receives the gross minus the fee.',
     linkExplained:
-      'No payment is created: the order is credited with the transaction amount plus the fee.',
+      'Choose a receipt already recorded in a till in Finance. It will be credited to the order without adding the money again.',
     noTills: 'The business has no active till. Create a till to take payments.',
     recordInto: 'Record into',
     receiptTill: 'Receiving till',
@@ -490,12 +490,12 @@ export const deliveryDrawerMessages = defineMessages({
     savePayment: 'Zapisz płatność',
     saveLink: 'Zapisz powiązanie',
     recordPayment: 'Dodaj płatność',
-    linkTransaction: 'Powiąż transakcję',
+    linkTransaction: 'Powiąż płatność z finansów',
     paymentMethod: 'Sposób płatności',
     recordExplained:
       'Kwota brutto zmniejsza saldo zamówienia, do kasy trafia brutto minus prowizja.',
     linkExplained:
-      'Płatność nie jest tworzona: zamówieniu zalicza się kwotę transakcji plus prowizję.',
+      'Wybierz wpływ już zapisany w kasie w Finansach. Zostanie zaliczony do zamówienia bez ponownego dodawania pieniędzy.',
     noTills:
       'Firma nie ma aktywnej kasy. Utwórz kasę, aby przyjmować płatności.',
     recordInto: 'Gdzie księgujemy',

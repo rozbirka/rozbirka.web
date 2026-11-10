@@ -8,7 +8,7 @@ export const npFeedMessages = defineMessages({
     connect: 'Підключити',
     connecting: 'Підключаємо…',
     retrying: 'Повторюємо…',
-    keyPlaceholder: 'Вставте ключ з кабінету Нової пошти',
+    keyPlaceholder: 'Вставте API-ключ NovaPost v1',
     // Tracking subscription
     callbackUnavailable:
       'У цьому середовищі автоматичні оновлення ще не налаштовані: потрібна публічна HTTPS-адреса прийому подій. Її задає адміністратор сервісу. Періодична перевірка статусів продовжується.',
@@ -17,7 +17,7 @@ export const npFeedMessages = defineMessages({
       'Оберіть розбірку, щоб побачити автоматичні оновлення.',
     trackingTitle: 'Автоматичне оновлення доставки',
     trackingIntro:
-      'Підключається автоматично після завершення налаштування НП, з тим самим API-ключем. Нові накладні додаються автоматично.',
+      'Підписка отримує події Нової пошти через NovaPost v1. Нові накладні додаються автоматично.',
     readingState: 'Читаємо стан підписки…',
     denied:
       'Немає доступу до автоматичних оновлень: потрібні права на налаштування команди.',
@@ -34,8 +34,8 @@ export const npFeedMessages = defineMessages({
         'Для {count} накладних автоматичні оновлення не підтверджені. Періодична перевірка продовжується.',
     },
     keyHint:
-      'Ключ зберігається в сервісі зашифрованим і більше не показується.',
-    keyLabel: 'API-ключ Нової пошти',
+      'Окремий ключ для вебхуків. Ключ v2 для створення ТТН не змінюється. Зберігаємо зашифрованим і більше не показуємо.',
+    keyLabel: 'API-ключ NovaPost v1',
     hideKey: 'Приховати ключ',
     showKey: 'Показати ключ',
     checkConnection: 'Перевірити підключення НП',
@@ -117,14 +117,14 @@ export const npFeedMessages = defineMessages({
     connect: 'Connect',
     connecting: 'Connecting…',
     retrying: 'Retrying…',
-    keyPlaceholder: 'Paste the key from your Nova Poshta account',
+    keyPlaceholder: 'Paste the NovaPost v1 API key',
     callbackUnavailable:
       'Automatic updates aren’t set up in this environment yet. The receiving address is set by the service administrator — you don’t need to enter it.',
-    pasteKey: 'Paste the key from your Nova Poshta account.',
+    pasteKey: 'Paste the NovaPost v1 API key.',
     pickBusinessTracking: 'Choose a business to see automatic updates.',
     trackingTitle: 'Automatic delivery updates',
     trackingIntro:
-      'Connects automatically after Nova Poshta setup using the same API key. New waybills are added automatically.',
+      'Receives Nova Poshta events through NovaPost v1. New waybills are added automatically.',
     readingState: 'Reading the subscription state…',
     denied:
       'No access to automatic updates: you need permission to manage team settings.',
@@ -138,8 +138,9 @@ export const npFeedMessages = defineMessages({
       other:
         'Automatic updates aren’t confirmed for {count} waybills. The periodic check continues.',
     },
-    keyHint: 'The key is stored encrypted and is never shown again.',
-    keyLabel: 'Nova Poshta API key',
+    keyHint:
+      'A separate key for webhooks. The v2 key for creating waybills stays unchanged. Stored encrypted and never shown again.',
+    keyLabel: 'NovaPost v1 API key',
     hideKey: 'Hide key',
     showKey: 'Show key',
     checkConnection: 'Check Nova Poshta connection',
@@ -217,15 +218,15 @@ export const npFeedMessages = defineMessages({
     connect: 'Połącz',
     connecting: 'Łączenie…',
     retrying: 'Ponawianie…',
-    keyPlaceholder: 'Wklej klucz z panelu Nova Poshta',
+    keyPlaceholder: 'Wklej klucz API NovaPost v1',
     callbackUnavailable:
       'W tym środowisku automatyczne aktualizacje nie są jeszcze skonfigurowane. Adres odbioru ustawia administrator usługi — nie trzeba go wpisywać ręcznie.',
-    pasteKey: 'Wklej klucz z panelu Nova Poshta.',
+    pasteKey: 'Wklej klucz API NovaPost v1.',
     pickBusinessTracking:
       'Wybierz firmę, aby zobaczyć automatyczne aktualizacje.',
     trackingTitle: 'Automatyczne aktualizacje dostaw',
     trackingIntro:
-      'Łączy się automatycznie po konfiguracji Nova Poshta, z tym samym kluczem API. Nowe listy przewozowe są dodawane automatycznie.',
+      'Odbiera zdarzenia Nova Poshta przez NovaPost v1. Nowe listy przewozowe są dodawane automatycznie.',
     readingState: 'Odczytywanie stanu subskrypcji…',
     denied:
       'Brak dostępu do automatycznych aktualizacji: potrzebne są uprawnienia do ustawień zespołu.',
@@ -242,8 +243,8 @@ export const npFeedMessages = defineMessages({
         'Automatyczne aktualizacje nie są potwierdzone dla {count} listu przewozowego. Okresowe sprawdzanie trwa nadal.',
     },
     keyHint:
-      'Klucz jest przechowywany w usłudze w postaci zaszyfrowanej i nie jest już wyświetlany.',
-    keyLabel: 'Klucz API Nova Poshta',
+      'Osobny klucz do webhooków. Klucz v2 do tworzenia listów przewozowych pozostaje bez zmian. Przechowujemy go w postaci zaszyfrowanej i nie wyświetlamy ponownie.',
+    keyLabel: 'Klucz API NovaPost v1',
     hideKey: 'Ukryj klucz',
     showKey: 'Pokaż klucz',
     checkConnection: 'Sprawdź połączenie Nova Poshta',

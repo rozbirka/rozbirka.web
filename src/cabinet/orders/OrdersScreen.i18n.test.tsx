@@ -14,7 +14,10 @@ import {
 
 const country = vi.hoisted(() => ({ code: null as string | null }))
 const orderMocks = vi.hoisted(() => ({ list: vi.fn(), getById: vi.fn() }))
-const integrationMocks = vi.hoisted(() => ({ list: vi.fn() }))
+const integrationMocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  dispatchPoints: vi.fn(),
+}))
 const deliveryMocks = vi.hoisted(() => ({ get: vi.fn(), configure: vi.fn() }))
 
 vi.mock('@/auth/useTenantSettings', () => ({
@@ -25,7 +28,12 @@ vi.mock('@/auth/useTenantSettings', () => ({
 }))
 vi.mock('@/api/orders', () => ({ ordersApi: orderMocks }))
 vi.mock('@/api/integrations', () => ({
-  integrationsApi: { list: integrationMocks.list },
+  integrationsApi: integrationMocks,
+}))
+vi.mock('@/api/shipping', () => ({
+  shippingApi: {
+    get: vi.fn().mockResolvedValue(null),
+  },
 }))
 vi.mock('@/api/delivery', () => ({ deliveryApi: deliveryMocks }))
 vi.mock('@/api/customers', async (importOriginal) => ({
@@ -128,6 +136,7 @@ beforeEach(() => {
   })
   orderMocks.getById.mockResolvedValue(detail)
   integrationMocks.list.mockResolvedValue([])
+  integrationMocks.dispatchPoints.mockResolvedValue([])
   deliveryMocks.get.mockRejectedValue({
     kind: 'conflict',
     code: 'ORDER_INVALID_STATUS',
@@ -182,14 +191,23 @@ describe('in British English', () => {
     const history = screen.getByRole('list', { name: 'Order history' })
     expect(within(history).getByText('Order created')).toBeVisible()
     expect(
-      await screen.findByRole('button', { name: 'Arrange delivery' }),
+      await screen.findByRole('region', { name: 'Delivery with Nova Poshta' }),
     ).toBeVisible()
+    expect(
+      screen.getByText('Ask your business administrator to connect it.'),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Arrange delivery' }),
+    ).toBeNull()
   })
 })
 
 describe('Nova Poshta by business country', () => {
   it('offers delivery to a Ukrainian business', async () => {
     country.code = 'UA'
+    integrationMocks.list.mockResolvedValue([
+      { id: 'int-1', code: 'nova_poshta', status: 'active' },
+    ])
     renderAt('/app/garage/orders/order-1')
 
     expect(
@@ -199,6 +217,9 @@ describe('Nova Poshta by business country', () => {
   })
 
   it('treats an unknown country as the Ukrainian default', async () => {
+    integrationMocks.list.mockResolvedValue([
+      { id: 'int-1', code: 'nova_poshta', status: 'active' },
+    ])
     renderAt('/app/garage/orders/order-1')
 
     expect(

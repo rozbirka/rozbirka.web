@@ -11,6 +11,7 @@ import {
   type MessageParams,
 } from '@/i18n'
 import { orderStatusPresentation } from '../order-labels'
+import { trackingSignal } from '../../waybills/waybill-presentation'
 import {
   hasDepositWaiver,
   minimumPrepayment,
@@ -40,6 +41,30 @@ const tr = (
 export const hasWaybill = (shipment: Shipment | null): boolean =>
   shipment !== null && shipment.number !== null && shipment.number !== ''
 
+/** Match Core's customer-reassignment guard; booking alone does not lock it. */
+export function customerChangeReason(
+  delivery: DeliveryOrder,
+  shipment: Shipment | null,
+  locale: Locale,
+): string | null {
+  if (
+    delivery.workflowState !== 'Open' ||
+    delivery.dispatchedAt !== null ||
+    delivery.receivedAt !== null ||
+    delivery.returnedAt !== null
+  )
+    return tr(locale, 'customerChangeClosed')
+  if (
+    shipment !== null &&
+    ['Creating', 'Unknown', 'Cancelling', 'CancelUnknown'].includes(
+      shipment.state,
+    )
+  )
+    return tr(locale, 'customerChangeUnresolved')
+  if (shipment?.state === 'Created') return tr(locale, 'customerChangeWaybill')
+  return null
+}
+
 export interface LifecycleStep {
   key: string
   label: string
@@ -48,6 +73,8 @@ export interface LifecycleStep {
   done: boolean
   /** This milestone is cleared by an exception, not by money received. */
   prepaymentNotRequired?: boolean
+  /** The required prepayment is covered; a goods balance is still outstanding. */
+  prepaymentReceived?: boolean
   /** The furthest step reached — the one the eye should land on. */
   current: boolean
 }
@@ -72,8 +99,8 @@ const stamp = (
 }
 
 /**
- * The first milestone can be cleared by payment or by an active prepayment
- * exception. An exception never settles the outstanding goods balance.
+ * The first milestone is cleared by full payment, a covered minimum prepayment
+ * or an active exception. Only full payment settles the goods balance.
  */
 export function lifecycle(
   delivery: DeliveryOrder,
@@ -81,17 +108,28 @@ export function lifecycle(
   locale: Locale,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): LifecycleStep[] {
+  const fullyPaid = isFullyPaid(delivery)
+  const prepaymentReceived =
+    delivery.workflowState === 'Open' &&
+    !fullyPaid &&
+    delivery.agreedTotalUah > 0 &&
+    delivery.appliedUah > 0 &&
+    (!delivery.depositRequired ||
+      hasDepositWaiver(delivery) ||
+      (minimumPrepayment(delivery) > 0 && delivery.depositSatisfied))
   const prepaymentNotRequired =
     delivery.workflowState === 'Open' &&
-    !isFullyPaid(delivery) &&
+    !fullyPaid &&
+    !prepaymentReceived &&
     (!delivery.depositRequired || hasDepositWaiver(delivery))
-  const paidAt = isFullyPaid(delivery)
-    ? (delivery.payments
-        .filter((payment) => payment.refundedAt === null)
-        .map((payment) => payment.createdAt)
-        .sort()
-        .at(-1) ?? null)
-    : null
+  const paidAt =
+    fullyPaid || prepaymentReceived
+      ? (delivery.payments
+          .filter((payment) => payment.refundedAt === null)
+          .map((payment) => payment.createdAt)
+          .sort()
+          .at(-1) ?? null)
+      : null
   const waybillAt =
     shipment?.events.find((event) => event.code === 'Created')?.recordedAt ??
     (hasWaybill(shipment) ? (shipment?.quoteAt ?? null) : null)
@@ -106,9 +144,13 @@ export function lifecycle(
       key: 'paid',
       label: tr(
         locale,
-        prepaymentNotRequired ? 'stepNoPrepayment' : 'stepPaid',
+        prepaymentReceived
+          ? 'stepPrepaymentReceived'
+          : prepaymentNotRequired
+            ? 'stepNoPrepayment'
+            : 'stepPaid',
       ),
-      done: isFullyPaid(delivery) || prepaymentNotRequired,
+      done: fullyPaid || prepaymentReceived || prepaymentNotRequired,
       at: paidAt,
     },
     {
@@ -138,6 +180,9 @@ export function lifecycle(
     done: step.done,
     ...(step.key === 'paid' && prepaymentNotRequired
       ? { prepaymentNotRequired: true }
+      : {}),
+    ...(step.key === 'paid' && prepaymentReceived
+      ? { prepaymentReceived: true }
       : {}),
     current: step.done && steps[index + 1]?.done !== true,
   }))
@@ -174,6 +219,15 @@ export function shipmentChip(
   shipment: Shipment | null,
   locale: Locale,
 ): { label: string; tone: StatusTone } {
+  if (shipment?.state === 'Created' && shipment.trackingCode !== null) {
+    const signal = trackingSignal(
+      shipment.state,
+      shipment.trackingCode,
+      shipment.receivedAt ?? delivery.receivedAt,
+      locale,
+    )
+    if (signal !== null) return signal
+  }
   if (delivery.receivedAt !== null)
     return { label: tr(locale, 'shipReceived'), tone: 'ok' }
   if (delivery.dispatchedAt !== null)

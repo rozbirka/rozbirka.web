@@ -40,6 +40,12 @@ export const orderCardMessages = defineMessages({
     customerCard: 'картка клієнта',
     addCustomer: 'Додати клієнта',
     changeCustomer: 'Змінити клієнта',
+    editCustomerProfile: 'Редагувати дані клієнта',
+    editCustomerProfileHint:
+      'Змінює спільну картку клієнта. Отримувач у створеній ТТН не зміниться.',
+    chooseAnotherCustomer: 'Обрати іншого клієнта',
+    chooseAnotherCustomerHint:
+      'Змінює клієнта лише цього замовлення. Після заміни перевірте отримувача доставки.',
     change: 'Змінити',
     customerOrders: 'Замовлень',
     customerSpent: 'Витратив',
@@ -107,6 +113,12 @@ export const orderCardMessages = defineMessages({
     customerCard: 'customer card',
     addCustomer: 'Add customer',
     changeCustomer: 'Change customer',
+    editCustomerProfile: 'Edit customer details',
+    editCustomerProfileHint:
+      'Updates the shared customer profile. The recipient on an existing waybill stays unchanged.',
+    chooseAnotherCustomer: 'Choose another customer',
+    chooseAnotherCustomerHint:
+      'Changes the customer for this order only. Check the delivery recipient afterwards.',
     change: 'Change',
     customerOrders: 'Orders',
     customerSpent: 'Spent',
@@ -178,6 +190,12 @@ export const orderCardMessages = defineMessages({
     customerCard: 'karta klienta',
     addCustomer: 'Dodaj klienta',
     changeCustomer: 'Zmień klienta',
+    editCustomerProfile: 'Edytuj dane klienta',
+    editCustomerProfileHint:
+      'Zmienia wspólną kartę klienta. Odbiorca na wystawionym liście przewozowym pozostaje bez zmian.',
+    chooseAnotherCustomer: 'Wybierz innego klienta',
+    chooseAnotherCustomerHint:
+      'Zmienia klienta tylko w tym zamówieniu. Następnie sprawdź odbiorcę dostawy.',
     change: 'Zmień',
     customerOrders: 'Zamówienia',
     customerSpent: 'Wydał',
