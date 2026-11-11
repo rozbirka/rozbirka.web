@@ -282,6 +282,16 @@ jobs:
             npm run verify:release:qa
           fi
 
+      - if: failure()
+        name: Retain Lighthouse diagnostics for failed release validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-lighthouse-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .lighthouseci
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
       - if: github.event_name != 'pull_request'
         name: Seal static assets, compiled Worker and runtime config
         run: node scripts/web-release.mjs seal
