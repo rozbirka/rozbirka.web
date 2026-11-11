@@ -571,52 +571,55 @@ it('refunds the whole amount after a final confirmation (10.6–10.8, 10.11)', a
   )
 })
 
-it('says when a linked expense already belongs to another order (10.9)', async () => {
-  vi.mocked(deliveryApi.confirmFullRefund).mockRejectedValue({
-    kind: 'conflict',
-    code: 'refund_transaction_already_allocated',
-    message: 'Цю операцію вже використано.',
-  })
-  const user = userEvent.setup()
-  renderBody(
-    load({
-      money: delivery({
-        outstandingUah: 0,
-        payments: [payment({ amountUah: 9600 })],
-        refundDueUah: 9600,
-        returnedAt: 'x',
-        workflowState: 'AwaitingRefund',
-      }),
-    }),
-  )
-
-  await user.click(screen.getByRole('button', { name: 'Завершити розрахунок' }))
-  const sheet = await screen.findByRole('dialog', {
-    name: 'Завершити розрахунок',
-  })
-  await user.click(
-    within(sheet).getByRole('button', {
+it('offers only a new cash refund without a Finance link mode or transaction lookup', async () => {
+  const { sheet } = await openRetentionRefund(500)
+  expect(
+    within(sheet).queryByRole('button', {
       name: 'Повернення вже є у «Фінансах»',
     }),
-  )
-  await user.click(
-    await within(sheet).findByRole('button', { name: /ОП-2291/ }),
-  )
-  await user.click(
-    within(sheet).getByRole('button', { name: 'Прив’язати операцію' }),
-  )
-
-  expect(deliveryApi.confirmFullRefund).toHaveBeenCalledWith(
-    'order-1',
-    { existingCashTransactionId: 'tx-out' },
-    expect.any(Object),
-  )
+  ).not.toBeInTheDocument()
   expect(
-    await within(sheet).findByText(
-      'Операцію вже прив’язано до іншого замовлення.',
-    ),
-  ).toBeVisible()
+    within(sheet).queryByRole('button', { name: 'Повернення з каси' }),
+  ).not.toBeInTheDocument()
+  expect(within(sheet).queryByRole('searchbox')).not.toBeInTheDocument()
+  expect(
+    await within(sheet).findByRole('combobox', { name: 'Каса' }),
+  ).toBeEnabled()
+  expect(cashApi.transactions).not.toHaveBeenCalled()
 })
+
+it.each([0, 20])(
+  'keeps settled payments and the refunded amount in cancelled order history (retained=%s)',
+  async (retainedDeliveryCostUah) => {
+    renderBody(
+      load({
+        money: delivery({
+          workflowState: 'Cancelled',
+          outstandingUah: 0,
+          appliedUah: 0,
+          refundDueUah: 0,
+          retainedDeliveryCostUah,
+          payments: [
+            payment({
+              amountUah: 150,
+              netUah: 150,
+              retainedDeliveryCostUah,
+              refundedAt: '2026-11-11T13:10:00Z',
+            }),
+          ],
+        }),
+      }),
+    )
+    const history = await screen.findByRole('list', {
+      name: 'Платежі замовлення',
+    })
+    expect(history).toHaveTextContent('Передоплата')
+    expect(history).toHaveTextContent(
+      `повернено ${150 - retainedDeliveryCostUah},00 UAH`,
+    )
+    expect(screen.queryByText('Платежів ще немає.')).not.toBeInTheDocument()
+  },
+)
 
 it('cancels an unsent order through the waybill and the refund step (10.13)', async () => {
   vi.mocked(deliveryApi.cancel).mockResolvedValue(
@@ -888,33 +891,7 @@ it('shows retained delivery costs on a cancelled return without claiming a cash 
   await screen.findByRole('tab', { name: /Доставка/ })
 })
 
-it('links only the net refund expense while retaining confirmed actual delivery costs', async () => {
-  vi.mocked(cashApi.transactions).mockResolvedValueOnce({
-    items: [
-      {
-        id: 'tx-net',
-        amount: 314,
-        direction: 'out',
-        type: 'manual_out',
-        currency: 'UAH',
-        note: 'Повернення 314',
-        referenceId: null,
-        createdAt: '2026-10-30T10:00:00Z',
-        createdByName: 'Олег',
-      },
-      {
-        id: 'tx-gross',
-        amount: 500,
-        direction: 'out',
-        type: 'manual_out',
-        currency: 'UAH',
-        note: 'Повернення 500',
-        referenceId: null,
-        createdAt: '2026-10-30T10:00:00Z',
-        createdByName: 'Олег',
-      },
-    ],
-  } as Awaited<ReturnType<typeof cashApi.transactions>>)
+it('records the net cash refund after retaining confirmed delivery costs', async () => {
   vi.mocked(deliveryApi.confirmFullRefund).mockResolvedValue(
     delivery({ workflowState: 'Cancelled', refundDueUah: 0 }),
   )
@@ -929,32 +906,24 @@ it('links only the net refund expense while retaining confirmed actual delivery 
     'Фактична доставка',
   )
   await user.click(
-    within(sheet).getByRole('button', {
-      name: 'Повернення вже є у «Фінансах»',
-    }),
+    within(sheet).getByRole('button', { name: /^Підтвердити повернення 314/ }),
   )
+  const confirm = await screen.findByRole('dialog', {
+    name: /^Повернути клієнту/,
+  })
   await user.click(
-    await within(sheet).findByRole('button', { name: /Повернення 500/ }),
-  )
-  expect(
-    within(sheet).getByRole('button', { name: 'Прив’язати операцію' }),
-  ).toBeDisabled()
-  expect(sheet).toHaveTextContent(/Сума операції має дорівнювати.+314,00/)
-  await user.click(
-    within(sheet).getByRole('button', { name: /Повернення 314/ }),
-  )
-  await user.click(
-    within(sheet).getByRole('button', { name: 'Прив’язати операцію' }),
+    within(confirm).getByRole('button', { name: /^Зафіксувати 314/ }),
   )
   expect(deliveryApi.confirmFullRefund).toHaveBeenCalledWith(
     'order-1',
     {
-      existingCashTransactionId: 'tx-net',
+      accountId: 'till-1',
       retainedDeliveryCostUah: 186,
       retentionNote: 'Фактична доставка',
     },
     expect.any(Object),
   )
+  expect(cashApi.transactions).not.toHaveBeenCalled()
 })
 
 it('preserves retention and reuses the replay key after an ambiguous no-cash settlement', async () => {
