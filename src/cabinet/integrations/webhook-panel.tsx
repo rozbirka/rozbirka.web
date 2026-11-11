@@ -213,7 +213,9 @@ export function WebhookPanel({
                 {t('deadLettersWarn', { count: status.deadLetters })}
               </Notice>
             ) : (
-              <Notice tone="ok">{t('queueClean')}</Notice>
+              <Notice tone="info">
+                {status.pending > 0 ? t('queuePending') : t('queueClean')}
+              </Notice>
             )
           ) : (
             <Notice tone="warn">{t('notConfigured')}</Notice>

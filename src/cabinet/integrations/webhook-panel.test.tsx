@@ -162,3 +162,40 @@ it('never displays NaN for an empty queue without a timestamp', async () => {
   await screen.findByText('Найстаріша необроблена')
   expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
 })
+
+it('reports pending inbox events instead of claiming that the queue is clear', async () => {
+  vi.mocked(integrationsApi.webhookStatus).mockResolvedValue({
+    enabled: true,
+    pending: 3,
+    deadLetters: 0,
+    oldestPendingAt: new Date().toISOString(),
+    deadLetterIds: [],
+  })
+  renderScreen()
+  expect(
+    await screen.findByText(
+      'У вхідній черзі є події, які ще очікують обробки.',
+    ),
+  ).toBeVisible()
+  expect(
+    screen.queryByText(/черга чиста|Статуси відправлень оновлюються самі/),
+  ).not.toBeInTheDocument()
+})
+
+it('does not treat a configured receiver and an empty inbox as proof of shipment updates', async () => {
+  vi.mocked(integrationsApi.webhookStatus).mockResolvedValue({
+    enabled: true,
+    pending: 0,
+    deadLetters: 0,
+    oldestPendingAt: null,
+    deadLetterIds: [],
+  })
+  renderScreen()
+  expect(
+    await screen.findByText(
+      /Порожня черга не підтверджує отримання змін статусу ТТН/,
+    ),
+  ).toBeVisible()
+  expect(screen.getByText('Перевірка підпису')).toBeVisible()
+  expect(screen.queryByText('Прийом подій')).not.toBeInTheDocument()
+})

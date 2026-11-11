@@ -112,6 +112,18 @@ const renderPanel = () =>
     </ToastProvider>,
   )
 
+it('distinguishes confirmed subscription callbacks from real shipment events and explains key reuse', async () => {
+  vi.mocked(integrationsApi.trackingSubscription).mockResolvedValue(
+    status({ state: 'Connected', lastCallbackAt: '2026-11-11T12:52:00Z' }),
+  )
+  renderPanel()
+  expect(
+    await screen.findByText(/Збережений ключ НП використовується для вебхуків/),
+  ).toBeVisible()
+  expect(screen.getByText(/Останній callback/)).toBeVisible()
+  expect(screen.getByText(/Callback може бути тестовим/)).toBeVisible()
+})
+
 beforeEach(() => {
   // Reset, not clear: a `mockResolvedValueOnce` a failing test never consumed
   // would otherwise answer the next test's first request.
