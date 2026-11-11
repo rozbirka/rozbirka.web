@@ -57,7 +57,7 @@ export function DeliveryRecordPaymentDrawer({
       await onRecord({
         accountId: payment.accountId,
         amountUah: payment.amount,
-        feeUah,
+        feeUah: codWaybill === null ? 0 : feeUah,
         kind: codWaybill === null ? 'prepayment' : 'cod',
       })
       onClose()
@@ -79,7 +79,7 @@ export function DeliveryRecordPaymentDrawer({
     <OrderPaymentDrawer
       accountingCurrency={accountingCurrency}
       allowedCurrencies={UAH_ONLY}
-      allowCarrierFee
+      allowCarrierFee={codWaybill !== null}
       paymentHint={
         requireFullBalance
           ? tf('actualReceiptWithWaybill')

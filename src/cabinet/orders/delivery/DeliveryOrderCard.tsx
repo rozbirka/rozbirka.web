@@ -369,13 +369,6 @@ export function DeliveryPaymentsCard({
             {' — '}
             {t('recordPaymentHint')}
           </p>
-          <p className="rz-caption m-0 text-pretty">
-            <span className="font-medium text-app-ink">
-              {t('linkTransaction')}
-            </span>
-            {' — '}
-            {t('linkPaymentHint')}
-          </p>
         </div>
       )}
       {visible.length === 0 ? (

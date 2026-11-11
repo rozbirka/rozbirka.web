@@ -749,21 +749,13 @@ export function DeliveryOrderBody({
                     !financeAllowed ||
                     closing ||
                     delivery.outstandingUah <= 0 ? null : (
-                      <>
-                        <Button
-                          disabled={busy}
-                          onClick={() => open(payDrawer('link'))}
-                        >
-                          {t('linkTransaction')}
-                        </Button>
-                        <Button
-                          disabled={busy}
-                          onClick={() => open(payDrawer('record'))}
-                        >
-                          <Plus aria-hidden />
-                          {t('recordPayment')}
-                        </Button>
-                      </>
+                      <Button
+                        disabled={busy}
+                        onClick={() => open(payDrawer('record'))}
+                      >
+                        <Plus aria-hidden />
+                        {t('recordPayment')}
+                      </Button>
                     )
                   }
                   delivery={delivery}
