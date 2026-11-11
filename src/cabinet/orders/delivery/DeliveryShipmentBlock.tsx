@@ -490,7 +490,8 @@ export function DeliveryShipmentBlock({
     if (
       stage !== 'cancelling' &&
       stage !== 'cancelUnknown' &&
-      shipment.trackingCode !== null
+      (shipment.trackingCode !== null ||
+        (stage === 'created' && attachedAt === null))
     ) {
       const signal = trackingSignal(
         shipment.state,

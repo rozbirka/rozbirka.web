@@ -7,9 +7,8 @@ import type { DeliveryOrder } from '@/api/delivery'
 import { commonMessages, useLocale, useT } from '@/i18n'
 import { NpChecks } from '../../integrations/np-checks'
 import { SheetGroup } from '../sheet-group'
-import { readiness, readinessBlocks } from './delivery-view'
+import { readiness, readinessBlocks, readinessNextStep } from './delivery-view'
 import { deliveryDrawerMessages } from './drawer-messages'
-import { deliveryMessages } from './messages'
 import { waybillMessages } from './waybill-messages'
 
 /**
@@ -44,12 +43,17 @@ export function WaybillReadinessDrawer({
   const { locale } = useLocale()
   const t = useT(deliveryDrawerMessages)
   const tw = useT(waybillMessages)
-  const tm = useT(deliveryMessages)
   const tc = useT(commonMessages)
   const checks = readiness(delivery, shipment, dispatchPointActive, locale)
   const blocking = readinessBlocks(checks)
   const passed = blocking.length === 0
-  const first = blocking[0]
+  const next = readinessNextStep(checks, locale)
+  const prepaymentMissing =
+    delivery.requiredDepositUah > 0 &&
+    checks.find((check) => check.key === 'deposit')?.ok === false
+  const allKnownChecksPassed = checks.every(
+    (check) => check.ok || check.deferred === true,
+  )
 
   return (
     <Sheet
@@ -94,15 +98,18 @@ export function WaybillReadinessDrawer({
       open
       title={t('readinessTitle')}
     >
-      <Notice block tone={passed ? 'ok' : 'warn'}>
-        <p className="rz-strong m-0 font-semibold">
-          {first === undefined ? tm('nextClearTitle') : tm('nextFixTitle')}
-        </p>
-        <p className="m-0 mt-1">
-          {first === undefined
-            ? tm('nextClearNote')
-            : tm('nextFixNote', { label: first.label, state: first.state })}
-        </p>
+      <Notice
+        block
+        tone={
+          !passed || prepaymentMissing
+            ? 'warn'
+            : allKnownChecksPassed
+              ? 'ok'
+              : 'info'
+        }
+      >
+        <p className="rz-strong m-0 font-semibold">{next.title}</p>
+        <p className="m-0 mt-1">{next.note}</p>
       </Notice>
 
       <SheetGroup title={t('readinessChecks')}>

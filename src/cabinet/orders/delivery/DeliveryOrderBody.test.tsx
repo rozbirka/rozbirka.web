@@ -278,6 +278,21 @@ it('names the till behind a payment once the cash module answers', async () => {
   expect(await within(payments).findByText(/ФОП Nova Pay/)).toBeVisible()
 })
 
+it.each([null, '1'])(
+  'uses the same created badge before and after tracking refresh (code=%s)',
+  async (trackingCode) => {
+    const user = userEvent.setup()
+    renderBody(load({ shipment: shipment({ trackingCode }) }))
+    await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+    const card = within(
+      screen.getByRole('region', { name: 'Доставка · Нова пошта' }),
+    )
+    expect(card.getByText('Створено')).toBeVisible()
+    expect(card.queryByText('ТТН створено')).not.toBeInTheDocument()
+    expect(card.getByText('Статус НП: ще не надходив')).toBeVisible()
+  },
+)
+
 it('sums an order from its parts and keeps the hryvnia figure out of it', () => {
   renderBody(load({}))
 
@@ -618,8 +633,44 @@ it('lets an unpaid, uncalculated order reach the booking drawer', async () => {
   const drawer = await screen.findByRole('dialog', {
     name: 'Перевірка перед створенням ТТН',
   })
-  expect(drawer).toHaveTextContent('Перешкод не знайдено')
+  expect(drawer).toHaveTextContent('Наступний крок — розрахувати доставку')
   expect(drawer).toHaveTextContent('зробимо на наступному кроці')
+  expect(
+    within(drawer).getByRole('button', { name: 'Продовжити оформлення' }),
+  ).toBeEnabled()
+})
+
+it('names an unmet known prepayment instead of claiming readiness while allowing review of the next step', async () => {
+  const user = userEvent.setup()
+  renderBody(
+    load({
+      money: delivery({
+        appliedUah: 0,
+        netReceivedUah: 0,
+        outstandingUah: 1000,
+        requiredDepositUah: 150,
+        depositShortfallUah: 150,
+        depositSatisfied: false,
+        payments: [],
+      }),
+      points: [point()],
+      shipment: draftShipment({
+        quoteAt: new Date().toISOString(),
+        quoteUah: 75,
+        returnEstimateUah: 75,
+      }),
+    }),
+  )
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  await user.click(
+    screen.getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Перевірка перед створенням ТТН',
+  })
+  expect(drawer).toHaveTextContent('Потрібна мінімальна передоплата')
+  expect(drawer).not.toHaveTextContent('Перешкод не знайдено')
+  expect(drawer).toHaveTextContent(/Залишилось внести: 150,00 UAH/)
   expect(
     within(drawer).getByRole('button', { name: 'Продовжити оформлення' }),
   ).toBeEnabled()
@@ -683,7 +734,7 @@ it('speaks British English on both halves of the card', async () => {
   expect(
     screen.getByRole('menuitem', { name: 'Mark as handed over' }),
   ).toBeVisible()
-  expect(within(carrier).getByText('Waybill created')).toBeVisible()
+  expect(within(carrier).getByText('Created')).toBeVisible()
   expect(within(carrier).getByText('1 piece · 42 kg')).toBeVisible()
   expect(
     screen.getByRole('menuitem', { name: 'Waybill details' }),
