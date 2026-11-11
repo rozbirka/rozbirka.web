@@ -25,10 +25,14 @@ on:
           - qa
           - prod
       enable_deployment:
-        description: Deploy after building
+        description: Deploy an existing verified release (requires release_run_id)
         required: true
         type: boolean
-        default: true
+        default: false
+      release_run_id:
+        description: Deploy the verified package from this workflow run (no build/tests)
+        required: false
+        type: string
       skip_e2e:
         description: Skip browser E2E and authenticated smoke tests
         required: false
@@ -48,6 +52,7 @@ jobs:
     uses: ./.github/workflows/deploy-node-static-template.yml
     permissions:
       contents: read
+      actions: read
       id-token: write
     secrets:
       CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
@@ -58,8 +63,9 @@ jobs:
     with:
       project_name: Rozbirka Web
       branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref_name }}
-      environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'qa' }}
+      environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || (github.ref_name == 'main' && 'prod' || 'qa') }}
       enable_deployment: ${{ (github.event_name == 'push' && github.ref_name == 'develop') || (github.event_name == 'workflow_dispatch' && inputs.enable_deployment) }}
       auto_qa_deploy: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
       run_build: true
       skip_e2e: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_e2e }}
+      release_run_id: ${{ github.event_name == 'workflow_dispatch' && inputs.release_run_id || '' }}

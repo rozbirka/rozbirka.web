@@ -44,3 +44,6 @@ gha-creds-*.json
 .playwright-mcp/
 .superpowers/
 .worktrees/
+
+.web-release
+.release-worker

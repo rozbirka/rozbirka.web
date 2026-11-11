@@ -3,17 +3,21 @@
 ## Deployment
 
 Deploy through the **Deploy Rozbirka Web** GitHub Actions workflow. Pushes to
-`develop` deploy QA automatically. For a manual run, select the branch,
-`environment` (`qa` or `prod`), and `enable_deployment`.
+`develop` build and deploy QA automatically; pushes to `main` prepare a production
+release. Manual runs default to preparation (`enable_deployment=false`). To
+deploy, select the same branch/environment, enable deployment and provide the
+verified producer's `release_run_id`. This deploy-only path reuses the sealed
+static assets, compiled Worker and runtime config without building or testing.
+Production requires `main` and the protected environment approval.
 
-Manual runs also offer `skip_e2e` (default: `false`). Enable it to skip all five
-browser E2E projects and authenticated Chromium smoke tests. Static, unit,
-contract, integration, build, and artifact checks still run and block deployment
-on failure. Push and pull-request runs always run browser tests.
+For a failed deployment, use **Re-run failed jobs** or dispatch with the original
+`release_run_id`. **Re-run all jobs** explicitly rebuilds. Manual `skip_e2e=true`
+is diagnostic only: skipped browser gates cannot produce a deployable package.
+Push and pull-request runs always run browser tests. Environment-specific API
+origin checks remain enforced before deployment.
 
-The artifact environment checks also run in GitHub Actions. A QA artifact that
-contains the production API origin (or a production artifact containing the QA
-origin) is rejected before deployment.
+See [verified Web release instructions](docs/releases/verified-web-release.md)
+for provenance checks, artifact retention and recovery.
 
 ## Tenant feature flags
 

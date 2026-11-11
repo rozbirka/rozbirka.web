@@ -27,6 +27,11 @@ on:
         description: Run npm build before deployment
         required: true
         type: boolean
+      release_run_id:
+        description: Existing verified release run; skips all build and test jobs
+        required: false
+        type: string
+        default: ''
       skip_e2e:
         description: Skip browser E2E and authenticated smoke tests
         required: false
@@ -53,7 +58,41 @@ env:
   NODE_VERSION: '22'
 
 jobs:
+  request:
+    name: Validate release request
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require an existing release for manual deployment
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ENABLE_DEPLOYMENT: ${{ inputs.enable_deployment }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          TARGET_ENVIRONMENT: ${{ inputs.auto_qa_deploy && 'qa' || inputs.environment }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$ENABLE_DEPLOYMENT" = "true" ] && [ -z "$RELEASE_RUN_ID" ]; then
+            echo "::error::Manual deployment requires release_run_id. Prepare with enable_deployment=false, then deploy that verified release."
+            exit 1
+          fi
+          if [ -n "$RELEASE_RUN_ID" ] && ! [[ "$RELEASE_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::release_run_id must be a positive workflow run ID."
+            exit 1
+          fi
+          if [ "$TARGET_ENVIRONMENT" != "qa" ] && [ "$TARGET_ENVIRONMENT" != "prod" ]; then
+            echo "::error::Only qa and prod are valid release environments."
+            exit 1
+          fi
+          if [ "$TARGET_ENVIRONMENT" = "prod" ] && [ "$SOURCE_BRANCH" != "main" ]; then
+            echo "::error::Production releases require main."
+            exit 1
+          fi
+
   quality:
+    needs: [request]
+    if: ${{ !inputs.release_run_id }}
     name: Quality ${{ inputs.project_name }} (${{ matrix.gate }})
     runs-on: ubuntu-latest
     permissions:
@@ -75,7 +114,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ github.event_name == 'pull_request' && inputs.branch || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -124,7 +163,8 @@ jobs:
         run: npm run test:integration
 
   e2e:
-    if: ${{ !inputs.skip_e2e }}
+    needs: [request]
+    if: ${{ !inputs.release_run_id && !inputs.skip_e2e }}
     name: Browser E2E ${{ inputs.project_name }} (${{ matrix.project }})
     runs-on: ubuntu-latest
     # Every project runs in the Playwright image: it ships the browsers and
@@ -163,7 +203,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ github.event_name == 'pull_request' && inputs.branch || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -212,10 +252,9 @@ jobs:
 
   build:
     needs: [quality, e2e]
-    # An explicitly skipped browser gate must not skip the release build.
-    # Failed quality checks or browser tests still block it.
-    if: ${{ !cancelled() && needs.quality.result == 'success' && (needs.e2e.result == 'success' || (inputs.skip_e2e && needs.e2e.result == 'skipped')) }}
-    name: Build release artifact ${{ inputs.project_name }}
+    # Only the complete quality/browser gate can seal a deployable release.
+    if: ${{ !cancelled() && !inputs.release_run_id && inputs.run_build && needs.quality.result == 'success' && needs.e2e.result == 'success' }}
+    name: Seal verified Web release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -223,7 +262,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ github.event_name == 'pull_request' && inputs.branch || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -243,30 +282,73 @@ jobs:
             npm run verify:release:qa
           fi
 
-      - uses: actions/upload-artifact@v4
+      - if: github.event_name != 'pull_request'
+        name: Seal static assets, compiled Worker and runtime config
+        run: node scripts/web-release.mjs seal
+        env:
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_ENVIRONMENT: ${{ inputs.auto_qa_deploy && 'qa' || inputs.environment }}
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
         with:
-          name: web-dist
-          path: dist
+          name: web-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .web-release
+          include-hidden-files: true
           if-no-files-found: error
+          retention-days: 30
+
+  release:
+    needs: [request, quality, e2e, build]
+    if: ${{ !cancelled() && needs.request.result == 'success' && github.event_name != 'pull_request' && (inputs.release_run_id || needs.build.result == 'success') }}
+    name: Resolve verified Web release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      run_id: ${{ steps.release.outputs.run_id }}
+      attempt: ${{ steps.release.outputs.attempt }}
+      artifact_id: ${{ steps.release.outputs.artifact_id }}
+      digest: ${{ steps.release.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Verify source run, successful producer/gates and artifact binding
+        id: release
+        run: node scripts/web-release.mjs resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_ENVIRONMENT: ${{ inputs.auto_qa_deploy && 'qa' || inputs.environment }}
 
   deploy:
-    needs: build
-    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.enable_deployment }}
+    needs: [release]
+    if: ${{ !cancelled() && needs.release.result == 'success' && inputs.enable_deployment && (inputs.environment != 'prod' || github.ref == 'refs/heads/main') }}
     name: Deploy ${{ inputs.project_name }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.auto_qa_deploy && 'qa' || inputs.environment }}
     permissions:
       contents: read
-
+      actions: read
+    env:
+      RELEASE_SHA: ${{ needs.release.outputs.sha }}
+      RELEASE_RUN_ID: ${{ needs.release.outputs.run_id }}
+      RELEASE_ATTEMPT: ${{ needs.release.outputs.attempt }}
+      RELEASE_ARTIFACT_ID: ${{ needs.release.outputs.artifact_id }}
+      RELEASE_DIGEST: ${{ needs.release.outputs.digest }}
+      RELEASE_BRANCH: ${{ github.ref_name }}
+      RELEASE_ENVIRONMENT: ${{ inputs.auto_qa_deploy && 'qa' || inputs.environment }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.branch }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: web-dist
-          path: dist
+          ref: ${{ needs.release.outputs.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -274,34 +356,39 @@ jobs:
           cache: npm
 
       - run: npm install --global npm@11.16.0
+      - run: npm ci --ignore-scripts
 
-      - run: |
-          env_name="${{ inputs.auto_qa_deploy && 'qa' || inputs.environment }}"
-          if [ "$env_name" = "prod" ]; then
-            wrangler_env="production"
-          else
-            wrangler_env="qa"
-          fi
+      - name: Download exact artifact and enforce archive digest
+        run: node scripts/web-release.mjs fetch
+        env:
+          GH_TOKEN: ${{ github.token }}
 
-          npm ci
+      - name: Verify sealed package contents and provenance
+        run: node scripts/web-release.mjs verify
+
+      - name: Deploy verified prebundled Worker and assets
+        shell: bash
+        run: |
+          set -euo pipefail
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "::error::CLOUDFLARE_API_TOKEN GitHub secret is missing or empty."
             exit 1
           fi
 
-          if [ "$wrangler_env" = "production" ]; then
-            npm run check:artifact:prod
-            npm run check:routes -- https://rozbirka.pro https://api.rozbirka.pro
+          cd .web-release
+          if [ "$RELEASE_ENVIRONMENT" = "prod" ]; then
+            node ../scripts/check-deploy-artifact.mjs production
+            node ../scripts/check-production-routes.mjs https://rozbirka.pro https://api.rozbirka.pro
           else
-            npm run check:artifact:qa
+            node ../scripts/check-deploy-artifact.mjs qa
           fi
 
-          npx wrangler deploy --env "$wrangler_env"
+          ../node_modules/.bin/wrangler deploy --config wrangler.json --no-bundle
 
-          if [ "$wrangler_env" = "production" ]; then
-            npm run check:routes -- https://rozbirka.pro https://api.rozbirka.pro
+          if [ "$RELEASE_ENVIRONMENT" = "prod" ]; then
+            node ../scripts/check-production-routes.mjs https://rozbirka.pro https://api.rozbirka.pro
           else
-            npm run check:routes -- https://qa.rozbirka.pro https://qaapi.rozbirka.pro
+            node ../scripts/check-production-routes.mjs https://qa.rozbirka.pro https://qaapi.rozbirka.pro
           fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
