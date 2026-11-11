@@ -151,27 +151,37 @@ export function useLandingMotion(numberLocale: string) {
       { threshold: 0, rootMargin: '0px 0px -10% 0px' },
     )
 
+    // Read geometry together before animations write styles. Interleaving
+    // reads and writes forces a full landing layout for every reveal block.
+    const viewportHeight = window.innerHeight
+    const reveals = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[data-reveal]:not([data-revealed])',
+      ),
+      (element) => ({
+        element,
+        inView: element.getBoundingClientRect().top < viewportHeight,
+      }),
+    )
     const top = document.getElementById('top')
     if (top) animate(top, numberLocale)
     const hidden: HTMLElement[] = []
-    document
-      .querySelectorAll<HTMLElement>('[data-reveal]:not([data-revealed])')
-      .forEach((element) => {
-        if (element.getBoundingClientRect().top < window.innerHeight) {
-          element.setAttribute('data-revealed', '')
-          animate(element, numberLocale)
-          return
-        }
-        hidden.push(element)
-        const siblings = element.parentElement
-          ? [...element.parentElement.children].indexOf(element) % 3
-          : 0
-        const delay = `${siblings * 90}ms`
-        element.style.opacity = '0'
-        element.style.transform = 'translateY(28px)'
-        element.style.transition = `opacity .7s cubic-bezier(.2,.7,.2,1) ${delay}, transform .7s cubic-bezier(.2,.7,.2,1) ${delay}`
-        observer.observe(element)
-      })
+    reveals.forEach(({ element, inView }) => {
+      if (inView) {
+        element.setAttribute('data-revealed', '')
+        animate(element, numberLocale)
+        return
+      }
+      hidden.push(element)
+      const siblings = element.parentElement
+        ? [...element.parentElement.children].indexOf(element) % 3
+        : 0
+      const delay = `${siblings * 90}ms`
+      element.style.opacity = '0'
+      element.style.transform = 'translateY(28px)'
+      element.style.transition = `opacity .7s cubic-bezier(.2,.7,.2,1) ${delay}, transform .7s cubic-bezier(.2,.7,.2,1) ${delay}`
+      observer.observe(element)
+    })
 
     return () => {
       document.removeEventListener('pointermove', onMove)
