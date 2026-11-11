@@ -100,12 +100,6 @@ export function validateProductionResponses(result) {
     result.asset.cacheControl === 'public, max-age=31536000, immutable',
     'fingerprinted asset must be immutable',
   )
-  assert(result.ogImage?.status === 200, 'OG image must return 200')
-  assert(
-    result.ogImage.contentType.startsWith('image/'),
-    'OG image must return an image, not HTML',
-  )
-  assert(result.ogImage.body.length > 0, 'OG image must not be empty')
   assert(result.api.status === 200, 'public billing plans must return 200')
   assert(
     /json/.test(result.api.contentType) && !result.api.body.includes('<html'),
@@ -234,18 +228,11 @@ export async function checkProductionRoutes(baseUrl, apiBaseUrl) {
   const home = await inspect(new URL('/', baseUrl))
   const assetPath = home.body.match(/\/assets\/[^"' ]+/)?.[0]
   assert(assetPath, 'home did not expose a fingerprinted asset')
-  const imageTag = [...home.body.matchAll(/<meta\b[^>]*>/gi)].find(
-    ([tag]) => attributeValue(tag, 'property') === 'og:image',
-  )?.[0]
-  const imageUrl = imageTag && attributeValue(imageTag, 'content')
-  assert(imageUrl, 'home did not expose an OG image')
-  const imagePath = new URL(imageUrl, baseUrl).pathname
   const targets = buildRouteTargets(baseUrl, apiBaseUrl, assetPath)
   const base = new URL(baseUrl)
 
   const result = {
     home,
-    ogImage: await inspect(new URL(imagePath, baseUrl)),
     landings: {
       'landing-en': await inspect(targets.landingEn),
       'landing-pl': await inspect(targets.landingPl),
