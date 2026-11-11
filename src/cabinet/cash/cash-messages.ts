@@ -3,6 +3,9 @@ import { defineMessages } from '@/i18n'
 /** Гроші · Каси: the till list, a till's card and its forms and drawers. */
 export const cashMessages = defineMessages({
   uk: {
+    deliveryPrepayment: 'Замовлення №{number}: передоплата',
+    deliveryCod: 'Замовлення №{number}: післяплата',
+    deliveryRefund: 'Замовлення №{number}: повернення коштів',
     typeCash: 'Готівкова',
     typeBank: 'Безготівкова',
     typeCashHint: 'Фізичні гроші',
@@ -178,6 +181,9 @@ export const cashMessages = defineMessages({
       'Для переказу без конвертації суми списання і зарахування мають збігатися.',
   },
   'en-GB': {
+    deliveryPrepayment: 'Order #{number}: prepayment',
+    deliveryCod: 'Order #{number}: cash on delivery',
+    deliveryRefund: 'Order #{number}: refund',
     typeCash: 'Cash',
     typeBank: 'Bank',
     typeCashHint: 'Physical money',
@@ -338,6 +344,9 @@ export const cashMessages = defineMessages({
       'Without conversion, the amount out and the amount in must match.',
   },
   pl: {
+    deliveryPrepayment: 'Zamówienie nr {number}: przedpłata',
+    deliveryCod: 'Zamówienie nr {number}: pobranie',
+    deliveryRefund: 'Zamówienie nr {number}: zwrot środków',
     typeCash: 'Gotówkowa',
     typeBank: 'Bezgotówkowa',
     typeCashHint: 'Pieniądze fizyczne',
