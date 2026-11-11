@@ -251,7 +251,13 @@ async function installCabinetApiBoundary(
     resolveDelivery = resolve
   })
 
-  await page.route('**/*', async (route) => {
+  // Only API calls belong to this fixture. Documents and static files must
+  // reach the real Worker without pausing WebKit's navigation in Playwright.
+  const apiRequest = (url: URL) =>
+    url.pathname === '/auth/me' ||
+    url.pathname === '/api/v1' ||
+    url.pathname.startsWith('/api/v1/')
+  await page.route(apiRequest, async (route) => {
     const request = route.request()
     const requestUrl = new URL(request.url())
     const path = requestUrl.pathname
