@@ -28,6 +28,7 @@ export const waybillMessages = defineMessages({
     cancelledSub: 'скасована {when}',
     npStatus: 'Статус НП: {status} · оновлено {time}',
     npStatusNoTime: 'Статус НП: {status}',
+    npUpdatedAt: 'Оновлено {time}',
     npStatusNone: 'Статус НП: ще не надходив',
     createdToast: 'ТТН {number} створено.',
     depositNotice:
@@ -266,6 +267,7 @@ export const waybillMessages = defineMessages({
     cancelledSub: 'cancelled {when}',
     npStatus: 'NP status: {status} · updated {time}',
     npStatusNoTime: 'NP status: {status}',
+    npUpdatedAt: 'Updated {time}',
     npStatusNone: 'NP status: not received yet',
     createdToast: 'Waybill {number} created.',
     depositNotice:
@@ -497,6 +499,7 @@ export const waybillMessages = defineMessages({
     cancelledSub: 'anulowany {when}',
     npStatus: 'Status NP: {status} · zaktualizowano {time}',
     npStatusNoTime: 'Status NP: {status}',
+    npUpdatedAt: 'Zaktualizowano {time}',
     npStatusNone: 'Status NP: jeszcze nie otrzymano',
     createdToast: 'List {number} utworzony.',
     depositNotice:

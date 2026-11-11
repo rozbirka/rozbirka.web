@@ -77,6 +77,7 @@ export function CashList({
     money,
     moment,
     movementText,
+    transactionDescription,
     registerHint,
     registerType,
     signedMoney,
@@ -347,14 +348,14 @@ export function CashList({
                       <td className="py-1" data-label={t('colPurpose')}>
                         {cashOrderHref(entry, ordersPath) === null ? (
                           <span className="text-app-ink block font-medium">
-                            {entry.note ?? movementText(entry.type)}
+                            {transactionDescription(entry)}
                           </span>
                         ) : (
                           <Link
                             className="text-app-ink block font-medium"
                             to={cashOrderHref(entry, ordersPath)!}
                           >
-                            {entry.note ?? movementText(entry.type)}
+                            {transactionDescription(entry)}
                           </Link>
                         )}
                         <span className="rz-caption block">

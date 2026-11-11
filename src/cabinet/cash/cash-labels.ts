@@ -52,6 +52,8 @@ export interface CashText {
   moment: (value: string) => string
   count: (value: number) => string
   movementText: (code: string) => string
+  /** Translate known system notes without changing stored ledger records. */
+  transactionDescription: (entry: CashTransaction) => string
   registerType: (type: string) => string
   registerHint: (type: string) => string | null
 }
@@ -85,6 +87,31 @@ export function useCashText(): CashText {
         ) ?? value,
       count: (value) => formatNumber(value, locale) ?? String(value),
       movementText: (code) => label(MOVEMENT, code) ?? code,
+      transactionDescription: (entry) => {
+        const note = entry.note
+        if (entry.referenceId && note) {
+          if (entry.type === 'sale_in' && entry.direction === 'in') {
+            const payment = /^Delivery order #(\d+): (prepayment|cod)$/.exec(
+              note,
+            )
+            if (payment)
+              return t(
+                payment[2] === 'prepayment'
+                  ? 'deliveryPrepayment'
+                  : 'deliveryCod',
+                { number: payment[1]! },
+              )
+          }
+          if (entry.type === 'refund_out' && entry.direction === 'out') {
+            const refund =
+              /^(?:Delivery payment refund #|Повернення коштів за замовленням #)(\d+)$/.exec(
+                note,
+              )
+            if (refund) return t('deliveryRefund', { number: refund[1]! })
+          }
+        }
+        return note ?? label(MOVEMENT, entry.type) ?? entry.type
+      },
       registerType: (type) => label(REGISTER_TYPE, type) ?? type,
       registerHint: (type) => label(REGISTER_HINT, type),
     }

@@ -329,6 +329,10 @@ function ScopedTrackingSubscriptionPanel({
               </p>
             </div>
 
+            <p className="rz-caption m-0 text-pretty">
+              {t('callbackEvidence')}
+            </p>
+
             {reason !== null && <Notice tone="warn">{reason}</Notice>}
 
             {!callbackReady && (

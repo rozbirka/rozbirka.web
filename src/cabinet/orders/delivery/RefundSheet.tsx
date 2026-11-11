@@ -4,40 +4,25 @@ import {
   ConfirmDialog,
   Field,
   Notice,
-  SearchInput,
   SelectInput,
   Sheet,
   TextInput,
   TextArea,
 } from '@/components/app'
-import { cashApi, type CashRegister, type CashTransaction } from '@/api/cash'
+import { cashApi, type CashRegister } from '@/api/cash'
 import type {
   DeliveryOrder,
   DeliveryFullRefundInput,
   DeliveryRefundSource,
 } from '@/api/delivery'
-import { isProblemCode, normalizeApiProblem } from '@/api/errors'
-import { commonMessages, useFormat, useLocale, useT } from '@/i18n'
-import { cn } from '@/lib/utils'
+import { normalizeApiProblem } from '@/api/errors'
+import { commonMessages, useLocale, useT } from '@/i18n'
 import { SheetGroup } from '../sheet-group'
 import { hryvnia, uah } from './delivery-money'
 import { refundTotals } from './delivery-flow'
 import { deliveryFlowMessages } from './flow-messages'
 import { deliveryProblemMessage } from './nova-poshta-availability'
 import { SummaryList } from './WaybillCreateSheet'
-
-type Method = 'create' | 'link'
-
-const OUT_TYPES = new Set(['manual_out', 'refund_out'])
-
-/** Expenses Core could take as this refund; others are not shown at all. */
-const refundCandidates = (items: readonly CashTransaction[]) =>
-  items.filter(
-    (item) =>
-      item.direction === 'out' &&
-      item.currency === 'UAH' &&
-      OUT_TYPES.has(item.type),
-  )
 
 const ambiguous = (problem: unknown) => {
   const kind = normalizeApiProblem(problem).kind
@@ -47,7 +32,7 @@ const ambiguous = (problem: unknown) => {
 /**
  * «Повернути кошти» (10.7–10.11). Core settles all held payments at once,
  * retaining only explicitly confirmed actual delivery costs after goods return.
- * The net refund is a new or already booked expense of exactly that sum.
+ * The net refund is a new cash expense of exactly that sum.
  * The sheet records the books only — the customer transfer is made elsewhere.
  */
 export function RefundSheet({
@@ -55,7 +40,6 @@ export function RefundSheet({
   onClose,
   onCloseAutoFocus,
   onConfirm,
-  orderId,
   orderNumber,
 }: {
   delivery: DeliveryOrder
@@ -66,12 +50,10 @@ export function RefundSheet({
   orderNumber: number
 }) {
   const { locale } = useLocale()
-  const format = useFormat()
   const t = useT(deliveryFlowMessages)
   const tc = useT(commonMessages)
   const totals = refundTotals(delivery)
   const money = (value: number) => uah(value, locale)
-  const [method, setMethod] = useState<Method>('create')
   const [tills, setTills] = useState<CashRegister[] | null>(null)
   const [tillId, setTillId] = useState<string | null>(null)
   const [retentionDraft, setRetentionDraft] = useState('0')
@@ -108,14 +90,6 @@ export function RefundSheet({
         }
       : {}
 
-  const [operations, setOperations] = useState<{
-    tillId: string
-    items: CashTransaction[]
-  } | null>(null)
-  const [operationsFailed, setOperationsFailed] = useState(false)
-  const [query, setQuery] = useState('')
-  const [operationId, setOperationId] = useState<string | null>(null)
-  const [taken, setTaken] = useState<ReadonlySet<string>>(new Set())
   const [confirming, setConfirming] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -137,47 +111,6 @@ export function RefundSheet({
     return () => controller.abort()
   }, [])
 
-  useEffect(() => {
-    if (method !== 'link' || tillId === null || noRefund) return
-    const controller = new AbortController()
-    void cashApi
-      .transactions(
-        tillId,
-        { currency: 'UAH', pageSize: 50 },
-        { signal: controller.signal },
-      )
-      .then(
-        (page) => {
-          if (controller.signal.aborted) return
-          setOperations({ tillId, items: refundCandidates(page.items) })
-          setOperationsFailed(false)
-        },
-        () => {
-          if (!controller.signal.aborted) setOperationsFailed(true)
-        },
-      )
-    return () => controller.abort()
-  }, [method, tillId, noRefund])
-
-  const listed = operations?.tillId === tillId ? operations.items : []
-  const needle = query.trim().toLocaleLowerCase(locale).replace(',', '.')
-  const shown = listed.filter(
-    (item) =>
-      needle === '' ||
-      String(item.amount).includes(needle) ||
-      item.id.toLocaleLowerCase(locale).includes(needle) ||
-      (item.note ?? '').toLocaleLowerCase(locale).includes(needle),
-  )
-  const operation = listed.find((item) => item.id === operationId) ?? null
-  const operationError =
-    operation === null
-      ? null
-      : taken.has(operation.id) ||
-          (operation.referenceId !== null && operation.referenceId !== orderId)
-        ? t('operationTaken')
-        : operation.amount !== netDue
-          ? t('operationAmount', { amount: money(netDue) })
-          : null
   const tillName = tills?.find((till) => till.id === tillId)?.name ?? '—'
 
   const fail = (problem: unknown) => {
@@ -197,15 +130,7 @@ export function RefundSheet({
     } catch (problem) {
       setConfirming(false)
       setPending(false)
-      if (
-        'existingCashTransactionId' in source &&
-        typeof source.existingCashTransactionId === 'string' &&
-        isProblemCode(problem, 'refund_transaction_already_allocated')
-      )
-        setTaken((current) =>
-          new Set(current).add(source.existingCashTransactionId),
-        )
-      else fail(problem)
+      fail(problem)
     }
   }
 
@@ -215,28 +140,11 @@ export function RefundSheet({
       setConfirming(true)
       return
     }
-    if (method === 'create') {
-      if (tillId === null) return
-      setConfirming(true)
-      return
-    }
-    if (operation === null) {
-      setError(t('operationPick'))
-      window.requestAnimationFrame(() => alertRef.current?.focus())
-      return
-    }
-    if (operationError !== null) return
-    void send({ existingCashTransactionId: operation.id })
+    if (tillId !== null) setConfirming(true)
   }
 
   const due = money(netDue)
-  const blocked =
-    pending ||
-    retentionBlocked ||
-    (!noRefund &&
-      (method === 'create'
-        ? tillId === null
-        : operation === null || operationError !== null))
+  const blocked = pending || retentionBlocked || (!noRefund && tillId === null)
 
   return (
     <Sheet
@@ -258,11 +166,7 @@ export function RefundSheet({
               ? tc('saving')
               : noRefund
                 ? t('settleWithoutRefund')
-                : method === 'create'
-                  ? t('submitRefund', {
-                      amount: due,
-                    })
-                  : t('submitLink')}
+                : t('submitRefund', { amount: due })}
           </Button>
         </>
       }
@@ -382,34 +286,6 @@ export function RefundSheet({
             <p className="rz-caption m-0 text-pretty">
               {t('refundPaymentHint')}
             </p>
-            <div
-              aria-label={t('refundMethod', {
-                step: retentionAllowed ? '4' : '3',
-              })}
-              className="rz-seg flex w-full"
-              role="group"
-            >
-              {(
-                [
-                  ['create', t('refundMethodCreate')],
-                  ['link', t('refundMethodLink')],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  aria-pressed={method === value}
-                  className="flex-1 justify-center"
-                  disabled={pending}
-                  key={value}
-                  onClick={() => {
-                    setMethod(value)
-                    setError(null)
-                  }}
-                  type="button"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
           </SheetGroup>
 
           {tills !== null && tills.length === 0 ? (
@@ -423,7 +299,6 @@ export function RefundSheet({
                   disabled={pending || tills === null || tills.length === 0}
                   onChange={(event) => {
                     setTillId(event.target.value)
-                    setOperationId(null)
                   }}
                   value={tillId ?? ''}
                 >
@@ -436,65 +311,6 @@ export function RefundSheet({
               </Field>
             </div>
           </SheetGroup>
-
-          {method === 'link' ? (
-            <SheetGroup>
-              <Field
-                error={operationError ?? undefined}
-                label={t('operationLabel')}
-                required
-              >
-                <SearchInput
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t('operationPlaceholder')}
-                  value={query}
-                />
-              </Field>
-              {operationsFailed ? (
-                <Notice tone="danger">{t('operationsFailed')}</Notice>
-              ) : shown.length === 0 ? (
-                <p className="rz-inset text-app-muted m-0 text-pretty">
-                  {t('operationNone')}
-                </p>
-              ) : (
-                <div className="grid gap-1.5">
-                  {shown.map((item) => {
-                    const chosen = item.id === operationId
-                    return (
-                      <button
-                        aria-pressed={chosen}
-                        className={cn(
-                          'border-app-line flex min-h-11 w-full items-center gap-3 rounded-rz-md border bg-(--rz-sheet-field) px-3 py-2 text-left',
-                          chosen &&
-                            'border-brand bg-(--rz-row-selected) shadow-[inset_2px_0_0_var(--rz-brand)]',
-                        )}
-                        disabled={pending}
-                        key={item.id}
-                        onClick={() => {
-                          setOperationId(item.id)
-                          setError(null)
-                        }}
-                        type="button"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="rz-strong block truncate font-medium">
-                            {item.note ?? item.id}
-                          </span>
-                          <span className="text-app-muted block font-mono text-micro">
-                            {format.date(item.createdAt) ?? item.createdAt} ·{' '}
-                            {item.createdByName}
-                          </span>
-                        </span>
-                        <span className="rz-mono rz-strong whitespace-nowrap">
-                          {money(item.amount)}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </SheetGroup>
-          ) : null}
         </>
       ) : null}
 

@@ -253,7 +253,7 @@ export function ShipmentCard({
   /** One muted line above the buttons. */
   caption?: string | undefined
   facts: readonly ShipmentFactRow[] | null
-  hint?: string | undefined
+  hint?: ReactNode
   notices?: ReactNode
   /** The waybill number, which takes focus once a waybill is created. */
   numberRef?: Ref<HTMLSpanElement> | undefined
@@ -349,10 +349,7 @@ export function DeliveryPaymentsCard({
   const t = useT(deliveryMessages)
   const tf = useT(deliveryFlowMessages)
   const format = useFormat()
-  const visible = delivery.payments.filter(
-    (payment) =>
-      payment.refundedAt === null || (payment.retainedDeliveryCostUah ?? 0) > 0,
-  )
+  const visible = delivery.payments
 
   return (
     <OrderCard
@@ -368,13 +365,6 @@ export function DeliveryPaymentsCard({
             </span>
             {' — '}
             {t('recordPaymentHint')}
-          </p>
-          <p className="rz-caption m-0 text-pretty">
-            <span className="font-medium text-app-ink">
-              {t('linkTransaction')}
-            </span>
-            {' — '}
-            {t('linkPaymentHint')}
           </p>
         </div>
       )}
@@ -411,18 +401,23 @@ export function DeliveryPaymentsCard({
                         ),
                       })}
                     </span>
-                    {payment.refundedAt !== null ? (
-                      <span className="rz-caption block text-pretty">
-                        {tf('subRefunded', {
-                          amount: uah(
-                            payment.amountUah -
-                              (payment.retainedDeliveryCostUah ?? 0),
-                            locale,
-                          ),
-                        })}
-                      </span>
-                    ) : null}
                   </>
+                ) : null}
+                {payment.refundedAt !== null ? (
+                  <span className="rz-caption block text-pretty">
+                    {tf('subRefunded', {
+                      amount: uah(
+                        payment.amountUah -
+                          (payment.retainedDeliveryCostUah ?? 0),
+                        locale,
+                      ),
+                    })}
+                    {' · '}
+                    <time dateTime={payment.refundedAt}>
+                      {format.dateTime(payment.refundedAt) ??
+                        payment.refundedAt}
+                    </time>
+                  </span>
                 ) : null}
               </span>
               <span className="rz-num rz-strong ml-auto whitespace-nowrap">

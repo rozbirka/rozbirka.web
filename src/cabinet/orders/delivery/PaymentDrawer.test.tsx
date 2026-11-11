@@ -122,6 +122,10 @@ it('uses the ordinary payment drawer without delivery gross, fee, presets or cal
   expect(
     screen.queryByRole('button', { name: 'Прив’язати оплату з фінансів' }),
   ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('checkbox', { name: 'Перевізник утримав комісію' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Утримана комісія, грн')).toBeNull()
 })
 
 it.each([null, '20451200987731'])(
@@ -406,7 +410,11 @@ it('records the customer gross and confirmed carrier fee separately in the stand
 
 it('refuses an invalid fee and clears it when the fee option is switched off', async () => {
   const user = userEvent.setup()
-  const { onRecord } = renderDrawer()
+  const { onRecord } = renderDrawer(
+    'record',
+    {},
+    { codWaybill: '99000000000001' },
+  )
   await user.type(await screen.findByLabelText('Сума'), '100')
   await user.click(
     screen.getByRole('checkbox', { name: 'Перевізник утримав комісію' }),

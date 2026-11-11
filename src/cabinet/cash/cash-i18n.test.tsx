@@ -92,3 +92,96 @@ it('reads a till card in Polish', () => {
   expect(screen.getByText('−25,50 GBP')).toBeVisible()
   expect(screen.getByText('Salda')).toBeVisible()
 })
+
+it.each([
+  [
+    'uk',
+    'sale_in',
+    'in',
+    'Delivery order #3: prepayment',
+    'Замовлення №3: передоплата',
+  ],
+  [
+    'uk',
+    'sale_in',
+    'in',
+    'Delivery order #3: cod',
+    'Замовлення №3: післяплата',
+  ],
+  [
+    'uk',
+    'refund_out',
+    'out',
+    'Delivery payment refund #3',
+    'Замовлення №3: повернення коштів',
+  ],
+  [
+    'uk',
+    'refund_out',
+    'out',
+    'Повернення коштів за замовленням #3',
+    'Замовлення №3: повернення коштів',
+  ],
+  [
+    'en-GB',
+    'sale_in',
+    'in',
+    'Delivery order #3: prepayment',
+    'Order #3: prepayment',
+  ],
+  [
+    'pl',
+    'refund_out',
+    'out',
+    'Повернення коштів за замовленням #3',
+    'Zamówienie nr 3: zwrot środków',
+  ],
+] as const)(
+  'localises existing system payment notes in %s (%s, %s, %s)',
+  (locale, type, direction, note, expected) => {
+    const entry: CashTransaction = {
+      ...ledger[0]!,
+      type,
+      direction,
+      note,
+      referenceId: 'order-3',
+    }
+    inLocale(
+      locale,
+      <CashCard
+        canManage
+        cashHref="/app/yard/cash"
+        error={null}
+        filters={null}
+        lastOperationAt={null}
+        ledger={[entry]}
+        ledgerTotal={1}
+        pagination={null}
+        register={registers[0]!}
+        totalOperations={1}
+      />,
+    )
+    expect(screen.getByText(expected)).toBeVisible()
+    expect(entry.note).toBe(note)
+  },
+)
+
+it('keeps free-form finance notes unchanged even if they mention a delivery order', () => {
+  const note = 'Delivery order #3: prepayment — уточнення клієнта'
+  inLocale(
+    'uk',
+    <CashCard
+      canManage
+      cashHref="/app/yard/cash"
+      error={null}
+      filters={null}
+      lastOperationAt={null}
+      ledger={[{ ...ledger[0]!, note }]}
+      ledgerTotal={1}
+      pagination={null}
+      register={registers[0]!}
+      totalOperations={1}
+    />,
+  )
+  expect(screen.getByText(note)).toBeVisible()
+})

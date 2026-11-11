@@ -296,7 +296,7 @@ export function DeliveryPaymentBlock({
         {facts.map((fact) => (
           <div key={fact.key}>
             <dt>{fact.label}</dt>
-            <dd>
+            <dd className="[overflow-wrap:normal]">
               <span
                 className={cn(
                   'rz-mono',
@@ -306,7 +306,7 @@ export function DeliveryPaymentBlock({
                 {fact.value}
               </span>
               {fact.sub === undefined || fact.sub === '' ? null : (
-                <span className="rz-caption ml-2 font-mono">{fact.sub}</span>
+                <span className="rz-caption mt-1 block">{fact.sub}</span>
               )}
             </dd>
           </div>

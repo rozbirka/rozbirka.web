@@ -17,14 +17,17 @@ export const npFeedMessages = defineMessages({
       'Оберіть розбірку, щоб побачити автоматичні оновлення.',
     trackingTitle: 'Автоматичне оновлення доставки',
     trackingIntro:
-      'Підписка отримує події Нової пошти через NovaPost v1. Нові накладні додаються автоматично.',
+      'Підписка отримує події Нової пошти через NovaPost v1. Нові накладні додаються автоматично. Збережений ключ НП використовується для вебхуків, якщо API v1 його приймає; інакше потрібен окремий ключ v1.',
+    callbackEvidence:
+      'Callback може бути тестовим. Отримання реальних змін статусу ТТН потрібно перевірити окремо.',
+    queuePending: 'У вхідній черзі є події, які ще очікують обробки.',
     readingState: 'Читаємо стан підписки…',
     denied:
       'Немає доступу до автоматичних оновлень: потрібні права на налаштування команди.',
     stateError:
       'Не вдалося прочитати стан автоматичних оновлень. На вже створені накладні це не впливає —',
-    noUpdatesYet: 'оновлень ще не надходило',
-    lastUpdate: 'останнє оновлення',
+    noUpdatesYet: 'callback ще не надходив',
+    lastUpdate: 'Останній callback',
     pendingNumbers: 'Накладних у черзі підключення: {count}.',
     unconfirmed: {
       one: 'Для {count} накладної автоматичні оновлення не підтверджені. Періодична перевірка продовжується.',
@@ -34,7 +37,7 @@ export const npFeedMessages = defineMessages({
         'Для {count} накладних автоматичні оновлення не підтверджені. Періодична перевірка продовжується.',
     },
     keyHint:
-      'Окремий ключ для вебхуків. Ключ v2 для створення ТТН не змінюється. Зберігаємо зашифрованим і більше не показуємо.',
+      'Введіть ключ, який приймає API v1, якщо збережений ключ не підійшов. Ключ v2 для створення ТТН не змінюється. Зберігаємо зашифрованим і більше не показуємо.',
     keyLabel: 'API-ключ NovaPost v1',
     hideKey: 'Приховати ключ',
     showKey: 'Показати ключ',
@@ -60,7 +63,7 @@ export const npFeedMessages = defineMessages({
     urlCopied: 'Адресу прийому скопійовано.',
     copyFailed: 'Не вдалося скопіювати адресу прийому.',
     webhookIntro:
-      'Чи Rozbirka отримує події Нової пошти і що сталося з необробленими. Технічний блок для адміністратора.',
+      'Вхідна черга вебхуків Нової пошти: події, що очікують обробки, та вичерпані спроби. Це не всі фонові черги Rozbirka.',
     refreshData: 'Оновити дані',
     queueError:
       'Не вдалося прочитати стан черги подій. На вже створені накладні це не впливає —',
@@ -73,10 +76,10 @@ export const npFeedMessages = defineMessages({
         'Прийом подій налаштований, але {count} події не вдалося обробити після всіх спроб. Періодична перевірка статусів продовжується.',
     },
     queueClean:
-      'Прийом подій налаштований, черга чиста. Статуси відправлень оновлюються самі.',
+      'У вхідній черзі немає необроблених подій. Порожня черга не підтверджує отримання змін статусу ТТН.',
     notConfigured:
       'Прийом подій ще не налаштований. Періодична перевірка статусів продовжується; також можна оновити статус із картки замовлення.',
-    kpiReceiving: 'Прийом подій',
+    kpiReceiving: 'Перевірка підпису',
     secretSavedMeta: 'Секрет збережено, підпис перевіряється',
     secretMissingMeta: 'Секрет не збережено',
     kpiPending: 'Очікують обробки',
@@ -124,14 +127,17 @@ export const npFeedMessages = defineMessages({
     pickBusinessTracking: 'Choose a business to see automatic updates.',
     trackingTitle: 'Automatic delivery updates',
     trackingIntro:
-      'Receives Nova Poshta events through NovaPost v1. New waybills are added automatically.',
+      'Receives Nova Poshta events through NovaPost v1. New waybills are added automatically. The saved Nova Poshta key is reused if API v1 accepts it; otherwise a separate v1 key is needed.',
+    callbackEvidence:
+      'A callback may be a test. Receipt of real shipment status changes must be verified separately.',
+    queuePending: 'Inbox events are still awaiting processing.',
     readingState: 'Reading the subscription state…',
     denied:
       'No access to automatic updates: you need permission to manage team settings.',
     stateError:
       'Couldn’t read the state of automatic updates. Waybills already created aren’t affected —',
-    noUpdatesYet: 'no updates received yet',
-    lastUpdate: 'last update',
+    noUpdatesYet: 'no callback received yet',
+    lastUpdate: 'Last callback',
     pendingNumbers: 'Waybills waiting to be connected: {count}.',
     unconfirmed: {
       one: 'Automatic updates aren’t confirmed for {count} waybill. The periodic check continues.',
@@ -139,7 +145,7 @@ export const npFeedMessages = defineMessages({
         'Automatic updates aren’t confirmed for {count} waybills. The periodic check continues.',
     },
     keyHint:
-      'A separate key for webhooks. The v2 key for creating waybills stays unchanged. Stored encrypted and never shown again.',
+      'Enter a key accepted by API v1 if the saved key was not accepted. The v2 key for creating waybills stays unchanged. Stored encrypted and never shown again.',
     keyLabel: 'NovaPost v1 API key',
     hideKey: 'Hide key',
     showKey: 'Show key',
@@ -164,7 +170,7 @@ export const npFeedMessages = defineMessages({
     urlCopied: 'Receiving address copied.',
     copyFailed: 'Couldn’t copy the receiving address.',
     webhookIntro:
-      'Whether Rozbirka receives Nova Poshta events, and what happened to unprocessed ones. A technical section for the administrator.',
+      'Nova Poshta webhook inbox: pending events and exhausted attempts. These counters do not cover all Rozbirka background queues.',
     refreshData: 'Refresh data',
     queueError:
       'Couldn’t read the event queue state. Waybills already created aren’t affected —',
@@ -175,10 +181,10 @@ export const npFeedMessages = defineMessages({
         'Event receiving is set up, but {count} events couldn’t be processed after all attempts. Periodic status checks continue.',
     },
     queueClean:
-      'Event receiving is set up and the queue is clear. Shipment statuses update on their own.',
+      'There are no unprocessed inbox events. An empty inbox does not confirm receipt of shipment status changes.',
     notConfigured:
       'Event receiving is not set up yet. Periodic status checks continue; you can also refresh a status from the order card.',
-    kpiReceiving: 'Event receiving',
+    kpiReceiving: 'Signature verification',
     secretSavedMeta: 'Secret saved, signature is checked',
     secretMissingMeta: 'No secret saved',
     kpiPending: 'Awaiting processing',
@@ -224,16 +230,19 @@ export const npFeedMessages = defineMessages({
     pasteKey: 'Wklej klucz API NovaPost v1.',
     pickBusinessTracking:
       'Wybierz firmę, aby zobaczyć automatyczne aktualizacje.',
+    callbackEvidence:
+      'Callback może być testowy. Odbiór rzeczywistych zmian statusów przesyłek wymaga osobnej weryfikacji.',
+    queuePending: 'Zdarzenia w skrzynce nadal oczekują na przetworzenie.',
     trackingTitle: 'Automatyczne aktualizacje dostaw',
     trackingIntro:
-      'Odbiera zdarzenia Nova Poshta przez NovaPost v1. Nowe listy przewozowe są dodawane automatycznie.',
+      'Odbiera zdarzenia Nova Poshta przez NovaPost v1. Nowe listy przewozowe są dodawane automatycznie. Zapisany klucz NP jest używany, jeśli API v1 go akceptuje; w przeciwnym razie potrzebny jest osobny klucz v1.',
     readingState: 'Odczytywanie stanu subskrypcji…',
     denied:
       'Brak dostępu do automatycznych aktualizacji: potrzebne są uprawnienia do ustawień zespołu.',
     stateError:
       'Nie udało się odczytać stanu automatycznych aktualizacji. Nie wpływa to na utworzone listy przewozowe —',
-    noUpdatesYet: 'nie otrzymano jeszcze aktualizacji',
-    lastUpdate: 'ostatnia aktualizacja',
+    noUpdatesYet: 'nie otrzymano jeszcze callbacku',
+    lastUpdate: 'Ostatni callback',
     pendingNumbers: 'Listy przewozowe w kolejce do podłączenia: {count}.',
     unconfirmed: {
       one: 'Automatyczne aktualizacje nie są potwierdzone dla {count} listu przewozowego. Okresowe sprawdzanie trwa nadal.',
@@ -243,7 +252,7 @@ export const npFeedMessages = defineMessages({
         'Automatyczne aktualizacje nie są potwierdzone dla {count} listu przewozowego. Okresowe sprawdzanie trwa nadal.',
     },
     keyHint:
-      'Osobny klucz do webhooków. Klucz v2 do tworzenia listów przewozowych pozostaje bez zmian. Przechowujemy go w postaci zaszyfrowanej i nie wyświetlamy ponownie.',
+      'Wprowadź klucz akceptowany przez API v1, jeśli zapisany klucz nie został przyjęty. Klucz v2 do tworzenia listów pozostaje bez zmian. Przechowujemy go zaszyfrowany i nie wyświetlamy ponownie.',
     keyLabel: 'Klucz API NovaPost v1',
     hideKey: 'Ukryj klucz',
     showKey: 'Pokaż klucz',
@@ -273,7 +282,7 @@ export const npFeedMessages = defineMessages({
     urlCopied: 'Adres odbioru skopiowany.',
     copyFailed: 'Nie udało się skopiować adresu odbioru.',
     webhookIntro:
-      'Czy Rozbirka otrzymuje zdarzenia Nova Poshta i co stało się z nieprzetworzonymi. Sekcja techniczna dla administratora.',
+      'Skrzynka webhooków Nova Poshta: zdarzenia oczekujące i wyczerpane próby. Liczniki nie obejmują wszystkich kolejek zadań Rozbirka.',
     refreshData: 'Odśwież dane',
     queueError:
       'Nie udało się odczytać stanu kolejki zdarzeń. Nie wpływa to na utworzone listy przewozowe —',
@@ -286,10 +295,10 @@ export const npFeedMessages = defineMessages({
         'Odbiór zdarzeń jest skonfigurowany, ale {count} zdarzenia nie udało się przetworzyć mimo wszystkich prób. Okresowe sprawdzanie statusów trwa nadal.',
     },
     queueClean:
-      'Odbiór zdarzeń jest skonfigurowany, kolejka jest pusta. Statusy przesyłek aktualizują się same.',
+      'Brak nieprzetworzonych zdarzeń w skrzynce. Pusta skrzynka nie potwierdza odbioru zmian statusów przesyłek.',
     notConfigured:
       'Odbiór zdarzeń nie jest jeszcze skonfigurowany. Okresowe sprawdzanie statusów trwa nadal; status można też odświeżyć z karty zamówienia.',
-    kpiReceiving: 'Odbiór zdarzeń',
+    kpiReceiving: 'Weryfikacja podpisu',
     secretSavedMeta: 'Sekret zapisany, podpis jest sprawdzany',
     secretMissingMeta: 'Sekret nie jest zapisany',
     kpiPending: 'Oczekują na przetworzenie',
