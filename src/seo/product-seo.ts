@@ -34,7 +34,7 @@ export interface ProductSeoEntry {
   primaryQuery: string
   supportingQueries: readonly string[]
   intent: 'commercial-category'
-  ogImage: 'https://rozbirka.pro/og-cover.webp'
+  ogImage: 'https://rozbirka.pro/og-cover-20261111.png'
   faqSchema: boolean
   indexable: true
   includeInSitemap: true
@@ -55,7 +55,7 @@ const landingDefaults = {
   landing: true,
   alternates: LANDING_ALTERNATES,
   intent: 'commercial-category',
-  ogImage: 'https://rozbirka.pro/og-cover.webp',
+  ogImage: 'https://rozbirka.pro/og-cover-20261111.png',
   faqSchema: true,
   indexable: true,
   includeInSitemap: true,

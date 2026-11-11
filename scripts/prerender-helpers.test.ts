@@ -11,7 +11,7 @@ const seo = {
   title: 'Приклад & "продукту" <rozbirka>',
   description: 'Опис & "можливості" <продукту>',
   canonical: 'https://rozbirka.pro/example-product?ref=a&b=c',
-  ogImage: 'https://rozbirka.pro/og-cover.webp',
+  ogImage: 'https://rozbirka.pro/og-cover-20261111.png',
   breadcrumbs: [
     { name: 'Головна', path: '/' },
     { name: 'Приклад продукту', path: '/example-product' },
@@ -233,7 +233,7 @@ describe('assertProductDocument', () => {
     ],
     [
       'Twitter image',
-      'name="twitter:image" content="https://rozbirka.pro/og-cover.webp"',
+      'name="twitter:image" content="https://rozbirka.pro/og-cover-20261111.png"',
       'name="twitter:image" content="https://rozbirka.pro/stale.webp"',
     ],
   ])('rejects a stale %s field', (_label, current, stale) => {
@@ -288,7 +288,7 @@ describe('language versions of the landing', () => {
     title: 'Software for car breakers | rozbirka',
     description: 'English landing description',
     canonical: 'https://rozbirka.pro/en',
-    ogImage: 'https://rozbirka.pro/og-cover.webp',
+    ogImage: 'https://rozbirka.pro/og-cover-20261111.png',
     alternates: [
       { hreflang: 'uk', href: 'https://rozbirka.pro/' },
       { hreflang: 'en-GB', href: 'https://rozbirka.pro/en' },
