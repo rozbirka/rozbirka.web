@@ -28,6 +28,7 @@ function validResponses() {
       'landing-en': landing('en-GB', 'https://rozbirka.pro/en'),
       'landing-pl': landing('pl', 'https://rozbirka.pro/pl'),
     },
+    ogImage: { status: 200, contentType: 'image/png', body: 'PNG bytes' },
     unknown: { status: 404, contentType: 'text/html' },
     robots: { status: 200, contentType: 'text/plain' },
     sitemap: { status: 200, contentType: 'application/xml' },
@@ -83,6 +84,19 @@ function validResponses() {
 }
 
 describe('production route validation', () => {
+  it('rejects missing or HTML OG images even when landing metadata is present', () => {
+    const missing = validResponses()
+    missing.ogImage.status = 404
+    expect(() => validateProductionResponses(missing)).toThrow(
+      'OG image must return 200',
+    )
+    const html = validResponses()
+    html.ogImage.contentType = 'text/html'
+    expect(() => validateProductionResponses(html)).toThrow(
+      'OG image must return an image',
+    )
+  })
+
   it('probes the API gateway instead of the landing origin', () => {
     expect(
       buildRouteTargets(

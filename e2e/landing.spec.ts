@@ -23,6 +23,24 @@ test('prerendered landing paints before hydration entry downloads', async ({
   expect(timing.hydration).toBeGreaterThanOrEqual(timing.paint ?? Infinity)
 })
 
+test('the advertised OG cover is publicly served as a PNG by the Worker', async ({
+  page,
+}) => {
+  await page.goto('/')
+  const imageUrl = await page
+    .locator('meta[property="og:image"]')
+    .getAttribute('content')
+  expect(imageUrl).toBeTruthy()
+  const response = await page.request.get(new URL(imageUrl!).pathname, {
+    headers: { 'User-Agent': 'TelegramBot (like TwitterBot)' },
+  })
+  expect(response.status()).toBe(200)
+  expect(response.headers()['content-type']).toContain('image/png')
+  expect([...(await response.body()).subarray(0, 8)]).toEqual([
+    137, 80, 78, 71, 13, 10, 26, 10,
+  ])
+})
+
 test('retired SEO use-case URLs return the branded 404 page', async ({
   page,
 }) => {

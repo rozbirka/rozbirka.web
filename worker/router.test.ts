@@ -49,6 +49,11 @@ function env(): EdgeEnv {
             headers: { 'content-type': 'text/css' },
           })
         }
+        if (path === '/og-cover-20261111.png') {
+          return new Response('cover', {
+            headers: { 'content-type': 'image/png', etag: '"cover"' },
+          })
+        }
         if (path === '/favicon.png') {
           return new Response('favicon', {
             headers: { 'content-type': 'image/png', etag: '"favicon"' },
@@ -371,6 +376,19 @@ describe('edge routing', () => {
       'max-age=0, must-revalidate',
     )
     expect(response.headers.get('etag')).toBe('"favicon"')
+  })
+
+  it('serves the versioned OG cover to Telegram without noindex on production', async () => {
+    const response = await handleRequest(
+      new Request('https://rozbirka.pro/og-cover-20261111.png', {
+        headers: { 'User-Agent': 'TelegramBot (like TwitterBot)' },
+      }),
+      env(),
+    )
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/png')
+    expect(response.headers.get('x-robots-tag')).toBeNull()
+    expect(await response.text()).toBe('cover')
   })
 
   it('adds noindex to private and QA SPA responses', async () => {
