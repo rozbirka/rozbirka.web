@@ -239,15 +239,24 @@ const qrCells: readonly boolean[] = (() => {
   return cells
 })()
 
+// One path preserves the same 21×21 pattern without hydrating/layouting
+// 441 decorative grid cells on every landing visit.
+const qrPath = qrCells
+  .flatMap((on, index) =>
+    on ? [`M${index % 21} ${Math.floor(index / 21)}h1v1h-1z`] : [],
+  )
+  .join('')
+
 export function QrPattern({ className }: { className?: string }) {
   return (
-    <div
-      className={cn('grid grid-cols-[repeat(21,1fr)]', className)}
-      aria-hidden
+    <svg
+      viewBox="0 0 21 21"
+      className={cn('block text-lp-bg', className)}
+      aria-hidden="true"
+      focusable="false"
+      shapeRendering="crispEdges"
     >
-      {qrCells.map((on, index) => (
-        <span key={index} className={on ? 'bg-lp-bg' : undefined} />
-      ))}
-    </div>
+      <path d={qrPath} fill="currentColor" />
+    </svg>
   )
 }
