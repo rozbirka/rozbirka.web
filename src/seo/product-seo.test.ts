@@ -56,7 +56,7 @@ describe('product SEO registry', () => {
       expect(entry.title.length).toBeGreaterThan(20)
       expect(entry.title).toMatch(/\| rozbirka$/)
       expect(entry.description.length).toBeGreaterThan(80)
-      expect(entry.ogImage).toBe('https://rozbirka.pro/og-cover.webp')
+      expect(entry.ogImage).toBe('https://rozbirka.pro/og-cover-20261111.png')
       expect(entry.indexable).toBe(true)
       expect(entry.includeInSitemap).toBe(true)
       expect(entry.landing).toBe(true)
