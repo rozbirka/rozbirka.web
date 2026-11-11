@@ -253,7 +253,7 @@ export function ShipmentCard({
   /** One muted line above the buttons. */
   caption?: string | undefined
   facts: readonly ShipmentFactRow[] | null
-  hint?: string | undefined
+  hint?: ReactNode
   notices?: ReactNode
   /** The waybill number, which takes focus once a waybill is created. */
   numberRef?: Ref<HTMLSpanElement> | undefined

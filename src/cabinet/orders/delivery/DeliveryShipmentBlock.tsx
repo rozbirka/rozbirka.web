@@ -469,14 +469,22 @@ export function DeliveryShipmentBlock({
           : t('createdSub', { when: when(createdAt(shipment)) }),
   }
   const hint =
-    shipment.trackingStatus === null
-      ? t('npStatusNone')
-      : shipment.lastTrackedAt === null
-        ? t('npStatusNoTime', { status: shipment.trackingStatus })
-        : t('npStatus', {
-            status: shipment.trackingStatus,
-            time: format.time(shipment.lastTrackedAt) ?? '',
-          })
+    shipment.trackingStatus === null ? (
+      t('npStatusNone')
+    ) : (
+      <span className="grid gap-1">
+        <span className="text-app-strong text-body font-medium">
+          {t('npStatusNoTime', { status: shipment.trackingStatus })}
+        </span>
+        {shipment.lastTrackedAt === null ? null : (
+          <time dateTime={shipment.lastTrackedAt}>
+            {t('npUpdatedAt', {
+              time: format.time(shipment.lastTrackedAt) ?? '',
+            })}
+          </time>
+        )}
+      </span>
+    )
 
   const livePill = (): { label: string; tone: StatusTone } => {
     if (
