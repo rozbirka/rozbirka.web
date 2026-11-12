@@ -2,6 +2,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { ActionMenu, FactRows } from '@/components/app'
 import { providerReturnApi } from '@/api/provider-return'
 import { ProviderReturnPanel } from './ProviderReturnPanel'
 
@@ -39,6 +40,82 @@ const props = {
   canManage: true,
   enabled: true,
 }
+
+it('hides an unused return card after the buyer received the parcel', async () => {
+  vi.mocked(providerReturnApi.get).mockResolvedValue({
+    ...accepted,
+    capability: { canCreate: false, blockReason: 'buyer_received' },
+    state: null,
+    requestRef: null,
+    requestNumber: null,
+    requestStatus: null,
+    version: null,
+  })
+  const { rerender } = render(<ProviderReturnPanel {...props} />)
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('region', { name: 'Повернення посилки · Нова пошта' }),
+    ).not.toBeInTheDocument(),
+  )
+  expect(screen.queryByText('Не оформлено')).not.toBeInTheDocument()
+  expect(screen.queryByText(/Посилку вже отримано/)).not.toBeInTheDocument()
+
+  rerender(
+    <ProviderReturnPanel
+      {...props}
+      renderActions={() => <div>Картка доставки</div>}
+    />,
+  )
+  expect(screen.getByText('Картка доставки')).toBeVisible()
+})
+
+it('keeps an existing return visible after the buyer received the parcel', async () => {
+  vi.mocked(providerReturnApi.get).mockResolvedValue({
+    ...accepted,
+    capability: { canCreate: false, blockReason: 'buyer_received' },
+  })
+  render(<ProviderReturnPanel {...props} />)
+  expect(
+    await screen.findByRole('button', { name: 'Оновити повернення' }),
+  ).toBeVisible()
+})
+
+it('explains an unavailable return and separates searching for an existing carrier request', async () => {
+  const user = userEvent.setup()
+  vi.mocked(providerReturnApi.get).mockResolvedValue({
+    ...accepted,
+    capability: {
+      canCreate: false,
+      canFindExternal: true,
+      blockReason: 'source_not_eligible',
+    },
+    version: null,
+    state: null,
+    requestRef: null,
+    requestNumber: null,
+  })
+  vi.mocked(providerReturnApi.externalCandidates).mockResolvedValue({
+    sourceVersion: 'source-v',
+    candidates: [],
+  })
+  render(<ProviderReturnPanel {...props} />)
+  expect(await screen.findByText('Повернення ще недоступне')).toBeVisible()
+  expect(screen.getByText('Не оформлено')).toBeVisible()
+  expect(
+    screen.getByText(/Якщо повернення вже оформлено в кабінеті НП/),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Оформити повернення НП' }),
+  ).toBeNull()
+  expect(screen.queryByText(/Після повернення й огляду посилки/)).toBeNull()
+  await user.click(
+    screen.getByRole('button', { name: 'Знайти повернення в НП' }),
+  )
+  await waitFor(() =>
+    expect(providerReturnApi.externalCandidates).toHaveBeenCalledWith('i', 's'),
+  )
+  expect(providerReturnApi.create).not.toHaveBeenCalled()
+})
 
 it('attaches a provider-created return only after the manager confirms its details', async () => {
   const user = userEvent.setup()
@@ -311,7 +388,9 @@ it('separates accepted request from actual reverse TTN and refreshes it', async 
     screen.getByRole('button', { name: 'Оновити повернення' }),
   )
   expect(await screen.findByText('20400000000002')).toBeInTheDocument()
-  expect(screen.getByText('Прибула у відділення')).toBeInTheDocument()
+  expect(
+    screen.getByText('Зворотна доставка: Прибула у відділення'),
+  ).toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: 'Прийняти товар' }),
   ).not.toBeInTheDocument()
@@ -403,6 +482,55 @@ it.each([
     expect(providerReturnApi.create).toHaveBeenCalledTimes(1)
   },
 )
+
+it('provides a direct unknown return result action without opening More', async () => {
+  vi.mocked(providerReturnApi.get).mockResolvedValue({
+    ...accepted,
+    state: 'Unknown',
+    requestRef: null,
+    requestNumber: null,
+  })
+  render(
+    <ProviderReturnPanel
+      {...props}
+      renderActions={(_actions, facts, primaryAction) => (
+        <>
+          <FactRows rows={facts} />
+          {primaryAction}
+        </>
+      )}
+    />,
+  )
+  const check = await screen.findByRole('button', {
+    name: 'Перевірити результат',
+  })
+  await userEvent.click(check)
+  expect(
+    await screen.findByRole('dialog', {
+      name: 'Повернення посилки · Нова пошта',
+    }),
+  ).toBeVisible()
+  expect(providerReturnApi.create).not.toHaveBeenCalled()
+  await userEvent.keyboard('{Escape}')
+  await waitFor(() => expect(check).toHaveFocus())
+})
+
+it.each([
+  ['Посилка прибула у відділення', 'Зворотна посилка прибула у відділення'],
+  ['Посилку отримано', 'Зворотну посилку отримано'],
+  [
+    'ТТН створена, посилку ще не передано',
+    'Зворотна ТТН створена, посилку ще не передано',
+  ],
+  ['В дорозі', 'Зворотна доставка: В дорозі'],
+])('makes the return direction explicit for %s', async (status, expected) => {
+  vi.mocked(providerReturnApi.get).mockResolvedValue({
+    ...accepted,
+    reverse: { number: '99000000000023', status, statusAt: null },
+  })
+  render(<ProviderReturnPanel {...props} />)
+  expect(await screen.findByText(expected)).toBeVisible()
+})
 
 it('keeps history readable without manage permission and disables carrier actions when disconnected', async () => {
   vi.mocked(providerReturnApi.get).mockResolvedValue(accepted)
@@ -548,7 +676,9 @@ it('prioritises the return waybill and keeps request metadata behind a disclosur
   })
   render(<ProviderReturnPanel {...props} />)
   expect(await screen.findByText('99000000000023')).toBeVisible()
-  expect(screen.getByText('ТТН створена, посилку ще не передано')).toBeVisible()
+  expect(
+    screen.getByText('Зворотна ТТН створена, посилку ще не передано'),
+  ).toBeVisible()
   expect(screen.getByText('102-001')).not.toBeVisible()
   expect(screen.getByText(props.sourceNumber)).not.toBeVisible()
   await userEvent.click(screen.getByText('Дані заявки'))
@@ -602,8 +732,113 @@ it('shows the latest successful check even when the carrier status has not chang
     '2026-11-10T12:40:27Z',
   )
   expect(checked.closest('p')).toHaveTextContent('14:40:27')
-  expect(screen.getByText(reverse.status)).toBeVisible()
+  expect(
+    screen.getByText('Зворотна ТТН створена, посилку ще не передано'),
+  ).toBeVisible()
   expect(
     screen.getByRole('button', { name: 'Оновити повернення' }),
   ).toBeEnabled()
 })
+
+it('offers return actions in the waybill menu without a standalone card', async () => {
+  const user = userEvent.setup()
+  vi.mocked(providerReturnApi.get).mockResolvedValue({
+    ...accepted,
+    capability: { canCreate: true, canFindExternal: true, blockReason: null },
+    state: null,
+    requestRef: null,
+    requestNumber: null,
+    version: null,
+  })
+  vi.mocked(providerReturnApi.externalCandidates).mockResolvedValue({
+    sourceVersion: 'source-v',
+    candidates: [],
+  })
+  render(
+    <ProviderReturnPanel
+      {...props}
+      renderActions={(actions) => <ActionMenu label="Ще" actions={actions} />}
+    />,
+  )
+  expect(
+    screen.queryByRole('region', { name: 'Повернення посилки · Нова пошта' }),
+  ).not.toBeInTheDocument()
+  await user.click(await screen.findByRole('button', { name: 'Ще' }))
+  await user.click(
+    await screen.findByRole('menuitem', { name: 'Знайти повернення в НП' }),
+  )
+  expect(
+    await screen.findByRole('dialog', {
+      name: 'Повернення посилки · Нова пошта',
+    }),
+  ).toBeVisible()
+  expect(
+    await screen.findByText(/Заявку не знайдено в перевіреній частині списку/),
+  ).toBeVisible()
+  expect(providerReturnApi.externalCandidates).toHaveBeenCalledWith('i', 's')
+  expect(providerReturnApi.create).not.toHaveBeenCalled()
+})
+
+it('keeps an existing return readable from the menu with the integration disconnected', async () => {
+  const user = userEvent.setup()
+  vi.mocked(providerReturnApi.get).mockResolvedValue(accepted)
+  render(
+    <ProviderReturnPanel
+      {...props}
+      enabled={false}
+      canManage={false}
+      renderActions={(actions) => <ActionMenu label="Ще" actions={actions} />}
+    />,
+  )
+  await user.click(await screen.findByRole('button', { name: 'Ще' }))
+  await user.click(
+    await screen.findByRole('menuitem', {
+      name: 'Повернення посилки · Нова пошта',
+    }),
+  )
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Повернення посилки · Нова пошта',
+  })
+  expect(sheet).not.toHaveTextContent('Заявку подано')
+  await user.click(screen.getByText('Дані заявки'))
+  expect(sheet).toHaveTextContent('102-001')
+  expect(
+    screen.queryByRole('button', { name: 'Оновити повернення' }),
+  ).not.toBeInTheDocument()
+  expect(providerReturnApi.create).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['Submitting', 'Заявка надсилається'],
+  ['Unknown', 'Результат заявки невідомий'],
+  ['Rejected', 'НП відхилила заявку'],
+  ['Accepted', 'Заявку прийнято · Очікуємо зворотну ТТН'],
+])(
+  'exposes the %s return status to the existing delivery card',
+  async (state, label) => {
+    vi.mocked(providerReturnApi.get).mockResolvedValue({
+      ...accepted,
+      state,
+      reverse: null,
+      capability: {
+        canCreate: false,
+        canFindExternal: false,
+        blockReason: 'request_exists',
+      },
+      requestRef: state === 'Accepted' ? 'r' : null,
+      requestNumber: state === 'Accepted' ? '102-001' : null,
+    })
+    render(
+      <ProviderReturnPanel
+        {...props}
+        renderActions={(_actions, facts) => <FactRows rows={facts} />}
+      />,
+    )
+    expect(await screen.findByText(label)).toBeVisible()
+    expect(screen.getByText('Повернення')).toBeVisible()
+    expect(screen.queryByText('Зворотна ТТН')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('region', { name: 'Повернення посилки · Нова пошта' }),
+    ).not.toBeInTheDocument()
+  },
+)

@@ -226,9 +226,9 @@ export function WaybillCreateSheet({
         .catch(() => null)
       if (latest !== null) onShipment(latest)
       const ambiguous =
-        latest === null
-          ? ['network', 'timeout'].includes(normalizeApiProblem(problem).kind)
-          : latest.state === 'Unknown' || latest.state === 'Creating'
+        latest === null ||
+        latest.state === 'Unknown' ||
+        latest.state === 'Creating'
       if (ambiguous) {
         setPhase('unknown')
         window.requestAnimationFrame(() => alertRef.current?.focus())

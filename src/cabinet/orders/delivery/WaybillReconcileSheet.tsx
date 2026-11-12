@@ -347,6 +347,16 @@ function CreateRecoverySheet({
         </div>
       )}
       <Notice tone="info">{t('unknown')}</Notice>
+      {candidates.length === 0 ? (
+        <details>
+          <summary className="rz-strong min-h-control cursor-pointer py-2">
+            {t('withoutNumberTitle')}
+          </summary>
+          <p className="rz-caption m-0 mt-1 text-pretty">
+            {t('withoutNumberText')}
+          </p>
+        </details>
+      ) : null}
       <SheetGroup>
         <form
           className="grid min-w-0 gap-2.5"

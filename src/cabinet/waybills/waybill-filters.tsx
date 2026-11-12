@@ -18,7 +18,7 @@ import { DELIVERY_FILTERS } from './waybill-presentation'
 import { waybillsMessages } from './waybills-messages'
 
 /**
- * Search, the four filters and «Скинути» (7.2), in the tab order section 11
+ * Search, the three filters and «Скинути» (7.2), in the tab order section 11
  * asks for. «Післяплата» needs the finance right: Core refuses that filter
  * without it.
  */
@@ -135,33 +135,7 @@ export function WaybillToolbar({
           </div>
         </FilterPopover>
       ) : null}
-      <FilterPopover
-        label={t('filterSync')}
-        placeholder={t('filterSync')}
-        setKey={filters.sync === '' ? undefined : t('filterSync')}
-        setValue={
-          filters.sync === ''
-            ? undefined
-            : t(filters.sync === 'problem' ? 'syncProblem' : 'syncFine')
-        }
-      >
-        <div className="grid gap-px p-1">
-          {(['', 'problem', 'fine'] as const).map((value) => (
-            <FilterOption
-              active={filters.sync === value}
-              key={value}
-              label={t(
-                value === ''
-                  ? 'any'
-                  : value === 'problem'
-                    ? 'syncProblem'
-                    : 'syncFine',
-              )}
-              onSelect={() => onChange('sync', value)}
-            />
-          ))}
-        </div>
-      </FilterPopover>
+
       {filtered(filters) ? (
         <Button onClick={onReset} variant="quiet">
           <RotateCcw aria-hidden />

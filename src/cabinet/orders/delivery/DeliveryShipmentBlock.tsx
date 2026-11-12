@@ -1,6 +1,5 @@
-import { TrackingSyncDetails } from './TrackingSyncDetails'
 import { TrackingRetryNotice } from './TrackingRetryNotice'
-import { useRef, type Ref } from 'react'
+import { useRef, type Ref, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import {
   Ban,
@@ -117,8 +116,14 @@ export function DeliveryShipmentBlock({
   stage,
   waiting,
   waybillPath,
+  returnMenuActions = [],
+  returnFacts = [],
+  returnPrimaryAction = null,
 }: {
   actions: ShipmentBlockActions
+  returnMenuActions?: readonly MenuAction[]
+  returnFacts?: readonly ShipmentFactRow[]
+  returnPrimaryAction?: ReactNode
   /** When the waybill was attached from the carrier's cabinet here (6.12). */
   attachedAt: string | null
   /** Received, the post-payment not yet in (9.2): the pill says both. */
@@ -156,6 +161,28 @@ export function DeliveryShipmentBlock({
   const when = (value: string | null) =>
     value === null ? '' : (format.dateTime(value) ?? value)
   const manage = canManage && carrierReady
+
+  // Let the modal menu release focus before opening another modal surface.
+  const openFromMenu = (action: () => void) => {
+    const opener = menuRef.current
+    window.requestAnimationFrame(() => {
+      if (opener?.isConnected !== true) return
+      opener.focus()
+      action()
+    })
+  }
+  const returnActions = returnMenuActions.map((action) => ({
+    ...action,
+    disabled: busy || action.disabled === true,
+    onSelect: () => openFromMenu(action.onSelect),
+  }))
+  const returnMenu = (
+    <ActionMenu
+      actions={returnActions}
+      label={t('moreActions')}
+      triggerRef={menuRef}
+    />
+  )
 
   const facts = (
     source: Shipment,
@@ -204,6 +231,7 @@ export function DeliveryShipmentBlock({
               : tm('factCodMismatch'),
         mono: true,
       },
+      ...returnFacts,
     ]
   }
 
@@ -300,7 +328,11 @@ export function DeliveryShipmentBlock({
             <>
               <Button disabled={busy} onClick={actions.start} variant="primary">
                 <Truck aria-hidden />
-                {tm('startDelivery')}
+                {tm(
+                  delivery.agreedTotalUah > 0
+                    ? 'continueDelivery'
+                    : 'startDelivery',
+                )}
               </Button>
               <Button disabled={busy} onClick={actions.attach} variant="quiet">
                 <Link2 aria-hidden />
@@ -310,7 +342,11 @@ export function DeliveryShipmentBlock({
           ) : null
         }
         facts={null}
-        hint={tm('configureNote')}
+        hint={tm(
+          delivery.agreedTotalUah > 0
+            ? 'continueDeliveryNote'
+            : 'configureNote',
+        )}
       />
     )
 
@@ -535,6 +571,8 @@ export function DeliveryShipmentBlock({
               <RefreshCw aria-hidden />
               {tm('refreshStatus')}
             </Button>
+            {returnMenu}
+            {returnPrimaryAction}
             {waybillPath === null ? null : (
               <Button asChild variant="quiet">
                 <Link to={waybillPath}>
@@ -556,7 +594,6 @@ export function DeliveryShipmentBlock({
                     date: format.date(disconnected.at) ?? disconnected.at,
                   })}
             </Notice>
-            <TrackingSyncDetails state={shipment} />
           </>
         }
         numberRef={numberRef}
@@ -625,6 +662,8 @@ export function DeliveryShipmentBlock({
         actions={
           carrierReady ? (
             <>
+              {returnMenu}
+              {returnPrimaryAction}
               <Button
                 disabled={busy}
                 onClick={actions.recover}
@@ -658,16 +697,8 @@ export function DeliveryShipmentBlock({
 
   const pill = livePill()
 
-  // Let the modal menu release focus before opening another modal surface.
-  const openFromMenu = (action: () => void) => {
-    const opener = menuRef.current
-    window.requestAnimationFrame(() => {
-      if (opener?.isConnected !== true) return
-      opener.focus()
-      action()
-    })
-  }
   const moreActions: MenuAction[] = [
+    ...returnActions,
     ...(waybillPath === null
       ? []
       : [
@@ -722,6 +753,7 @@ export function DeliveryShipmentBlock({
               <Printer aria-hidden />
               {tm('printLabel')}
             </Button>
+            {returnPrimaryAction}
             <Button
               aria-busy={busy}
               disabled={busy}
@@ -765,12 +797,7 @@ export function DeliveryShipmentBlock({
           : fact,
       )}
       hint={hint}
-      notices={
-        <>
-          <TrackingRetryNotice state={shipment} />
-          <TrackingSyncDetails state={shipment} />
-        </>
-      }
+      notices={<TrackingRetryNotice state={shipment} />}
       numberRef={numberRef}
       pill={pill}
     />

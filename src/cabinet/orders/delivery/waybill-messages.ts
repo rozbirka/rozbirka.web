@@ -143,7 +143,7 @@ export const waybillMessages = defineMessages({
     repeatBlocked: 'Повторне створення недоступне до перевірки',
     refusedTitle: 'ТТН не створено',
     refusedText:
-      'Нова пошта відмовила у створенні ТТН. Дані збережено — перевірте їх або зверніться до підтримки Нової пошти.',
+      'Нова пошта підтвердила відмову: ТТН не створено. Дані збережено — виправте причину відмови та повторіть створення.',
 
     // Edit (5.2–5.6)
     editTitle: 'Редагувати ТТН',
@@ -380,7 +380,7 @@ export const waybillMessages = defineMessages({
     repeatBlocked: 'Creating again is unavailable until checked',
     refusedTitle: 'Waybill not created',
     refusedText:
-      'Nova Poshta refused to create the waybill. The details are saved — review them or contact Nova Poshta support.',
+      'Nova Poshta confirmed the refusal: no waybill was created. The details are saved — correct the reason for refusal and try creating it again.',
 
     editTitle: 'Edit waybill',
     editDescription:
@@ -611,7 +611,7 @@ export const waybillMessages = defineMessages({
     repeatBlocked: 'Ponowne tworzenie niedostępne do sprawdzenia',
     refusedTitle: 'List nie został utworzony',
     refusedText:
-      'Nova Poshta odmówiła utworzenia listu. Dane są zapisane — sprawdź je lub skontaktuj się z pomocą Nova Poshta.',
+      'Nova Poshta potwierdziła odmowę: list nie został utworzony. Dane są zapisane — usuń przyczynę odmowy i ponów tworzenie.',
 
     editTitle: 'Edytuj list',
     editDescription:

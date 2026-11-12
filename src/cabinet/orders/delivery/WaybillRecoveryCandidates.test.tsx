@@ -143,6 +143,10 @@ it('previews a manual number after no hits and waits for a separate confirmation
   const post = vi.spyOn(apiClient, 'post').mockResolvedValue(response())
   const { user, onResolved } = mount()
   expect(await screen.findByText(/Накладну не знайдено/)).toBeVisible()
+  expect(screen.getByText('Якщо номера немає')).toBeVisible()
+  await user.click(screen.getByText('Якщо номера немає'))
+  expect(screen.getByText(/Залиште поле порожнім/)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Створити ТТН' })).toBeNull()
   await user.type(
     screen.getByLabelText('Номер ТТН із кабінету НП'),
     '2045 0011 8722 09',

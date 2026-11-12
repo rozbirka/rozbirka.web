@@ -197,7 +197,6 @@ export const deliveryMessages = defineMessages({
 
     // Body
     linkTransaction: 'Прив’язати оплату з фінансів',
-    recordPaymentHint: 'Створює новий запис про отримані гроші в обраній касі.',
     linkPaymentHint:
       'Зараховує замовленню наявне надходження з каси. Повторно гроші не додаються.',
     npNotConnected: 'Нову пошту не підключено.',
@@ -232,6 +231,8 @@ export const deliveryMessages = defineMessages({
     connectIntegration: 'Підключити',
     configureNote:
       'Замовлення поки не їде поштою. Оформіть доставку — отримувача, посилку й післяплату вкажете на наступному кроці.',
+    continueDeliveryNote:
+      'Суму замовлення збережено. Щоб завершити оформлення доставки, заповніть отримувача й посилку та збережіть чернетку.',
   },
   'en-GB': {
     customerChangeClosed:
@@ -414,7 +415,6 @@ export const deliveryMessages = defineMessages({
       'Nova Poshta will collect {amount} from the recipient — exactly the order balance — and transfer it to you. The recipient pays the transfer fee.',
 
     linkTransaction: 'Link payment from Finance',
-    recordPaymentHint: 'Creates a new receipt in the selected till.',
     linkPaymentHint:
       'Credits the order with an existing till receipt without adding the money again.',
     npNotConnected: 'Nova Poshta is not connected.',
@@ -447,6 +447,8 @@ export const deliveryMessages = defineMessages({
     connectIntegration: 'Connect',
     configureNote:
       'This order isn’t being shipped yet. Arrange delivery — you’ll add the recipient, parcel and cash on delivery at the next step.',
+    continueDeliveryNote:
+      'The order amount is saved. To finish booking delivery, enter the recipient and parcel details and save the draft.',
   },
   pl: {
     customerChangeClosed:
@@ -631,8 +633,6 @@ export const deliveryMessages = defineMessages({
       'Nova Poshta pobierze od odbiorcy {amount} — dokładnie saldo zamówienia — i przekaże je firmie. Prowizję za przekaz płaci odbiorca.',
 
     linkTransaction: 'Powiąż płatność z finansów',
-    recordPaymentHint:
-      'Tworzy nowy zapis otrzymanych pieniędzy w wybranej kasie.',
     linkPaymentHint:
       'Zalicza do zamówienia istniejący wpływ z kasy, bez ponownego dodawania pieniędzy.',
     npNotConnected: 'Nova Poshta nie jest podłączona.',
@@ -666,5 +666,7 @@ export const deliveryMessages = defineMessages({
     connectIntegration: 'Połącz',
     configureNote:
       'To zamówienie nie jest jeszcze wysyłane. Zorganizuj dostawę — odbiorcę, przesyłkę i pobranie podasz w następnym kroku.',
+    continueDeliveryNote:
+      'Kwota zamówienia została zapisana. Aby dokończyć nadawanie, uzupełnij odbiorcę i przesyłkę oraz zapisz szkic.',
   },
 })

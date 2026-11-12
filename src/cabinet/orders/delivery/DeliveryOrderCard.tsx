@@ -357,17 +357,6 @@ export function DeliveryPaymentsCard({
       count={String(visible.length)}
       aside={<div className="rz-btn-row gap-1.5">{actions}</div>}
     >
-      {actions === null || actions === undefined || actions === false ? null : (
-        <div className="grid gap-1 px-(--rz-card-p) py-3">
-          <p className="rz-caption m-0 text-pretty">
-            <span className="font-medium text-app-ink">
-              {t('recordPayment')}
-            </span>
-            {' — '}
-            {t('recordPaymentHint')}
-          </p>
-        </div>
-      )}
       {visible.length === 0 ? (
         <p className="rz-card__body text-app-muted m-0">{t('noPayments')}</p>
       ) : (

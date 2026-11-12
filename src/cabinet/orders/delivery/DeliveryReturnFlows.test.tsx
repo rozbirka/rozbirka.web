@@ -489,10 +489,15 @@ it('waits for the goods and accepts only a full return (10.3–10.5)', async () 
     'aria-current',
     'step',
   )
-  expect(card).toHaveTextContent(
-    'Чекаємо посилку. ТТН повернення: 20451201020045.',
+  expect(card).toHaveTextContent('ТТН повернення: 20451201020045.')
+  expect(card).not.toHaveTextContent('Чекаємо посилку.')
+  const acceptButton = within(card).getByRole('button', {
+    name: 'Прийняти товар',
+  })
+  expect(acceptButton).toHaveAccessibleDescription(
+    'Підтвердьте приймання лише після повернення й огляду посилки.',
   )
-  await user.click(within(card).getByRole('button', { name: 'Прийняти товар' }))
+  await user.click(acceptButton)
 
   const sheet = await screen.findByRole('dialog', {
     name: 'Прийняти повернення',
@@ -621,6 +626,37 @@ it.each([0, 20])(
   },
 )
 
+it('shows the cancellation explanation only on an attempted cancellation after dispatch', async () => {
+  const user = userEvent.setup()
+  const value = load({
+    money: delivery({ receivedAt: null }),
+    shipment: shipment({ receivedAt: null, trackingCode: '5' }),
+  })
+  const view = renderBody(value)
+  expect(
+    screen.queryByText('Скасування після відправлення'),
+  ).not.toBeInTheDocument()
+
+  view.unmount()
+  renderBody(value, { intent: 'cancelOrder' })
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Скасування після відправлення',
+  })
+  expect(dialog).toHaveTextContent('підтверджені витрати на доставку')
+  expect(
+    within(dialog).queryByRole('button', { name: 'Скасувати замовлення' }),
+  ).not.toBeInTheDocument()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Почати повернення' }),
+  )
+  expect(
+    await screen.findByRole('dialog', { name: 'Почати повернення?' }),
+  ).toBeInTheDocument()
+  expect(deliveryApi.cancel).not.toHaveBeenCalled()
+  expect(deliveryApi.startReturn).not.toHaveBeenCalled()
+  expect(shippingApi.cancel).not.toHaveBeenCalled()
+})
+
 it('cancels an unsent order through the waybill and the refund step (10.13)', async () => {
   vi.mocked(deliveryApi.cancel).mockResolvedValue(
     delivery({
@@ -704,7 +740,7 @@ it('asks to book and refund money the carrier paid after cancellation (10.16)', 
   const card = screen.getByRole('region', { name: 'Повернення' })
   expect(card).toHaveTextContent('Замовлення скасованоз 30.10.2026')
   const block = paymentBlock()
-  const paid = within(block).getByText('Отримано від клієнта').closest('div')!
+  const paid = within(block).getByText('Отримано').closest('div')!
   expect(paid).toHaveTextContent(/0,00\sUAH/)
   expect(paid).not.toHaveTextContent(/4\s200,00\sUAH/)
   expect(

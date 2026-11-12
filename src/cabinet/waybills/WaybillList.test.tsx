@@ -86,7 +86,7 @@ beforeEach(() => {
   vi.mocked(shippingApi.refresh).mockReset()
 })
 
-it('lists delivery, cash on delivery and sync as three columns (7.1)', async () => {
+it('shows delivery and COD without a technical synchronization column', async () => {
   vi.mocked(shippingApi.list).mockResolvedValue(
     page([
       row(),
@@ -128,10 +128,10 @@ it('lists delivery, cash on delivery and sync as three columns (7.1)', async () 
   expect(draftLabels).toHaveLength(2)
   for (const label of draftLabels) expect(label).toBeVisible()
   expect(within(rows[2]!).getByText('не створено')).toBeVisible()
-  // A failed sync keeps the last known delivery status beside it.
+  // Carrier refresh problems do not hide the last known delivery status.
   expect(within(rows[3]!).getByText('Прибула')).toBeVisible()
-  expect(within(rows[3]!).getByText('Помилка')).toBeVisible()
-  expect(within(rows[3]!).getByText('2 год тому')).toBeVisible()
+  expect(screen.queryByRole('columnheader', { name: 'Синхр.' })).toBeNull()
+  expect(within(rows[3]!).queryByText('Помилка')).toBeNull()
   expect(rows[4]).toHaveClass('opacity-60')
   expect(within(rows[4]!).getByText('Скасовано')).toBeVisible()
 
@@ -169,8 +169,8 @@ it('offers no refresh once Nova Poshta is switched off (2.18)', async () => {
     name: 'Накладні Нової пошти',
   })
   const rows = within(table).getAllByRole('row')
-  expect(within(rows[1]!).getByText('Не оновлюється')).toBeVisible()
-  expect(within(rows[2]!).getByText('Не оновлюється')).toBeVisible()
+  expect(within(rows[1]!).queryByText('Не оновлюється')).toBeNull()
+  expect(within(rows[2]!).queryByText('Не оновлюється')).toBeNull()
   expect(within(rows[2]!).queryByText('Помилка')).toBeNull()
   expect(screen.queryByRole('button', { name: 'Оновити статуси' })).toBeNull()
   expect(screen.queryByText(/не оновлювал/)).toBeNull()
@@ -201,21 +201,11 @@ it('keeps search, filters and page in the address and hands them to the card (7.
   )
 })
 
-it('filters by sync problems and resets everything at once', async () => {
+it('ignores the removed sync filter in old links without filtering the list invisibly', async () => {
   vi.mocked(shippingApi.list).mockResolvedValue(page([row()], 1))
-  const user = userEvent.setup()
-  renderList()
-
+  renderList('/app/koval/sales/waybills?sync=problem')
   await screen.findByRole('table', { name: 'Накладні Нової пошти' })
-  await user.click(screen.getByRole('button', { name: 'Синхронізація' }))
-  await user.click(await screen.findByRole('button', { name: 'Є проблема' }))
-  expect(shippingApi.list).toHaveBeenLastCalledWith(
-    'int-1',
-    { hasProblem: true, page: 1, pageSize: 20 },
-    expect.anything(),
-  )
-
-  await user.click(screen.getByRole('button', { name: 'Скинути' }))
+  expect(screen.queryByRole('button', { name: 'Синхронізація' })).toBeNull()
   expect(shippingApi.list).toHaveBeenLastCalledWith(
     'int-1',
     { page: 1, pageSize: 20 },

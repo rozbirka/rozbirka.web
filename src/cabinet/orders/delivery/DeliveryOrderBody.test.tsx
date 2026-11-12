@@ -313,7 +313,7 @@ it('offers the next step in the block that needs it (module 46 §9)', async () =
   const payment = screen.getByRole('region', { name: 'Оплата' })
   expect(within(payment).getByText('Оплачено')).toBeVisible()
   expect(within(payment).queryByRole('button')).toBeNull()
-  expect(payment).toHaveTextContent(
+  expect(payment).not.toHaveTextContent(
     'Оплату отримано. Замовлення завершиться, коли посилку отримають.',
   )
 
@@ -502,8 +502,11 @@ it('shows delivery progress only after a parcel has been configured', async () =
   ).toBeNull()
   await user.click(screen.getByRole('tab', { name: /Доставка/ }))
   expect(
-    screen.getByRole('button', { name: 'Оформити доставку' }),
+    screen.getByRole('button', { name: 'Продовжити оформлення' }),
   ).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Оформити доставку' })).toBeNull()
+  expect(screen.queryByText(/Замовлення поки не їде поштою/)).toBeNull()
+  expect(screen.getByText(/Суму замовлення збережено/)).toBeVisible()
   expect(screen.queryByRole('region', { name: 'Порядок дій' })).toBeNull()
 })
 
@@ -726,7 +729,7 @@ it('speaks British English on both halves of the card', async () => {
   const payment = screen.getByRole('region', { name: 'Payment' })
   // The pill and the «Paid» fact both say it.
   expect(within(payment).getByText('Paid')).toBeVisible()
-  expect(within(payment).getByText('Received from customer')).toBeVisible()
+  expect(within(payment).getByText('Received')).toBeVisible()
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
   const carrier = screen.getByRole('region', { name: 'Delivery · Nova Poshta' })

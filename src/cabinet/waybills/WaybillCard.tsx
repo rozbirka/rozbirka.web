@@ -1,7 +1,13 @@
-import { TrackingSyncDetails } from '../orders/delivery/TrackingSyncDetails'
 import { TrackingRetryNotice } from '../orders/delivery/TrackingRetryNotice'
 import { ProviderReturnPanel } from '../orders/delivery/ProviderReturnPanel'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import {
   ArrowUpRight,
@@ -21,6 +27,7 @@ import {
   StateScreen,
   StatusPill,
   useOptionalToast,
+  type MenuAction,
 } from '@/components/app'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { normalizeApiProblem } from '@/api/errors'
@@ -52,6 +59,7 @@ import {
 import { WaybillReconcileSheet } from '../orders/delivery/WaybillReconcileSheet'
 import { waybillMessages } from '../orders/delivery/waybill-messages'
 import { createdAt } from '../orders/delivery/waybill-view'
+import type { ShipmentFactRow } from '../orders/delivery/DeliveryOrderCard'
 import {
   WaybillDeliveryCard,
   WaybillHistoryCard,
@@ -166,6 +174,7 @@ export function WaybillCard({
   // The control that opened a sheet or dialog takes focus back (section 11).
   const [opener, setOpener] = useState<HTMLElement | null>(null)
   const recoverRef = useRef<HTMLButtonElement | null>(null)
+  const narrowMenuRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (integrationId === null) return
@@ -453,21 +462,50 @@ export function WaybillCard({
     ...actions.filter((action) => action.key === 'order'),
   ]
   const narrowActions = (
-    <div className="rz-btn-row md:hidden">
-      {narrow
-        .slice(0, 2)
-        .map((action, index) => button(action, index === 0, false))}
+    returnActions: readonly MenuAction[],
+    primaryAction: ReactNode,
+  ) => (
+    <div className="rz-btn-row">
+      {narrow.slice(0, 2).map((action, index) => (
+        <Fragment key={action.key}>
+          {button(action, index === 0, false)}
+          {action.key === 'print' ? primaryAction : null}
+        </Fragment>
+      ))}
+      {!narrow.slice(0, 2).some((action) => action.key === 'print')
+        ? primaryAction
+        : null}
       <ActionMenu
-        actions={narrow.slice(2).map((action) => ({
-          key: action.key,
-          label: action.label,
-          icon: action.icon,
-          onSelect: () => {
-            if (action.to !== undefined) void navigate(action.to)
-            else action.onSelect?.()
-          },
-          ...(action.quiet ? { destructive: true } : {}),
-        }))}
+        triggerRef={narrowMenuRef}
+        actions={[
+          ...narrow.slice(2).map((action) => ({
+            key: action.key,
+            label: action.label,
+            icon: action.icon,
+            disabled: busy && action.to === undefined,
+            onSelect: () => {
+              if (action.to !== undefined) void navigate(action.to)
+              else
+                window.requestAnimationFrame(() => {
+                  if (!narrowMenuRef.current?.isConnected) return
+                  narrowMenuRef.current.focus()
+                  action.onSelect?.()
+                })
+            },
+            ...(action.quiet ? { destructive: true } : {}),
+          })),
+          ...returnActions.map((action) => ({
+            ...action,
+            disabled: busy || action.disabled === true,
+            onSelect: () => {
+              window.requestAnimationFrame(() => {
+                if (!narrowMenuRef.current?.isConnected) return
+                narrowMenuRef.current.focus()
+                action.onSelect()
+              })
+            },
+          })),
+        ]}
         label={t('moreLabel')}
       />
     </div>
@@ -554,9 +592,6 @@ export function WaybillCard({
       {live && lost === null && current.state === 'Created' ? (
         <TrackingRetryNotice state={current} />
       ) : null}
-      {lost === null && current.state === 'Created' ? (
-        <TrackingSyncDetails state={current} />
-      ) : null}
       {!syncStale || current.trackingPaused ? null : (
         <Notice
           action={
@@ -587,13 +622,46 @@ export function WaybillCard({
     </>
   )
 
-  return (
-    <CardFrame
+  const renderDeliveryCard = (
+    returnActions: readonly MenuAction[] = [],
+    returnFacts: readonly ShipmentFactRow[] = [],
+    primaryAction: ReactNode = null,
+  ) => (
+    <WaybillDeliveryCard
       actions={
-        <span className="rz-btn-row max-md:hidden">
-          {actions.map((action) => button(action))}
-        </span>
+        <>
+          {off ? offActions : narrowActions(returnActions, primaryAction)}
+          {off ? primaryAction : null}
+        </>
       }
+      returnFacts={returnFacts}
+      {...(off && lastKnownAt !== null
+        ? { hint: t('lastKnownStatus', { time: lastKnownAt }) }
+        : {})}
+      notice={
+        draft ? (
+          <Notice tone="info">{t('draftNotice')}</Notice>
+        ) : currentStage === 'sent' || currentStage === 'received' ? (
+          <p className="rz-caption m-0 text-pretty">{tw('sentHint')}</p>
+        ) : undefined
+      }
+      shipment={current}
+      signal={deliverySignal(
+        current.state,
+        current.trackingCode,
+        current.receivedAt,
+        locale,
+      )}
+      stale={syncStale || lost !== null}
+    />
+  )
+
+  const renderCard = (
+    returnActions: readonly MenuAction[] = [],
+    returnFacts: readonly ShipmentFactRow[] = [],
+    primaryAction: ReactNode = null,
+  ) => (
+    <CardFrame
       chips={chips}
       listPath={listPath}
       number={current.number ?? t('draft')}
@@ -610,36 +678,7 @@ export function WaybillCard({
           />
         </div>
         <div className="order-1 grid min-w-0 gap-4 lg:order-none lg:col-start-1 lg:row-start-2">
-          <WaybillDeliveryCard
-            actions={off ? (offActions ?? undefined) : narrowActions}
-            {...(off && lastKnownAt !== null
-              ? { hint: t('lastKnownStatus', { time: lastKnownAt }) }
-              : {})}
-            notice={
-              draft ? (
-                <Notice tone="info">{t('draftNotice')}</Notice>
-              ) : currentStage === 'sent' || currentStage === 'received' ? (
-                <p className="rz-caption m-0 text-pretty">{tw('sentHint')}</p>
-              ) : undefined
-            }
-            shipment={current}
-            signal={deliverySignal(
-              current.state,
-              current.trackingCode,
-              current.receivedAt,
-              locale,
-            )}
-            stale={syncStale || lost !== null}
-          />
-          {current.state === 'Created' && current.number ? (
-            <ProviderReturnPanel
-              canManage={rights.manage}
-              enabled={live && current.trackingEnabled && lost === null}
-              integrationId={current.integrationId}
-              shipmentId={current.id}
-              sourceNumber={current.number}
-            />
-          ) : null}
+          {renderDeliveryCard(returnActions, returnFacts, primaryAction)}
         </div>
         <div className="order-4 min-w-0 max-md:hidden lg:order-none lg:col-start-1 lg:row-start-3">
           <WaybillHistoryCard
@@ -780,6 +819,27 @@ export function WaybillCard({
         />
       ) : null}
     </CardFrame>
+  )
+
+  return current.state === 'Created' && current.number ? (
+    <ProviderReturnPanel
+      canManage={rights.manage}
+      enabled={live && current.trackingEnabled && lost === null}
+      integrationId={current.integrationId}
+      shipmentId={current.id}
+      sourceNumber={current.number}
+      renderActions={(returnActions, returnFacts, primaryAction) =>
+        renderCard(
+          returnActions.filter(
+            (action) => action.key === 'provider-return-details',
+          ),
+          returnFacts,
+          primaryAction,
+        )
+      }
+    />
+  ) : (
+    renderCard()
   )
 }
 

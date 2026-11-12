@@ -17,6 +17,7 @@ import {
 } from '../customers/customer-phone'
 import { customerFormMessages } from '../customers/customer-form-messages'
 import { orderCustomerMessages } from './order-customer-messages'
+import { orderCardMessages } from './order-cards-messages'
 
 /**
  * Who the order is for, chosen or created without leaving the order.
@@ -34,6 +35,7 @@ interface OrderCustomerDrawerProps {
   onOpenChange: (open: boolean) => void
   open: boolean
   orderNumber: number
+  deliveryOrder?: boolean
 }
 
 export function OrderCustomerDrawer(props: OrderCustomerDrawerProps) {
@@ -50,8 +52,10 @@ function OpenOrderCustomerDrawer({
   onOpenChange,
   open,
   orderNumber,
+  deliveryOrder = false,
 }: OrderCustomerDrawerProps) {
   const t = useT(orderCustomerMessages)
+  const to = useT(orderCardMessages)
   const tf = useT(customerFormMessages)
   const tc = useT(commonMessages)
   /** A national number is read in the business country; any country is fine. */
@@ -106,6 +110,11 @@ function OpenOrderCustomerDrawer({
 
   return (
     <Sheet
+      description={
+        deliveryOrder && currentId !== null
+          ? to('chooseAnotherCustomerHint')
+          : undefined
+      }
       eyebrow={t('eyebrow', { number: String(orderNumber) })}
       footer={
         <>

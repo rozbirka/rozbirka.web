@@ -8,12 +8,29 @@ import type { DeliveryOrder } from '@/api/delivery'
 import type { ApiProblem } from '@/api/contracts'
 import type { OrderDetail } from '@/api/orders'
 import { shippingApi, type Shipment } from '@/api/shipping'
+import { providerReturnApi } from '@/api/provider-return'
 import { deliveryApi } from '@/api/delivery'
 import { integrationsApi } from '@/api/integrations'
 import { ToastProvider } from '@/components/app'
 import { DeliveryOrderBody } from './DeliveryOrderBody'
 import type { DeliveryOrderState } from './use-delivery-order'
 
+vi.mock('@/api/provider-return', () => ({
+  providerReturnApi: {
+    get: vi.fn().mockResolvedValue({
+      capability: { canCreate: false, blockReason: null },
+      sourceVersion: 's',
+      version: null,
+      state: null,
+      requestRef: null,
+      requestNumber: null,
+      requestStatus: null,
+      reverse: null,
+    }),
+    externalCandidates: vi.fn(),
+    options: vi.fn(),
+  },
+}))
 vi.mock('@/api/cash', () => ({
   cashApi: { list: vi.fn().mockResolvedValue([]) },
 }))
@@ -254,7 +271,15 @@ beforeEach(() => {
 })
 
 it('starts with no delivery and offers the form or an external waybill (4.1)', async () => {
-  const { block } = await renderFlow({ initial: null })
+  const { block } = await renderFlow({
+    initial: null,
+    delivery: money({
+      agreedTotalUah: 0,
+      appliedUah: 0,
+      outstandingUah: 0,
+      netReceivedUah: 0,
+    }),
+  })
   expect(block()).toHaveTextContent(
     'Замовлення поки не їде поштою. Оформіть доставку — отримувача, посилку й післяплату вкажете на наступному кроці.',
   )
@@ -460,6 +485,36 @@ it('keeps the draft after a known refusal (4.10)', async () => {
   expect(
     within(sheet).getByRole('button', { name: 'Створити ТТН' }),
   ).toBeEnabled()
+  vi.mocked(shippingApi.create).mockResolvedValue(created())
+  await user.click(within(sheet).getByRole('button', { name: 'Створити ТТН' }))
+  expect(await within(block()).findByText(TTN)).toBeVisible()
+  expect(shippingApi.create).toHaveBeenCalledTimes(2)
+})
+
+it('blocks another create when the result cannot be reloaded after an error', async () => {
+  vi.mocked(shippingApi.create).mockRejectedValue(
+    problem('nova_poshta_rejected', 'validation', 422),
+  )
+  vi.mocked(shippingApi.get).mockRejectedValue({ kind: 'network' })
+  const { user, block } = await renderFlow({ initial: shipment() })
+  await user.click(
+    within(block()).getByRole('button', { name: 'Перевірити й створити ТТН' }),
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Продовжити оформлення' }),
+  )
+  const sheet = await screen.findByRole('dialog', { name: 'Створити ТТН' })
+  await user.click(within(sheet).getByRole('button', { name: 'Створити ТТН' }))
+  expect(
+    await within(sheet).findByText('Не вдалося підтвердити результат'),
+  ).toBeVisible()
+  expect(
+    within(sheet).queryByRole('button', { name: 'Створити ТТН' }),
+  ).toBeNull()
+  expect(
+    within(sheet).getByRole('button', { name: 'Перевірити результат' }),
+  ).toBeEnabled()
+  expect(shippingApi.create).toHaveBeenCalledTimes(1)
 })
 
 it('turns an unanswered create into a result check with a candidate (4.11, 5.14)', async () => {
@@ -1201,4 +1256,102 @@ it('stops after one retry if the waybill version changes again', async () => {
   expect(within(sheet).getByLabelText('Вага')).toHaveValue('2')
   expect(shippingApi.update).toHaveBeenCalledTimes(2)
   expect(shippingApi.get).toHaveBeenCalledTimes(1)
+})
+
+it('moves return booking and lookup into the existing waybill menu', async () => {
+  vi.mocked(providerReturnApi.get).mockResolvedValueOnce({
+    capability: { canCreate: true, canFindExternal: true, blockReason: null },
+    sourceVersion: 's',
+    version: null,
+    state: null,
+    requestRef: null,
+    requestNumber: null,
+    requestStatus: null,
+    reverse: null,
+  })
+  vi.mocked(providerReturnApi.externalCandidates).mockResolvedValue({
+    sourceVersion: 's',
+    candidates: [],
+  })
+  const { user, block } = await renderFlow({
+    initial: created({
+      dispatchedAt: '2026-11-12T10:00:00Z',
+      trackingCode: '7',
+    }),
+    delivery: money({ dispatchedAt: '2026-11-12T10:00:00Z' }),
+  })
+  expect(
+    screen.queryByRole('region', { name: 'Повернення посилки · Нова пошта' }),
+  ).not.toBeInTheDocument()
+  expect(within(block()).getAllByRole('button', { name: 'Ще' })).toHaveLength(1)
+  await user.click(within(block()).getByRole('button', { name: 'Ще' }))
+  expect(
+    await screen.findByRole('menuitem', { name: 'Оформити повернення НП' }),
+  ).toBeVisible()
+  await user.click(
+    screen.getByRole('menuitem', { name: 'Знайти повернення в НП' }),
+  )
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Повернення посилки · Нова пошта',
+  })
+  expect(
+    await within(sheet).findByText(
+      /Заявку не знайдено в перевіреній частині списку/,
+    ),
+  ).toBeVisible()
+  expect(providerReturnApi.externalCandidates).toHaveBeenCalledWith(
+    'int-1',
+    'ship-1',
+  )
+  await user.keyboard('{Escape}')
+  await waitFor(() => expect(sheet).not.toBeInTheDocument())
+  expect(within(block()).getByRole('button', { name: 'Ще' })).toHaveFocus()
+  expect(shippingApi.cancel).not.toHaveBeenCalled()
+})
+
+it('shows the return status and reverse waybill inside delivery while its actions stay in More', async () => {
+  vi.mocked(providerReturnApi.get).mockResolvedValueOnce({
+    capability: {
+      canCreate: false,
+      canFindExternal: false,
+      blockReason: 'request_exists',
+    },
+    sourceVersion: 's',
+    version: 'r',
+    state: 'Accepted',
+    requestRef: 'r',
+    requestNumber: '102-123',
+    requestStatus: 'Прийняте',
+    reverse: {
+      number: '20400000000999',
+      status: 'Посилка прибула у відділення',
+      statusAt: '2026-11-12T10:00:00Z',
+    },
+  })
+  const { user, block } = await renderFlow({
+    initial: created({
+      dispatchedAt: '2026-11-12T09:00:00Z',
+      trackingCode: '7',
+    }),
+    delivery: money({ dispatchedAt: '2026-11-12T09:00:00Z' }),
+  })
+  expect(
+    await within(block()).findByText('Зворотна посилка прибула у відділення', {
+      exact: true,
+    }),
+  ).toBeVisible()
+  expect(within(block()).getByText('Зворотна ТТН')).toBeVisible()
+  expect(within(block()).getByText('20400000000999')).toBeVisible()
+  expect(
+    screen.queryByRole('region', { name: 'Повернення посилки · Нова пошта' }),
+  ).not.toBeInTheDocument()
+  expect(
+    within(block()).queryByRole('button', { name: 'Оновити повернення' }),
+  ).not.toBeInTheDocument()
+  await user.click(within(block()).getByRole('button', { name: 'Ще' }))
+  expect(
+    await screen.findByRole('menuitem', {
+      name: 'Повернення посилки · Нова пошта',
+    }),
+  ).toBeVisible()
 })

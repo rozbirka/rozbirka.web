@@ -28,14 +28,16 @@ import {
   type Signal,
 } from './waybill-presentation'
 import { waybillsMessages } from './waybills-messages'
+import type { ShipmentFactRow } from '../orders/delivery/DeliveryOrderCard'
 
 interface Fact {
   key: string
   label: string
   value: ReactNode
+  action?: ReactNode
   sub?: string
   mono?: boolean
-  tone?: 'warn'
+  tone?: ShipmentFactRow['tone']
 }
 
 function Facts({ rows }: { rows: readonly Fact[] }) {
@@ -44,15 +46,23 @@ function Facts({ rows }: { rows: readonly Fact[] }) {
       {rows.map((fact) => (
         <div key={fact.key}>
           <dt>{fact.label}</dt>
-          <dd className="m-0">
+          <dd
+            className={cn(
+              'm-0',
+              fact.action && 'flex flex-wrap items-center gap-2',
+            )}
+          >
             <span
               className={cn(
                 fact.mono === true && 'rz-mono',
                 fact.tone === 'warn' && 'text-state-warn',
+                fact.tone === 'danger' && 'text-state-danger',
+                fact.tone === 'strong' && 'text-app-strong font-semibold',
               )}
             >
               {fact.value}
             </span>
+            {fact.action}
             {fact.sub === undefined || fact.sub === '' ? null : (
               <span className="rz-caption ml-2">{fact.sub}</span>
             )}
@@ -189,6 +199,7 @@ export function WaybillInfoCard({
  */
 export function WaybillDeliveryCard({
   actions,
+  returnFacts = [],
   hint,
   notice,
   shipment,
@@ -196,6 +207,7 @@ export function WaybillDeliveryCard({
   stale,
 }: {
   actions?: ReactNode
+  returnFacts?: readonly ShipmentFactRow[]
   /** «Останній відомий статус · …» once nothing refreshes it (2.18). */
   hint?: string
   notice?: ReactNode
@@ -233,6 +245,7 @@ export function WaybillDeliveryCard({
             mono: true,
             ...(stale ? { tone: 'warn' as const } : {}),
           },
+          ...returnFacts,
         ]}
       />
       {notice === undefined && actions === undefined ? null : (

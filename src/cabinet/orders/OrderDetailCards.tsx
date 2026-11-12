@@ -267,7 +267,7 @@ export function OrderItemsCard({
               </tbody>
             </table>
           </div>
-          <div className="rz-card__foot flex-wrap items-baseline">
+          <div className="rz-card__foot flex-wrap items-baseline bg-transparent">
             <span className="rz-muted">{t('total')}</span>
             <span className="grid justify-items-end gap-0.5">
               <span className="rz-mono rz-strong">
@@ -528,8 +528,6 @@ export function OrderDueCard({
 export function OrderCustomerCard({
   accountingCurrency,
   changeHint,
-  editPath = null,
-  explainActions = false,
   customerId,
   customerName,
   initials,
@@ -539,8 +537,6 @@ export function OrderCustomerCard({
   /** What the customer's spending is counted in; `null` if unknown. */
   accountingCurrency: string | null
   changeHint?: string | null
-  editPath?: string | null
-  explainActions?: boolean
   customerId: string | null
   customerName: string | null
   initials: string
@@ -549,7 +545,6 @@ export function OrderCustomerCard({
   to: string
 }) {
   const t = useT(orderCardMessages)
-  const actionHintId = useId()
   const [loadedCustomer, setLoadedCustomer] = useState<{
     id: string
     detail: CustomerDetail
@@ -577,10 +572,11 @@ export function OrderCustomerCard({
     <section aria-label={t('customer')} className="rz-card">
       <div className="rz-card__head py-2">
         <h2 className="rz-h-card">{t('customer')}</h2>
-        {explainActions || onChange === undefined ? null : (
+        {onChange === undefined && !changeHint ? null : (
           <SmallButton
             label={customerId === null ? t('addCustomer') : t('changeCustomer')}
-            onClick={onChange}
+            disabled={onChange === undefined}
+            {...(onChange === undefined ? {} : { onClick: onChange })}
           >
             {customerId === null ? t('addCustomer') : t('change')}
           </SmallButton>
@@ -608,55 +604,7 @@ export function OrderCustomerCard({
           </Link>
         )}
       </div>
-      {explainActions &&
-      (editPath !== null || onChange !== undefined || changeHint) ? (
-        <div className="grid gap-3 border-t border-app-line px-4 py-3">
-          {customerId === null || editPath === null ? null : (
-            <div className="grid gap-1.5">
-              <Button
-                asChild
-                size="sm"
-                className="w-fit max-w-full whitespace-normal text-left"
-              >
-                <Link
-                  to={editPath}
-                  aria-describedby={`${actionHintId}-profile`}
-                >
-                  {t('editCustomerProfile')}
-                </Link>
-              </Button>
-              <p
-                className="rz-caption m-0 text-pretty"
-                id={`${actionHintId}-profile`}
-              >
-                {t('editCustomerProfileHint')}
-              </p>
-            </div>
-          )}
-          {onChange === undefined && !changeHint ? null : (
-            <div className="grid gap-1.5">
-              <Button
-                size="sm"
-                className="w-fit max-w-full whitespace-normal text-left"
-                aria-describedby={`${actionHintId}-assign`}
-                disabled={onChange === undefined}
-                onClick={onChange}
-              >
-                {customerId === null
-                  ? t('addCustomer')
-                  : t('chooseAnotherCustomer')}
-              </Button>
-              <p
-                className="rz-caption m-0 text-pretty"
-                id={`${actionHintId}-assign`}
-              >
-                {changeHint ?? t('chooseAnotherCustomerHint')}
-              </p>
-            </div>
-          )}
-        </div>
-      ) : null}
-      {!explainActions && changeHint ? (
+      {onChange === undefined && changeHint ? (
         <p className="rz-caption m-0 border-t border-app-line px-4 py-3 text-pretty">
           {changeHint}
         </p>
