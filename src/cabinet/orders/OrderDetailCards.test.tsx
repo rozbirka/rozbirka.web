@@ -249,7 +249,7 @@ it.each(['mouse', 'keyboard'])(
   },
 )
 
-it('keeps editing the customer profile available while a live waybill blocks reassignment', () => {
+it('keeps the single header change button disabled when a live waybill blocks reassignment', () => {
   customerMocks.getById.mockResolvedValue({
     id: 'customer-1',
     name: 'Владислав',
@@ -263,27 +263,23 @@ it('keeps editing the customer profile available while a live waybill blocks rea
         customerName="Владислав"
         initials="В"
         to="/customers/customer-1"
-        editPath="/customers/customer-1/edit"
-        explainActions
         changeHint="Спочатку скасуйте створену ТТН."
       />
     </MemoryRouter>,
   )
   expect(
-    screen.getByRole('link', { name: 'Редагувати дані клієнта' }),
-  ).toHaveAttribute('href', '/customers/customer-1/edit')
-  expect(
-    screen.getByRole('button', { name: 'Обрати іншого клієнта' }),
-  ).toBeDisabled()
+    screen.queryByRole('link', { name: 'Редагувати дані клієнта' }),
+  ).toBeNull()
+  expect(screen.getByRole('button', { name: 'Змінити клієнта' })).toBeDisabled()
   expect(screen.getByText('Спочатку скасуйте створену ТТН.')).toBeVisible()
   expect(
-    screen.getByText(
+    screen.queryByText(
       'Змінює спільну картку клієнта. Отримувач у створеній ТТН не зміниться.',
     ),
-  ).toBeVisible()
+  ).not.toBeInTheDocument()
 })
 
-it('opens the existing customer picker separately from editing profile details', async () => {
+it('opens the existing customer picker from the single header change button', async () => {
   customerMocks.getById.mockResolvedValue({
     id: 'customer-1',
     name: 'Владислав',
@@ -299,7 +295,6 @@ it('opens the existing customer picker separately from editing profile details',
         customerName="Владислав"
         initials="В"
         to="/customers/customer-1"
-        explainActions
         onChange={onChange}
       />
     </MemoryRouter>,
@@ -307,13 +302,19 @@ it('opens the existing customer picker separately from editing profile details',
   expect(
     screen.queryByRole('link', { name: 'Редагувати дані клієнта' }),
   ).toBeNull()
-  await user.click(
-    screen.getByRole('button', { name: 'Обрати іншого клієнта' }),
-  )
+  await user.click(screen.getByRole('button', { name: 'Змінити клієнта' }))
+  expect(
+    screen
+      .getByRole('button', { name: 'Змінити клієнта' })
+      .closest('.rz-card__head'),
+  ).not.toBeNull()
+  expect(
+    screen.getByRole('button', { name: 'Змінити клієнта' }),
+  ).toHaveTextContent('Змінити')
   expect(onChange).toHaveBeenCalledOnce()
   expect(
-    screen.getByText(
+    screen.queryByText(
       'Змінює клієнта лише цього замовлення. Після заміни перевірте отримувача доставки.',
     ),
-  ).toBeVisible()
+  ).not.toBeInTheDocument()
 })

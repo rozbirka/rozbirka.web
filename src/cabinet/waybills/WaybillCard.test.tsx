@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -162,11 +162,15 @@ it('shows a created waybill with every action the matrix allows (8.2)', async ()
   expect(
     screen.getByText('Замовлення #361 · створена 14.10.2026'),
   ).toBeVisible()
-  for (const name of ['Друк', 'Оновити статус', 'Редагувати', 'Скасувати ТТН'])
-    expect(screen.getAllByRole('button', { name })[0]).toBeVisible()
-  expect(
-    screen.getAllByRole('link', { name: 'До замовлення' })[0],
-  ).toHaveAttribute('href', '/app/koval/orders/order-1')
+  const deliveryCard = screen.getByRole('region', { name: 'Доставка' })
+  for (const name of ['Друк', 'Оновити статус'])
+    expect(within(deliveryCard).getByRole('button', { name })).toBeVisible()
+  await userEvent.click(
+    within(deliveryCard).getByRole('button', { name: 'Інші дії з накладною' }),
+  )
+  for (const name of ['Редагувати', 'Скасувати ТТН', 'До замовлення'])
+    expect(screen.getByRole('menuitem', { name })).toBeVisible()
+  await userEvent.keyboard('{Escape}')
   // «До списку» returns to the same search and page.
   expect(screen.getByRole('link', { name: 'Накладні НП' })).toHaveAttribute(
     'href',
@@ -180,7 +184,6 @@ it('shows a created waybill with every action the matrix allows (8.2)', async ()
   expect(within(info).getByText('Київ · №12')).toBeVisible()
   expect(within(info).getByText('1 місце · 4,2 кг · 60×40×30 см')).toBeVisible()
 
-  const deliveryCard = screen.getByRole('region', { name: 'Доставка' })
   expect(within(deliveryCard).getByText('Створено')).toBeVisible()
   expect(deliveryCard).not.toHaveTextContent(
     'Після відправлення зміни до накладної оформлюються через Нову пошту.',
@@ -390,6 +393,37 @@ it('shows the waybill read-only without order management (8.8)', async () => {
   expect(within(payment).queryByText('Очікуємо післяплату')).toBeNull()
 })
 
+it.each(['Редагувати', 'Скасувати ТТН'])(
+  'returns focus to More after closing %s opened from the menu',
+  async (action) => {
+    vi.mocked(shippingApi.byId).mockResolvedValue(shipment())
+    const user = userEvent.setup()
+    renderCard()
+    await screen.findByRole('heading', { name: `ТТН ${TTN}` })
+    const more = screen.getByRole('button', { name: 'Інші дії з накладною' })
+    await user.click(more)
+    await user.click(screen.getByRole('menuitem', { name: action }))
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(more).toHaveFocus())
+  },
+)
+
+it('disables edit and cancellation in More while a refresh is pending', async () => {
+  vi.mocked(shippingApi.byId).mockResolvedValue(shipment())
+  vi.mocked(shippingApi.refresh).mockReturnValue(new Promise(() => undefined))
+  const user = userEvent.setup()
+  renderCard()
+  await screen.findByRole('heading', { name: `ТТН ${TTN}` })
+  await user.click(screen.getByRole('button', { name: 'Оновити статус' }))
+  await user.click(screen.getByRole('button', { name: 'Інші дії з накладною' }))
+  for (const name of ['Редагувати', 'Скасувати ТТН'])
+    expect(screen.getByRole('menuitem', { name })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+})
+
 it('cancels through the confirm dialog and shows the cancelled waybill', async () => {
   vi.mocked(shippingApi.byId)
     .mockResolvedValueOnce(shipment())
@@ -399,7 +433,8 @@ it('cancels through the confirm dialog and shows the cancelled waybill', async (
   renderCard()
 
   await screen.findByRole('heading', { name: `ТТН ${TTN}` })
-  await user.click(screen.getAllByRole('button', { name: 'Скасувати ТТН' })[0]!)
+  await user.click(screen.getByRole('button', { name: 'Інші дії з накладною' }))
+  await user.click(screen.getByRole('menuitem', { name: 'Скасувати ТТН' }))
   const dialog = await screen.findByRole('dialog', {
     name: 'Скасувати накладну?',
   })
@@ -551,13 +586,83 @@ it('lets the tracking attention destination resume a paused reverse waybill inde
     syncProblem: null,
   })
   renderCard()
-  const panel = await screen.findByRole('region', {
+  const card = await screen.findByRole('region', { name: 'Доставка' })
+  expect(await within(card).findByText('REVERSE-TEST')).toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Повернення посилки · Нова пошта' }),
+  ).not.toBeInTheDocument()
+  await userEvent.click(
+    within(card)
+      .getAllByRole('button', { name: 'Інші дії з накладною' })
+      .at(-1)!,
+  )
+  await userEvent.click(
+    await screen.findByRole('menuitem', {
+      name: 'Повернення посилки · Нова пошта',
+    }),
+  )
+  const panel = await screen.findByRole('dialog', {
     name: 'Повернення посилки · Нова пошта',
   })
-  expect(await within(panel).findByText('REVERSE-TEST')).toBeInTheDocument()
   await userEvent.click(
     within(panel).getByRole('button', { name: 'Оновити повернення' }),
   )
   expect(providerReturnApi.refresh).toHaveBeenCalledWith('int-1', 'ship-1')
   expect(shippingApi.refresh).not.toHaveBeenCalled()
 })
+
+it('keeps booking and finding a return in the order rather than the waybill menus', async () => {
+  vi.mocked(shippingApi.byId).mockResolvedValue(shipment())
+  vi.mocked(providerReturnApi.get).mockResolvedValue({
+    sourceVersion: 'v1',
+    version: null,
+    state: null,
+    requestRef: null,
+    requestNumber: null,
+    requestStatus: null,
+    reverse: null,
+    capability: { canCreate: true, canFindExternal: true, blockReason: null },
+  })
+  renderCard()
+  const card = await screen.findByRole('region', { name: 'Доставка' })
+  await userEvent.click(
+    within(card).getAllByRole('button', { name: 'Інші дії з накладною' })[0]!,
+  )
+  expect(
+    screen.queryByRole('menuitem', { name: 'Оформити повернення НП' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('menuitem', { name: 'Знайти повернення в НП' }),
+  ).not.toBeInTheDocument()
+})
+
+it.each([
+  ['Unknown', 'Результат заявки невідомий'],
+  ['Submitting', 'Заявка надсилається'],
+  ['Rejected', 'НП відхилила заявку'],
+  ['Accepted', 'Заявку прийнято · Очікуємо зворотну ТТН'],
+])(
+  'shows the %s return inside the delivery card, with details in More',
+  async (state, label) => {
+    vi.mocked(shippingApi.byId).mockResolvedValue(shipment())
+    vi.mocked(providerReturnApi.get).mockResolvedValue({
+      sourceVersion: 'v1',
+      version: 'return-v1',
+      state,
+      requestRef: state === 'Accepted' ? 'ref' : null,
+      requestNumber: state === 'Accepted' ? '102-001' : null,
+      requestStatus: null,
+      reverse: null,
+      capability: { canCreate: false, blockReason: null },
+    })
+    renderCard()
+    const card = await screen.findByRole('region', { name: 'Доставка' })
+    expect(await within(card).findByText(label)).toBeVisible()
+    expect(
+      screen.queryByRole('region', { name: 'Повернення посилки · Нова пошта' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Оновити повернення' }),
+    ).not.toBeInTheDocument()
+  },
+)

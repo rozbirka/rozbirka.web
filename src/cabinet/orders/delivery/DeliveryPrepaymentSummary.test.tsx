@@ -119,11 +119,13 @@ it('shows the required amount and actual customer payment even when the minimum 
     </MemoryRouter>,
   )
   const payment = screen.getByRole('region', { name: 'Оплата' })
+  expect(within(payment).getByText('Сума замовлення')).toBeVisible()
+  expect(within(payment).getByText('До сплати')).toBeVisible()
   expect(
     within(payment).getByText('Мінімальна передоплата').closest('div'),
   ).toHaveTextContent('186,00 UAH')
   expect(
-    within(payment).getByText('Отримано від клієнта').closest('div'),
+    within(payment).getByText('Отримано').closest('div'),
   ).toHaveTextContent('500,00 UAH')
   expect(payment).toHaveTextContent('Додаткова передоплата не потрібна')
 })

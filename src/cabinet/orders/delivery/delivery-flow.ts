@@ -185,9 +185,7 @@ export function returnProgress(delivery: DeliveryOrder): number | null {
  */
 export interface OrderActions {
   startReturn: 'button' | 'menu' | null
-  cancel: 'enabled' | 'disabled' | null
-  /** «Скасування після відправлення» (10.15). */
-  sentNotice: boolean
+  cancel: 'enabled' | 'returnRequired' | null
 }
 
 export function orderActions(
@@ -197,15 +195,14 @@ export function orderActions(
   const none: OrderActions = {
     startReturn: null,
     cancel: null,
-    sentNotice: false,
   }
   if (!canManage || orderClosing(delivery) || delivery.returnedAt !== null)
     return none
   if (delivery.dispatchedAt === null)
-    return { startReturn: null, cancel: 'enabled', sentNotice: false }
+    return { startReturn: null, cancel: 'enabled' }
   if (delivery.receivedAt !== null)
-    return { startReturn: 'button', cancel: null, sentNotice: false }
-  return { startReturn: 'menu', cancel: 'disabled', sentNotice: true }
+    return { startReturn: 'button', cancel: null }
+  return { startReturn: 'menu', cancel: 'returnRequired' }
 }
 
 /** How many units the order holds: what a full return brings back. */

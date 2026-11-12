@@ -1,7 +1,6 @@
-import { TrackingSyncDetails } from './TrackingSyncDetails'
 import { TrackingRetryNotice } from './TrackingRetryNotice'
-import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, RefreshCw, RotateCcw } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { ChevronDown, RefreshCw, RotateCcw, Search } from 'lucide-react'
 import {
   Button,
   Card,
@@ -13,6 +12,7 @@ import {
   Sheet,
   StatusPill,
   TextArea,
+  type MenuAction,
 } from '@/components/app'
 import {
   providerReturnApi,
@@ -26,6 +26,7 @@ import {
 import { isProblemCode, normalizeApiProblem } from '@/api/errors'
 import { useFormat, useT } from '@/i18n'
 import { SheetGroup } from '../sheet-group'
+import type { ShipmentFactRow } from './DeliveryOrderCard'
 import { providerReturnMessages } from './provider-return-messages'
 import { ReturnBranchPicker, type ReturnBranch } from './ReturnBranchPicker'
 
@@ -35,6 +36,11 @@ interface Props {
   sourceNumber: string
   canManage: boolean
   enabled: boolean
+  renderActions?: (
+    actions: readonly MenuAction[],
+    facts: readonly ShipmentFactRow[],
+    primaryAction: ReactNode,
+  ) => ReactNode
 }
 
 /** Own the state by both tenant integration and immutable outbound attempt. */
@@ -53,14 +59,26 @@ function ReturnPanel({
   sourceNumber,
   canManage,
   enabled,
+  renderActions,
 }: Props) {
   const t = useT(providerReturnMessages)
   const format = useFormat()
+  const menuOpenerRef = useRef<HTMLElement | null>(null)
+  const restoreMenuFocus = (event: Event) => {
+    const opener = menuOpenerRef.current
+    if (opener?.isConnected) {
+      event.preventDefault()
+      opener.focus()
+    }
+  }
+  const bookHintId = useId()
+  const findHintId = useId()
   const [detail, setDetail] = useState<ProviderReturnDetail | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [candidates, setCandidates] = useState<
     ProviderReturnCandidate[] | null
@@ -130,6 +148,13 @@ function ReturnPanel({
   }
   const unknown =
     uncertain || detail?.state === 'Unknown' || detail?.state === 'Submitting'
+  const canBookReturn =
+    detail?.capability.canCreate && !unknown && actionsAllowed
+  const canFindReturn =
+    detail?.capability.canFindExternal &&
+    !unknown &&
+    !detail.requestRef &&
+    actionsAllowed
   const reason = detail?.capability.blockReason
   const block = !enabled
     ? t('disconnected')
@@ -141,330 +166,501 @@ function ReturnPanel({
           ? t('nativeExists')
           : t('blocked')
 
-  return (
-    <Card
-      title={t('title')}
-      aside={
-        detail?.requestNumber ? (
-          <StatusPill tone="info">
-            {t(detail.isExternal ? 'externalLinked' : 'accepted')}
-          </StatusPill>
-        ) : undefined
-      }
+  const reverseStatus = (status: string | null) => {
+    if (!status?.trim()) return t('statusPending')
+    // Keep the carrier's wording; only make the return direction explicit.
+    const text = status.trim()
+    if (text.startsWith('Посилка '))
+      return t('reverseParcelStatus', { status: text.slice('Посилка '.length) })
+    if (text.startsWith('Посилку '))
+      return t('reverseReceivedStatus', {
+        status: text.slice('Посилку '.length),
+      })
+    if (text.startsWith('ТТН '))
+      return t('reverseWaybillStatus', { status: text.slice('ТТН '.length) })
+    return t('reverseOtherStatus', { status: text })
+  }
+  const returnFacts: ShipmentFactRow[] = []
+  const checkResultAction = unknown ? (
+    <Button
+      variant="primary"
+      disabled={busy}
+      onClick={(event) => {
+        menuOpenerRef.current = event.currentTarget
+        setDetailsOpen(true)
+      }}
     >
-      <div className="grid gap-3">
-        {error ? (
-          <Notice tone="danger">{detail ? t('error') : t('loadFailed')}</Notice>
-        ) : null}
-        {detail === null ? (
-          loading ? (
+      <Search aria-hidden />
+      {t('checkResult')}
+    </Button>
+  ) : null
+  if (
+    detail?.state ||
+    uncertain ||
+    detail?.requestRef ||
+    detail?.reverse ||
+    (error && !detail)
+  ) {
+    const status =
+      uncertain || detail?.state === 'Unknown'
+        ? t('summaryUnknown')
+        : detail?.state === 'Submitting'
+          ? t('summarySubmitting')
+          : detail?.state === 'Rejected'
+            ? t('summaryRejected')
+            : detail?.reverse
+              ? reverseStatus(detail.reverse.status)
+              : detail?.state === 'Accepted'
+                ? t('summaryAccepted')
+                : (detail?.requestStatus ?? t('loadFailed'))
+    returnFacts.push({
+      key: 'provider-return-status',
+      label: t('summaryLabel'),
+      value: status,
+      tone:
+        detail?.state === 'Rejected'
+          ? 'danger'
+          : unknown || error
+            ? 'warn'
+            : 'strong',
+      ...(detail?.isExternal ? { sub: t('externalLinked') } : {}),
+    })
+    if (detail?.reverse)
+      returnFacts.push({
+        key: 'provider-return-number',
+        label: t('reverse'),
+        value: detail.reverse.number,
+        mono: true,
+        tone: 'strong',
+      })
+  }
+
+  const searchExternal = () => {
+    if (renderActions) setDetailsOpen(true)
+    void run(async () => {
+      setCandidates(null)
+      const result = await providerReturnApi.externalCandidates(
+        integrationId,
+        shipmentId,
+      )
+      if (!alive.current) return
+      setExternalSourceVersion(result.sourceVersion)
+      setCandidates(result.candidates)
+    })
+  }
+  // The waybill owns the menu trigger and releases it before opening a sheet.
+  const menuActions: MenuAction[] = [
+    ...(canBookReturn
+      ? [
+          {
+            key: 'provider-return-create',
+            label: t('create'),
+            icon: <RotateCcw aria-hidden />,
+            disabled: busy,
+            onSelect: () => setOpen(true),
+          },
+        ]
+      : []),
+    ...(canFindReturn
+      ? [
+          {
+            key: 'provider-return-find',
+            label: t('searchExternal'),
+            icon: <Search aria-hidden />,
+            disabled: busy,
+            onSelect: searchExternal,
+          },
+        ]
+      : []),
+    ...(unknown || detail?.requestRef || error
+      ? [
+          {
+            key: 'provider-return-details',
+            label: t('title'),
+            icon: <RotateCcw aria-hidden />,
+            onSelect: () => setDetailsOpen(true),
+          },
+        ]
+      : []),
+  ]
+
+  if (
+    !renderActions &&
+    reason === 'buyer_received' &&
+    detail?.state === null &&
+    !detail.requestRef &&
+    !detail.requestNumber &&
+    !detail.reverse &&
+    !unknown &&
+    !error
+  ) {
+    return null
+  }
+
+  return (
+    <>
+      {renderActions?.(
+        // eslint-disable-next-line react-hooks/refs -- Only onSelect reads/writes the opener ref, after the menu releases focus.
+        menuActions.map((action) => ({
+          ...action,
+          onSelect: () => {
+            menuOpenerRef.current =
+              document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null
+            action.onSelect()
+          },
+        })),
+        returnFacts,
+        checkResultAction,
+      )}
+      <ReturnSurface
+        menu={renderActions !== undefined}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        onCloseAutoFocus={renderActions ? restoreMenuFocus : undefined}
+        pending={busy}
+        title={t('title')}
+        aside={
+          detail?.requestNumber ? (
+            <StatusPill tone="info">
+              {t(detail.isExternal ? 'externalLinked' : 'accepted')}
+            </StatusPill>
+          ) : detail?.state === null ? (
+            <StatusPill tone="neutral">{t('notRequested')}</StatusPill>
+          ) : undefined
+        }
+      >
+        <div className="grid gap-3" aria-busy={busy}>
+          {renderActions && busy ? (
             <p className="rz-caption m-0" role="status">
               {t('loading')}
             </p>
+          ) : null}
+          {error ? (
+            <Notice tone="danger">
+              {detail ? t('error') : t('loadFailed')}
+            </Notice>
+          ) : null}
+          {detail === null ? (
+            loading ? (
+              <p className="rz-caption m-0" role="status">
+                {t('loading')}
+              </p>
+            ) : (
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void run(async () =>
+                    update(
+                      await providerReturnApi.get(integrationId, shipmentId),
+                    ),
+                  )
+                }
+              >
+                {t('retry')}
+              </Button>
+            )
           ) : (
-            <Button
-              disabled={busy}
-              onClick={() =>
-                void run(async () =>
-                  update(
-                    await providerReturnApi.get(integrationId, shipmentId),
-                  ),
-                )
-              }
-            >
-              {t('retry')}
-            </Button>
-          )
-        ) : (
-          <>
-            <TrackingRetryNotice actionLabel={t('refresh')} state={detail} />
-            {detail.reverse ? (
-              <div className="rz-inset grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
-                <div className="grid min-w-0 gap-1">
-                  <p className="rz-caption m-0">{t('reverse')}</p>
-                  <p className="rz-h-title m-0 font-mono break-all">
-                    {detail.reverse.number}
-                  </p>
-                  <p className="m-0 text-pretty">
-                    {detail.reverse.status ?? t('statusPending')}
-                  </p>
-                </div>
-                {detail.trackingLastSuccessAt || detail.reverse.statusAt ? (
-                  <p className="rz-caption m-0 sm:text-right">
-                    {t(detail.trackingLastSuccessAt ? 'checked' : 'statusAt')}
-                    <br className="hidden sm:block" />{' '}
-                    <time
-                      dateTime={
-                        detail.trackingLastSuccessAt ??
-                        detail.reverse.statusAt ??
-                        undefined
-                      }
-                    >
-                      {detail.trackingLastSuccessAt
-                        ? format.dateWith(detail.trackingLastSuccessAt, {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit',
-                          })
-                        : format.dateTime(detail.reverse.statusAt)}
-                    </time>
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-            {unknown ? (
-              <Notice tone="warn">
-                {t(
-                  detail.state === 'Submitting' && !uncertain
-                    ? 'submitting'
-                    : 'unknown',
-                )}
-              </Notice>
-            ) : detail.requestNumber && !detail.reverse ? (
-              <p className="rz-caption m-0">{t('waiting')}</p>
-            ) : detail.state === 'Rejected' ? (
-              <Notice tone="warn">{t('rejected')}</Notice>
-            ) : null}
-            {!enabled ||
-            (!detail.capability.canCreate && !detail.requestRef && !unknown) ? (
-              <p className="rz-caption m-0">{block}</p>
-            ) : null}
-            {detail.capability.canCreate && !unknown && actionsAllowed ? (
-              <>
-                <p className="rz-caption m-0">{t('intro')}</p>
-                <div>
-                  <Button onClick={() => setOpen(true)}>
-                    <RotateCcw aria-hidden />
-                    {t('create')}
-                  </Button>
-                </div>
-              </>
-            ) : null}
-            {detail.capability.canFindExternal &&
-            !unknown &&
-            !detail.requestRef &&
-            actionsAllowed ? (
-              <div>
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      setCandidates(null)
-                      const result = await providerReturnApi.externalCandidates(
-                        integrationId,
-                        shipmentId,
-                      )
-                      if (!alive.current) return
-                      setExternalSourceVersion(result.sourceVersion)
-                      setCandidates(result.candidates)
-                    })
-                  }
-                >
-                  {t('searchExternal')}
-                </Button>
-              </div>
-            ) : null}
-            {actionsAllowed && (detail.requestRef || unknown) ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="primary"
-                  disabled={busy}
-                  aria-busy={busy}
-                  onClick={() =>
-                    void run(
-                      async () =>
-                        update(
-                          await (unknown
-                            ? providerReturnApi.get(integrationId, shipmentId)
-                            : providerReturnApi.refresh(
-                                integrationId,
-                                shipmentId,
-                              )),
-                        ),
-                      true,
-                    )
-                  }
-                >
-                  <RefreshCw
-                    aria-hidden
-                    className={busy ? 'animate-spin' : undefined}
-                  />
-                  {t(busy ? 'refreshing' : 'refresh')}
-                </Button>
-                {unknown ? (
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        setExternalSourceVersion(null)
-                        update(
-                          await providerReturnApi.get(
-                            integrationId,
-                            shipmentId,
-                          ),
-                        )
-                        const next = await providerReturnApi.candidates(
-                          integrationId,
-                          shipmentId,
-                        )
-                        if (alive.current) setCandidates(next)
-                      })
-                    }
-                  >
-                    {t('search')}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {detail.requestNumber || detail.reverse ? (
-              <details className="group border-t border-app-line pt-2">
-                <summary className="rz-muted flex min-h-control cursor-pointer list-none items-center justify-between gap-3 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
-                  {t('requestDetails')}
-                  <ChevronDown
-                    aria-hidden
-                    className="size-4 shrink-0 transition-transform group-open:rotate-180"
-                  />
-                </summary>
-                <FactRows
-                  rows={[
-                    {
-                      label: t('source'),
-                      value: <span className="font-mono">{sourceNumber}</span>,
-                    },
-                    ...(detail.requestNumber
-                      ? [
-                          {
-                            label: t('request'),
-                            value: (
-                              <span className="font-mono">
-                                {detail.requestNumber}
-                              </span>
-                            ),
-                          },
-                        ]
-                      : []),
-                    ...(detail.requestStatus
-                      ? [
-                          {
-                            label: t('requestStatus'),
-                            value: detail.requestStatus,
-                          },
-                        ]
-                      : []),
-                    ...(detail.trackingLastSuccessAt && detail.reverse?.statusAt
-                      ? [
-                          {
-                            label: t('statusAt'),
-                            value: format.dateTime(detail.reverse.statusAt),
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
-              </details>
-            ) : null}
-            {detail.state === 'Accepted' ? (
-              <TrackingSyncDetails
-                state={{
-                  ...detail,
-                  trackingEnabled: enabled && detail.trackingEnabled !== false,
-                }}
-              />
-            ) : null}
-            {candidates !== null ? (
-              <div className="grid gap-2">
-                <Notice tone="info">
-                  {t(candidates.length ? 'candidateHint' : 'empty')}
-                </Notice>
-                {candidates.map((candidate) => (
-                  <div
-                    key={candidate.ref}
-                    className="border-app-line grid gap-2 rounded-rz-md border p-3"
-                  >
-                    <FactRows
-                      rows={[
-                        { label: t('request'), value: candidate.number },
-                        { label: t('source'), value: candidate.sourceNumber },
-                        ...(candidate.status
-                          ? [
-                              {
-                                label: t('requestStatus'),
-                                value: candidate.status,
-                              },
-                            ]
-                          : []),
-                        ...(candidate.contactPersonRecipient
-                          ? [
-                              {
-                                label: t('contact'),
-                                value: candidate.contactPersonRecipient,
-                              },
-                            ]
-                          : []),
-                        ...(candidate.addressRecipient
-                          ? [
-                              {
-                                label: t('address'),
-                                value: candidate.addressRecipient,
-                              },
-                            ]
-                          : []),
-                        ...(candidate.reverseNumber
-                          ? [
-                              {
-                                label: t('reverse'),
-                                value: candidate.reverseNumber,
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                    {actionsAllowed ? (
-                      <Button
-                        disabled={busy}
-                        onClick={() =>
-                          void run(async () =>
-                            update(
-                              await (externalSourceVersion
-                                ? providerReturnApi.attachExternal(
-                                    integrationId,
-                                    shipmentId,
-                                    externalSourceVersion,
-                                    candidate,
-                                  )
-                                : providerReturnApi.confirm(
-                                    integrationId,
-                                    shipmentId,
-                                    candidate.ref,
-                                    detail.version ?? '',
-                                  )),
-                            ),
-                          )
+            <>
+              <TrackingRetryNotice actionLabel={t('refresh')} state={detail} />
+              {detail.reverse ? (
+                <div className="rz-inset grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-4">
+                  <div className="grid min-w-0 gap-1">
+                    <p className="rz-caption m-0">{t('reverse')}</p>
+                    <p className="rz-h-title m-0 font-mono break-all">
+                      {detail.reverse.number}
+                    </p>
+                    <p className="m-0 text-pretty">
+                      {reverseStatus(detail.reverse.status)}
+                    </p>
+                  </div>
+                  {detail.trackingLastSuccessAt || detail.reverse.statusAt ? (
+                    <p className="rz-caption m-0 sm:text-right">
+                      {t(detail.trackingLastSuccessAt ? 'checked' : 'statusAt')}
+                      <br className="hidden sm:block" />{' '}
+                      <time
+                        dateTime={
+                          detail.trackingLastSuccessAt ??
+                          detail.reverse.statusAt ??
+                          undefined
                         }
                       >
-                        {t(
-                          externalSourceVersion
-                            ? 'confirmExternal'
-                            : 'confirmCandidate',
-                        )}
+                        {detail.trackingLastSuccessAt
+                          ? format.dateWith(detail.trackingLastSuccessAt, {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })
+                          : format.dateTime(detail.reverse.statusAt)}
+                      </time>
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {unknown ? (
+                <Notice tone="warn">
+                  {t(
+                    detail.state === 'Submitting' && !uncertain
+                      ? 'submitting'
+                      : 'unknown',
+                  )}
+                </Notice>
+              ) : detail.requestNumber && !detail.reverse ? (
+                <p className="rz-caption m-0">{t('waiting')}</p>
+              ) : detail.state === 'Rejected' ? (
+                <Notice tone="warn">{t('rejected')}</Notice>
+              ) : null}
+              {!enabled ||
+              (!detail.capability.canCreate &&
+                !detail.requestRef &&
+                !unknown) ? (
+                <div className="grid gap-1">
+                  {enabled && reason === 'source_not_eligible' ? (
+                    <p className="rz-strong m-0 font-medium">
+                      {t('notReadyTitle')}
+                    </p>
+                  ) : null}
+                  <p className="rz-caption m-0 text-pretty">{block}</p>
+                </div>
+              ) : null}
+              {!renderActions && (canBookReturn || canFindReturn) ? (
+                <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+                  {canBookReturn ? (
+                    <div className="grid min-w-0 max-w-sm justify-items-start gap-2">
+                      <Button
+                        aria-describedby={bookHintId}
+                        className="min-h-control h-auto max-w-full whitespace-normal"
+                        variant="primary"
+                        onClick={() => setOpen(true)}
+                      >
+                        <RotateCcw aria-hidden />
+                        {t('create')}
                       </Button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <p className="rz-caption m-0">{t('scope')}</p>
-          </>
-        )}
-      </div>
+                      <p className="rz-caption m-0 text-pretty" id={bookHintId}>
+                        {t('intro')}
+                      </p>
+                    </div>
+                  ) : null}
+                  {canFindReturn ? (
+                    <div className="grid min-w-0 max-w-sm justify-items-start gap-2">
+                      <Button
+                        aria-describedby={findHintId}
+                        className="min-h-control h-auto max-w-full whitespace-normal"
+                        disabled={busy}
+                        aria-busy={busy}
+                        onClick={searchExternal}
+                      >
+                        <Search aria-hidden />
+                        {t('searchExternal')}
+                      </Button>
+                      <p className="rz-caption m-0 text-pretty" id={findHintId}>
+                        {t('externalHint')}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {actionsAllowed && (detail.requestRef || unknown) ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="primary"
+                    disabled={busy}
+                    aria-busy={busy}
+                    onClick={() =>
+                      void run(
+                        async () =>
+                          update(
+                            await (unknown
+                              ? providerReturnApi.get(integrationId, shipmentId)
+                              : providerReturnApi.refresh(
+                                  integrationId,
+                                  shipmentId,
+                                )),
+                          ),
+                        true,
+                      )
+                    }
+                  >
+                    <RefreshCw
+                      aria-hidden
+                      className={busy ? 'animate-spin' : undefined}
+                    />
+                    {t(busy ? 'refreshing' : 'refresh')}
+                  </Button>
+                  {unknown ? (
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          setExternalSourceVersion(null)
+                          update(
+                            await providerReturnApi.get(
+                              integrationId,
+                              shipmentId,
+                            ),
+                          )
+                          const next = await providerReturnApi.candidates(
+                            integrationId,
+                            shipmentId,
+                          )
+                          if (alive.current) setCandidates(next)
+                        })
+                      }
+                    >
+                      {t('search')}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+              {detail.requestNumber || detail.reverse ? (
+                <details className="group border-t border-app-line pt-2">
+                  <summary className="rz-muted flex min-h-control cursor-pointer list-none items-center justify-between gap-3 py-2 marker:content-none [&::-webkit-details-marker]:hidden">
+                    {t('requestDetails')}
+                    <ChevronDown
+                      aria-hidden
+                      className="size-4 shrink-0 transition-transform group-open:rotate-180"
+                    />
+                  </summary>
+                  <FactRows
+                    rows={[
+                      {
+                        label: t('source'),
+                        value: (
+                          <span className="font-mono">{sourceNumber}</span>
+                        ),
+                      },
+                      ...(detail.requestNumber
+                        ? [
+                            {
+                              label: t('request'),
+                              value: (
+                                <span className="font-mono">
+                                  {detail.requestNumber}
+                                </span>
+                              ),
+                            },
+                          ]
+                        : []),
+                      ...(detail.requestStatus
+                        ? [
+                            {
+                              label: t('requestStatus'),
+                              value: detail.requestStatus,
+                            },
+                          ]
+                        : []),
+                      ...(detail.trackingLastSuccessAt &&
+                      detail.reverse?.statusAt
+                        ? [
+                            {
+                              label: t('statusAt'),
+                              value: format.dateTime(detail.reverse.statusAt),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </details>
+              ) : null}
+              {candidates !== null ? (
+                <div className="grid gap-2">
+                  <Notice tone="info">
+                    {t(candidates.length ? 'candidateHint' : 'empty')}
+                  </Notice>
+                  {candidates.map((candidate) => (
+                    <div
+                      key={candidate.ref}
+                      className="border-app-line grid gap-2 rounded-rz-md border p-3"
+                    >
+                      <FactRows
+                        rows={[
+                          { label: t('request'), value: candidate.number },
+                          { label: t('source'), value: candidate.sourceNumber },
+                          ...(candidate.status
+                            ? [
+                                {
+                                  label: t('requestStatus'),
+                                  value: candidate.status,
+                                },
+                              ]
+                            : []),
+                          ...(candidate.contactPersonRecipient
+                            ? [
+                                {
+                                  label: t('contact'),
+                                  value: candidate.contactPersonRecipient,
+                                },
+                              ]
+                            : []),
+                          ...(candidate.addressRecipient
+                            ? [
+                                {
+                                  label: t('address'),
+                                  value: candidate.addressRecipient,
+                                },
+                              ]
+                            : []),
+                          ...(candidate.reverseNumber
+                            ? [
+                                {
+                                  label: t('reverse'),
+                                  value: candidate.reverseNumber,
+                                },
+                              ]
+                            : []),
+                        ]}
+                      />
+                      {actionsAllowed ? (
+                        <Button
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () =>
+                              update(
+                                await (externalSourceVersion
+                                  ? providerReturnApi.attachExternal(
+                                      integrationId,
+                                      shipmentId,
+                                      externalSourceVersion,
+                                      candidate,
+                                    )
+                                  : providerReturnApi.confirm(
+                                      integrationId,
+                                      shipmentId,
+                                      candidate.ref,
+                                      detail.version ?? '',
+                                    )),
+                              ),
+                            )
+                          }
+                        >
+                          {t(
+                            externalSourceVersion
+                              ? 'confirmExternal'
+                              : 'confirmCandidate',
+                          )}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {detail.requestRef || unknown || detail.capability.canCreate ? (
+                <p className="rz-caption m-0">{t('scope')}</p>
+              ) : null}
+            </>
+          )}
+        </div>
+      </ReturnSurface>
       {open && actionsAllowed ? (
         <ProviderReturnSheet
           integrationId={integrationId}
           shipmentId={shipmentId}
           sourceVersion={detail?.sourceVersion ?? ''}
+          onCloseAutoFocus={renderActions ? restoreMenuFocus : undefined}
           onClose={() => {
             setOpen(false)
             void run(async () =>
@@ -474,6 +670,10 @@ function ReturnPanel({
           onCreated={(next) => {
             update(next)
             setOpen(false)
+            if (renderActions)
+              window.requestAnimationFrame(() => {
+                if (alive.current) setDetailsOpen(true)
+              })
           }}
           onUnknown={() => {
             setUncertain(true)
@@ -484,6 +684,42 @@ function ReturnPanel({
           }}
         />
       ) : null}
+    </>
+  )
+}
+
+function ReturnSurface({
+  onCloseAutoFocus,
+  menu,
+  open,
+  onOpenChange,
+  pending,
+  title,
+  aside,
+  children,
+}: {
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
+  menu: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  pending: boolean
+  title: string
+  aside: ReactNode
+  children: ReactNode
+}) {
+  return menu ? (
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      onCloseAutoFocus={onCloseAutoFocus}
+      pending={pending}
+      title={title}
+    >
+      {children}
+    </Sheet>
+  ) : (
+    <Card title={title} aside={aside}>
+      {children}
     </Card>
   )
 }
@@ -495,7 +731,9 @@ function ProviderReturnSheet({
   onClose,
   onCreated,
   onUnknown,
+  onCloseAutoFocus,
 }: {
+  onCloseAutoFocus?: ((event: Event) => void) | undefined
   integrationId: string
   shipmentId: string
   sourceVersion: string
@@ -651,6 +889,7 @@ function ProviderReturnSheet({
     <Sheet
       open
       title={t('create')}
+      onCloseAutoFocus={onCloseAutoFocus}
       description={t('intro')}
       pending={busy}
       onOpenChange={(next) => {

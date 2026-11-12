@@ -19,9 +19,9 @@ export const deliveryFlowMessages = defineMessages({
     chipReturn: 'Повернення',
     // «Оплата» block (§9)
     paymentTitle: 'Оплата',
-    factDue: 'Погоджена сума замовлення, грн',
-    factPaid: 'Отримано від клієнта',
-    factLeft: 'Залишок',
+    factDue: 'Сума замовлення',
+    factPaid: 'Отримано',
+    factLeft: 'До сплати',
     pillPaid: 'Оплачено',
     noteTotalUnknown:
       'Вкажіть погоджену суму замовлення у гривнях під час оформлення доставки.',
@@ -53,8 +53,6 @@ export const deliveryFlowMessages = defineMessages({
     noteReconcile:
       'Нова пошта повідомила про переказ. Перевірте виписку або отримання готівки та внесіть фактичну оплату. Залишок замовлення: {left}.',
     reconcileAction: 'Звірити у «Фінансах»',
-    notePaidEarly:
-      'Оплату отримано. Замовлення завершиться, коли посилку отримають.',
     noFinance:
       'Вносити оплату й повертати кошти може користувач із правом «Фінанси».',
     savedToast: 'Оплату {amount} внесено.',
@@ -76,8 +74,7 @@ export const deliveryFlowMessages = defineMessages({
     startReturn: 'Почати повернення',
     sentTitle: 'Скасування після відправлення',
     sentNote:
-      'Посилку вже відправлено, тому скасувати замовлення напряму не можна. Дочекайтеся повернення товару від Нової пошти (або попросіть отримувача відмовитися), прийміть його й поверніть кошти.',
-    sentReason: 'Посилку вже відправлено',
+      'Посилку вже відправлено, тому скасувати замовлення напряму не можна. Оформіть повернення, а коли товар повернеться — огляньте й прийміть його. Потім завершіть розрахунок із клієнтом, врахувавши підтверджені витрати на доставку.',
     // Start return (10.2)
     startTitle: 'Почати повернення?',
     startText: 'Замовлення #{number} повернеться в роботу.',
@@ -125,9 +122,9 @@ export const deliveryFlowMessages = defineMessages({
       many: '{count} одиниць в наявності',
       other: '{count} одиниці в наявності',
     },
-    waitNote: 'Чекаємо посилку. ТТН повернення: {number} · прямує до {place}.',
-    waitNoteNumber: 'Чекаємо посилку. ТТН повернення: {number}.',
-    waitNoteBare: 'Чекаємо посилку.',
+    returnRouteNote: 'ТТН повернення: {number} · прямує до {place}.',
+    returnNumberNote: 'ТТН повернення: {number}.',
+    acceptHint: 'Підтвердьте приймання лише після повернення й огляду посилки.',
     acceptAction: 'Прийняти товар',
     awaitRefundNote:
       'Товар уже на складі. У нас залишилося {amount} коштів клієнта. Визначте витрати на доставку та завершіть розрахунок.',
@@ -264,9 +261,9 @@ export const deliveryFlowMessages = defineMessages({
       'Record payment only after the money arrives, and choose the till that received it.',
     chipReturn: 'Return',
     paymentTitle: 'Payment',
-    factDue: 'Agreed order total, UAH',
-    factPaid: 'Received from customer',
-    factLeft: 'Balance',
+    factDue: 'Order total',
+    factPaid: 'Received',
+    factLeft: 'Amount due',
     pillPaid: 'Paid',
     noteTotalUnknown:
       'Set the agreed order total in hryvnias when arranging delivery.',
@@ -298,8 +295,6 @@ export const deliveryFlowMessages = defineMessages({
     noteReconcile:
       'Nova Poshta reported a transfer. Check the statement or cash receipt and record actual payment. Order balance: {left}.',
     reconcileAction: 'Reconcile in Finance',
-    notePaidEarly:
-      'Payment received. The order completes once the parcel is collected.',
     noFinance:
       'Payments and refunds can be recorded by a user with the Finance permission.',
     savedToast: 'Payment of {amount} recorded.',
@@ -319,8 +314,7 @@ export const deliveryFlowMessages = defineMessages({
     startReturn: 'Start return',
     sentTitle: 'Cancelling after dispatch',
     sentNote:
-      'The parcel has already been sent, so the order cannot be cancelled directly. Wait for Nova Poshta to return the goods (or ask the recipient to refuse them), accept them and refund the money.',
-    sentReason: 'The parcel has already been sent',
+      'The parcel has already been sent, so the order cannot be cancelled directly. Arrange a return, then inspect and accept the goods when they arrive. Settle the balance with the customer, accounting for confirmed delivery costs.',
     startTitle: 'Start a return?',
     startText: 'Order #{number} goes back into progress.',
     startGoods:
@@ -364,10 +358,10 @@ export const deliveryFlowMessages = defineMessages({
       one: '{count} unit in stock',
       other: '{count} units in stock',
     },
-    waitNote:
-      'Waiting for the parcel. Return waybill: {number} · on its way to {place}.',
-    waitNoteNumber: 'Waiting for the parcel. Return waybill: {number}.',
-    waitNoteBare: 'Waiting for the parcel.',
+    returnRouteNote: 'Return waybill: {number} · on its way to {place}.',
+    returnNumberNote: 'Return waybill: {number}.',
+    acceptHint:
+      'Confirm receipt only after the parcel has been returned and inspected.',
     acceptAction: 'Accept goods',
     awaitRefundNote:
       'The goods are back in stock. We still hold {amount} of the customer’s money. Confirm delivery costs and settle the order.',
@@ -498,9 +492,9 @@ export const deliveryFlowMessages = defineMessages({
       'Zapisz płatność po faktycznym otrzymaniu pieniędzy i wybierz kasę, do której wpłynęły.',
     chipReturn: 'Zwrot',
     paymentTitle: 'Płatność',
-    factDue: 'Uzgodniona kwota zamówienia, UAH',
-    factPaid: 'Otrzymano od klienta',
-    factLeft: 'Pozostało',
+    factDue: 'Kwota zamówienia',
+    factPaid: 'Otrzymano',
+    factLeft: 'Do zapłaty',
     pillPaid: 'Opłacone',
     noteTotalUnknown:
       'Ustal uzgodnioną kwotę zamówienia w hrywnach podczas organizowania dostawy.',
@@ -532,8 +526,6 @@ export const deliveryFlowMessages = defineMessages({
     noteReconcile:
       'Nova Poshta zgłosiła przelew. Sprawdź wyciąg lub odbiór gotówki i zapisz faktyczną płatność. Saldo: {left}.',
     reconcileAction: 'Uzgodnij w „Finansach”',
-    notePaidEarly:
-      'Płatność otrzymana. Zamówienie zakończy się, gdy przesyłka zostanie odebrana.',
     noFinance:
       'Płatności i zwroty może wprowadzać użytkownik z uprawnieniem „Finanse”.',
     savedToast: 'Wprowadzono płatność {amount}.',
@@ -554,8 +546,7 @@ export const deliveryFlowMessages = defineMessages({
     startReturn: 'Rozpocznij zwrot',
     sentTitle: 'Anulowanie po wysyłce',
     sentNote:
-      'Przesyłka została już wysłana, więc nie można bezpośrednio anulować zamówienia. Poczekaj na zwrot towaru od Nowej Poczty (lub poproś odbiorcę o odmowę), przyjmij go i zwróć środki.',
-    sentReason: 'Przesyłka została już wysłana',
+      'Przesyłka została już wysłana, więc nie można bezpośrednio anulować zamówienia. Zleć zwrot, a gdy towar wróci, sprawdź go i potwierdź przyjęcie. Następnie rozlicz się z klientem, uwzględniając potwierdzone koszty dostawy.',
     startTitle: 'Rozpocząć zwrot?',
     startText: 'Zamówienie #{number} wróci do realizacji.',
     startGoods: 'Będziemy czekać na towar — przyjmiesz go ręcznie, gdy dotrze.',
@@ -599,10 +590,10 @@ export const deliveryFlowMessages = defineMessages({
       many: '{count} sztuk na stanie',
       other: '{count} sztuki na stanie',
     },
-    waitNote:
-      'Czekamy na przesyłkę. List zwrotny: {number} · w drodze do {place}.',
-    waitNoteNumber: 'Czekamy na przesyłkę. List zwrotny: {number}.',
-    waitNoteBare: 'Czekamy na przesyłkę.',
+    returnRouteNote: 'List zwrotny: {number} · w drodze do {place}.',
+    returnNumberNote: 'List zwrotny: {number}.',
+    acceptHint:
+      'Potwierdź przyjęcie dopiero po otrzymaniu i sprawdzeniu zwróconej przesyłki.',
     acceptAction: 'Przyjmij towar',
     awaitRefundNote:
       'Towar jest już na stanie. Pozostaje u nas {amount} pieniędzy klienta. Potwierdź koszty dostawy i zakończ rozliczenie.',

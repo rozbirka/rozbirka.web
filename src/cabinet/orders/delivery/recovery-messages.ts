@@ -16,6 +16,9 @@ export const recoveryMessages = defineMessages({
       'Пошук обмежено. Показано не всі можливі накладні. Перевірте номер у кабінеті НП.',
     unknown:
       'Результат створення залишається невідомим. Повторне створення ТТН недоступне до підтвердження.',
+    withoutNumberTitle: 'Якщо номера немає',
+    withoutNumberText:
+      'Залиште поле порожнім. Перевірте накладні в кабінеті НП та повторіть пошук. Якщо накладна так і не з’явилась, зверніться до підтримки НП для звірки початкового запиту. Відсутність у пошуку не підтверджує, що ТТН не створено.',
     searchFailed:
       'Не вдалося перевірити створення ТТН. Повторіть пошук або перевірте номер із кабінету НП.',
     accessFailed:
@@ -66,6 +69,9 @@ export const recoveryMessages = defineMessages({
       'The search was limited. Some waybills may be missing. Check the number in the Nova Poshta account.',
     unknown:
       'The creation result remains unknown. Creating another waybill is unavailable until confirmation.',
+    withoutNumberTitle: 'If you do not have a number',
+    withoutNumberText:
+      'Leave the field empty. Check waybills in the Nova Poshta account and search again. If no waybill appears, contact Nova Poshta support to reconcile the original request. An empty search does not confirm that no waybill was created.',
     searchFailed:
       'Could not check waybill creation. Search again or check a number from the Nova Poshta account.',
     accessFailed:
@@ -103,6 +109,9 @@ export const recoveryMessages = defineMessages({
       'Could not confirm the waybill. Search again and review the details.',
   },
   pl: {
+    withoutNumberTitle: 'Jeśli nie masz numeru',
+    withoutNumberText:
+      'Pozostaw pole puste. Sprawdź listy na koncie Nova Poshta i ponów wyszukiwanie. Jeśli list nadal się nie pojawi, skontaktuj się z pomocą Nova Poshta, aby sprawdzić pierwotne żądanie. Brak wyników nie potwierdza, że list nie został utworzony.',
     title: 'Sprawdź utworzenie listu przewozowego',
     description:
       'Zamówienie #{number}. Odpowiedź Nowej Poczty mogła zostać przerwana. Potwierdź pasujący list przewozowy.',

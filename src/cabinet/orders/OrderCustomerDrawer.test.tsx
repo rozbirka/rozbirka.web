@@ -262,3 +262,24 @@ it('renders the customer picker in British English', async () => {
   expect(screen.getByText('No customer set')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Assign customer' })).toBeDisabled()
 })
+
+it('explains reassignment inside the delivery order picker', async () => {
+  render(
+    <OrderCustomerDrawer
+      busy={false}
+      currentId="customer-1"
+      currentName="Ірина"
+      error={null}
+      onAssign={vi.fn()}
+      onOpenChange={vi.fn()}
+      open
+      orderNumber={1}
+      deliveryOrder
+    />,
+  )
+  expect(
+    await screen.findByText(
+      'Змінює клієнта лише цього замовлення. Після заміни перевірте отримувача доставки.',
+    ),
+  ).toBeVisible()
+})

@@ -1596,15 +1596,7 @@ function OrderDetailScreen({
                 />
               ) : null}
               {deliveryActions.cancel === null ? null : (
-                <Button
-                  disabled={deliveryActions.cancel === 'disabled'}
-                  onClick={() => setDeliveryIntent('cancelOrder')}
-                  title={
-                    deliveryActions.cancel === 'disabled'
-                      ? tf('sentReason')
-                      : undefined
-                  }
-                >
+                <Button onClick={() => setDeliveryIntent('cancelOrder')}>
                   <Ban aria-hidden />
                   {t('cancelOrder')}
                 </Button>
@@ -1704,13 +1696,6 @@ function OrderDetailScreen({
             countryCode={novaPoshta.countryCode}
             accountingCurrency={currency}
             customerPath={customerPath}
-            customerEditPath={
-              customerPath !== null &&
-              customerSearchAllowed &&
-              canMutate(definition, cabinet, 'customers.manage')
-                ? `${customerPath}/edit`
-                : null
-            }
             delivery={deliveryMoney}
             financeAllowed={financeAllowed}
             financePath={financePath}
@@ -2139,6 +2124,7 @@ function OrderDetailScreen({
 
       <OrderCustomerDrawer
         busy={busy}
+        deliveryOrder={deliveryOrder}
         currentId={order.customerId}
         currentName={order.customerName}
         error={customerOpen ? error : null}

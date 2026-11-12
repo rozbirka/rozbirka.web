@@ -104,16 +104,14 @@ it('offers cancel before dispatch and only a return after (10.1, 10.13, 10.15)',
   expect(orderActions(delivery(), true)).toEqual({
     startReturn: null,
     cancel: 'enabled',
-    sentNotice: false,
   })
   expect(orderActions(delivery({ dispatchedAt: 'x' }), true)).toEqual({
     startReturn: 'menu',
-    cancel: 'disabled',
-    sentNotice: true,
+    cancel: 'returnRequired',
   })
   expect(
     orderActions(delivery({ dispatchedAt: 'x', receivedAt: 'y' }), true),
-  ).toEqual({ startReturn: 'button', cancel: null, sentNotice: false })
+  ).toEqual({ startReturn: 'button', cancel: null })
   // A step already taken is not offered again, nor anything without the right.
   for (const workflowState of ['AwaitingGoods', 'AwaitingRefund', 'Cancelled'])
     expect(

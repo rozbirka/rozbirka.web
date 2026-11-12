@@ -32,7 +32,6 @@ import type { WaybillRights } from './WaybillsScreen'
 import { waybillsMessages } from './waybills-messages'
 
 const PAGE_SIZE = 20
-const HOUR_MS = 60 * 60 * 1000
 
 /** What a card needs to send «До списку» back to the same view. */
 export interface ListReturnState {
@@ -48,7 +47,6 @@ function query(filters: WaybillFilters) {
     ...(filters.q.trim() === '' ? {} : { search: filters.q.trim() }),
     ...(filters.delivery === '' ? {} : { deliveryCode: filters.delivery }),
     ...(filters.cod === '' ? {} : { hasCod: filters.cod === 'yes' }),
-    ...(filters.sync === '' ? {} : { hasProblem: filters.sync === 'problem' }),
     ...(filters.from === '' ? {} : { from: dayStart(filters.from) }),
     ...(filters.to === '' ? {} : { to: dayEnd(filters.to) }),
     page: filters.page,
@@ -68,9 +66,8 @@ const refreshable = (row: ShipmentListItem) =>
 
 /**
  * «Накладні Нової пошти» (module 46 §7): every waybill made or attached in
- * Rozbirka, drafts included, newest first. Delivery, cash on delivery and
- * sync are three columns on purpose — a sync failure never hides the last
- * known delivery status.
+ * Rozbirka, drafts included, newest first. Delivery and cash on delivery stay separate; the table shows the last
+ * known delivery status without a technical synchronization column.
  */
 export function WaybillList({
   fallback,
@@ -130,6 +127,7 @@ export function WaybillList({
 
   const setParam = (name: (typeof FILTER_PARAMS)[number], value: string) => {
     const next = new URLSearchParams(params)
+    next.delete('sync')
     if (value) next.set(name, value)
     else next.delete(name)
     next.delete('page')
@@ -137,7 +135,7 @@ export function WaybillList({
   }
   const reset = () => {
     const next = new URLSearchParams(params)
-    for (const name of [...FILTER_PARAMS, 'page']) next.delete(name)
+    for (const name of [...FILTER_PARAMS, 'page', 'sync']) next.delete(name)
     setParams(next)
   }
   const goToPage = (page: number) => {
@@ -170,18 +168,6 @@ export function WaybillList({
     )
     setRefreshing(false)
     setAttempt((value) => value + 1)
-  }
-
-  const ago = (value: string | null) => {
-    if (value === null) return ''
-    const elapsed = Date.now() - new Date(value).getTime()
-    if (elapsed < HOUR_MS)
-      return t('minutesAgo', {
-        count: Math.max(Math.round(elapsed / 60000), 1),
-      })
-    if (elapsed < 24 * HOUR_MS)
-      return t('hoursAgo', { count: Math.round(elapsed / HOUR_MS) })
-    return format.date(value) ?? value
   }
 
   const columns: DataColumn<ShipmentListItem>[] = [
@@ -288,22 +274,6 @@ export function WaybillList({
           </span>
         )
       },
-    },
-    {
-      key: 'sync',
-      label: t('columnSync'),
-      hideNarrow: true,
-      cell: (row) =>
-        !row.trackingEnabled ? (
-          <StatusPill tone="neutral">{t('notUpdating')}</StatusPill>
-        ) : row.syncProblem === null ? null : (
-          <span className="grid justify-items-start">
-            <StatusPill tone="danger">{t('syncError')}</StatusPill>
-            {row.lastSuccessAt === null ? null : (
-              <span className="rz-caption">{ago(row.lastSuccessAt)}</span>
-            )}
-          </span>
-        ),
     },
   ]
 

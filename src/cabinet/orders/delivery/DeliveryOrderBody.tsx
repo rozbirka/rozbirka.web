@@ -1,7 +1,13 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router'
 import { Plus } from 'lucide-react'
-import { Button, Notice, useOptionalToast } from '@/components/app'
+import {
+  Button,
+  ConfirmDialog,
+  Notice,
+  useOptionalToast,
+  type MenuAction,
+} from '@/components/app'
 import { cashApi, type CashRegister } from '@/api/cash'
 import {
   deliveryApi,
@@ -41,6 +47,7 @@ import {
   DeliverySteps,
   DeliveryTabs,
   type DeliveryTab,
+  type ShipmentFactRow,
 } from './DeliveryOrderCard'
 import {
   DeliveryShipmentBlock,
@@ -62,12 +69,7 @@ import { WaybillLabelDrawer, WaybillReadinessDrawer } from './WaybillDrawers'
 import { WaybillEditSheet, type RecreateReason } from './WaybillEditSheet'
 import { WaybillReconcileSheet } from './WaybillReconcileSheet'
 import { uah } from './delivery-money'
-import {
-  orderActions,
-  orderClosing,
-  paymentState,
-  unitCount,
-} from './delivery-flow'
+import { orderClosing, paymentState, unitCount } from './delivery-flow'
 import { lifecycle } from './delivery-view'
 import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
@@ -154,7 +156,6 @@ export function DeliveryOrderBody({
   countryCode = null,
   accountingCurrency = null,
   customerPath,
-  customerEditPath = null,
   customerSearchAllowed = false,
   customerChangeHint = null,
   delivery,
@@ -178,7 +179,6 @@ export function DeliveryOrderBody({
   /** The order lines' currency; `null` when not chosen or not reported. */
   accountingCurrency?: string | null
   customerPath: string | null
-  customerEditPath?: string | null
   customerSearchAllowed?: boolean
   customerChangeHint?: string | null
   onCustomerChange?: (() => void) | undefined
@@ -335,7 +335,6 @@ export function DeliveryOrderBody({
         : codTill
 
   const closing = orderClosing(delivery)
-  const headerActions = orderActions(delivery, mutationsAllowed)
   const payState = paymentState(delivery, shipment)
 
   const open = (next: Drawer) => {
@@ -649,6 +648,50 @@ export function DeliveryOrderBody({
     })
   }
 
+  const renderShipmentBlock = (
+    returnMenuActions: readonly MenuAction[] = [],
+    returnFacts: readonly ShipmentFactRow[] = [],
+    returnPrimaryAction: ReactNode = null,
+  ) => (
+    <DeliveryShipmentBlock
+      actions={blockActions}
+      returnMenuActions={returnMenuActions}
+      returnFacts={returnFacts}
+      returnPrimaryAction={returnPrimaryAction}
+      attachedAt={attachedAt}
+      awaitingCod={payState === 'awaitingCod'}
+      busy={busy}
+      canManage={mutationsAllowed && !closing && cancelFlow === null}
+      canPay={financeAllowed}
+      cancelled={cancelled}
+      carrierReady={novaPoshtaAvailable && integrationId !== null}
+      delivery={delivery}
+      disconnected={
+        disconnected === null
+          ? null
+          : {
+              at: disconnected.at,
+              integrationPath:
+                integrationsPath === null
+                  ? null
+                  : `${integrationsPath}/${encodeURIComponent(disconnected.integrationId)}`,
+            }
+      }
+      lost={lost !== null}
+      numberRef={numberRef}
+      points={points}
+      recoverRef={recoverRef}
+      shipment={shipment}
+      stage={stage}
+      waiting={waiting}
+      waybillPath={
+        waybillsPath === null || shipment === null
+          ? null
+          : `${waybillsPath}/${encodeURIComponent(shipment.id)}`
+      }
+    />
+  )
+
   return (
     <>
       {needsConnection ? null : (
@@ -671,13 +714,6 @@ export function DeliveryOrderBody({
           waybillState={shipment?.state ?? null}
           steps={lifecycle(delivery, shipment, locale, timeZone)}
         />
-      ) : null}
-
-      {headerActions.sentNotice ? (
-        <Notice block tone="info">
-          <p className="rz-strong m-0 font-semibold">{tf('sentTitle')}</p>
-          <p className="m-0 mt-1">{tf('sentNote')}</p>
-        </Notice>
       ) : null}
 
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
@@ -802,42 +838,26 @@ export function DeliveryOrderBody({
                   </Notice>
                 ) : null}
 
-                <DeliveryShipmentBlock
-                  actions={blockActions}
-                  attachedAt={attachedAt}
-                  awaitingCod={payState === 'awaitingCod'}
-                  busy={busy}
-                  canManage={
-                    mutationsAllowed && !closing && cancelFlow === null
-                  }
-                  canPay={financeAllowed}
-                  cancelled={cancelled}
-                  carrierReady={novaPoshtaAvailable && integrationId !== null}
-                  delivery={delivery}
-                  disconnected={
-                    disconnected === null
-                      ? null
-                      : {
-                          at: disconnected.at,
-                          integrationPath:
-                            integrationsPath === null
-                              ? null
-                              : `${integrationsPath}/${encodeURIComponent(disconnected.integrationId)}`,
-                        }
-                  }
-                  lost={lost !== null}
-                  numberRef={numberRef}
-                  points={points}
-                  recoverRef={recoverRef}
-                  shipment={shipment}
-                  stage={stage}
-                  waiting={waiting}
-                  waybillPath={
-                    waybillsPath === null || shipment === null
-                      ? null
-                      : `${waybillsPath}/${encodeURIComponent(shipment.id)}`
-                  }
-                />
+                {shipment?.number &&
+                shipment.state === 'Created' &&
+                (delivery.dispatchedAt !== null ||
+                  shipment.dispatchedAt !== null) ? (
+                  <ProviderReturnPanel
+                    renderActions={renderShipmentBlock}
+                    canManage={mutationsAllowed}
+                    enabled={
+                      novaPoshtaAvailable &&
+                      shipment.trackingEnabled &&
+                      disconnected === null &&
+                      lost === null
+                    }
+                    integrationId={shipment.integrationId}
+                    shipmentId={shipment.id}
+                    sourceNumber={shipment.number}
+                  />
+                ) : (
+                  renderShipmentBlock()
+                )}
 
                 {hasDeliveryProgress ? (
                   <DeliverySteps delivery={delivery} shipment={shipment} />
@@ -845,23 +865,12 @@ export function DeliveryOrderBody({
               </>
             )}
           </div>
-          {shipment?.number &&
-          shipment.state === 'Created' &&
-          (delivery.dispatchedAt !== null || shipment.dispatchedAt !== null) ? (
-            <ProviderReturnPanel
-              canManage={mutationsAllowed}
-              enabled={
-                novaPoshtaAvailable &&
-                shipment.trackingEnabled &&
-                disconnected === null &&
-                lost === null
-              }
-              integrationId={shipment.integrationId}
-              shipmentId={shipment.id}
-              sourceNumber={shipment.number}
-            />
-          ) : null}
           {notes}
+          <OrderHistoryCard
+            rows={order.history}
+            title={(eventType) => orderEventTitle(eventType, locale)}
+            when={when}
+          />
         </div>
 
         <aside className="grid min-w-0 gap-3.5">
@@ -882,18 +891,11 @@ export function DeliveryOrderBody({
           <OrderCustomerCard
             accountingCurrency={accountingCurrency}
             changeHint={customerChangeHint}
-            editPath={customerEditPath}
-            explainActions
             onChange={onCustomerChange}
             customerId={order.customerId}
             customerName={order.customerName}
             initials={initials(order.customerName ?? '—')}
             to={customerPath ?? '#'}
-          />
-          <OrderHistoryCard
-            rows={order.history}
-            title={(eventType) => orderEventTitle(eventType, locale)}
-            when={when}
           />
         </aside>
       </div>
@@ -968,6 +970,25 @@ export function DeliveryOrderBody({
         pending={flowPending}
       />
 
+      <ConfirmDialog
+        confirmLabel={tf('startReturn')}
+        cancelLabel={tc('close')}
+        consequence={tf('sentNote')}
+        destructive={false}
+        onCloseAutoFocus={restoreFlowFocus}
+        onConfirm={() => {
+          setFlowError(null)
+          setFlowDialog('startReturn')
+        }}
+        onOpenChange={(next) => {
+          if (!next) closeFlowDialog()
+        }}
+        open={
+          activeFlowDialog === 'cancelOrder' && delivery.dispatchedAt !== null
+        }
+        title={tf('sentTitle')}
+      />
+
       <OrderCancelDialog
         error={flowError}
         onCloseAutoFocus={restoreFlowFocus}
@@ -975,7 +996,9 @@ export function DeliveryOrderBody({
         onOpenChange={(next) => {
           if (!next) closeFlowDialog()
         }}
-        open={activeFlowDialog === 'cancelOrder'}
+        open={
+          activeFlowDialog === 'cancelOrder' && delivery.dispatchedAt === null
+        }
         orderNumber={order.number}
         paidUah={delivery.appliedUah}
         pending={flowPending}

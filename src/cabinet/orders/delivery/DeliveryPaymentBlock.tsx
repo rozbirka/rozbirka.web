@@ -127,8 +127,6 @@ export function DeliveryPaymentBlock({
         })}
       </Notice>
     )
-  else if (state === 'paid' && open && delivery.receivedAt === null)
-    notice = <Notice tone="info">{t('notePaidEarly')}</Notice>
   else if (state === 'awaitingCod')
     notice = <Notice tone="info">{t('noteAwaitingCodBare')}</Notice>
   else if (state === 'manual')

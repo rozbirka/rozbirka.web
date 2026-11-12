@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Ban, PackageCheck, SearchCheck, Undo2 } from 'lucide-react'
 import { Button, Notice, StatusPill } from '@/components/app'
 import type { DeliveryOrder } from '@/api/delivery'
@@ -82,6 +82,7 @@ export function DeliveryFlowCard({
   const t = useT(deliveryFlowMessages)
   const tw = useT(waybillMessages)
   const to = useT(orderMessages)
+  const acceptHintId = useId()
   const totals = refundTotals(delivery)
   const money = (value: number) => uah(value, locale)
   const refundHint = <p className="rz-caption m-0">{t('noFinance')}</p>
@@ -126,16 +127,20 @@ export function DeliveryFlowCard({
     if (progress === 1)
       form = (
         <>
-          <Notice tone="info">
-            {returnNumber === null
-              ? t('waitNoteBare')
-              : toPlace === ''
-                ? t('waitNoteNumber', { number: returnNumber })
-                : t('waitNote', { number: returnNumber, place: toPlace })}
-          </Notice>
+          {returnNumber === null ? null : (
+            <p className="rz-caption m-0 text-pretty">
+              {toPlace === ''
+                ? t('returnNumberNote', { number: returnNumber })
+                : t('returnRouteNote', {
+                    number: returnNumber,
+                    place: toPlace,
+                  })}
+            </p>
+          )}
           {canManage ? (
-            <div className="rz-btn-row">
+            <div className="grid justify-items-start gap-2">
               <Button
+                aria-describedby={acceptHintId}
                 disabled={busy}
                 onClick={actions.accept}
                 variant="primary"
@@ -143,6 +148,9 @@ export function DeliveryFlowCard({
                 <PackageCheck aria-hidden />
                 {t('acceptAction')}
               </Button>
+              <p className="rz-caption m-0 text-pretty" id={acceptHintId}>
+                {t('acceptHint')}
+              </p>
             </div>
           ) : null}
         </>

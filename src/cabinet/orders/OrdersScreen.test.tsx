@@ -3121,7 +3121,7 @@ it('reuses the customer drawer after booking delivery and refreshes customer and
   await screen.findByRole('region', { name: 'Стан оплати та доставки' })
   const card = screen.getByRole('region', { name: 'Клієнт' })
   await user.click(
-    within(card).getByRole('button', { name: 'Обрати іншого клієнта' }),
+    within(card).getByRole('button', { name: 'Змінити клієнта' }),
   )
   const drawer = await screen.findByRole('dialog', { name: 'Змінити клієнта' })
   await user.click(await within(drawer).findByRole('option', { name: /Олена/ }))
@@ -3151,7 +3151,7 @@ it('reuses the customer drawer after booking delivery and refreshes customer and
 })
 
 it.each([true, false])(
-  'keeps the carrier restriction separate from profile editing (customers.manage: %s)',
+  'keeps the header change button blocked by a live waybill (customers.manage: %s)',
   async (canEditProfile) => {
     orderMocks.getById.mockResolvedValue({
       ...confirmationOrder(),
@@ -3239,17 +3239,12 @@ it.each([true, false])(
     const card = await screen.findByRole('region', { name: 'Клієнт' })
     expect(card).toHaveTextContent('спочатку скасуйте створену ТТН')
     expect(
-      within(card).getByRole('button', { name: 'Обрати іншого клієнта' }),
+      within(card).getByRole('button', { name: 'Змінити клієнта' }),
     ).toBeDisabled()
     const edit = within(card).queryByRole('link', {
       name: 'Редагувати дані клієнта',
     })
-    if (canEditProfile)
-      expect(edit).toHaveAttribute(
-        'href',
-        '/app/garage/customers/customer-1/edit',
-      )
-    else expect(edit).toBeNull()
+    expect(edit).toBeNull()
     expect(deliveryMocks.setCustomer).not.toHaveBeenCalled()
     expect(orderMocks.setCustomer).not.toHaveBeenCalled()
   },
