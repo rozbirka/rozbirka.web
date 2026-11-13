@@ -3,7 +3,10 @@ import { Link } from 'react-router'
 import { billingApi } from '@/api/billing'
 import { useAuth } from '@/auth/AuthContext'
 import { resolveLandingPlans } from '@/lib/landing-plans'
-import { accountPathForPlan, loginPathForPlan } from '@/lib/plan-selection'
+import {
+  accountPathForPlan,
+  registrationPathForPlan,
+} from '@/lib/plan-selection'
 import { useLocale, useT } from '@/i18n'
 import { Eyebrow, SectionInner, SectionTitle } from './landing-ui'
 import { useSupportHref } from './landing-hooks'
@@ -42,7 +45,7 @@ export function Pricing() {
   const destination =
     status === 'authenticated'
       ? accountPathForPlan(plan.code)
-      : loginPathForPlan(plan.code)
+      : registrationPathForPlan(plan.code)
 
   return (
     <section id="pricing" data-reveal="" data-tone="light" className="lp-light">

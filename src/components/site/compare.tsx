@@ -186,7 +186,9 @@ export function Compare() {
           ))}
         </ul>
         <div className="flex flex-wrap items-center gap-4">
-          <PrimaryLink to="/login">{t('heroCta')}</PrimaryLink>
+          <PrimaryLink to="/login?purpose=registration">
+            {t('heroCta')}
+          </PrimaryLink>
           {supportHref && (
             <a
               href={supportHref}

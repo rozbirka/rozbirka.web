@@ -178,7 +178,10 @@ export function TrialBand() {
           {l('midBody')}
         </p>
         <div className="mt-2 flex flex-wrap justify-center gap-3">
-          <PrimaryLink to="/login" className="whitespace-nowrap text-[#0b0b0b]">
+          <PrimaryLink
+            to="/login?purpose=registration"
+            className="whitespace-nowrap text-[#0b0b0b]"
+          >
             {l('startFree')}
           </PrimaryLink>
           {supportHref && (

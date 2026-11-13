@@ -100,7 +100,7 @@ describe('Pricing destinations', () => {
       await screen.findByRole('link', {
         name: 'Почати 14 днів безкоштовно',
       }),
-    ).toHaveAttribute('href', '/login?plan=pro_monthly')
+    ).toHaveAttribute('href', '/login?purpose=registration&plan=pro_monthly')
     expect(screen.getByText('Інвентаризація')).toBeInTheDocument()
     expect(screen.queryByText(/API і мульти-локація/i)).toBeNull()
   })
@@ -137,7 +137,7 @@ describe('Pricing destinations', () => {
 
     const links = await screen.findAllByRole('link')
     expect(links.map((link) => link.getAttribute('href'))).toEqual([
-      '/login?plan=pro_monthly',
+      '/login?purpose=registration&plan=pro_monthly',
     ])
     links.forEach((link) => expect(link).toHaveClass('h-14'))
   })

@@ -90,7 +90,7 @@ test('landing interactions work without serious accessibility violations', async
   await expect(second).toHaveAttribute('aria-expanded', 'true')
   await expect(
     page.getByRole('link', { name: 'Почати 14 днів безкоштовно' }),
-  ).toHaveAttribute('href', '/login?plan=pro_monthly')
+  ).toHaveAttribute('href', '/login?purpose=registration&plan=pro_monthly')
 })
 
 test('landing content is immediately visible with reduced motion', async ({

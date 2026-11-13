@@ -17,6 +17,10 @@ export function loginPathForPlan(planCode: PlanCode): string {
   return `/login?plan=${planCode}`
 }
 
+export function registrationPathForPlan(planCode: PlanCode): string {
+  return `/login?purpose=registration&plan=${planCode}`
+}
+
 export function accountPathForPlan(planCode: PlanCode): string {
   return `/account?section=plans&plan=${planCode}`
 }

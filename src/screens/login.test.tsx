@@ -135,6 +135,41 @@ it.each([1, 3])(
 
 let auth: AuthContextValue
 
+it('opens registration from a landing CTA and preserves the plan after registration OTP', async () => {
+  const user = userEvent.setup()
+  registrationSend.mockResolvedValue({
+    ...challengeData(),
+    cooldownSeconds: 0,
+    retryAfterSeconds: 0,
+  })
+  registrationVerify.mockResolvedValue({
+    accessToken: 'registered',
+    user: existingUser,
+    isNewUser: false,
+  })
+  renderLogin('/login?purpose=registration&plan=pro_monthly')
+  expect(
+    screen.getByRole('heading', { name: 'Створіть обліковий запис' }),
+  ).toBeInTheDocument()
+  await reachOtpStep(user)
+  expect(registrationSend).toHaveBeenCalled()
+  expect(otpSend).not.toHaveBeenCalled()
+  await enterOtp(user)
+  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  expect(
+    await screen.findByRole('link', { name: 'Продовжити' }),
+  ).toHaveAttribute('href', '/account?section=plans&plan=pro_monthly')
+  expect(registrationVerify).toHaveBeenCalled()
+  expect(otpVerify).not.toHaveBeenCalled()
+})
+
+it('keeps the default login destination in sign-in mode', () => {
+  renderLogin('/login')
+  expect(
+    screen.queryByRole('heading', { name: 'Створіть обліковий запис' }),
+  ).not.toBeInTheDocument()
+})
+
 beforeEach(() => {
   credentials.clear()
   sessionStorage.clear()

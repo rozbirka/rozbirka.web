@@ -8,7 +8,7 @@ import {
 } from 'react'
 import { Link } from 'react-router'
 import { useT } from '@/i18n'
-import { loginPathForPlan } from '@/lib/plan-selection'
+import { registrationPathForPlan } from '@/lib/plan-selection'
 import { cn } from '@/lib/utils'
 import { Count, PrimaryLink, TelegramIcon } from './landing-ui'
 import { useMoney, useSupportHref } from './landing-hooks'
@@ -656,7 +656,7 @@ export function Hero() {
               {h('pillProduct')}
             </span>
             <Link
-              to={loginPathForPlan('pro_monthly')}
+              to={registrationPathForPlan('pro_monthly')}
               className="bg-lp-accent text-lp-bg hover:bg-lp-accent-hover hover:text-lp-bg focus-visible:outline-lp-accent relative flex animate-[lp-badge_3s_ease-in-out_infinite] items-center gap-2 overflow-hidden rounded-full px-4 py-[9px] text-[15px] font-bold whitespace-nowrap shadow-[0_6px_18px_rgba(255,106,26,0.22)] focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               <span
@@ -681,7 +681,10 @@ export function Hero() {
             {h('lead')}
           </p>
           <div className="flex flex-wrap items-center justify-start gap-3">
-            <PrimaryLink to="/login" className="max-sm:w-full">
+            <PrimaryLink
+              to="/login?purpose=registration"
+              className="max-sm:w-full"
+            >
               {t('heroCta')}
             </PrimaryLink>
             <AppStoreBadge />

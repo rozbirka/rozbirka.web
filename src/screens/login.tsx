@@ -182,7 +182,11 @@ function LoginFlow() {
       ? 'name'
       : 'phone',
   )
-  const [purpose, setPurpose] = useState<'login' | 'registration'>('login')
+  const [purpose, setPurpose] = useState<'login' | 'registration'>(() =>
+    new URLSearchParams(location.search).get('purpose') === 'registration'
+      ? 'registration'
+      : 'login',
+  )
   const [challenge, setChallenge] = useState<SendOtpResponse | null>(null)
   const requestControllerRef = useRef<AbortController | null>(null)
   const cancellationRef = useRef<Promise<void> | null>(null)

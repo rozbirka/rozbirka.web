@@ -43,10 +43,10 @@ describe('Hero conversion', () => {
     expect(screen.getByText('Програма для авторозбірки')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '14 днів безкоштовно' }),
-    ).toHaveAttribute('href', '/login?plan=pro_monthly')
+    ).toHaveAttribute('href', '/login?purpose=registration&plan=pro_monthly')
     expect(
       screen.getByRole('link', { name: 'Спробувати безкоштовно' }),
-    ).toHaveAttribute('href', '/login')
+    ).toHaveAttribute('href', '/login?purpose=registration')
     expect(
       screen.getByRole('link', { name: 'Завантажити в App Store' }),
     ).toHaveAttribute(
