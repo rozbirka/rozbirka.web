@@ -5,7 +5,10 @@ import { NavLinks } from '@/components/site/nav-links'
 import { navItems } from '@/components/site/nav-items'
 import { useAuth } from '@/auth/AuthContext'
 import { useLocale, useT } from '@/i18n'
-import { accountPathForPlan, loginPathForPlan } from '@/lib/plan-selection'
+import {
+  accountPathForPlan,
+  registrationPathForPlan,
+} from '@/lib/plan-selection'
 import { cn } from '@/lib/utils'
 import { landingPathFor } from '@/seo/landing-locales'
 import { LandingLogo, PrimaryLink } from './landing-ui'
@@ -21,7 +24,7 @@ function PromoBar() {
   const to =
     status === 'authenticated'
       ? accountPathForPlan('pro_monthly')
-      : loginPathForPlan('pro_monthly')
+      : registrationPathForPlan('pro_monthly')
   return (
     <Link
       to={to}
@@ -176,28 +179,28 @@ export function SiteHeader() {
             activeClassName="text-lp-ink bg-[rgba(var(--hl),0.08)]"
           />
 
-          <div className="flex flex-none items-center gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
             {/* Kept from the previous header (not in the mock-up): the
                 language and the App Store badge sit before «Увійти» while
                 there is room, and move into the burger menu below 900px. */}
-            <LanguageMenu className="hidden min-[900px]:block [&>button]:h-10 [&>button]:ring-[rgba(var(--hl),0.16)] group-data-[hdrtone=light]/hdr:[&>button]:text-lp-ink group-data-[hdrtone=light]/hdr:[&>button:hover]:bg-black/[0.06]" />
-            <div className="hidden min-[1180px]:block [&>a]:min-h-10">
+            <LanguageMenu className="hidden shrink-0 min-[900px]:block [&>button]:h-10 [&>button]:ring-[rgba(var(--hl),0.16)] group-data-[hdrtone=light]/hdr:[&>button]:text-lp-ink group-data-[hdrtone=light]/hdr:[&>button:hover]:bg-black/[0.06]" />
+            <div className="hidden shrink-0 min-[1180px]:block [&>a]:min-h-10">
               <AppStoreBadge />
             </div>
             <Link
               data-login=""
               to={accountPath}
               className={cn(
-                'text-lp-soft hover:text-lp-ink flex h-10 max-w-[200px] items-center rounded-full px-4 text-[15px] whitespace-nowrap transition-colors max-sm:hidden min-[900px]:max-[1024px]:hidden',
+                'text-lp-soft hover:text-lp-ink flex h-10 min-w-0 max-w-[200px] items-center rounded-full px-4 text-[15px] whitespace-nowrap transition-colors max-sm:hidden min-[900px]:max-[1024px]:hidden',
                 hoverTint,
               )}
             >
               <span className="truncate">{accountLabel}</span>
             </Link>
             <PrimaryLink
-              to="/login"
+              to="/login?purpose=registration"
               size="md"
-              className="hover:text-lp-bg h-10 gap-2 px-[18px] whitespace-nowrap"
+              className="hover:text-lp-bg h-10 shrink-0 gap-2 px-[18px] whitespace-nowrap"
             >
               {l('headerCta')}
               <span aria-hidden className="max-sm:hidden">

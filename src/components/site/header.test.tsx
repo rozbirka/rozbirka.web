@@ -27,6 +27,22 @@ describe('SiteHeader mobile menu', () => {
     })
   })
 
+  it('separates sign-in from registration in the header', () => {
+    render(
+      <MemoryRouter>
+        <SiteHeader />
+      </MemoryRouter>,
+    )
+    const nav = screen.getByRole('navigation', { name: 'Головна навігація' })
+    expect(within(nav).getByRole('link', { name: 'Увійти' })).toHaveAttribute(
+      'href',
+      '/login',
+    )
+    expect(
+      within(nav).getByRole('link', { name: 'Спробувати' }),
+    ).toHaveAttribute('href', '/login?purpose=registration')
+  })
+
   it('opens and closes an accessible navigation disclosure', async () => {
     const user = userEvent.setup()
     render(

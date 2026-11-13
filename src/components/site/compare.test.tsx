@@ -55,5 +55,5 @@ it('lets keyboard users scroll the wide table', () => {
   ).toHaveAttribute('tabindex', '0')
   expect(
     screen.getByRole('link', { name: 'Спробувати безкоштовно' }),
-  ).toHaveAttribute('href', '/login')
+  ).toHaveAttribute('href', '/login?purpose=registration')
 })

@@ -56,7 +56,9 @@ export function Pains() {
             {l('painTitle')}
           </h2>
           <div className="flex flex-wrap items-center gap-4">
-            <PrimaryLink to="/login">{t('heroCta')}</PrimaryLink>
+            <PrimaryLink to="/login?purpose=registration">
+              {t('heroCta')}
+            </PrimaryLink>
             <span className="text-lp-muted text-[15px]">{l('trialNote')}</span>
           </div>
         </div>

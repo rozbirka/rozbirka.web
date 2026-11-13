@@ -62,7 +62,9 @@ function StartForm() {
         <span className="text-lp-muted text-[17px] leading-[1.5]">
           {l('formThanksBody')}
         </span>
-        <PrimaryLink to="/login">{l('formThanksCta')}</PrimaryLink>
+        <PrimaryLink to="/login?purpose=registration">
+          {l('formThanksCta')}
+        </PrimaryLink>
       </div>
     )
   }

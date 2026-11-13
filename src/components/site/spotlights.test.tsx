@@ -83,7 +83,7 @@ describe('light chapter spotlights', () => {
     )
     expect(
       screen.getByRole('link', { name: 'Почати безкоштовно' }),
-    ).toHaveAttribute('href', '/login')
+    ).toHaveAttribute('href', '/login?purpose=registration')
     expect(
       screen.getByRole('link', { name: 'Замовити демо' }).getAttribute('href'),
     ).toContain('rozbirkabot')

@@ -91,7 +91,7 @@ describe('localized landing', () => {
     )
     expect(
       screen.getAllByRole('link', { name: 'Start free trial' })[0],
-    ).toHaveAttribute('href', '/login')
+    ).toHaveAttribute('href', '/login?purpose=registration')
     for (const title of [
       'Already on board',
       'Sound familiar?',
