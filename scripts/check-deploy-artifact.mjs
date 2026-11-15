@@ -30,6 +30,7 @@ const files = await readdir(dist, { recursive: true, withFileTypes: true })
 const deployFiles = files.filter((entry) => entry.isFile())
 
 let expectedFound = false
+const marketingHtmlFiles = []
 const forbiddenFiles = []
 
 for (const file of deployFiles) {
@@ -37,8 +38,20 @@ for (const file of deployFiles) {
   const path = resolve(parentPath, file.name)
   const contents = await readFile(path)
 
+  if (
+    environment === 'qa' &&
+    path.endsWith('.html') &&
+    /googletagmanager\.com\/(?:gtm\.js|gtag\/js)/.test(contents.toString())
+  )
+    marketingHtmlFiles.push(path)
   if (contents.includes(contract.expected)) expectedFound = true
   if (contents.includes(contract.forbidden)) forbiddenFiles.push(path)
+}
+
+if (marketingHtmlFiles.length > 0) {
+  throw new Error(
+    `Refusing QA deployment: marketing loaders found in ${marketingHtmlFiles.join(', ')}`,
+  )
 }
 
 if (forbiddenFiles.length > 0) {

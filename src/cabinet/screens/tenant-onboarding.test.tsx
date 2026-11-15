@@ -1,3 +1,4 @@
+import { trackFunnelEvent } from '@/lib/marketing-events'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
@@ -10,6 +11,7 @@ import { TenantOnboardingScreen } from './tenant-onboarding'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest resolves the API method into a typed mock. */
 
+vi.mock('@/lib/marketing-events', () => ({ trackFunnelEvent: vi.fn() }))
 vi.mock('@/api/tenants', () => ({ tenantsApi: { create: vi.fn() } }))
 vi.mock('@/auth/AuthContext', () => ({ useAuth: vi.fn() }))
 
@@ -103,6 +105,12 @@ it('creates the first tenant, hydrates, and hands over to the dashboard checklis
   await user.type(screen.getByLabelText(/Місто/), 'Львів')
   await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
 
+  expect(trackFunnelEvent).toHaveBeenCalledWith('trial_started_web')
+  expect(
+    vi
+      .mocked(trackFunnelEvent)
+      .mock.calls.filter(([name]) => name === 'trial_started_web'),
+  ).toHaveLength(1)
   expect(tenantPreference.get()).toBe('tenant-new')
   expect(hydrate).toHaveBeenCalledOnce()
   // No warehouse/team/done steps: the owner continues on the dashboard, and
@@ -164,6 +172,7 @@ it('keeps the failure reason on screen and creates the yard on retry', async () 
     'Не вдалося створити розбірку. Бізнес з такою назвою вже існує.',
   )
   expect(hydrate).not.toHaveBeenCalled()
+  expect(trackFunnelEvent).not.toHaveBeenCalledWith('trial_started_web')
 
   await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
 
@@ -200,6 +209,7 @@ it('invalidates a pending create before logout can resume it', async () => {
     await Promise.resolve()
   })
 
+  expect(trackFunnelEvent).not.toHaveBeenCalledWith('trial_started_web')
   expect(tenantPreference.get()).toBeNull()
   expect(hydrate).not.toHaveBeenCalled()
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(/^\/$/)
@@ -244,3 +254,26 @@ it('asks for the business in Polish and says why the name is refused', async () 
   expect(create).not.toHaveBeenCalled()
   expect(screen.queryByText(/[А-Яа-яЇїІіЄєҐґ]/)).toBeNull()
 })
+
+it.each(['active', 'blocked'])(
+  'does not claim a trial when Core returns %s',
+  async (plan) => {
+    create.mockResolvedValue({
+      tenantId: 'tenant-new',
+      name: 'New Yard',
+      slug: 'new-yard',
+      plan,
+      planTier: 'pro',
+      isActive: true,
+    })
+    const user = userEvent.setup()
+    renderOnboarding()
+    await user.type(screen.getByLabelText('Назва розбірки'), 'New Yard')
+    await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
+    expect(await screen.findByLabelText('Поточний маршрут')).toHaveTextContent(
+      '/app/new-yard/dashboard',
+    )
+    expect(trackFunnelEvent).toHaveBeenCalledWith('tenant_created')
+    expect(trackFunnelEvent).not.toHaveBeenCalledWith('trial_started_web')
+  },
+)

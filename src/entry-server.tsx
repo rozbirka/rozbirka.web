@@ -47,3 +47,6 @@ export function structuredDataForRoute(pathname: string) {
   if (!seo) throw new Error(`Missing product SEO for ${pathname}`)
   return buildStructuredData(seo, landingFaqEntries(seo.locale))
 }
+
+export const marketingBuildEnabled =
+  import.meta.env['VITE_APP_ENV'] === 'production'
