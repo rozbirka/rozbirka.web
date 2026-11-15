@@ -5,16 +5,19 @@ import { marketingTags } from './marketing-tags.mjs'
 
 function load(hostname, protocol = 'https:') {
   const scripts = []
-  const window = { location: { hostname, protocol } }
+  const window = {
+    location: { hostname, protocol, href: `${protocol}//${hostname}/` },
+  }
   const document = {
     createElement: () => ({}),
     head: { appendChild: (script) => scripts.push(script) },
   }
-  const html = marketingTags()
+  const html = marketingTags(true)
   vm.runInNewContext(html.replace(/^<script>\n|\n<\/script>$/g, ''), {
     window,
     document,
     Date,
+    URL,
   })
   return { scripts, window }
 }
@@ -50,4 +53,9 @@ for (const host of [
 
 test('plain HTTP production is excluded', () => {
   assert.equal(load('rozbirka.pro', 'http:').scripts.length, 0)
+})
+
+test('QA and non-production builds contain no tags even on production host', () => {
+  assert.equal(marketingTags(false), '')
+  assert.equal(marketingTags(), '')
 })

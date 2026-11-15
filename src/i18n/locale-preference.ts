@@ -8,22 +8,28 @@ const SITE_LOCALE_KEY = 'rozbirka.site-locale'
  * SSR) read as "no choice" rather than breaking the app.
  */
 function storedLocale(key: string) {
+  let memory: Locale | null = null
+  let volatile = false
   return {
     get(): Locale | null {
+      if (volatile) return memory
       try {
         const value = globalThis.localStorage?.getItem(key)
         return isLocale(value) ? value : null
       } catch {
-        return null
+        return memory
       }
     },
 
     /** `null` returns to automatic selection. */
     set(locale: Locale | null) {
+      memory = locale
       try {
         if (locale === null) globalThis.localStorage?.removeItem(key)
         else globalThis.localStorage?.setItem(key, locale)
+        volatile = false
       } catch {
+        volatile = true
         /* storage unavailable: the choice lasts for this page only */
       }
     },

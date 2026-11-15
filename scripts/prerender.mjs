@@ -11,6 +11,7 @@ import {
 const indexPath = resolve('dist/index.html')
 const serverEntry = resolve('dist-ssr/entry-server.js')
 const {
+  marketingBuildEnabled,
   expectedH1ForRoute,
   prerenderManifest,
   renderRoute,
@@ -80,7 +81,7 @@ if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedE
 </script>`
 // Google Tag Manager and Google Analytics, only on the prerendered landing
 // pages: the app shell (login, account, cabinet) stays without them.
-const googleTagManager = marketingTags()
+const googleTagManager = marketingTags(marketingBuildEnabled)
 const charsetMeta = '<meta charset="UTF-8" />'
 if (!appShell.includes(charsetMeta)) {
   throw new Error('Charset meta was not found in dist/index.html')

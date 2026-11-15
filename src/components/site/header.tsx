@@ -1,3 +1,5 @@
+import { siteLocalePreference } from '@/i18n/locale-preference'
+import { trackFunnelEvent } from '@/lib/marketing-events'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Menu, X } from 'lucide-react'
 import { Link } from 'react-router'
@@ -115,6 +117,24 @@ const hoverTint = 'hover:bg-[rgba(var(--hl),0.06)]'
 export function SiteHeader() {
   const { status, user } = useAuth()
   const { locale } = useLocale()
+  useEffect(() => {
+    siteLocalePreference.set(locale)
+    const onClick = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return
+      const anchor = event.target.closest('a')
+      if (!anchor) return
+      const url = new URL(anchor.href, window.location.origin)
+      if (
+        url.origin === window.location.origin &&
+        url.pathname === '/login' &&
+        url.searchParams.get('purpose') === 'registration'
+      ) {
+        trackFunnelEvent('registration_cta_click')
+      }
+    }
+    document.addEventListener('click', onClick, true)
+    return () => document.removeEventListener('click', onClick, true)
+  }, [locale])
   const t = useT(siteMessages)
   const l = useT(landingMessages)
   const isAuthed = status === 'authenticated'
