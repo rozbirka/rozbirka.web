@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { partsApi, type PartDetail } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
 import { Button, Field, Notice, Sheet } from '@/components/app'
@@ -14,24 +14,39 @@ import { partFormMessages } from './part-form-messages'
 import { partEditingRestriction } from './part-labels'
 
 /** Price-only edit over the part card; never resubmits its other fields. */
-export function PartPriceDrawer({
+export function PartPriceDrawer(props: PartPriceEditorProps) {
+  return <PartPriceEditor {...props} />
+}
+
+interface PartPriceEditorProps {
+  part: Pick<
+    PartDetail,
+    'id' | 'name' | 'status' | 'desiredSalePrice' | 'effectiveSalePrice'
+  >
+  beforeSave: () => LatestMutationScope
+  onSaved: (saved: PartDetail) => void
+  onClose: () => void
+  returnFocus?: () => void
+  onPendingChange?: (pending: boolean) => void
+  inline?: boolean
+}
+
+export function PartPriceEditor({
   part,
   beforeSave,
   onSaved,
   onClose,
   returnFocus,
-}: {
-  part: PartDetail
-  beforeSave: () => LatestMutationScope
-  onSaved: (saved: PartDetail) => void
-  onClose: () => void
-  returnFocus?: () => void
-}) {
+  onPendingChange,
+  inline,
+}: PartPriceEditorProps) {
   const t = useT(partDetailMessages)
   const tf = useT(partFormMessages)
   const tc = useT(commonMessages)
   const tl = useT(lostResponseMessages)
   const { locale } = useLocale()
+  const formId = useId()
+  const input = useRef<HTMLInputElement>(null)
   const restriction = partEditingRestriction(part.status, locale)
   const guard = useFirstPriceGuard()
   const [value, setValue] = useState(() => {
@@ -61,6 +76,9 @@ export function PartPriceDrawer({
       mounted.current = false
     }
   }, [])
+  useEffect(() => {
+    if (inline) input.current?.focus()
+  }, [inline])
   const save = async (
     event?: FormEvent,
     accepted?: SupportedCurrency | null,
@@ -71,6 +89,7 @@ export function PartPriceDrawer({
     if (validation) return
     pendingRef.current = true
     setPending(true)
+    onPendingChange?.(true)
     setError(null)
     setStatus(null)
     const finish = (saved: PartDetail) => {
@@ -120,9 +139,67 @@ export function PartPriceDrawer({
       }
     } finally {
       pendingRef.current = false
-      if (mounted.current) setPending(false)
+      if (mounted.current) {
+        setPending(false)
+        onPendingChange?.(false)
+      }
     }
   }
+  const actions = (
+    <div className="grid w-full gap-3">
+      {price.saveNotes}
+      <div className="rz-btn-row justify-end">
+        <Button disabled={pending} onClick={onClose}>
+          {tc('cancel')}
+        </Button>
+        <Button
+          form={formId}
+          type="submit"
+          variant={inline ? 'ghost' : 'primary'}
+          disabled={pending || price.disabled || restriction !== null}
+          aria-busy={pending}
+        >
+          {pending ? tc('saving') : tc('save')}
+        </Button>
+      </div>
+    </div>
+  )
+  const fields = (
+    <form
+      id={formId}
+      className="grid gap-4"
+      onSubmit={(event) => void save(event)}
+    >
+      <Field
+        label={t('salePrice')}
+        hint={restriction ?? price.hint}
+        error={showErrors ? validation : undefined}
+      >
+        <MoneyInput
+          ref={input}
+          currency={price.currency}
+          disabled={pending || price.disabled || restriction !== null}
+          numeric
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      </Field>
+      {price.note}
+      {status ? <Notice role="status">{status}</Notice> : null}
+      {error ? (
+        <Notice tone="danger" role="alert">
+          {error}
+        </Notice>
+      ) : null}
+    </form>
+  )
+  if (inline)
+    return (
+      <div className="rz-inset grid gap-3">
+        {fields}
+        {actions}
+      </div>
+    )
   return (
     <Sheet
       open
@@ -137,52 +214,9 @@ export function PartPriceDrawer({
       onOpenChange={(open) => {
         if (!open && !pendingRef.current) onClose()
       }}
-      footer={
-        <div className="grid w-full gap-3">
-          {price.saveNotes}
-          <div className="rz-btn-row justify-end">
-            <Button disabled={pending} onClick={onClose}>
-              {tc('cancel')}
-            </Button>
-            <Button
-              form="part-price-form"
-              type="submit"
-              variant="primary"
-              disabled={pending || price.disabled || restriction !== null}
-              aria-busy={pending}
-            >
-              {pending ? tc('saving') : tc('save')}
-            </Button>
-          </div>
-        </div>
-      }
+      footer={actions}
     >
-      <form
-        id="part-price-form"
-        className="grid gap-4"
-        onSubmit={(event) => void save(event)}
-      >
-        <Field
-          label={t('salePrice')}
-          hint={restriction ?? price.hint}
-          error={showErrors ? validation : undefined}
-        >
-          <MoneyInput
-            currency={price.currency}
-            disabled={pending || price.disabled || restriction !== null}
-            numeric
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
-        </Field>
-        {price.note}
-        {status ? <Notice role="status">{status}</Notice> : null}
-        {error ? (
-          <Notice tone="danger" role="alert">
-            {error}
-          </Notice>
-        ) : null}
-      </form>
+      {fields}
     </Sheet>
   )
 }

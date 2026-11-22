@@ -14,7 +14,7 @@ export function Card({
   headerClassName,
   bodyClassName,
 }: {
-  title: string
+  title: ReactNode
   aside?: ReactNode
   children: ReactNode
   className?: string

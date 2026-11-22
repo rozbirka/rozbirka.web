@@ -2,6 +2,8 @@ import type { components as CoreComponents } from '../api/generated/core'
 import type { SubscriptionDto } from '../api/types'
 
 export const ALL_PERMISSIONS = [
+  'olx.integration.manage',
+  'olx.publications.manage',
   'cars.view',
   'cars.manage',
   'parts.view',

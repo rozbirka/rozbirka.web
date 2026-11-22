@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi, type Integration } from '@/api/integrations'
+import { olxApi } from '@/api/olx'
 import type { Tenant } from '@/api/types'
 import { tenantSettings } from '@/api/tenant-settings'
 import { useTenantSettings } from '@/auth/useTenantSettings'
@@ -18,6 +19,7 @@ vi.mock('@/api/integrations', () => ({
     create: vi.fn(),
   },
 }))
+vi.mock('@/api/olx', () => ({ olxApi: { connection: vi.fn() } }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 vi.mock('@/auth/useTenantSettings', () => ({ useTenantSettings: vi.fn() }))
 
@@ -85,6 +87,16 @@ beforeEach(() => {
   vi.mocked(integrationsApi.definitions).mockResolvedValue([
     { id: 'definition-np', code: 'nova_poshta', displayName: 'Нова пошта' },
   ])
+  vi.mocked(olxApi.connection).mockResolvedValue({
+    available: true,
+    connected: true,
+    accountId: 'synthetic-seller',
+    mode: 'oauth',
+    verifiedAt: '2026-11-18T09:12:00Z',
+    scope: 'v2 read',
+    reconnectRequired: false,
+    writesAvailable: false,
+  })
 })
 
 const renderScreen = () =>
@@ -93,6 +105,63 @@ const renderScreen = () =>
       <IntegrationsScreen />
     </MemoryRouter>,
   )
+
+function allowOlx() {
+  const context = cabinet()
+  vi.mocked(useCabinet).mockReturnValue({
+    ...context,
+    snapshot: {
+      ...context.snapshot!,
+      permissions: new Set(['team.manage', 'olx.integration.manage']),
+    },
+  })
+}
+
+it('shows the saved OLX connection alongside Nova Poshta with its settings link', async () => {
+  allowOlx()
+  renderScreen()
+  const link = await screen.findByRole('link', { name: /OLX/ })
+  expect(link).toHaveAttribute('href', '/app/koval/settings/integrations/olx')
+  expect(within(link).getByText('Підключено')).toBeVisible()
+  expect(screen.getByRole('link', { name: /Нова пошта/ })).toBeVisible()
+  expect(screen.getByText(/Підключено 2 із 2/)).toBeVisible()
+  expect(screen.queryByText('synthetic-seller')).toBeNull()
+})
+
+it('offers disconnected OLX through OAuth settings without creating a generic integration', async () => {
+  allowOlx()
+  vi.mocked(olxApi.connection).mockResolvedValue({
+    available: true,
+    connected: false,
+    mode: 'oauth',
+    reconnectRequired: false,
+    writesAvailable: false,
+  })
+  renderScreen()
+  const available = await screen.findByRole('region', {
+    name: 'Доступні до підключення',
+  })
+  const link = within(available).getByRole('link', { name: /OLX/ })
+  expect(link).toHaveAttribute('href', '/app/koval/settings/integrations/olx')
+  expect(integrationsApi.create).not.toHaveBeenCalled()
+  expect(screen.getByText(/Підключено 1 із 2/)).toBeVisible()
+})
+
+it('keeps Nova Poshta visible when saved OLX status cannot be loaded', async () => {
+  allowOlx()
+  vi.mocked(olxApi.connection).mockRejectedValue(new Error('offline'))
+  renderScreen()
+  expect(await screen.findByRole('link', { name: /Нова пошта/ })).toBeVisible()
+  expect(
+    await screen.findByText(/Не вдалося завантажити стан OLX/),
+  ).toBeVisible()
+})
+
+it('does not request OLX data without an OLX permission', async () => {
+  renderScreen()
+  await screen.findByRole('link', { name: /Нова пошта/ })
+  expect(olxApi.connection).not.toHaveBeenCalled()
+})
 
 it('opens a connected service by its own link', async () => {
   renderScreen()

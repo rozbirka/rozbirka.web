@@ -1,18 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { partsApi, type PartListItem, type PartSearchItem } from '@/api/parts'
-import { Button, StatusPill } from '@/components/app'
+import {
+  Button,
+  Field,
+  SearchInput,
+  StatusPill,
+  Thumbnail,
+} from '@/components/app'
 import {
   SearchPicker,
   SearchPickerOption,
   SearchPickerOptions,
 } from '@/components/app/search-picker'
 import { formatMoney, useLocale, useT, type Locale } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { partPickerMessages } from './part-picker-messages'
 import './part-search-picker.css'
 import { PartSearchSkeleton } from './PartSearchSkeleton'
 
 export interface PartPickerItem extends PartListItem {
   effectiveSalePrice: number | null
+  hasOlxSubmission?: boolean
+  oemCode?: string
 }
 
 interface PartSearchPickerProps {
@@ -24,6 +33,12 @@ interface PartSearchPickerProps {
   disabled?: boolean
   /** Compact order drawer results: code under name, stock and price alongside. */
   compact?: boolean
+  /** Publication management can revisit reserved/sold adverts. Orders keep available-only search. */
+  includeUnavailable?: boolean
+  /** Reconciliation can only choose a part without an OLX submission. */
+  disableOlxSubmissions?: boolean
+  /** Keep the options visible in a matching panel. */
+  inline?: boolean
   /** Existing order lines cannot be added again. */
   takenPartIds?: readonly string[]
   /** The accounting currency of the prices; `null` shows bare numbers. */
@@ -41,7 +56,7 @@ const price = (
 const fromSearchItem = (item: PartSearchItem): PartListItem => ({
   id: item.id,
   name: item.name,
-  photos: item.thumbnailUrl === null ? [] : [item.thumbnailUrl],
+  photos: item.thumbnailUrl ? [item.thumbnailUrl] : [],
   quantityTotal: item.quantity,
   quantityReserved: item.quantityReserved,
   quantityAvailable: item.quantityAvailable,
@@ -63,6 +78,9 @@ export function PartSearchPicker({
   onClear,
   disabled = false,
   compact = false,
+  includeUnavailable = false,
+  disableOlxSubmissions = false,
+  inline = false,
   takenPartIds = [],
   currency = null,
 }: PartSearchPickerProps) {
@@ -81,7 +99,7 @@ export function PartSearchPicker({
 
   useEffect(() => {
     const q = query.trim()
-    if (!open || !q) return
+    if ((!open && !inline) || !q) return
     const request = ++listRequestRef.current
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
@@ -93,7 +111,7 @@ export function PartSearchPicker({
             query: q,
             page,
             pageSize: PAGE_SIZE,
-            statuses: ['available'],
+            ...(includeUnavailable ? {} : { statuses: ['available'] }),
           },
           { signal: controller.signal },
         )
@@ -101,13 +119,22 @@ export function PartSearchPicker({
           if (controller.signal.aborted || request !== listRequestRef.current)
             return
           const availableItems = result.items.filter(
-            (item) => item.quantityAvailable > 0,
+            (item) => includeUnavailable || item.quantityAvailable > 0,
           )
           const baseItems = availableItems.map((searchItem) => {
             const item = fromSearchItem(searchItem)
             return {
               ...item,
               effectiveSalePrice: priceCacheRef.current.get(item.id) ?? null,
+              ...(inline && searchItem.oemCode
+                ? { oemCode: searchItem.oemCode }
+                : {}),
+              ...(disableOlxSubmissions &&
+              searchItem.olx &&
+              (searchItem.olx.advertId ||
+                !['draft', 'rejected'].includes(searchItem.olx.state))
+                ? { hasOlxSubmission: true }
+                : {}),
             }
           })
           setItems((current) => {
@@ -164,35 +191,32 @@ export function PartSearchPicker({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [open, page, query, attempt])
+  }, [
+    open,
+    page,
+    query,
+    attempt,
+    includeUnavailable,
+    disableOlxSubmissions,
+    inline,
+  ])
 
   const shown = Math.min(items.length, total)
   const hasMore = page < totalPages
 
-  return (
-    <SearchPicker
-      compact={compact}
-      headerHidden={compact}
-      count={t('shownOf', { shown: String(shown), total: String(total) })}
-      disabled={disabled}
-      heading={t('available')}
-      label={t('label')}
-      onOpenChange={setOpen}
-      onQueryChange={(next) => {
-        onQueryChange(next)
-        setPage(1)
-        setItems([])
-        setTotal(0)
-        setTotalPages(1)
-        setLoading(Boolean(next.trim()))
-        setError(false)
-        onClear()
-      }}
-      open={open}
-      placeholder={t('placeholder')}
-      query={query}
-      resultsLabel={t('results')}
-    >
+  function changeQuery(next: string) {
+    onQueryChange(next)
+    setPage(1)
+    setItems([])
+    setTotal(0)
+    setTotalPages(1)
+    setLoading(Boolean(next.trim()))
+    setError(false)
+    onClear()
+  }
+
+  const results = (
+    <>
       {error && items.length === 0 ? (
         <div className="grid justify-items-center gap-2 px-4 py-6">
           <p className="text-state-danger m-0 text-center" role="alert">
@@ -217,6 +241,87 @@ export function PartSearchPicker({
         <SearchPickerOptions label={t('found')}>
           {items.map((part) => {
             const taken = takenPartIds.includes(part.id)
+            const olxTaken =
+              disableOlxSubmissions && part.hasOlxSubmission === true
+            if (inline) {
+              const selected = value?.id === part.id
+              const codes = [part.oemCode, part.externalCode]
+                .filter(
+                  (code, index, values) =>
+                    code && values.indexOf(code) === index,
+                )
+                .join(' · ')
+              const photo = part.photos[0]
+              return (
+                <SearchPickerOption
+                  key={part.id}
+                  className={cn(
+                    'min-h-15 px-4 py-2.5',
+                    selected &&
+                      'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]',
+                  )}
+                  disabled={disabled || taken || olxTaken || loading}
+                  label={t('choose', { name: part.name })}
+                  selected={selected}
+                  onSelect={() => onSelect(part)}
+                  aside={
+                    olxTaken ? null : (
+                      <>
+                        <span className="rz-num rz-strong whitespace-nowrap">
+                          {price(part.effectiveSalePrice, currency, locale)}
+                        </span>
+                        <span className="rz-caption">
+                          {t('stockQuantity', {
+                            count: part.quantityAvailable,
+                          })}
+                        </span>
+                      </>
+                    )
+                  }
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-3.5 shrink-0 place-items-center rounded-full border',
+                        selected ? 'border-brand' : 'border-app-line',
+                      )}
+                    >
+                      {selected && (
+                        <span className="bg-brand size-1.5 rounded-full" />
+                      )}
+                    </span>
+                    {photo ? (
+                      <Thumbnail
+                        photo={{ url: photo }}
+                        alt=""
+                        className="size-10 shrink-0"
+                      />
+                    ) : (
+                      <span
+                        aria-hidden
+                        className="bg-app-input rounded-control size-10 shrink-0"
+                      />
+                    )}
+                    <span className="min-w-0">
+                      <span className="rz-strong block break-words">
+                        {part.name}
+                      </span>
+                      {codes && (
+                        <span className="rz-caption block font-mono break-words">
+                          {codes}
+                        </span>
+                      )}
+                      {olxTaken && (
+                        <span className="rz-caption block">
+                          {t('olxSubmission')}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                </SearchPickerOption>
+              )
+            }
             const car = part.car
               ? `${part.car.make} ${part.car.model} · ${part.car.year}`
               : compact
@@ -230,7 +335,7 @@ export function PartSearchPicker({
               <SearchPickerOption
                 key={part.id}
                 className={compact ? 'part-search-picker__option' : undefined}
-                disabled={taken || loading}
+                disabled={taken || olxTaken || loading}
                 label={t('choose', { name: part.name })}
                 selected={value?.id === part.id}
                 onSelect={() => {
@@ -278,10 +383,12 @@ export function PartSearchPicker({
                       {part.name}
                     </span>
                     {!compact && (
-                      <StatusPill tone={taken ? 'neutral' : 'ok'}>
-                        {taken
-                          ? t('inOrder')
-                          : t('inStock', { count: part.quantityAvailable })}
+                      <StatusPill tone={taken || olxTaken ? 'neutral' : 'ok'}>
+                        {olxTaken
+                          ? t('olxSubmission')
+                          : taken
+                            ? t('inOrder')
+                            : t('inStock', { count: part.quantityAvailable })}
                       </StatusPill>
                     )}
                   </span>
@@ -320,6 +427,43 @@ export function PartSearchPicker({
           </Button>
         </div>
       )}
+    </>
+  )
+
+  if (inline) {
+    return (
+      <div>
+        {query.trim() && (
+          <div className="border-app-line border-t">{results}</div>
+        )}
+        <Field className="px-4 py-3" hiddenLabel label={t('label')}>
+          <SearchInput
+            disabled={disabled}
+            onChange={(event) => changeQuery(event.currentTarget.value)}
+            placeholder={t('placeholder')}
+            value={query}
+          />
+        </Field>
+      </div>
+    )
+  }
+
+  return (
+    <SearchPicker
+      compact={compact}
+      headerHidden={compact}
+      count={t('shownOf', { shown: String(shown), total: String(total) })}
+      disabled={disabled}
+      heading={t('available')}
+      label={t('label')}
+      onOpenChange={setOpen}
+      onQueryChange={changeQuery}
+      open={open}
+      placeholder={t('placeholder')}
+      query={query}
+      resultsLabel={t('results')}
+    >
+      {results}
     </SearchPicker>
   )
 }

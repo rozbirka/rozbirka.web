@@ -94,6 +94,7 @@ export interface AddIntakePartRequest {
   quantity: number
   unit?: string | null | undefined
   notes?: string | null | undefined
+  publicDescription?: string | null | undefined
   photoKeys: string[]
 }
 
@@ -208,6 +209,9 @@ export const intakesApi = {
       quantity: request.quantity,
       unit: request.unit,
       notes: request.notes,
+      ...(request.publicDescription === undefined
+        ? {}
+        : { publicDescription: request.publicDescription }),
       photoKeys: request.photoKeys,
     }
     const response = await apiClient.post<IntakePartCreateResult>(

@@ -42,6 +42,7 @@ export function Thumbnail({
   ratio = 'square',
   size = 'thumbnail',
   fallback = 'compact',
+  onUnavailable,
 }: {
   photo: Pick<Photo, 'url' | 'thumbnailUrl'>
   alt: string
@@ -56,6 +57,7 @@ export function Thumbnail({
   size?: 'thumbnail' | 'full'
   /** Roomier unavailable state for record tiles; never changes the image frame. */
   fallback?: 'compact' | 'tile'
+  onUnavailable?: () => void
 }) {
   const t = useT(appMessages)
   const source =
@@ -138,9 +140,10 @@ export function Thumbnail({
               placeholder !== null && !loaded && 'opacity-0',
             )}
             loading={size === 'full' ? 'eager' : 'lazy'}
-            onError={() =>
+            onError={() => {
               setStatus((current) => ({ ...current, failed: true }))
-            }
+              onUnavailable?.()
+            }}
             onLoad={() =>
               setStatus((current) => ({ ...current, loaded: true }))
             }
@@ -487,6 +490,7 @@ export function PhotoGrid({
   layout = 'grid',
   coverLabel,
   title,
+  onPhotoUnavailable,
 }: {
   photos: readonly Photo[]
   /** Names the group, and seeds the alt text of each photo. */
@@ -501,6 +505,7 @@ export function PhotoGrid({
   layout?: 'grid' | 'strip'
   /** When supplied, identifies the first photo as the record cover. */
   coverLabel?: string
+  onPhotoUnavailable?: (photo: Photo) => void
 }) {
   const t = useT(appMessages)
   const opener = useRef<HTMLButtonElement | null>(null)
@@ -536,6 +541,7 @@ export function PhotoGrid({
                 photo={photo}
                 ratio={variant === 'tiles' ? 'wide' : 'square'}
                 fallback={variant === 'tiles' ? 'tile' : 'compact'}
+                onUnavailable={() => onPhotoUnavailable?.(photo)}
               />
               {index === 0 && coverLabel ? (
                 <span className="rz-photo__badge pointer-events-none">

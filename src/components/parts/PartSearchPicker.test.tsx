@@ -357,4 +357,40 @@ describe('PartSearchPicker', () => {
       }),
     )
   })
+  it('allows selecting sold parts only when publication management requests unavailable stock', async () => {
+    partMocks.search.mockResolvedValue(
+      page([
+        part('sold', {
+          name: 'Продане крило',
+          status: 'sold',
+          quantityAvailable: 0,
+          quantity: 0,
+        }),
+      ]),
+    )
+    partMocks.get.mockResolvedValue({ effectiveSalePrice: 100 })
+    const user = userEvent.setup()
+    const selected = vi.fn()
+    render(
+      <LocaleProvider locale="uk">
+        <PartSearchPicker
+          includeUnavailable
+          value={null}
+          query="крило"
+          onQueryChange={vi.fn()}
+          onSelect={selected}
+          onClear={vi.fn()}
+        />
+      </LocaleProvider>,
+    )
+    await user.click(
+      screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+    )
+    await user.click(
+      await screen.findByRole('option', { name: /Продане крило/ }),
+    )
+    expect(selected).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'sold', status: 'sold' }),
+    )
+  })
 })

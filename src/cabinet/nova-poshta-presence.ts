@@ -67,7 +67,7 @@ export function forgetNovaPoshtaPresence() {
 }
 
 /** The modules to leave out of the navigation and the command palette. */
-export function useHiddenModules(
+export function useNovaPoshtaHiddenModules(
   tenant: Tenant,
   snapshot: TenantAccessSnapshot,
 ): ReadonlySet<CabinetModuleKey> {

@@ -46,6 +46,7 @@ const layouts: Record<CabinetModuleKey, LoadingLayout> = {
   payments: list(['2fr', '1fr', '1fr', '1fr'], 4),
   profile: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
   business: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
+  olx: { ...list(['2fr', '1fr'], 3), kind: 'settings' },
   integrations: list(['3fr', '2fr', '1fr'], 3),
 }
 

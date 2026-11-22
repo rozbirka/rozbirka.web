@@ -1275,7 +1275,7 @@ it('keeps canonical permission codes and unknown permissions when saving localis
   zones.focus()
   await user.keyboard(' ')
   expect(zones).toBeChecked()
-  expect(dialog.getByText('Права користувача — обрано 2 з 24')).toBeVisible()
+  expect(dialog.getByText('Права користувача — обрано 2 з 26')).toBeVisible()
   await user.click(dialog.getByRole('button', { name: 'Зберегти права' }))
   await waitFor(() =>
     expect(teamApi.updateUserPermissions).toHaveBeenCalledWith(

@@ -27,6 +27,7 @@ export function BulkBar({
   onSelectPage,
   pageCount,
   busy,
+  additionalActions,
 }: {
   count: number
   /** Genitive plural of what is counted: "деталей", "автомобілів". */
@@ -38,6 +39,7 @@ export function BulkBar({
   pageCount?: number
   /** Progress of a running bulk operation, replacing the actions. */
   busy?: ReactNode
+  additionalActions?: ReactNode
 }) {
   const t = useT(appMessages)
   const everythingOnPage =
@@ -83,6 +85,7 @@ export function BulkBar({
                 {action.label}
               </Button>
             ))}
+            {additionalActions}
             <Button
               aria-label={t('clearSelection')}
               onClick={onClear}
