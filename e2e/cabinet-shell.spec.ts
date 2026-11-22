@@ -4414,18 +4414,10 @@ test('OLX local alpha publishes and observes simulated moderation only on explic
   await expect(
     page.getByRole('button', { name: 'Опублікувати', exact: true }),
   ).toBeDisabled()
-  await page.screenshot({
-    path: '/tmp/olx-alpha-cabinet-desktop.png',
-    fullPage: true,
-  })
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(
     page.getByRole('button', { name: 'Оновити статус' }),
   ).toBeVisible()
-  await page.screenshot({
-    path: '/tmp/olx-alpha-cabinet-mobile.png',
-    fullPage: true,
-  })
 })
 
 test('OLX listing settings and searchable part status work from the cabinet', async ({
@@ -5135,10 +5127,6 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
   await expect(page.getByLabel('Ідентифікатор тестового акаунта')).toHaveCount(
     0,
   )
-  await page.screenshot({
-    path: '/tmp/olx-oauth-disconnected-desktop.png',
-    fullPage: true,
-  })
   await connect.focus()
   await expect(connect).toBeFocused()
   await page.keyboard.press('Enter')
@@ -5155,7 +5143,6 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
     name: 'Введіть від двох літер назви міста',
   })
   await expect(citySearch).toBeFocused()
-  await page.screenshot({ path: '/tmp/olx-oauth-city-setup.png' })
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(citySearch).toBeVisible()
   expect(
@@ -5163,7 +5150,6 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true)
-  await page.screenshot({ path: '/tmp/olx-oauth-city-setup-mobile.png' })
   await citySearch.fill('Львів')
   await page.getByRole('option', { name: 'Львів · Львівська область' }).click()
   const saveLocation = page.getByRole('button', {
@@ -5200,10 +5186,6 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .analyze()
   expect(accessibility.violations).toEqual([])
-  await page.screenshot({
-    path: '/tmp/olx-oauth-connected-desktop.png',
-    fullPage: true,
-  })
   await page.getByRole('button', { name: 'Перевірити підключення' }).click()
   await expect.poll(() => verified).toBe(1)
   await page
@@ -5244,10 +5226,6 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
       .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
       .analyze()
     expect(themedAccessibility.violations).toEqual([])
-    await page.screenshot({
-      path: `/tmp/olx-oauth-connected-mobile-${theme}.png`,
-      fullPage: true,
-    })
   }
   await page.getByRole('link', { name: 'Налаштування оголошень' }).click()
   await allowPublication.click()
@@ -5779,7 +5757,6 @@ for (const { writeAccess, partCard, linkExisting } of [
           .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
           .analyze()
         expect(linkAccessibility.violations).toEqual([])
-        await page.screenshot({ path: '/tmp/olx-part-link-mobile.png' })
         await confirm.click()
         await expect(linkPage).not.toBeVisible()
         await expect(sheet.getByText('№ 123', { exact: true })).toBeVisible()
@@ -5889,10 +5866,6 @@ for (const { writeAccess, partCard, linkExisting } of [
       await expect(
         sheet.locator('.rz-card__foot').getByRole('status'),
       ).toHaveText('Чернетка')
-      await page.setViewportSize({ width: 1440, height: 1000 })
-      await page.screenshot({
-        path: '/tmp/olx-part-draft-redesign-desktop.png',
-      })
       await page.setViewportSize({ width: 390, height: 1000 })
       const categoryPicker = sheet.getByRole('button', {
         name: 'Категорія OLX',
@@ -5981,7 +5954,6 @@ for (const { writeAccess, partCard, linkExisting } of [
       await page.evaluate(() =>
         window.scrollTo({ top: 0, behavior: 'instant' }),
       )
-      await page.screenshot({ path: '/tmp/olx-part-compact-mobile.png' })
       await page.setViewportSize({ width: 1440, height: 1000 })
     } else {
       await page.goto('/app/koval/settings/integrations/olx')
@@ -6027,9 +5999,6 @@ for (const { writeAccess, partCard, linkExisting } of [
               () => document.documentElement.scrollWidth <= window.innerWidth,
             ),
           ).toBe(true)
-          await page.screenshot({
-            path: `/tmp/olx-redesign-adverts-${width}.png`,
-          })
         }
         await page.setViewportSize({ width: 1440, height: 1000 })
       }
@@ -6055,15 +6024,11 @@ for (const { writeAccess, partCard, linkExisting } of [
       await expect(matchingPart).toContainText('5G1941006')
       await expect(matchingPart.locator('img')).toHaveCount(0)
       if (writeAccess) {
-        await page.screenshot({
-          path: '/tmp/olx-order-part-picker-desktop.png',
-        })
         await page.setViewportSize({ width: 390, height: 844 })
         expect((await partSearch.boundingBox())?.y).toBeLessThan(
           (await matchingPart.boundingBox())!.y,
         )
         await expect(partResults).toBeInViewport({ ratio: 1 })
-        await page.screenshot({ path: '/tmp/olx-order-part-picker-mobile.png' })
       }
       await matchingPart.click()
       if (writeAccess) {
@@ -6151,7 +6116,6 @@ for (const { writeAccess, partCard, linkExisting } of [
           name: 'Дубляни · Самбірський · Львівська область',
         }),
       ).toBeVisible()
-      await page.screenshot({ path: '/tmp/olx-drawer-city-choices.png' })
     }
     await page
       .getByRole('option', {
@@ -6208,7 +6172,6 @@ for (const { writeAccess, partCard, linkExisting } of [
       await page.evaluate(() =>
         window.scrollTo({ top: 0, behavior: 'instant' }),
       )
-      await page.screenshot({ path: '/tmp/olx-part-compact-desktop.png' })
       expect(attributeReads).toBe(2)
     }
     await expect(
@@ -6297,9 +6260,6 @@ for (const { writeAccess, partCard, linkExisting } of [
       await expect(
         sheet.getByRole('button', { name: 'Перевірити дані' }),
       ).toHaveCount(0)
-      if (editsPrice) {
-        await page.screenshot({ path: '/tmp/olx-publication-result.png' })
-      }
       expect(creates).toBe(editsPrice ? 2 : 1)
       await sheet.getByRole('button', { name: 'Редагувати опис' }).click()
       const changedDescription = 'Оновлений публічний опис запчастини. '.repeat(
@@ -6377,10 +6337,6 @@ for (const { writeAccess, partCard, linkExisting } of [
           () => document.documentElement.scrollWidth <= window.innerWidth,
         ),
       ).toBe(true)
-      await page.screenshot({
-        path: `/tmp/olx-live-${partCard ? 'part-card' : 'preparation'}-${writeAccess}-${width}.png`,
-        fullPage: true,
-      })
     }
     if (partCard) {
       await overview.click()
