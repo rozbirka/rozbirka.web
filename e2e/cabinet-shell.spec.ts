@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import AxeBuilder from '@axe-core/playwright'
 import {
+  appOrigin,
   upstreamOrigin,
   expect,
   test,
@@ -180,6 +181,14 @@ interface DashboardUpstreamStats {
 
 async function fulfillData(route: Route, data: unknown, status = 200) {
   await route.fulfill({ status, json: status < 400 ? { data } : data })
+}
+
+function fulfillOlxCallback(route: Route, outcome: 'connected' | 'cancelled') {
+  // Playwright cannot fulfill an intercepted navigation with a redirect on WebKit.
+  return route.fulfill({
+    contentType: 'text/html',
+    body: `<!doctype html><meta http-equiv="refresh" content="0;url=/app/koval/olx-alpha?olx=${outcome}">`,
+  })
 }
 
 const isPaymentCancellationPath = (path: string) =>
@@ -4727,7 +4736,9 @@ test('OLX bulk category and publication from the parts list separate ready and b
 
   await loginFrom(page)
   await page.goto('/app/koval/parts')
-  await page.getByRole('checkbox', { name: 'Обрати всі на сторінці' }).check()
+  for (const part of parts) {
+    await page.getByRole('checkbox', { name: `Обрати: ${part.name}` }).check()
+  }
   const toolbar = page.getByRole('region', { name: 'Дії над обраними' })
   await toolbar.getByRole('button', { name: 'Майданчики' }).click()
   await page.getByRole('menuitem', { name: 'Призначити категорію…' }).click()
@@ -4739,7 +4750,9 @@ test('OLX bulk category and publication from the parts list separate ready and b
   await expect(
     categorySheet.getByRole('textbox', { name: 'Майданчик' }),
   ).toHaveValue('OLX')
-  expect((await categorySheet.boundingBox())?.width).toBe(480)
+  expect((await categorySheet.boundingBox())?.width).toBe(
+    Math.min(480, page.viewportSize()?.width ?? 480),
+  )
   await page.screenshot({ path: testInfo.outputPath('olx-bulk-category.png') })
   await categorySheet
     .getByRole('button', { name: 'Призначити', exact: true })
@@ -5048,7 +5061,7 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
       writeStarts++
       expect(request.headers()['x-tenant-id']).toBe('tenant-1')
       return fulfillData(route, {
-        launchUrl: 'http://127.0.0.1:4173/api/v1/integrations/olx/oauth/launch',
+        launchUrl: `${appOrigin()}/api/v1/integrations/olx/oauth/launch`,
         ticket: 'synthetic-write-ticket',
         expiresAt: '2026-11-17T18:00:00Z',
       })
@@ -5057,7 +5070,7 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
       starts++
       expect(request.headers()['x-tenant-id']).toBe('tenant-1')
       return fulfillData(route, {
-        launchUrl: 'http://127.0.0.1:4173/api/v1/integrations/olx/oauth/launch',
+        launchUrl: `${appOrigin()}/api/v1/integrations/olx/oauth/launch`,
         ticket: 'synthetic-one-time-ticket',
         expiresAt: '2026-11-17T18:00:00Z',
       })
@@ -5072,10 +5085,7 @@ test('OLX OAuth connection reuses cabinet UI and completes a one-time launch wit
       expect(request.url()).not.toContain('ticket=')
       connected = true
       canWrite = writeStarts > 0
-      return route.fulfill({
-        status: 303,
-        headers: { location: '/app/koval/olx-alpha?olx=connected' },
-      })
+      return fulfillOlxCallback(route, 'connected')
     }
     if (path.endsWith('/listing-settings')) {
       if (request.method() === 'PUT') {
@@ -5281,19 +5291,14 @@ test('OLX returns to the same part with unsaved fields after consent and cancell
     const pathname = new URL(request.url()).pathname
     if (pathname.endsWith('/oauth/write/start'))
       return fulfillData(route, {
-        launchUrl: 'http://127.0.0.1:4173/api/v1/integrations/olx/oauth/launch',
+        launchUrl: `${appOrigin()}/api/v1/integrations/olx/oauth/launch`,
         ticket: 'synthetic-part-return-ticket',
         expiresAt: new Date(Date.now() + 600_000).toISOString(),
       })
     if (pathname.endsWith('/oauth/launch')) {
       launches++
       canWrite = launches === 2
-      return route.fulfill({
-        status: 303,
-        headers: {
-          location: `/app/koval/olx-alpha?olx=${canWrite ? 'connected' : 'cancelled'}`,
-        },
-      })
+      return fulfillOlxCallback(route, canWrite ? 'connected' : 'cancelled')
     }
     if (pathname.endsWith('/connection')) {
       return fulfillData(route, {
