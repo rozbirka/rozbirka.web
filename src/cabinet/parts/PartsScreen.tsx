@@ -4,6 +4,17 @@ import { localizeApiError } from '@/api/error-localization'
 import { PartSourceFilter } from './PartSourceFilter'
 import { PartLocationCard } from './PartLocationCard'
 import { PartNotesCard } from './PartNotesCard'
+import { PartOlxPage } from './PartOlxPage'
+import { PartOlxListStatus } from './PartOlxListStatus'
+import {
+  OlxBatchSheet,
+  type OlxBatchMode,
+  type OlxBatchPart,
+  type OlxBatchResult,
+} from '../olx/OlxBatchSheet'
+import { OlxPublicationJobsSheet } from '../olx/OlxPublicationJobsSheet'
+import type { OlxPublicationJob } from '@/api/olx-live'
+import { olxBatchMessages } from '../olx/olx-batch-messages'
 import { PartPriceDrawer } from './PartPriceDrawer'
 import { PartPeekHeaderSkeleton, PartPeekSkeleton } from './PartPeekSkeleton'
 import { CabinetLoadingContent } from '../loading-screen'
@@ -21,7 +32,9 @@ import {
 } from 'react'
 import {
   Link,
+  Navigate,
   useLocation,
+  useMatch,
   useNavigate,
   useParams,
   useSearchParams,
@@ -41,6 +54,8 @@ import {
   Package,
   Pencil,
   ShoppingBag,
+  Send,
+  Store,
   Tag,
   Plus,
   Printer,
@@ -340,9 +355,18 @@ const allowedToView = (
   evaluateModuleAccess(definition, accessState(cabinet), 'view').kind ===
   'allowed'
 
+const olxFilterOptions = [
+  { value: '', label: 'marketplacesAll' },
+  { value: 'olx', label: 'marketplacesOlx' },
+  { value: 'attention', label: 'marketplacesAttention' },
+  { value: 'linked', label: 'marketplacesLinked' },
+  { value: 'unlinked', label: 'marketplacesUnlinked' },
+] as const
+
 export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const t = useT(partsListMessages)
+  const to = useT(olxBatchMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -350,6 +374,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [items, setItems] = useState<PartSearchItem[]>([])
+  const [olxConnected, setOlxConnected] = useState(false)
   const [facets, setFacets] = useState<PartFacets | null>(null)
   const [pageMeta, setPageMeta] = useState<{
     page: number
@@ -370,6 +395,20 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [error, setError] = useState<ApiProblem | null>(null)
   const isNew = location.pathname.endsWith('/new')
   const isEdit = location.pathname.endsWith('/edit')
+  const isOlx = useMatch('/app/:tenant/parts/:partId/olx') !== null
+  const { status, targetTenant, snapshot } = cabinet
+  const canViewOlx =
+    status === 'ready' &&
+    Boolean(targetTenant) &&
+    snapshot?.tenantId === targetTenant?.id &&
+    snapshot?.permissions.has('parts.view') === true &&
+    snapshot.permissions.has('olx.publications.manage')
+  const olxSettingsHref =
+    canViewOlx &&
+    targetTenant &&
+    snapshot?.permissions.has('olx.integration.manage')
+      ? cabinetPath(targetTenant.slug, 'integrations', 'olx')
+      : null
   const createDecision = evaluateModuleAccess(
     definition,
     accessState(cabinet),
@@ -384,9 +423,20 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   const [reloadToken, setReloadToken] = useState(0)
   // v2 list (module 11, frames 1.2–1.3): a working set of picked rows whose
-  // one bulk action is printing their stickers, and the part opened beside
-  // the list. Both reset when the filters change; paging keeps the picks.
+  // and the part opened beside the list. Filters reset both; paging keeps the picks.
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  const [olxBatch, setOlxBatch] = useState<{
+    mode: OlxBatchMode
+    parts: OlxBatchPart[]
+    owner: string
+  } | null>(null)
+  const marketplacesTrigger = useRef<HTMLButtonElement>(null)
+  const olxJobsTrigger = useRef<HTMLButtonElement>(null)
+  const [olxJobs, setOlxJobs] = useState<{
+    owner: string
+    initial: OlxPublicationJob | null
+    review: OlxBatchResult[]
+  } | null>(null)
   const [peekId, setPeekId] = useState<string | null>(null)
   const navigateList = useNavigate()
   const toast = useOptionalToast()
@@ -413,8 +463,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const filters = useMemo(() => {
     const one = (name: string) => searchParams.get(name)?.trim() ?? ''
     const status = one('status')
+    const olxStatus =
+      olxFilterOptions.find((option) => option.value === one('olx'))?.value ??
+      ''
     return {
       q: one('q'),
+      olxStatus,
       status: partStatuses.has(status) ? status : '',
       condition: one('condition'),
       origin: ['car', 'batch'].includes(one('origin')) ? one('origin') : '',
@@ -442,6 +496,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     () => ({
       ...(filters.q ? { query: filters.q } : {}),
       ...(filters.status ? { statuses: [filters.status] } : {}),
+      ...(filters.olxStatus ? { olxStatus: filters.olxStatus } : {}),
       ...(filters.condition
         ? { conditions: [filters.condition as PartCondition] }
         : {}),
@@ -590,6 +645,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     const rawStatus = searchParams.get('status')
     if (rawStatus !== null && !partStatuses.has(rawStatus))
       next.delete('status')
+    if (next.has('olx') && !filters.olxStatus) next.delete('olx')
     const rawPage = searchParams.get('page')
     if (rawPage !== null && String(filters.page) !== rawPage)
       next.set('page', String(filters.page))
@@ -623,7 +679,9 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     if (partId && !isEdit) {
       void Promise.all([
         partsApi.get(partId, { signal: controller.signal }),
-        partsApi.history(partId, { signal: controller.signal }),
+        isOlx
+          ? Promise.resolve(null)
+          : partsApi.history(partId, { signal: controller.signal }),
       ])
         .then(([result, nextHistory]) => {
           if (controller.signal.aborted) return
@@ -646,6 +704,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         .then(([page, nextFacets]) => {
           if (controller.signal.aborted) return
           setItems(page.items)
+          setOlxConnected(page.olxConnected === true)
           setPageMeta({ page: page.page, totalPages: page.totalPages })
           setFacets(nextFacets)
           setError(null)
@@ -663,6 +722,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     createDecision.kind,
     isEdit,
     isNew,
+    isOlx,
     partId,
     reloadToken,
     searchKey,
@@ -692,15 +752,23 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         requireLatestMutation={requireLatestMutation}
       />
     )
+  if (partId && isOlx && status === 'ready' && targetTenant && !canViewOlx)
+    return (
+      <Navigate to={cabinetPath(targetTenant.slug, 'parts', partId)} replace />
+    )
   if (partId)
     return (
       <PartDetailScreen
         key={partId}
-        detail={detail}
+        detail={detail?.id === partId ? detail : null}
         history={history}
         error={error !== null}
         partId={partId}
         canManage={canManage}
+        isOlx={isOlx}
+        canViewOlx={canViewOlx}
+        olxScopeKey={JSON.stringify([targetTenant?.id, snapshot?.generation])}
+        olxSettingsHref={olxSettingsHref}
         links={links}
         requireLatestMutation={requireLatestMutation}
         tenantSlug={cabinet.targetTenant?.slug ?? ''}
@@ -755,6 +823,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     [
       ['q', filters.q],
       ['status', filters.status],
+      ['olx', filters.olxStatus],
       ['condition', filters.condition],
       ['origin', filters.origin],
       ['make', filters.makeId],
@@ -835,6 +904,20 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       ? filteredCars.find((car) => car.id === filters.carIds[0])
       : undefined
   const sourceOwner = `${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`
+  const canManageOlx =
+    olxConnected &&
+    canManage &&
+    cabinet.snapshot?.tenantId === cabinet.targetTenant?.id &&
+    cabinet.snapshot?.permissions.has('olx.publications.manage') === true
+
+  function openOlxBatch(mode: OlxBatchMode) {
+    const names = new Map(items.map((part) => [part.id, part.name]))
+    setOlxBatch({
+      mode,
+      owner: sourceOwner,
+      parts: [...picked].map((id) => ({ id, name: names.get(id) })),
+    })
+  }
   const updateSource = (kind: 'cars' | 'intakes', id: string | null) => {
     const next = new URLSearchParams(searchParams)
     const ownKey = kind === 'cars' ? 'car_ids' : 'intake_ids'
@@ -921,6 +1004,16 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         createDecision.kind === 'allowed' ||
         createBlockedReason !== null ? (
           <>
+            {canManageOlx && (
+              <Button
+                ref={olxJobsTrigger}
+                onClick={() =>
+                  setOlxJobs({ owner: sourceOwner, initial: null, review: [] })
+                }
+              >
+                {to('jobsTitle')}
+              </Button>
+            )}
             {manageDecision.kind === 'allowed' ? (
               <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
                 <Button asChild>
@@ -989,6 +1082,35 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 ),
             },
           ]}
+          additionalActions={
+            canManageOlx ? (
+              <ActionMenu
+                label={to('marketplaces')}
+                triggerRef={marketplacesTrigger}
+                triggerContent={
+                  <>
+                    <Store aria-hidden />
+                    {to('marketplaces')}
+                    <ChevronDown aria-hidden />
+                  </>
+                }
+                actions={[
+                  {
+                    key: 'publish-olx',
+                    label: to('publish'),
+                    icon: <Send aria-hidden />,
+                    onSelect: () => openOlxBatch('publish'),
+                  },
+                  {
+                    key: 'category-olx',
+                    label: to('assign'),
+                    icon: <Tag aria-hidden />,
+                    onSelect: () => openOlxBatch('category'),
+                  },
+                ]}
+              />
+            ) : null
+          }
           count={picked.size}
           noun={t('bulkNoun', { count: picked.size })}
           onClear={() => setPicked(new Set())}
@@ -998,6 +1120,32 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           pageCount={items.length}
         />
       ) : null}
+
+      {canManageOlx && olxBatch?.owner === sourceOwner && (
+        <OlxBatchSheet
+          initialMode={olxBatch.mode}
+          parts={olxBatch.parts}
+          partsHref={directoryPath}
+          onChanged={() => setReloadToken((value) => value + 1)}
+          onJobStarted={(job, review) => {
+            setOlxBatch(null)
+            setOlxJobs({ owner: sourceOwner, initial: job, review })
+          }}
+          onClose={() => setOlxBatch(null)}
+          returnFocus={() => marketplacesTrigger.current?.focus()}
+        />
+      )}
+
+      {canManageOlx && olxJobs?.owner === sourceOwner && (
+        <OlxPublicationJobsSheet
+          initial={olxJobs.initial}
+          review={olxJobs.review}
+          partsHref={directoryPath}
+          onClose={() => setOlxJobs(null)}
+          onChanged={() => setReloadToken((value) => value + 1)}
+          returnFocus={() => olxJobsTrigger.current?.focus()}
+        />
+      )}
 
       <div
         className="rz-toolbar"
@@ -1155,6 +1303,34 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           </div>
         </FilterPopover>
 
+        {(olxConnected || filters.olxStatus) && (
+          <FilterPopover
+            label={t('marketplaces')}
+            placeholder={t('marketplaces')}
+            {...(filters.olxStatus
+              ? {
+                  setKey: t('marketplacesOlx'),
+                  setValue: t(
+                    olxFilterOptions.find(
+                      (option) => option.value === filters.olxStatus,
+                    )?.label ?? 'marketplacesOlx',
+                  ),
+                }
+              : {})}
+          >
+            <div className="grid gap-px p-1">
+              {olxFilterOptions.map((option) => (
+                <FilterOption
+                  active={option.value === filters.olxStatus}
+                  key={option.value}
+                  label={t(option.label)}
+                  onSelect={() => updateFilter('olx', option.value)}
+                />
+              ))}
+            </div>
+          </FilterPopover>
+        )}
+
         {activeFilters.length === 0 ? null : (
           <Button onClick={resetFilters} variant="quiet">
             {t('resetFilters')}
@@ -1198,19 +1374,29 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               key: 'name',
               label: t('colPart'),
               variant: 'primary',
-              cell: (part) => (
-                <span className="rz-cell-main">
-                  <Link
-                    className="text-app-strong hover:text-brand-text"
-                    to={part.id}
-                  >
-                    {part.name}
-                  </Link>
-                  {part.oemCode ? (
-                    <span className="rz-mono">{part.oemCode}</span>
-                  ) : null}
-                </span>
-              ),
+              cell: (part) => {
+                const name = (
+                  <span className="rz-cell-main">
+                    <Link
+                      className="text-app-strong hover:text-brand-text"
+                      to={part.id}
+                    >
+                      {part.name}
+                    </Link>
+                    {part.oemCode ? (
+                      <span className="rz-mono">{part.oemCode}</span>
+                    ) : null}
+                  </span>
+                )
+                return part.olx ? (
+                  <div className="grid min-w-0 gap-1 py-1.5">
+                    {name}
+                    <PartOlxListStatus status={part.olx} />
+                  </div>
+                ) : (
+                  name
+                )
+              },
             },
             {
               key: 'car',
@@ -1414,6 +1600,10 @@ function PartDetailScreen({
   partId,
   error,
   canManage,
+  isOlx,
+  canViewOlx,
+  olxScopeKey,
+  olxSettingsHref,
   links,
   requireLatestMutation,
   tenantSlug,
@@ -1427,6 +1617,10 @@ function PartDetailScreen({
   partId: string
   error: boolean
   canManage: boolean
+  isOlx: boolean
+  canViewOlx: boolean
+  olxScopeKey: string
+  olxSettingsHref: string | null
   links: {
     cars: boolean
     intakes: boolean
@@ -1498,7 +1692,7 @@ function PartDetailScreen({
     useState<(typeof SALES_TABS)[number]['value']>('all')
 
   useEffect(() => {
-    if (partId === undefined) return
+    if (isOlx) return
     const controller = new AbortController()
     void partsApi.compatibilities(partId, { signal: controller.signal }).then(
       (result) => {
@@ -1509,10 +1703,10 @@ function PartDetailScreen({
       },
     )
     return () => controller.abort()
-  }, [partId])
+  }, [isOlx, partId])
 
   useEffect(() => {
-    if (partId === undefined || !links.inventory) return
+    if (isOlx || !links.inventory) return
     const controller = new AbortController()
     void inventoryApi.getPartZones(partId, { signal: controller.signal }).then(
       (result) => {
@@ -1526,7 +1720,7 @@ function PartDetailScreen({
       },
     )
     return () => controller.abort()
-  }, [links.inventory, partId, placementRevision])
+  }, [isOlx, links.inventory, partId, placementRevision])
   // Every order this part is promised to, the current one included: the card
   // shows one list rather than singling out the order that was opened last.
   const reservations = detail?.reservations ?? []
@@ -1592,7 +1786,8 @@ function PartDetailScreen({
   }
 
   const name = detail === null ? t('titleFallback') : detail.name
-  const editHref = `${base}/${partId}/edit`
+  const partHref = `${base}/${encodeURIComponent(partId)}`
+  const editHref = `${partHref}/edit`
   const hasSalesAmounts = salesRows.some((row) => row.kind === 'sold')
   const salesTotal = salesRows.reduce(
     (sum, row) => sum + (row.unitPrice ?? 0) * row.quantity,
@@ -1769,6 +1964,20 @@ function PartDetailScreen({
           )}
         </div>
 
+        {detail && canViewOlx && (
+          <nav className="rz-tabs" aria-label={t('partSections')}>
+            <Link to={partHref} aria-current={!isOlx ? 'page' : undefined}>
+              {t('overviewTab')}
+            </Link>
+            <Link
+              to={`${partHref}/olx`}
+              aria-current={isOlx ? 'page' : undefined}
+            >
+              OLX
+            </Link>
+          </nav>
+        )}
+
         {deleteError !== null && !confirmingDelete ? (
           <Notice tone="danger">{deleteError}</Notice>
         ) : null}
@@ -1793,6 +2002,20 @@ function PartDetailScreen({
             heading={false}
             label={t('loading')}
           />
+        ) : isOlx ? (
+          canViewOlx && (
+            <PartOlxPage
+              key={olxScopeKey}
+              partId={partId}
+              partDetails={detail}
+              available={
+                detail.status === 'available' && detail.quantityAvailable > 0
+              }
+              canEditPart={canManage}
+              settingsHref={olxSettingsHref}
+              onPartSaved={onPriceSaved}
+            />
+          )
         ) : (
           <div className="flex flex-wrap items-start gap-4">
             <div className="grid min-w-0 flex-[1_1_480px] gap-4">
@@ -2384,6 +2607,13 @@ function PartDetailScreen({
                   onPlacementSaved()
                 }}
               />
+              {detail.publicDescription?.trim() && (
+                <Card title={t('publicDescription')}>
+                  <p className="text-app-muted m-0 whitespace-pre-wrap break-words">
+                    {detail.publicDescription}
+                  </p>
+                </Card>
+              )}
               <PartNotesCard
                 key={partId}
                 partId={partId}
@@ -2435,6 +2665,7 @@ interface PartFormValues {
   unit: string
   condition: string
   notes: string
+  publicDescription: string
   oemCode: string
   partType: string
   desiredSalePrice: string
@@ -2449,6 +2680,7 @@ const emptyPartForm: PartFormValues = {
   unit: PIECES_UNIT,
   condition: 'good',
   notes: '',
+  publicDescription: '',
   oemCode: '',
   partType: '',
   desiredSalePrice: '',
@@ -3509,6 +3741,13 @@ function PartFields({
             value={values.notes}
           />
         </Field>
+        <Field hint={t('publicDescriptionHint')} label={t('publicDescription')}>
+          <TextArea
+            onChange={field('publicDescription')}
+            rows={3}
+            value={values.publicDescription}
+          />
+        </Field>
       </SectionPanel>
       <SectionPanel
         description={t('conditionDescription')}
@@ -3748,7 +3987,7 @@ function PartForm({
   // A part started from a car's page arrives with that car already chosen,
   // so nobody has to find it again in the source list.
   const [values, setValues] = useState<PartFormValues>(() => {
-    const base = draft?.values ?? emptyPartForm
+    const base = draft ? { ...emptyPartForm, ...draft.values } : emptyPartForm
     const presetCar = searchParams.get('car_id')
     const presetIntake = searchParams.get('intake_id')
     if (presetCar) return { ...base, sourceType: 'car', sourceId: presetCar }
@@ -3851,6 +4090,9 @@ function PartForm({
       photoKeys: [],
       ...(condition !== undefined ? { condition } : {}),
       ...(notes !== undefined ? { notes } : {}),
+      ...(values.publicDescription.trim()
+        ? { publicDescription: values.publicDescription }
+        : {}),
       ...(oemCode !== undefined ? { oemCode } : {}),
       ...(partType !== undefined ? { partType } : {}),
       // No price without an accounting currency; the part itself still saves.
@@ -4149,6 +4391,8 @@ function PartEdit({
   const mountedRef = useRef(true)
   const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
+  const [publicDescriptionTouched, setPublicDescriptionTouched] =
+    useState(false)
   const [detail, setDetail] = useState<PartDetail | null>(null)
   const priceRestriction = partEditingRestriction(detail?.status, locale)
   const [compatState, setCompatState] = useState<{
@@ -4217,6 +4461,7 @@ function PartEdit({
           unit: PIECES_UNIT,
           condition: part.condition,
           notes: part.notes ?? '',
+          publicDescription: part.publicDescription ?? '',
           oemCode: part.oemCode ?? '',
           partType: part.partType ?? '',
           desiredSalePrice:
@@ -4296,6 +4541,9 @@ function PartEdit({
           oemCode: optional(values.oemCode) ?? null,
           condition: optional(values.condition) ?? null,
           notes: optional(values.notes) ?? null,
+          ...(publicDescriptionTouched
+            ? { publicDescription: values.publicDescription }
+            : {}),
           quantity: parsed.quantity,
           partType: optional(values.partType) ?? null,
           unit: PIECES_UNIT,
@@ -4340,6 +4588,11 @@ function PartEdit({
           fresh.quantityTotal === parsed.quantity &&
           (fresh.notes ?? null) ===
             (optional(values.notes) ?? detail?.notes ?? null) &&
+          (!publicDescriptionTouched ||
+            fresh.publicDescription ===
+              (values.publicDescription.trim()
+                ? values.publicDescription
+                : '')) &&
           (fresh.condition ?? null) ===
             (optional(values.condition) ?? detail?.condition ?? null) &&
           (fresh.partType ?? null) ===
@@ -4512,7 +4765,7 @@ function PartEdit({
                 title={editStep('02', t('describeStep'))}
                 variant="panel"
               >
-                <div className="grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field error={errors.name} label={t('name')} required>
                     <TextInput
                       name="name"
@@ -4527,36 +4780,34 @@ function PartEdit({
                       value={values.name}
                     />
                   </Field>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label={t('partType')}>
-                      <TextInput
-                        name="partType"
-                        onChange={(event) =>
-                          setValues((current) =>
-                            current
-                              ? { ...current, partType: event.target.value }
-                              : current,
-                          )
-                        }
-                        value={values.partType}
-                      />
-                    </Field>
-                    <Field hint={t('oemHint')} label={t('oem')}>
-                      <TextInput
-                        className="font-mono"
-                        maxLength={100}
-                        name="oemCode"
-                        onChange={(event) =>
-                          setValues((current) =>
-                            current
-                              ? { ...current, oemCode: event.target.value }
-                              : current,
-                          )
-                        }
-                        value={values.oemCode}
-                      />
-                    </Field>
-                  </div>
+                  <Field label={t('partType')}>
+                    <TextInput
+                      name="partType"
+                      onChange={(event) =>
+                        setValues((current) =>
+                          current
+                            ? { ...current, partType: event.target.value }
+                            : current,
+                        )
+                      }
+                      value={values.partType}
+                    />
+                  </Field>
+                  <Field hint={t('oemHint')} label={t('oem')}>
+                    <TextInput
+                      className="font-mono"
+                      maxLength={100}
+                      name="oemCode"
+                      onChange={(event) =>
+                        setValues((current) =>
+                          current
+                            ? { ...current, oemCode: event.target.value }
+                            : current,
+                        )
+                      }
+                      value={values.oemCode}
+                    />
+                  </Field>
                   <Field label={t('notes')}>
                     <TextArea
                       className="resize-none"
@@ -4570,6 +4821,28 @@ function PartEdit({
                       }
                       rows={2}
                       value={values.notes}
+                    />
+                  </Field>
+                  <Field
+                    className="sm:col-span-2"
+                    hint={t('publicDescriptionHint')}
+                    label={t('publicDescription')}
+                  >
+                    <TextArea
+                      name="publicDescription"
+                      onChange={(event) => {
+                        setPublicDescriptionTouched(true)
+                        setValues((current) =>
+                          current
+                            ? {
+                                ...current,
+                                publicDescription: event.target.value,
+                              }
+                            : current,
+                        )
+                      }}
+                      rows={3}
+                      value={values.publicDescription}
                     />
                   </Field>
                 </div>

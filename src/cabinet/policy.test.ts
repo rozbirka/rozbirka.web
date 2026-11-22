@@ -446,6 +446,7 @@ describe('cabinetModules', () => {
       '/dashboard',
       '/intakes',
       '/inventory',
+      '/olx',
       '/orders',
       '/parts',
       '/reports',

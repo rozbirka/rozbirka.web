@@ -25,7 +25,7 @@ import {
   type CabinetNavigationGroup,
 } from './module-registry'
 import { moduleLabel, navigationGroupLabel } from './module-messages'
-import { useHiddenModules } from './nova-poshta-presence'
+import { useHiddenModules } from './navigation-visibility'
 import { evaluateModuleAccess } from './policy'
 import { stickerNavigationTarget } from './stickers/sticker-access'
 import { shellMessages } from './shell-messages'

@@ -25,6 +25,9 @@ export const integrationsMessages = defineMessages({
     kpiNeverChecked: 'Жодне підключення ще не перевірялося',
     kpiFreshest: 'Найсвіжіша серед усіх підключень',
     connectedTitle: 'Підключені сервіси',
+    olxKind: 'Оголошення',
+    olxLoadError:
+      'Не вдалося завантажити стан OLX. Відкрийте його налаштування, щоб повторити спробу.',
     connectedHint: 'Оберіть рядок, щоб відкрити налаштування',
     noneConnected: 'Жодного сервісу ще не підключено.',
     serviceFallback: 'Сервіс',
@@ -103,6 +106,9 @@ export const integrationsMessages = defineMessages({
     kpiNeverChecked: 'No connection has been checked yet',
     kpiFreshest: 'Most recent across all connections',
     connectedTitle: 'Connected services',
+    olxKind: 'Adverts',
+    olxLoadError:
+      'Could not load the OLX connection status. Open its settings to try again.',
     connectedHint: 'Choose a row to open its settings',
     noneConnected: 'No services connected yet.',
     serviceFallback: 'Service',
@@ -178,6 +184,9 @@ export const integrationsMessages = defineMessages({
     kpiNeverChecked: 'Żadne połączenie nie zostało jeszcze sprawdzone',
     kpiFreshest: 'Najnowsze ze wszystkich połączeń',
     connectedTitle: 'Połączone usługi',
+    olxKind: 'Ogłoszenia',
+    olxLoadError:
+      'Nie udało się wczytać stanu połączenia OLX. Otwórz jego ustawienia i spróbuj ponownie.',
     connectedHint: 'Wybierz wiersz, aby otworzyć ustawienia',
     noneConnected: 'Nie połączono jeszcze żadnej usługi.',
     serviceFallback: 'Usługa',

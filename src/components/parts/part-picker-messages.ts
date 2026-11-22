@@ -21,6 +21,7 @@ export const partPickerMessages = defineMessages({
     loading: 'Завантажуємо…',
     showMore: 'Показати ще',
     inOrder: 'у замовленні',
+    olxSubmission: 'Є публікація OLX',
     retry: 'Повторити пошук',
   },
   'en-GB': {
@@ -43,6 +44,7 @@ export const partPickerMessages = defineMessages({
     loading: 'Loading…',
     showMore: 'Show more',
     inOrder: 'in order',
+    olxSubmission: 'Has an OLX submission',
     retry: 'Retry search',
   },
   pl: {
@@ -65,6 +67,7 @@ export const partPickerMessages = defineMessages({
     loading: 'Wczytywanie…',
     showMore: 'Pokaż więcej',
     inOrder: 'w zamówieniu',
+    olxSubmission: 'Ma publikację OLX',
     retry: 'Ponów wyszukiwanie',
   },
 })

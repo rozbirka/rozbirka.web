@@ -6,6 +6,12 @@ type PermissionCopy = Record<Permission | `${Permission}.hint`, string>
 
 export const permissionMessages = defineMessages({
   uk: {
+    'olx.integration.manage': 'Керування інтеграцією OLX',
+    'olx.integration.manage.hint': 'Підключення та відключення акаунта OLX.',
+    'olx.publications.manage': 'Керування публікаціями OLX',
+    'olx.publications.manage.hint':
+      'Публікація, перевірка статусів і керування оголошеннями.',
+
     'cars.view': 'Перегляд автомобілів',
     'cars.view.hint': 'Список автомобілів та їхні картки.',
     'cars.manage': 'Керування автомобілями',
@@ -64,6 +70,11 @@ export const permissionMessages = defineMessages({
     'billing.manage.hint': 'Зміна тарифу та керування підпискою.',
   } satisfies PermissionCopy,
   'en-GB': {
+    'olx.integration.manage': 'Manage OLX connection',
+    'olx.integration.manage.hint': 'Connect and disconnect an OLX account.',
+    'olx.publications.manage': 'Manage OLX publications',
+    'olx.publications.manage.hint':
+      'Publish parts, check statuses and manage adverts.',
     'cars.view': 'View vehicles',
     'cars.view.hint': 'View the vehicle list and vehicle details.',
     'cars.manage': 'Manage vehicles',
@@ -122,6 +133,12 @@ export const permissionMessages = defineMessages({
     'billing.manage.hint': 'Change the plan and manage the subscription.',
   } satisfies PermissionCopy,
   pl: {
+    'olx.integration.manage': 'Zarządzanie integracją OLX',
+    'olx.integration.manage.hint': 'Podłączanie i odłączanie konta OLX.',
+    'olx.publications.manage': 'Zarządzanie ogłoszeniami OLX',
+    'olx.publications.manage.hint':
+      'Publikowanie części, sprawdzanie stanów i zarządzanie ogłoszeniami.',
+
     'cars.view': 'Przeglądanie aut',
     'cars.view.hint': 'Lista aut i ich karty.',
     'cars.manage': 'Zarządzanie autami',

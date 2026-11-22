@@ -1,5 +1,6 @@
 import { apiClient } from './client'
 import type { Page, RequestOptions } from './contracts'
+import type { components } from './generated/core'
 
 export interface PartListItem {
   id: string
@@ -26,6 +27,7 @@ export interface PartDetail {
   name: string
   condition: string
   notes: string | null
+  publicDescription?: string | null
   qrCode: string
   unit: string
   source: string
@@ -122,9 +124,14 @@ export interface PartCompatibilityFilter {
  * restriction on this dimension" — the server reads a missing filter and an
  * empty one the same way.
  */
+export type PartOlxFilter = 'olx' | 'linked' | 'unlinked' | 'attention'
+export type PartOlxStatus = components['schemas']['PartOlxStatusDto']
+export type PartSearchPage = Page<PartSearchItem> & { olxConnected?: boolean }
+
 export interface PartSearchRequest {
   query?: string | null
   statuses?: string[]
+  olxStatus?: PartOlxFilter
   carIds?: string[]
   intakeIds?: string[]
   warehouseIds?: string[]
@@ -147,6 +154,7 @@ export interface PartSearchRequest {
 }
 
 export interface PartSearchItem {
+  olx?: PartOlxStatus | null
   id: string
   name: string
   oemCode: string | null
@@ -240,10 +248,12 @@ export interface PartCompatibilityItem {
   makeName: string | null
   modelId: string | null
   modelName: string | null
+  generationName?: string | null
   yearFrom: number | null
   yearTo: number | null
   /** `DonorObservation` is the row Core took from the part's own car. */
   evidenceType: string
+  verificationStatus?: string
 }
 
 export interface PartCompatibilities {
@@ -273,6 +283,7 @@ export interface CreatePartRequest {
   oemCode?: string | null
   condition?: string | null
   notes?: string | null
+  publicDescription?: string | null
   quantity: number
   unit?: string | null
   photoKeys: string[]
@@ -293,6 +304,7 @@ export interface UpdatePartRequest {
   oemCode?: string | null
   condition?: string | null
   notes?: string | null
+  publicDescription?: string | null
   quantity?: number | null
   partType?: string | null
   unit?: string | null
@@ -340,9 +352,9 @@ export const partsApi = {
   async search(
     request: PartSearchRequest,
     options: RequestOptions = {},
-  ): Promise<Page<PartSearchItem>> {
+  ): Promise<PartSearchPage> {
     const page = (
-      await apiClient.post<Page<PartSearchItem>>(
+      await apiClient.post<PartSearchPage>(
         '/parts/search',
         request,
         requestConfig(options),

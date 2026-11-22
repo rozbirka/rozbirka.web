@@ -15,6 +15,7 @@ import {
   type IntegrationDefinition,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
+import { olxApi, type OlxConnection } from '@/api/olx'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
@@ -32,6 +33,7 @@ import {
 } from './integration-labels'
 import { integrationsMessages } from './integrations-messages'
 import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
+import { olxConnectionMessages } from '../olx/olx-connection-messages'
 
 type LoadState =
   | { kind: 'loading' }
@@ -93,6 +95,19 @@ export function IntegrationsScreen() {
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}`
+  const canReadOlx =
+    import.meta.env.DEV &&
+    (cabinet.snapshot?.permissions.has('olx.integration.manage') === true ||
+      cabinet.snapshot?.permissions.has('olx.publications.manage') === true)
+  const [olxLoaded, setOlxLoaded] = useState<{
+    key: string
+    connection: OlxConnection | null
+    failed: boolean
+  } | null>(null)
+  const olx =
+    canReadOlx && olxLoaded?.key === scopeKey ? olxLoaded.connection : null
+  const showOlx = olx !== null && (olx.available || olx.connected)
+  const olxConnected = showOlx && olx.connected
   const [loaded, setLoaded] = useState<{
     key: string
     state: LoadState
@@ -133,6 +148,22 @@ export function IntegrationsScreen() {
     )
     return () => controller.abort()
   }, [scopeKey, attempt])
+
+  useEffect(() => {
+    if (!canReadOlx || !tenant) return
+    const controller = new AbortController()
+    void olxApi.connection({ signal: controller.signal }).then(
+      (connection) => {
+        if (!controller.signal.aborted)
+          setOlxLoaded({ key: scopeKey, connection, failed: false })
+      },
+      () => {
+        if (!controller.signal.aborted)
+          setOlxLoaded({ key: scopeKey, connection: null, failed: true })
+      },
+    )
+    return () => controller.abort()
+  }, [canReadOlx, scopeKey, tenant, attempt])
 
   if (tenant === null) {
     return (
@@ -194,8 +225,8 @@ export function IntegrationsScreen() {
         lead={
           state.kind === 'ready'
             ? t('leadReady', {
-                connected: items.length,
-                total: Math.max(catalogSize, items.length),
+                connected: items.length + (olxConnected ? 1 : 0),
+                total: Math.max(catalogSize, items.length) + (showOlx ? 1 : 0),
               })
             : t('leadLoading')
         }
@@ -212,6 +243,12 @@ export function IntegrationsScreen() {
         />
       )}
       {connectError !== null && <Notice tone="danger">{connectError}</Notice>}
+      {canReadOlx && olxLoaded?.key === scopeKey && olxLoaded.failed && (
+        <Notice tone="warn">
+          {t('olxLoadError')}{' '}
+          <Link to={cabinetPath(slug, 'integrations', 'olx')}>OLX</Link>
+        </Notice>
+      )}
 
       {state.kind === 'error' ? null : (
         <section aria-label={t('connectedTitle')} className="rz-card">
@@ -223,10 +260,13 @@ export function IntegrationsScreen() {
             <div className="rz-card__body">
               <SkeletonRows embedded label={t('loading')} rows={3} />
             </div>
-          ) : items.length === 0 ? (
+          ) : items.length === 0 && !olxConnected ? (
             <p className="rz-muted rz-card__body m-0">{t('noneConnected')}</p>
           ) : (
             <ul className="divide-app-line m-0 grid list-none divide-y p-0">
+              {olxConnected && (
+                <OlxRow connection={olx} slug={slug} kind={t('olxKind')} />
+              )}
               {items.map((item) => {
                 const status = integrationStatusPresentation(
                   item.status,
@@ -288,12 +328,15 @@ export function IntegrationsScreen() {
 
       {!novaPoshtaAvailable && <NovaPoshtaUnavailable />}
 
-      {available.length > 0 && (
+      {(available.length > 0 || (showOlx && !olxConnected)) && (
         <section aria-label={t('availableTitle')} className="rz-card">
           <header className="rz-card__head">
             <h2 className="rz-h-card">{t('availableTitle')}</h2>
           </header>
           <ul className="divide-app-line m-0 grid list-none divide-y p-0">
+            {showOlx && !olxConnected && (
+              <OlxRow connection={olx} slug={slug} kind={t('olxKind')} />
+            )}
             {available.map((definition) => (
               <li
                 className="flex min-h-row flex-wrap items-center gap-x-3 gap-y-2 px-[var(--rz-card-p)] py-2"
@@ -326,5 +369,51 @@ export function IntegrationsScreen() {
         </section>
       )}
     </RedesignShell>
+  )
+}
+
+function OlxRow({
+  connection,
+  slug,
+  kind,
+}: {
+  connection: OlxConnection
+  slug: string
+  kind: string
+}) {
+  const t = useT(olxConnectionMessages)
+  const attention = !connection.available || connection.reconnectRequired
+  const status = !connection.available
+    ? 'unavailableStatus'
+    : connection.reconnectRequired
+      ? 'reconnect'
+      : connection.connected
+        ? 'connected'
+        : 'disconnected'
+  return (
+    <li>
+      <Link
+        className="flex min-h-row flex-wrap items-center gap-x-3 gap-y-2 px-[var(--rz-card-p)] py-2 text-app-muted hover:bg-app-hover"
+        to={cabinetPath(slug, 'integrations', 'olx')}
+      >
+        <Mark code="OLX" />
+        <span className="grid min-w-0 flex-1">
+          <span className="truncate font-medium text-app-strong">OLX</span>
+          <span className="rz-caption truncate">{kind}</span>
+        </span>
+        <StatusPill
+          tone={attention ? 'warn' : connection.connected ? 'ok' : 'neutral'}
+        >
+          {t(status)}
+        </StatusPill>
+        <span className="rz-num min-w-[104px] text-app-muted">
+          {connection.verifiedAt ? (
+            <DateValue value={connection.verifiedAt} withTime={false} />
+          ) : (
+            t('neverChecked')
+          )}
+        </span>
+      </Link>
+    </li>
   )
 }

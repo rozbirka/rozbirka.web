@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import AxeBuilder from '@axe-core/playwright'
 import {
+  appOrigin,
   upstreamOrigin,
   expect,
   test,
@@ -139,6 +140,7 @@ const pendingPaymentPage = {
 }
 
 interface CabinetFixtureOptions {
+  olxAlpha?: boolean
   partsManage?: boolean
   cabinetParityRolledOut?: boolean
   sobolBilling?: boolean
@@ -179,6 +181,14 @@ interface DashboardUpstreamStats {
 
 async function fulfillData(route: Route, data: unknown, status = 200) {
   await route.fulfill({ status, json: status < 400 ? { data } : data })
+}
+
+function fulfillOlxCallback(route: Route, outcome: 'connected' | 'cancelled') {
+  // Playwright cannot fulfill an intercepted navigation with a redirect on WebKit.
+  return route.fulfill({
+    contentType: 'text/html',
+    body: `<!doctype html><meta http-equiv="refresh" content="0;url=/app/koval/olx-alpha?olx=${outcome}">`,
+  })
 }
 
 const isPaymentCancellationPath = (path: string) =>
@@ -358,6 +368,14 @@ async function installCabinetApiBoundary(
         'tenant-1': {
           role: 'owner',
           permissions: [
+            ...(options.olxAlpha
+              ? [
+                  'olx.integration.manage',
+                  'olx.publications.manage',
+                  'parts.view',
+                  'parts.manage',
+                ]
+              : []),
             'cars.view',
             'cars.manage',
             ...(options.businessOperations
@@ -4269,3 +4287,2080 @@ for (const mode of ['parts', 'locations'] as const) {
     })
   })
 }
+
+test('OLX local alpha publishes and observes simulated moderation only on explicit refresh', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { olxAlpha: true })
+  let connected = false
+  let provider = 'new'
+  let view = {
+    partId: '11111111-1111-1111-1111-111111111111',
+    advertId: null as string | null,
+    coreStatus: 'available',
+    observedStatus: null as string | null,
+    observedAt: null as string | null,
+    syncState: 'draft',
+    error: null,
+    excluded: false,
+    autoRestoreBlocked: false,
+    content: {
+      publicDescription: '',
+      categoryId: null as string | null,
+      categoryConfirmed: false,
+      attributes: {},
+    },
+    lastSent: null,
+  }
+  let refreshes = 0
+  await page.route('**/api/v1/integrations/olx/connection', (route) =>
+    fulfillData(route, {
+      available: true,
+      connected,
+      accountId: connected ? 'alpha-seller-1' : null,
+      mode: 'simulator',
+    }),
+  )
+  await page.route('**/api/v1/olx-alpha/**', async (route) => {
+    const request = route.request()
+    expect(request.headers()['x-tenant-id']).toBe('tenant-1')
+    const path = new URL(request.url()).pathname
+    if (path.endsWith('/connection')) {
+      if (request.method() === 'POST') connected = true
+      return fulfillData(route, {
+        available: true,
+        connected,
+        accountId: connected ? 'alpha-seller-1' : null,
+        mode: 'simulator',
+      })
+    }
+    if (path.endsWith('/content'))
+      view = { ...view, content: request.postDataJSON() as typeof view.content }
+    if (path.endsWith('/publish'))
+      view = {
+        ...view,
+        advertId: 'sim-1',
+        observedStatus: 'new',
+        observedAt: new Date().toISOString(),
+        syncState: 'synced',
+      }
+    if (path.endsWith('/simulate'))
+      provider = (request.postDataJSON() as { status: string }).status
+    if (path.endsWith('/refresh')) {
+      refreshes++
+      view = {
+        ...view,
+        observedStatus: provider,
+        observedAt: new Date().toISOString(),
+      }
+    }
+    return fulfillData(route, view)
+  })
+  await page.route('**/api/v1/parts/search', (route) =>
+    fulfillData(route, {
+      items: [
+        {
+          id: view.partId,
+          name: 'Крило тестове',
+          quantity: 1,
+          quantityReserved: 0,
+          quantityAvailable: 1,
+          status: 'available',
+          thumbnailUrl: null,
+          car: null,
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 6,
+      totalPages: 1,
+    }),
+  )
+  await page.route(
+    '**/api/v1/parts/11111111-1111-1111-1111-111111111111',
+    (route) =>
+      fulfillData(route, {
+        id: view.partId,
+        name: 'Крило тестове',
+        effectiveSalePrice: 250,
+      }),
+  )
+  await loginFrom(page)
+  await page.goto('/app/koval/settings/integrations/olx')
+  await page.getByRole('button', { name: 'Підключити тестовий акаунт' }).click()
+  await page.getByRole('link', { name: 'Відкрити розділ OLX' }).click()
+  await expect(page).toHaveURL(/\/app\/koval\/olx$/)
+  await page.getByRole('searchbox', { name: 'Пошук запчастини' }).fill('Крило')
+  await page.getByRole('option', { name: /Крило тестове/ }).click()
+  await page.getByLabel('Публічний опис').fill('Тестовий публічний опис')
+  await page
+    .getByLabel('Категорія тестового каталогу')
+    .selectOption('car-parts')
+  await page.getByLabel('Підтверджую категорію').check()
+  await page.getByLabel('Стан для оголошення').selectOption('used')
+  await page.getByRole('button', { name: 'Зберегти дані OLX' }).click()
+  await page.getByRole('button', { name: 'Опублікувати', exact: true }).click()
+  await expect(
+    page.getByText('Очікує модерації', { exact: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Пройшла модерацію' }).click()
+  await expect(
+    page.getByText('Очікує модерації', { exact: true }),
+  ).toBeVisible()
+  expect(refreshes).toBe(0)
+  await page.getByRole('button', { name: 'Оновити статус' }).click()
+  await expect(page.getByText('Активне', { exact: true })).toBeVisible()
+  expect(refreshes).toBe(1)
+  await expect(
+    page.getByRole('button', { name: 'Опублікувати', exact: true }),
+  ).toBeDisabled()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(
+    page.getByRole('button', { name: 'Оновити статус' }),
+  ).toBeVisible()
+})
+
+test('OLX listing settings and searchable part status work from the cabinet', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { olxAlpha: true })
+  let settings = {
+    contactName: 'Склад',
+    contactPhone: null,
+    cityId: null,
+    districtId: null,
+    descriptionSuffix: 'Самовивіз зі складу.',
+  }
+  await page.route('**/api/v1/integrations/olx/connection', (route) =>
+    fulfillData(route, {
+      available: true,
+      connected: true,
+      accountId: 'synthetic-seller-123',
+      mode: 'oauth',
+      scope: 'v2 write',
+      reconnectRequired: false,
+    }),
+  )
+  await page.route('**/api/v1/integrations/olx/listing-settings', (route) => {
+    expect(route.request().headers()['x-tenant-id']).toBe('tenant-1')
+    if (route.request().method() === 'PUT')
+      settings = route.request().postDataJSON() as typeof settings
+    return fulfillData(route, settings)
+  })
+
+  await page.route('**/api/v1/parts/search/facets', (route) =>
+    fulfillData(route, {
+      statuses: [],
+      warehouses: [],
+      zones: [],
+      conditions: [],
+      equipmentTypes: [],
+      makes: [],
+      models: [],
+      generations: [],
+      origins: [],
+      qualityFlags: [],
+      inventoryLocks: [],
+      discrepancies: [],
+    }),
+  )
+  let lastSearch: { olxStatus?: string } | undefined
+  await page.route('**/api/v1/parts/search', (route) => {
+    lastSearch = route.request().postDataJSON() as { olxStatus?: string }
+    return fulfillData(route, {
+      items: [
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          name: 'Фара для перевірки статусу',
+          quantity: 1,
+          quantityAvailable: 1,
+          quantityReserved: 0,
+          status: 'available',
+          olx: {
+            advertId: '123',
+            state: 'linked',
+            observedStatus: 'moderated',
+            needsAttention: true,
+          },
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 30,
+      totalPages: 1,
+      olxConnected: true,
+    })
+  })
+
+  await loginFrom(page)
+  await page.goto('/app/koval/settings/integrations/olx')
+  await page.getByRole('link', { name: 'Налаштування оголошень' }).click()
+  await expect(page).toHaveURL(/\/settings\/integrations\/olx\/listing$/)
+  const suffix = page.getByRole('textbox', { name: 'Текст наприкінці опису' })
+  await expect(suffix).toHaveValue('Самовивіз зі складу.')
+  await suffix.fill('Самовивіз і відправлення.')
+  await page
+    .locator('.rz-topbar')
+    .getByRole('button', { name: 'Зберегти', exact: true })
+    .click()
+  await expect(page.getByText('Налаштування збережено.')).toBeVisible()
+  await page.reload()
+  await expect(suffix).toHaveValue('Самовивіз і відправлення.')
+
+  const olxRequests: string[] = []
+  page.on('request', (request) => {
+    if (request.url().includes('/api/v1/integrations/olx/'))
+      olxRequests.push(request.url())
+  })
+  await page.goto('/app/koval/parts')
+  const part = page.getByRole('row', { name: /Фара для перевірки статусу/ })
+  await expect(part.getByTitle('OLX · Відхилено модерацією')).toBeVisible()
+  await page.getByRole('button', { name: 'Майданчики' }).click()
+  await page.getByText('Потребують уваги', { exact: true }).click()
+  await expect.poll(() => lastSearch?.olxStatus).toBe('attention')
+  await expect(part).toBeVisible()
+  expect(olxRequests).toEqual([])
+})
+
+test('OLX bulk category and publication from the parts list separate ready and blocked parts', async ({
+  page,
+}, testInfo) => {
+  await installCabinetApiBoundary(page, { olxAlpha: true, partsManage: true })
+  const seller = 'synthetic-batch-seller'
+  const parts = [
+    'Передня ліва фара Volkswagen',
+    'Передня права фара Volkswagen',
+    'Задній ліхтар Volkswagen',
+    'Протитуманна фара Volkswagen',
+    'Додаткова фара Volkswagen',
+  ].map((name, index) => ({
+    id: `11111111-1111-1111-1111-11111111111${index}`,
+    name,
+    quantity: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    status: 'available',
+  }))
+  const drafts = new Map<string, { content: unknown; revision: string }>()
+  const submitted: string[][] = []
+  const jobId = 'd38ad12c-780f-4dc3-9a8f-f05b9b3945f0'
+  const retryId = '3b0f64e0-a2b1-46dc-9f44-f227c0df4ee3'
+  const retryRequests: { operationId: string; partIds: string[] }[] = []
+  let jobReads = 0
+  let stopped = false
+  let reviewCount = 0
+  await page.route('**/api/v1/parts/search/facets', (route) =>
+    fulfillData(route, {
+      statuses: [{ id: 'available', name: 'available', count: parts.length }],
+      warehouses: [],
+      zones: [],
+      conditions: [],
+      equipmentTypes: [],
+      makes: [],
+      models: [],
+      generations: [],
+      origins: [],
+      qualityFlags: [],
+      inventoryLocks: [],
+      discrepancies: [],
+    }),
+  )
+  await page.route('**/api/v1/parts/search', (route) =>
+    fulfillData(route, {
+      items: parts,
+      total: parts.length,
+      page: 1,
+      pageSize: 30,
+      totalPages: 1,
+      olxConnected: true,
+    }),
+  )
+  await page.route('**/api/v1/integrations/olx/connection', (route) =>
+    fulfillData(route, {
+      available: true,
+      connected: true,
+      mode: 'oauth',
+      accountId: seller,
+      scope: 'v2 read write',
+      writesAvailable: true,
+      reconnectRequired: false,
+    }),
+  )
+  await page.route('**/api/v1/integrations/olx/live/**', async (route) => {
+    const segments = new URL(route.request().url()).pathname.split('/')
+    const action = segments.at(-1)
+    if (action === 'categories') {
+      return fulfillData(route, [
+        { id: 2544, name: 'Фари', path: 'Запчастини / Фари', photosLimit: 13 },
+      ])
+    }
+    if (segments.includes('publication-jobs')) {
+      const queued = [parts[0], parts[1], parts[4]].map(({ id }) => ({
+        partId: id,
+        revision: drafts.get(id)?.revision,
+      }))
+      const job = {
+        id: jobId,
+        status: stopped ? 'stopped' : 'running',
+        error: stopped ? 'OLX_RATE_LIMITED' : null,
+        createdAt: '2026-11-20T12:00:00Z',
+        updatedAt: '2026-11-20T12:00:00Z',
+        parts: queued,
+        partNames: Object.fromEntries(parts.map(({ id, name }) => [id, name])),
+        results: [
+          { partId: parts[0].id, status: 'submitted', advertId: '4501' },
+          ...(stopped
+            ? [
+                {
+                  partId: parts[1].id,
+                  status: 'pending',
+                  error: 'OLX_RATE_LIMITED',
+                },
+                { partId: parts[4].id, status: 'skipped' },
+              ]
+            : []),
+        ],
+      }
+      const retry = {
+        ...job,
+        id: retryId,
+        retryOfJobId: jobId,
+        status: 'completed',
+        error: null,
+        parts: queued.filter(({ partId }) => partId === parts[4].id),
+        results: [
+          { partId: parts[4].id, status: 'submitted', advertId: '4502' },
+        ],
+      }
+      if (action === 'retry' && segments.at(-2) === jobId) {
+        const body = route.request().postDataJSON() as {
+          operationId: string
+          partIds: string[]
+        }
+        expect(typeof body.operationId).toBe('string')
+        expect(body.partIds).toEqual([parts[4].id])
+        retryRequests.push(body)
+        if (retryRequests.length === 1)
+          return route.fulfill({ status: 503, json: { success: false } })
+        return fulfillData(route, retry, 202)
+      }
+      if (action === retryId) return fulfillData(route, retry)
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON() as {
+          operationId: string
+          accountId: string
+          parts: { partId: string; revision: string }[]
+        }
+        expect(typeof body.operationId).toBe('string')
+        expect(body).toEqual({
+          operationId: body.operationId,
+          accountId: seller,
+          parts: queued,
+        })
+        submitted.push(body.parts.map(({ partId }) => partId))
+        return fulfillData(route, { ...job, status: 'queued', results: [] })
+      }
+      if (action === jobId) {
+        jobReads++
+        return fulfillData(route, job)
+      }
+      return fulfillData(route, retryRequests.length > 0 ? [retry, job] : [job])
+    }
+    const part = parts.find(({ id }) => id === segments.at(-2))
+    if (!part)
+      throw new Error(`Unexpected OLX batch route: ${route.request().url()}`)
+    const draft = drafts.get(part.id)
+    if (action === 'publication')
+      return fulfillData(route, {
+        ...draft,
+        partId: part.id,
+        canWrite: true,
+        state: part.id === parts[3].id ? 'linked' : 'draft',
+        advertId: part.id === parts[3].id ? '4480' : null,
+        content: draft?.content ?? {
+          advertiserType: 'business',
+          attributes: {},
+          categoryConfirmed: false,
+          contactName: 'Склад',
+          contactPhone: '',
+          publicDescription: 'Тестовий опис запчастини.',
+          cityId: 1,
+        },
+      })
+    if (action === 'draft') {
+      const body = route.request().postDataJSON() as { content: unknown }
+      expect(body).toMatchObject({
+        expectedAccountId: seller,
+        expectedRevision: draft?.revision ?? null,
+        content: { categoryId: 2544, categoryConfirmed: true },
+      })
+      const revision = `draft-${part.id}-${draft ? '2' : '1'}`
+      drafts.set(part.id, { content: body.content, revision })
+      return fulfillData(route, {
+        partId: part.id,
+        revision,
+        canWrite: true,
+        state: 'draft',
+      })
+    }
+    if (action === 'preview') {
+      reviewCount++
+      expect(route.request().postDataJSON()).toMatchObject({
+        categoryId: 2544,
+        categoryConfirmed: true,
+        advertiserType: 'business',
+      })
+      return fulfillData(route, {
+        part: {
+          partId: part.id,
+          title: part.name,
+          photos: [],
+          status: 'available',
+        },
+        issues:
+          part.id === parts[2].id
+            ? [{ field: 'price', code: 'price_required' }]
+            : [],
+      })
+    }
+    throw new Error(`Unexpected OLX batch action: ${action}`)
+  })
+
+  await loginFrom(page)
+  await page.goto('/app/koval/parts')
+  for (const part of parts) {
+    await page.getByRole('checkbox', { name: `Обрати: ${part.name}` }).check()
+  }
+  const toolbar = page.getByRole('region', { name: 'Дії над обраними' })
+  await toolbar.getByRole('button', { name: 'Майданчики' }).click()
+  await page.getByRole('menuitem', { name: 'Призначити категорію…' }).click()
+  const categorySheet = page.getByRole('dialog', {
+    name: 'Категорія на майданчику',
+  })
+  await categorySheet.getByRole('button', { name: 'Категорія OLX' }).click()
+  await page.getByRole('option', { name: /Фари/ }).click()
+  await expect(
+    categorySheet.getByRole('textbox', { name: 'Майданчик' }),
+  ).toHaveValue('OLX')
+  expect((await categorySheet.boundingBox())?.width).toBe(
+    Math.min(480, page.viewportSize()?.width ?? 480),
+  )
+  await page.screenshot({ path: testInfo.outputPath('olx-bulk-category.png') })
+  await categorySheet
+    .getByRole('button', { name: 'Призначити', exact: true })
+    .click()
+  const assigned = page.getByRole('dialog', {
+    name: 'Результат призначення категорії',
+  })
+  await expect(
+    assigned
+      .getByRole('region', { name: 'Категорію призначено · 4' })
+      .getByRole('listitem'),
+  ).toHaveCount(4)
+  expect(drafts.size).toBe(4)
+  expect(submitted).toEqual([])
+
+  await assigned.getByRole('button', { name: 'Перейти до публікації' }).click()
+  const publicationSheet = page.getByRole('dialog', {
+    name: 'Опублікувати на майданчику',
+    exact: true,
+  })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(
+    publicationSheet.getByText('Готові 3 · Очікують даних 1'),
+  ).toBeVisible()
+  await expect(
+    publicationSheet.getByRole('button', { name: 'Тип продавця' }),
+  ).toHaveCount(0)
+  await expect(
+    publicationSheet.getByText('Вкажіть ціну більше нуля.'),
+  ).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('olx-bulk-preflight.png') })
+  await publicationSheet
+    .getByRole('button', { name: 'Опублікувати', exact: true })
+    .click()
+  expect(submitted).toEqual([])
+  await page
+    .getByRole('dialog', { name: 'Опублікувати готові запчастини на OLX?' })
+    .getByRole('button', { name: 'Опублікувати', exact: true })
+    .click()
+  const result = page.getByRole('dialog', {
+    name: 'Результат публікації на OLX',
+  })
+  await expect(
+    page.getByRole('dialog', {
+      name: 'Опублікувати готові запчастини на OLX?',
+    }),
+  ).toHaveCount(0)
+  await expect(result.getByText('Опрацьовано 1 з 3')).toBeVisible()
+  expect(jobReads).toBe(1)
+  const queuedPositions = result.getByRole('region', { name: 'У черзі · 2' })
+  await expect(queuedPositions.getByText(parts[4].name)).toBeVisible()
+  stopped = true
+  await result.getByRole('button', { name: 'Оновити стан завдання' }).click()
+  await expect(result.getByText('Опрацьовано 2 з 3')).toBeVisible()
+  await expect(result.getByText('Зупинено', { exact: true })).toBeVisible()
+  const accepted = result.getByRole('region', {
+    name: 'Прийнято в обробку · 1',
+  })
+  await expect(accepted.getByText('Оголошення № 4501')).toBeVisible()
+  const blocked = result.getByRole('region', { name: 'Очікують даних · 1' })
+  await expect(blocked.getByRole('link', { name: /Виправити/ })).toBeVisible()
+  await expect(
+    result
+      .getByRole('region', { name: 'Уже пов’язані · 1' })
+      .getByText('Оголошення № 4480'),
+  ).toBeVisible()
+  const uncertain = result.getByRole('region', {
+    name: 'Потрібно перевірити статус · 1',
+  })
+  const skipped = result.getByRole('region', { name: 'Не опрацьовано · 1' })
+  await expect(uncertain.getByText(parts[1].name)).toBeVisible()
+  await expect(skipped.getByText(parts[4].name)).toBeVisible()
+  expect((await result.boundingBox())?.width).toBe(390)
+  await page.screenshot({
+    path: testInfo.outputPath('olx-bulk-result-mobile.png'),
+  })
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.screenshot({
+    path: testInfo.outputPath('olx-bulk-result-desktop.png'),
+  })
+  expect(reviewCount).toBe(4)
+  await result.getByRole('button', { name: 'Готово' }).click()
+  await page.reload()
+  await page.getByRole('button', { name: 'Завдання OLX' }).click()
+  const history = page.getByRole('dialog', { name: 'Завдання OLX' })
+  await history.getByRole('button', { name: /Зупинено.*2\/3/ }).click()
+  await expect(result.getByText('Оголошення № 4501')).toBeVisible()
+  await expect(result.getByText('Опрацьовано 2 з 3')).toBeVisible()
+  await expect(uncertain.getByText(parts[1].name)).toBeVisible()
+  await expect(skipped.getByText(parts[4].name)).toBeVisible()
+  expect(jobReads).toBe(3)
+  expect(submitted).toEqual([[parts[0].id, parts[1].id, parts[4].id]])
+
+  const retryAction = result.getByRole('button', { name: /Повторити вибране/ })
+  await expect(retryAction).toBeDisabled()
+  await expect(accepted.getByRole('checkbox')).toHaveCount(0)
+  await expect(
+    uncertain.getByRole('checkbox', { name: /Вибрати для звірки/ }),
+  ).not.toBeChecked()
+  await skipped.getByRole('checkbox', { name: /Вибрати для повтору/ }).check()
+  await retryAction.click()
+  const confirmation = page.getByRole('dialog', {
+    name: 'Опрацювати вибрані позиції ще раз?',
+  })
+  expect(retryRequests).toHaveLength(0)
+  const confirm = confirmation.getByRole('button', {
+    name: 'Повторити вибране',
+  })
+  await confirm.click()
+  await expect(
+    confirmation.getByText(/Не вдалося підтвердити запуск/),
+  ).toBeVisible()
+  await confirm.click()
+  await expect(result.getByText('Оголошення № 4502')).toBeVisible()
+  expect(retryRequests).toHaveLength(2)
+  expect(retryRequests[1]).toEqual(retryRequests[0])
+
+  await result.getByRole('button', { name: 'Назад' }).click()
+  await expect(
+    history.getByRole('button', { name: /Опрацювання завершено.*Повтор/ }),
+  ).toBeVisible()
+  await history.getByRole('button', { name: /Зупинено.*2\/3/ }).click()
+  await expect(result.getByText('Оголошення № 4501')).toBeVisible()
+  await expect(skipped.getByText(parts[4].name)).toBeVisible()
+})
+
+test('OLX reconciliation manually links the existing ID and saves completion', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { olxAlpha: true, partsManage: true })
+  const partId = '11111111-1111-1111-1111-111111111111'
+  let linked = false
+  let completedAt: string | null = null
+  let advertReads = 0
+  let links = 0
+  await page.route('**/api/v1/integrations/olx/**', (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/connection'))
+      return fulfillData(route, {
+        available: true,
+        connected: true,
+        accountId: 'reconcile-account',
+        mode: 'oauth',
+        scope: 'v2 read write',
+        reconciliationCompletedAt: completedAt,
+      })
+    if (path.endsWith('/adverts')) {
+      advertReads++
+      if (new URL(route.request().url()).searchParams.get('page') === '2')
+        return fulfillData(route, {
+          items: [
+            { id: '789', title: 'Бампер зі сторінки 2', status: 'active' },
+          ],
+          page: 2,
+          hasMore: false,
+          checkedAt: '2026-11-19T12:00:00Z',
+        })
+      return fulfillData(route, {
+        items: [
+          {
+            id: '123',
+            title: 'Фара зі звірки',
+            status: 'active',
+            linkedPart: linked ? { partId, partName: 'Фара ліва' } : null,
+          },
+          {
+            id: '456',
+            title: 'Раніше пов’язаний диск',
+            status: 'active',
+            linkedPart: { partName: 'Диск R17' },
+          },
+        ],
+        page: 1,
+        hasMore: true,
+        checkedAt: '2026-11-19T12:00:00Z',
+      })
+    }
+    if (path.endsWith('/publication'))
+      return fulfillData(route, {
+        partId,
+        state: 'draft',
+        canLinkExisting: true,
+        revision: null,
+      })
+    if (path.endsWith('/link')) {
+      expect(route.request().method()).toBe('POST')
+      expect(route.request().postDataJSON()).toMatchObject({
+        advertId: '123',
+        expectedRevision: null,
+        expectedAccountId: 'reconcile-account',
+      })
+      links++
+      linked = true
+      return fulfillData(route, {
+        partId,
+        advertId: '123',
+        state: 'update_pending',
+      })
+    }
+    if (path.endsWith('/reconciliation/complete')) {
+      expect(route.request().postDataJSON()).toEqual({
+        accountId: 'reconcile-account',
+      })
+      completedAt = '2026-11-19T12:00:00Z'
+      return fulfillData(route, { completedAt })
+    }
+    throw new Error(`Unexpected OLX request: ${path}`)
+  })
+  await page.route('**/api/v1/parts/search', (route) =>
+    fulfillData(route, {
+      items: [
+        {
+          id: partId,
+          name: 'Фара ліва',
+          quantity: 1,
+          quantityAvailable: 1,
+          quantityReserved: 0,
+          status: 'available',
+          thumbnailUrl: null,
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 6,
+      totalPages: 1,
+    }),
+  )
+  await page.route(`**/api/v1/parts/${partId}`, (route) =>
+    fulfillData(route, { id: partId, effectiveSalePrice: 1200 }),
+  )
+  await loginFrom(page)
+  await page.goto('/app/koval/olx')
+  await page.getByRole('link', { name: 'Прив’язування' }).click()
+  await expect(page).toHaveURL(/\/olx\/reconcile$/)
+  await expect(page.getByText('Диск R17', { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole('columnheader', { name: 'Стан на OLX' }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Не прив’язані', exact: true }).click()
+  await expect(page.getByText('Раніше пов’язаний диск')).toHaveCount(0)
+  await page.getByRole('button', { name: /Фара зі звірки/ }).click()
+  await page.getByRole('searchbox', { name: 'Пошук запчастини' }).fill('Фара')
+  await page.getByRole('option', { name: /Фара ліва/ }).click()
+  await expect(
+    page.getByRole('option', { name: /Фара ліва/, selected: true }),
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Прив’язати', exact: true }).click()
+  const confirm = page.getByRole('dialog', { name: 'Прив’язати оголошення?' })
+  await expect(confirm.getByText(/123/)).toBeVisible()
+  await confirm.getByRole('button', { name: 'Прив’язати', exact: true }).click()
+  await expect(page.getByText('Оголошення прив’язано.')).toBeVisible()
+  expect(links).toBe(1)
+  expect(advertReads).toBe(2)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page
+    .getByRole('searchbox', { name: 'Назва або номер оголошення' })
+    .fill('№ 789')
+  await expect(
+    page.getByText('Серед завантажених оголошень збігів немає.'),
+  ).toBeVisible()
+  expect(advertReads).toBe(2)
+  await page.getByRole('button', { name: 'Завантажити ще' }).click()
+  await expect(
+    page.getByRole('button', { name: /Бампер зі сторінки 2/ }),
+  ).toBeVisible()
+  expect(advertReads).toBe(3)
+  await page
+    .getByRole('button', { name: 'Завершити звірку', exact: true })
+    .click()
+  await page
+    .getByRole('dialog', { name: 'Завершити звірку?' })
+    .getByRole('button', { name: 'Завершити звірку', exact: true })
+    .click()
+  await expect(
+    page.getByText('Звірку завершено.', { exact: true }),
+  ).toBeVisible()
+  await page.reload()
+  await expect(
+    page.getByText('Звірку завершено.', { exact: true }),
+  ).toBeVisible()
+})
+
+// Synthetic provider boundary: exercises the actual cabinet and top-level launch form.
+test('OLX OAuth connection reuses cabinet UI and completes a one-time launch without polling', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { olxAlpha: true })
+  let connected = false
+  let canWrite = false
+  let verified = 0
+  let starts = 0
+  let writeStarts = 0
+  const city = { id: 17, name: 'Львів', region: 'Львівська область' }
+  let settings = {
+    cityId: null as number | null,
+    districtId: null as number | null,
+    contactName: 'Склад',
+    contactPhone: '+380671234567',
+    descriptionSuffix: null,
+  }
+  let saves = 0
+  await page.route('**/api/v1/integrations/olx/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path.endsWith('/oauth/write/start')) {
+      writeStarts++
+      expect(request.headers()['x-tenant-id']).toBe('tenant-1')
+      return fulfillData(route, {
+        launchUrl: `${appOrigin()}/api/v1/integrations/olx/oauth/launch`,
+        ticket: 'synthetic-write-ticket',
+        expiresAt: '2026-11-17T18:00:00Z',
+      })
+    }
+    if (path.endsWith('/oauth/start')) {
+      starts++
+      expect(request.headers()['x-tenant-id']).toBe('tenant-1')
+      return fulfillData(route, {
+        launchUrl: `${appOrigin()}/api/v1/integrations/olx/oauth/launch`,
+        ticket: 'synthetic-one-time-ticket',
+        expiresAt: '2026-11-17T18:00:00Z',
+      })
+    }
+    if (path.endsWith('/oauth/launch')) {
+      expect(request.method()).toBe('POST')
+      expect(request.postData()).toBe(
+        writeStarts
+          ? 'ticket=synthetic-write-ticket'
+          : 'ticket=synthetic-one-time-ticket',
+      )
+      expect(request.url()).not.toContain('ticket=')
+      connected = true
+      canWrite = writeStarts > 0
+      return fulfillOlxCallback(route, 'connected')
+    }
+    if (path.endsWith('/listing-settings')) {
+      if (request.method() === 'PUT') {
+        saves++
+        const next = request.postDataJSON() as typeof settings
+        expect(next).toEqual({ ...settings, cityId: city.id, districtId: 51 })
+        settings = next
+      }
+      return fulfillData(route, settings)
+    }
+    if (path.endsWith('/listing-settings/cities'))
+      return fulfillData(route, [city])
+    if (path.endsWith('/listing-settings/cities/17'))
+      return fulfillData(route, city)
+    if (path.endsWith('/listing-settings/cities/17/districts'))
+      return fulfillData(route, [{ id: 51, name: 'Франківський' }])
+    if (path.endsWith('/live/adverts'))
+      return fulfillData(route, {
+        items: [],
+        page: 1,
+        hasMore: false,
+        checkedAt: '2026-11-18T12:00:00Z',
+      })
+    if (path.endsWith('/verify')) verified++
+    return fulfillData(route, {
+      available: true,
+      connected,
+      accountId: connected ? 'synthetic-seller-123' : null,
+      mode: 'oauth',
+      scope: canWrite ? 'v2 read write' : 'v2 read',
+      writesAvailable: true,
+      verifiedAt: connected ? '2026-11-17T12:00:00Z' : null,
+      reconnectRequired: false,
+    })
+  })
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await loginFrom(page)
+  await page.goto('/app/koval/settings/integrations/olx')
+  const connect = page.getByRole('button', {
+    name: 'Підключити OLX',
+    exact: true,
+  })
+  await expect(connect).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Підключіть акаунт OLX' }),
+  ).toBeVisible()
+  await expect(page.getByLabel('Ідентифікатор тестового акаунта')).toHaveCount(
+    0,
+  )
+  await connect.focus()
+  await expect(connect).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/olx\/listing\?setup=location$/)
+  await expect(
+    page.getByText('Оберіть місто для нових оголошень'),
+  ).toBeVisible()
+  const allowPublication = page.getByRole('button', {
+    name: 'Дозволити публікацію в OLX',
+  })
+  await expect(allowPublication).toBeVisible()
+  expect(writeStarts).toBe(0)
+  const citySearch = page.getByRole('searchbox', {
+    name: 'Введіть від двох літер назви міста',
+  })
+  await expect(citySearch).toBeFocused()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(citySearch).toBeVisible()
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
+  await citySearch.fill('Львів')
+  await page.getByRole('option', { name: 'Львів · Львівська область' }).click()
+  const saveLocation = page.getByRole('button', {
+    name: 'Зберегти',
+    exact: true,
+  })
+  await expect(saveLocation).toBeDisabled()
+  await page.getByRole('combobox', { name: 'Район' }).selectOption('51')
+  await saveLocation.click()
+  await expect(page).toHaveURL(/\/olx\/listing$/)
+  await expect(page.getByText('Оберіть місто для нових оголошень')).toHaveCount(
+    0,
+  )
+  await expect(
+    page.getByRole('button', { name: 'Місто', exact: true }),
+  ).toContainText('Львів')
+  expect(saves).toBe(1)
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await page.getByRole('link', { name: 'Акаунт', exact: true }).click()
+  await expect(
+    page.getByText('synthetic-seller-123', { exact: true }),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/app\/koval\/settings\/integrations\/olx$/)
+  expect(starts).toBe(1)
+  expect(verified).toBe(0)
+  await expect(
+    page.getByText('Доступ до читання', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Опублікувати', exact: true }),
+  ).toHaveCount(0)
+  const accessibility = await new AxeBuilder({ page })
+    .include('main')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+    .analyze()
+  expect(accessibility.violations).toEqual([])
+  await page.getByRole('button', { name: 'Перевірити підключення' }).click()
+  await expect.poll(() => verified).toBe(1)
+  await page
+    .getByRole('button', { name: 'Відключити акаунт', exact: true })
+    .click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.getByRole('button', { name: 'Скасувати', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  for (const theme of ['light', 'dark']) {
+    await page.setViewportSize({ width: 375, height: 860 })
+    await page.evaluate((value) => {
+      document.documentElement.setAttribute('data-theme', value)
+      document
+        .querySelectorAll('[data-theme]')
+        .forEach((element) => element.setAttribute('data-theme', value))
+    }, theme)
+    await page.evaluate(async () => {
+      await Promise.all(
+        document
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation.effect?.getTiming().iterations !== Infinity,
+          )
+          .map((animation) => animation.finished.catch(() => undefined)),
+      )
+    })
+    await expect(
+      page.getByText('synthetic-seller-123', { exact: true }),
+    ).toBeVisible()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true)
+    const themedAccessibility = await new AxeBuilder({ page })
+      .include('main')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze()
+    expect(themedAccessibility.violations).toEqual([])
+  }
+  await page.getByRole('link', { name: 'Налаштування оголошень' }).click()
+  await allowPublication.click()
+  await expect(
+    page.getByText('Доступ до читання та публікації', { exact: true }),
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/app\/koval\/settings\/integrations\/olx$/)
+  await expect(
+    page.getByText('synthetic-seller-123', { exact: true }),
+  ).toBeVisible()
+  await expect(allowPublication).toHaveCount(0)
+  expect(writeStarts).toBe(1)
+  await page.getByRole('link', { name: 'Налаштування оголошень' }).click()
+  await expect(page.getByText('Доступ до публікації надано.')).toBeVisible()
+})
+
+test('OLX returns to the same part with unsaved fields after consent and cancellation', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { olxAlpha: true })
+  const id = '11111111-1111-1111-1111-111111111111'
+  const path = `/app/koval/parts/${id}/olx`
+  let canWrite = false
+  let launches = 0
+  await page.route(`**/api/v1/parts/${id}`, (route) =>
+    fulfillData(route, {
+      id,
+      name: 'Передня фара Volkswagen Golf',
+      status: 'available',
+      condition: 'good',
+      quantityTotal: 1,
+      quantityAvailable: 1,
+      quantityReserved: 0,
+      quantitySoldTotal: 0,
+      effectiveSalePrice: 1200,
+      photos: [],
+    }),
+  )
+  await page.route('**/api/v1/integrations/olx/**', async (route) => {
+    const request = route.request()
+    const pathname = new URL(request.url()).pathname
+    if (pathname.endsWith('/oauth/write/start'))
+      return fulfillData(route, {
+        launchUrl: `${appOrigin()}/api/v1/integrations/olx/oauth/launch`,
+        ticket: 'synthetic-part-return-ticket',
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      })
+    if (pathname.endsWith('/oauth/launch')) {
+      launches++
+      canWrite = launches === 2
+      return fulfillOlxCallback(route, canWrite ? 'connected' : 'cancelled')
+    }
+    if (pathname.endsWith('/connection')) {
+      return fulfillData(route, {
+        available: true,
+        connected: true,
+        accountId: 'synthetic-part-seller',
+        mode: 'oauth',
+        scope: canWrite ? 'v2 read write' : 'v2 read',
+        writesAvailable: true,
+        reconnectRequired: false,
+      })
+    }
+    if (pathname.endsWith('/publication'))
+      return fulfillData(route, {
+        partId: id,
+        state: 'draft',
+        revision: null,
+        canWrite,
+      })
+    if (pathname.endsWith('/preparation'))
+      return fulfillData(route, {
+        part: {
+          partId: id,
+          title: 'Передня фара Volkswagen Golf',
+          status: 'available',
+          price: 1200,
+          currency: 'UAH',
+          photos: [],
+        },
+        suggestions: [],
+      })
+    if (pathname.endsWith('/categories')) return fulfillData(route, [])
+    throw new Error(`Unexpected OLX request: ${request.method()} ${pathname}`)
+  })
+  await loginFrom(page)
+  await page.goto(path)
+  const description = page.getByRole('textbox', { name: 'Публічний опис' })
+  const contact = page.getByRole('textbox', { name: 'Ім’я контактної особи' })
+  const grant = page.getByRole('button', { name: 'Дозволити публікацію в OLX' })
+  await description.fill('Введений опис до підтвердження доступу.')
+  await contact.fill('Контакт чернетки')
+
+  await grant.click()
+  await expect(page.getByText(/Підтвердження доступу скасовано/)).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`${path}$`))
+  await expect(description).toHaveValue(
+    'Введений опис до підтвердження доступу.',
+  )
+  await expect(contact).toHaveValue('Контакт чернетки')
+
+  await description.fill('Опис, оновлений після скасування.')
+  await grant.click()
+  await expect(page.getByText('Доступ до публікації надано.')).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`${path}$`))
+  await expect(description).toHaveValue('Опис, оновлений після скасування.')
+  await expect(contact).toHaveValue('Контакт чернетки')
+  await expect(grant).toHaveCount(0)
+  expect(launches).toBe(2)
+})
+
+for (const { writeAccess, partCard, linkExisting } of [
+  { writeAccess: false, partCard: false, linkExisting: false },
+  { writeAccess: true, partCard: false, linkExisting: false },
+  { writeAccess: true, partCard: true, linkExisting: false },
+  { writeAccess: true, partCard: true, linkExisting: true },
+])
+  test(`OLX live ${linkExisting ? 'links an existing advert from the part card' : `preparation and publication ${partCard ? 'from the part card' : writeAccess ? 'with write access' : 'without write access'}`}`, async ({
+    page,
+  }, testInfo) => {
+    await installCabinetApiBoundary(page, { olxAlpha: true })
+    const id = '11111111-1111-1111-1111-111111111111'
+    const editsPrice = partCard && !linkExisting
+    if (editsPrice)
+      await page.route('**/api/v1/tenants', (route) =>
+        fulfillData(
+          route,
+          tenants.map((tenant) =>
+            tenant.id === 'tenant-1'
+              ? { ...tenant, accountingCurrency: 'UAH', currencyLocked: true }
+              : tenant,
+          ),
+        ),
+      )
+    const part = {
+      partId: id,
+      title: editsPrice ? 'Цапфа RL Rivian' : 'Передня фара Volkswagen Golf',
+      status: 'available',
+      price: (editsPrice ? null : 1200) as number | null,
+      currency: 'UAH',
+      photos: editsPrice ? [] : ['https://images.example.test/a.jpg'],
+    }
+    const category = {
+      id: 2544,
+      name: 'Фари',
+      path: 'Запчастини / Фари',
+      photosLimit: 13,
+    }
+    const categories = editsPrice
+      ? [
+          category,
+          {
+            ...category,
+            id: 2545,
+            name: 'Ліхтарі',
+            path: 'Запчастини / Ліхтарі',
+          },
+          ...Array.from({ length: 24 }, (_, index) => ({
+            ...category,
+            id: 2600 + index,
+            name: `Категорія ${index + 1}`,
+            path: `Запчастини / Категорія ${index + 1}`,
+          })),
+        ]
+      : [category]
+    let priceSaves = 0
+    let nameSaves = 0
+    let releasePreparation: () => void = () => undefined
+    const preparationReady = new Promise<void>((resolve) => {
+      releasePreparation = resolve
+    })
+    let releasePublish: () => void = () => undefined
+    const publishReady = new Promise<void>((resolve) => {
+      releasePublish = resolve
+    })
+    let attributeReads = 0
+    let reads = 0
+    let previews = 0
+    let creates = 0
+    let links = 0
+    let refreshes = 0
+    let publication = {
+      partId: id,
+      revision: null as string | null,
+      state: 'draft',
+      advertId: null as string | null,
+      observedStatus: null as string | null,
+      url: null as string | null,
+      checkedAt: null as string | null,
+      error: null as string | null,
+      errorFields: [] as string[],
+      removeRequested: false,
+      content: null as unknown,
+      canWrite: writeAccess,
+      canLinkExisting: linkExisting,
+    }
+    await page.route('https://images.example.test/**', (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lHkAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      }),
+    )
+    await page.route('**/api/v1/integrations/olx/**', async (route) => {
+      expect(route.request().headers()['x-tenant-id']).toBe('tenant-1')
+      const path = new URL(route.request().url()).pathname
+      if (path.endsWith('/connection'))
+        return fulfillData(route, {
+          available: true,
+          connected: true,
+          accountId: 'synthetic-seller-live',
+          mode: 'oauth',
+          scope: writeAccess ? 'v2 read write' : 'v2 read',
+          writesAvailable: true,
+          verifiedAt: '2026-11-18T12:00:00Z',
+          reconnectRequired: false,
+        })
+      if (path.endsWith('/adverts')) {
+        reads++
+        return fulfillData(route, {
+          items: [
+            {
+              id: '123',
+              title: 'Фара на OLX',
+              status: publication.advertId === '123' ? 'active' : 'new',
+              linkedPart:
+                publication.advertId === '123'
+                  ? { partId: id, partName: 'Фара тестова' }
+                  : null,
+              url: 'https://www.olx.ua/d/uk/obyavlenie/test.html',
+              price: 1200,
+              currency: 'UAH',
+            },
+          ],
+          page: 1,
+          hasMore: false,
+          checkedAt: '2026-11-18T12:00:00Z',
+        })
+      }
+      if (path.endsWith('/publication')) return fulfillData(route, publication)
+      if (path.endsWith('/link') && linkExisting) {
+        links++
+        expect(route.request().method()).toBe('POST')
+        expect(route.request().postDataJSON()).toEqual({
+          advertId: '123',
+          expectedRevision: publication.revision,
+        })
+        publication = {
+          ...publication,
+          revision: '33333333-3333-3333-3333-333333333333',
+          state: 'update_pending',
+          advertId: '123',
+          observedStatus: 'new',
+          canLinkExisting: false,
+        }
+        return fulfillData(route, publication)
+      }
+      if (path.endsWith('/draft')) {
+        publication = {
+          ...publication,
+          state: publication.advertId ? 'update_pending' : 'draft',
+          error: null,
+          errorFields: [],
+          revision: '22222222-2222-2222-2222-222222222222',
+          content: (route.request().postDataJSON() as { content: unknown })
+            .content,
+        }
+        return fulfillData(route, publication)
+      }
+      if (path.endsWith('/publish')) {
+        creates++
+        expect(
+          (route.request().postDataJSON() as { expectedRevision: string })
+            .expectedRevision,
+        ).toBe(publication.revision)
+        if (editsPrice) await publishReady
+        if (editsPrice && creates === 1) {
+          expect(publication.content).toMatchObject({
+            publicDescription: expect.stringContaining(
+              'https://example.invalid',
+            ),
+          })
+          publication = {
+            ...publication,
+            state: 'rejected',
+            error: 'OLX_WRITE_REJECTED',
+            errorFields: ['description:contact_links'],
+          }
+          return fulfillData(route, publication)
+        }
+        publication = {
+          ...publication,
+          revision: '33333333-3333-3333-3333-333333333333',
+          state: 'linked',
+          advertId: '456',
+          observedStatus: editsPrice ? 'disabled' : 'new',
+          checkedAt: '2026-11-19T11:50:00Z',
+          url: 'https://www.olx.ua/d/uk/obyavlenie/test-456.html',
+        }
+        return fulfillData(route, publication)
+      }
+      if (path.endsWith('/remove')) {
+        publication = {
+          ...publication,
+          revision: '44444444-4444-4444-4444-444444444444',
+          state: 'remove_pending',
+          removeRequested: true,
+        }
+        return fulfillData(route, publication)
+      }
+      if (path.endsWith('/refresh')) {
+        refreshes++
+        publication = {
+          ...publication,
+          revision: '55555555-5555-5555-5555-555555555555',
+          state: publication.removeRequested ? 'removed' : 'linked',
+          observedStatus: publication.removeRequested
+            ? 'removed_by_user'
+            : 'active',
+          checkedAt: publication.removeRequested
+            ? '2026-11-19T12:10:00Z'
+            : '2026-11-19T12:00:00Z',
+        }
+        return fulfillData(route, publication)
+      }
+      if (path.endsWith('/preparation')) {
+        if (editsPrice) await preparationReady
+        return fulfillData(route, { part, suggestions: categories.slice(0, 2) })
+      }
+      if (path.endsWith('/categories')) return fulfillData(route, categories)
+      if (path.endsWith('/attributes')) {
+        attributeReads++
+        if (editsPrice && attributeReads === 1)
+          return route.fulfill({
+            status: 503,
+            json: {
+              error: { code: 'OLX_UNAVAILABLE', message: 'Temporary outage' },
+            },
+          })
+        return fulfillData(route, [
+          {
+            code: 'state',
+            label: 'Стан',
+            required: true,
+            numeric: false,
+            multiple: false,
+            values: [{ code: 'used', label: 'Вживане' }],
+          },
+          {
+            code: 'car_brand',
+            label: 'Підходить для авто',
+            required: false,
+            numeric: false,
+            multiple: true,
+            values: [
+              { code: 'vw', label: 'Volkswagen' },
+              { code: 'audi', label: 'Audi' },
+            ],
+          },
+          {
+            code: 'compatibility_list',
+            label: 'Список сумісності',
+            required: false,
+            numeric: false,
+            multiple: false,
+            values: [],
+          },
+        ])
+      }
+      if (path.endsWith('/cities'))
+        return fulfillData(
+          route,
+          editsPrice
+            ? [
+                {
+                  id: 2,
+                  name: 'Дубляни',
+                  region: 'Львівська область',
+                  municipality: 'Самбірський',
+                },
+                {
+                  id: 1,
+                  name: 'Дубляни',
+                  region: 'Львівська область',
+                  municipality: 'Львівський',
+                },
+              ]
+            : [{ id: 1, name: 'Київ', region: 'Київська область' }],
+        )
+      if (path.endsWith('/districts')) return fulfillData(route, [])
+      if (path.endsWith('/preview')) {
+        previews++
+        expect(route.request().postDataJSON()).toMatchObject({
+          categoryId: 2544,
+          categoryConfirmed: true,
+          attributes: editsPrice
+            ? { state: ['used'], car_brand: ['vw', 'audi'] }
+            : { state: ['used'] },
+          cityId: 1,
+          contactName: 'Synthetic seller',
+        })
+        return fulfillData(route, { part, category, issues: [] })
+      }
+      throw new Error(`Unexpected OLX route: ${path}`)
+    })
+    await page.route('**/api/v1/parts/search', (route) =>
+      fulfillData(route, {
+        items: [
+          {
+            id,
+            name: 'Фара тестова',
+            quantity: 1,
+            quantityReserved: 0,
+            quantityAvailable: 1,
+            status: 'available',
+            thumbnailUrl: 'https://images.example.test/a.jpg',
+            car: null,
+            externalCode: '5G1941006',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 6,
+        totalPages: 1,
+      }),
+    )
+    await page.route(`**/api/v1/parts/${id}`, (route) => {
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON() as object
+        if ('name' in body) {
+          expect(body).toEqual({ name: 'Передня ліва фара Volkswagen Golf' })
+          nameSaves++
+          part.title = 'Передня ліва фара Volkswagen Golf'
+        } else {
+          expect(body).toEqual({ desiredSalePrice: 1350.5 })
+          priceSaves++
+          part.price = 1350.5
+        }
+      }
+      return fulfillData(route, {
+        id,
+        name: editsPrice ? part.title : 'Фара тестова',
+        effectiveSalePrice: part.price,
+        desiredSalePrice: part.price,
+        status: 'available',
+        condition: 'good',
+        oemCode: '5G1941006',
+        quantityTotal: 1,
+        quantityAvailable: 1,
+        quantityReserved: 0,
+        quantitySoldTotal: 0,
+        photos: part.photos.map((url) => ({
+          id: 'part-photo',
+          url,
+          sortOrder: 0,
+        })),
+      })
+    })
+    await page.route(`**/api/v1/parts/${id}/history`, (route) =>
+      fulfillData(route, { events: [] }),
+    )
+    await page.route(`**/api/v1/parts/${id}/inventory-zones`, (route) =>
+      fulfillData(route, []),
+    )
+    await page.route(`**/api/v1/parts/${id}/compatibilities`, (route) =>
+      fulfillData(route, {
+        items: [
+          {
+            id: 'verified-fitment',
+            makeName: 'Rivian',
+            modelName: 'R1T',
+            yearFrom: 2022,
+            yearTo: 2023,
+            verificationStatus: 'verified',
+          },
+          {
+            id: 'unverified-fitment',
+            makeName: 'Ford',
+            modelName: 'Fiesta',
+            verificationStatus: 'unverified',
+          },
+        ],
+      }),
+    )
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await loginFrom(page)
+    const overview = page.getByRole('link', { name: 'Огляд', exact: true })
+    const olxTab = page
+      .getByRole('navigation', { name: 'Розділи картки запчастини' })
+      .getByRole('link', { name: 'OLX', exact: true })
+    const sheet = page.getByRole(partCard ? 'region' : 'dialog', {
+      name: 'Публікація OLX',
+      exact: true,
+    })
+    if (partCard) {
+      await page.goto(`/app/koval/parts/${id}`)
+      await expect(overview).toHaveAttribute('aria-current', 'page')
+      await expect(olxTab).toHaveAttribute('href', `/app/koval/parts/${id}/olx`)
+      await page.setViewportSize({ width: 390, height: 1000 })
+      await olxTab.click()
+      await expect(page).toHaveURL(`/app/koval/parts/${id}/olx`)
+      await expect(olxTab).toHaveAttribute('aria-current', 'page')
+      await expect(
+        page.getByRole('heading', {
+          level: 1,
+          name: editsPrice ? part.title : 'Фара тестова',
+        }),
+      ).toBeVisible()
+      await expect(sheet).toBeVisible()
+      await expect(page.getByRole('dialog')).toHaveCount(0)
+      if (linkExisting) {
+        expect(reads).toBe(0)
+        await sheet
+          .getByRole('button', { name: 'Прив’язати оголошення OLX' })
+          .click()
+        const linkPage = page.getByRole('region', {
+          name: 'Прив’язати оголошення OLX',
+        })
+        const confirm = linkPage.getByRole('button', {
+          name: 'Підтвердити прив’язування',
+        })
+        await expect(confirm).toBeDisabled()
+        await linkPage.getByRole('radio', { name: /Фара на OLX/ }).check()
+        await expect(linkPage.getByText(/Телефон і місто/)).toBeVisible()
+        const linkAccessibility = await new AxeBuilder({ page })
+          .include('.rz-page')
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+          .analyze()
+        expect(linkAccessibility.violations).toEqual([])
+        await confirm.click()
+        await expect(linkPage).not.toBeVisible()
+        await expect(sheet.getByText('№ 123', { exact: true })).toBeVisible()
+        await expect(
+          sheet.getByRole('button', { name: 'Прив’язати оголошення OLX' }),
+        ).toHaveCount(0)
+        await expect(sheet.getByText('Очікує оновлення OLX')).toBeVisible()
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+        expect({ reads, links, creates, refreshes }).toEqual({
+          reads: 1,
+          links: 1,
+          creates: 0,
+          refreshes: 0,
+        })
+        await page.goto('/app/koval/olx')
+        const row = page.getByRole('row', { name: /Фара тестова/ })
+        await expect(row).toContainText(/1\s200,00\sUAH/)
+        await row.getByText('Активне', { exact: true }).click()
+        const advertSheet = page.getByRole('dialog', {
+          name: 'Оголошення OLX',
+          exact: true,
+        })
+        await expect(
+          advertSheet.getByText('№ 123', { exact: true }),
+        ).toBeVisible()
+        await expect(
+          advertSheet.getByText('Активне', { exact: true }),
+        ).toBeVisible()
+        await expect(
+          advertSheet.getByRole('link', { name: 'Відкрити запчастину' }),
+        ).toHaveAttribute('href', `/app/koval/parts/${id}`)
+        await advertSheet
+          .getByRole('button', { name: 'Редагувати опис' })
+          .click()
+        const description =
+          'Опис оголошення, відредагований зі списку OLX. '.repeat(3)
+        await advertSheet
+          .getByRole('textbox', { name: 'Публічний опис' })
+          .fill(description)
+        await advertSheet
+          .getByRole('button', { name: 'Зберегти зміни' })
+          .click()
+        await expect(
+          advertSheet.getByText('Зміни збережено й передано на оновлення OLX.'),
+        ).toBeVisible()
+        expect(publication.content).toMatchObject({
+          publicDescription: description,
+        })
+        await advertSheet
+          .getByRole('button', { name: 'Інші дії з оголошенням OLX' })
+          .click()
+        await page.getByRole('menuitem', { name: 'Зняти з публікації' }).click()
+        await page
+          .getByRole('dialog', { name: 'Зняти оголошення з OLX' })
+          .getByRole('button', { name: 'Зняти з публікації' })
+          .click()
+        await expect(
+          advertSheet.getByText('Зняття очікує підтвердження OLX'),
+        ).toBeVisible()
+        await advertSheet
+          .getByRole('button', { name: 'Оновити статус' })
+          .click()
+        await expect(
+          advertSheet.getByText('Знято з публікації', { exact: true }),
+        ).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(
+          row.getByText('Зняте користувачем', { exact: true }),
+        ).toBeVisible()
+        await expect(
+          row.getByRole('button', { name: /Фара тестова/ }),
+        ).toBeFocused()
+        expect(creates).toBe(0)
+        return
+      }
+      const loadingForm = sheet.getByRole('region', {
+        name: 'Завантажуємо форму публікації OLX',
+      })
+      try {
+        await expect(loadingForm).toHaveAttribute('aria-busy', 'true')
+        await expect(loadingForm.locator('.rz-skel').first()).toBeVisible()
+        await expect(
+          sheet.getByRole('button', { name: 'Перевірити дані' }),
+        ).toHaveCount(0)
+      } finally {
+        releasePreparation()
+      }
+      await expect(loadingForm).toHaveCount(0)
+      await expect(
+        sheet.getByRole('heading', { level: 3 }).filter({
+          hasText:
+            /Назва запчастини|Категорія та характеристики|Продавець і місцезнаходження|Ціна та фото/,
+        }),
+      ).toHaveText([
+        'Назва запчастини',
+        'Категорія та характеристики',
+        'Продавець і місцезнаходження',
+        'Ціна та фото',
+      ])
+      await expect(
+        sheet.getByRole('alert').filter({ hasText: 'Бракує ще 1.' }),
+      ).toBeVisible()
+      const pricingPanel = sheet.getByRole('region', { name: 'Ціна та фото' })
+      await expect(
+        pricingPanel.getByText('Не вказано', { exact: true }),
+      ).toBeVisible()
+      await expect(
+        sheet.locator('.rz-card__foot').getByRole('status'),
+      ).toHaveText('Чернетка')
+      await page.setViewportSize({ width: 390, height: 1000 })
+      const categoryPicker = sheet.getByRole('button', {
+        name: 'Категорія OLX',
+        exact: true,
+      })
+      const checklist = sheet.getByRole('region', {
+        name: 'Залишилося заповнити',
+      })
+      await checklist.getByRole('button', { name: 'Оберіть категорію' }).click()
+      await expect(categoryPicker).toBeFocused()
+      await categoryPicker.click()
+      const categoryOptions = page.getByRole('listbox').locator('..')
+      if (testInfo.project.use.hasTouch) {
+        await categoryOptions
+          .getByRole('option')
+          .last()
+          .scrollIntoViewIfNeeded()
+      } else {
+        await categoryOptions.hover()
+        await page.mouse.wheel(0, 420)
+      }
+      await expect
+        .poll(() => categoryOptions.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0)
+      await page.keyboard.press('Escape')
+      await expect(categoryPicker).toBeFocused()
+      await expect(
+        sheet.getByRole('button', { name: 'Перевірити дані' }),
+      ).toBeVisible()
+      await checklist.getByRole('button', { name: 'Додайте ціну' }).click()
+      const priceInput = sheet.getByRole('textbox', { name: 'Ціна продажу' })
+      await expect(priceInput).toBeFocused()
+      await expect(
+        sheet.getByRole('button', { name: 'Перевірити дані' }),
+      ).toBeDisabled()
+      await priceInput.fill('1350,50')
+      await sheet.getByRole('button', { name: 'Зберегти', exact: true }).click()
+      await expect(priceInput).toHaveCount(0)
+      await expect(
+        checklist.getByRole('button', { name: 'Додайте ціну' }),
+      ).toHaveCount(0)
+      expect(priceSaves).toBe(1)
+      const descriptionInput = sheet.getByRole('textbox', {
+        name: 'Публічний опис',
+        exact: true,
+      })
+      const fillDescription = sheet.getByRole('button', {
+        name: 'Заповнити з картки',
+      })
+      await fillDescription.click()
+      await expect(descriptionInput).toHaveValue(
+        'Цапфа RL Rivian\nСтан — Хороший.\nOEM 5G1941006\n\nПідтверджена сумісність\nRivian R1T (2022 – 2023)',
+      )
+      await expect(descriptionInput).toBeFocused()
+      await expect(fillDescription).toHaveCount(0)
+      await descriptionInput.clear()
+      await checklist.getByRole('button', { name: 'Заповніть опис' }).click()
+      await expect(descriptionInput).toBeFocused()
+      await descriptionInput.fill('Опис, який уже введено у чернетці.')
+      await checklist.getByRole('button', { name: 'Виправте назву' }).click()
+      const nameInput = sheet.getByRole('textbox', { name: 'Назва запчастини' })
+      await expect(nameInput).toBeFocused()
+      await nameInput.fill('Фара')
+      await expect(nameInput).toHaveAccessibleDescription(/Бракує ще 12\./)
+      const saveName = sheet.getByRole('button', {
+        name: 'Зберегти',
+        exact: true,
+      })
+      await expect(saveName).toBeDisabled()
+      expect(nameSaves).toBe(0)
+      await expect(nameInput).toBeVisible()
+      await nameInput.fill('Передня ліва фара Volkswagen Golf')
+      await expect(nameInput).not.toHaveAccessibleDescription(/Бракує/)
+      await saveName.click()
+      await expect(nameInput).toHaveCount(0)
+      await expect(
+        checklist.getByRole('button', { name: 'Виправте назву' }),
+      ).toHaveCount(0)
+      expect(nameSaves).toBe(1)
+      await expect(descriptionInput).toHaveValue(
+        'Опис, який уже введено у чернетці.',
+      )
+      await expect(
+        sheet.getByText('Оголошення можна опублікувати без фото.'),
+      ).toBeVisible()
+      await page.evaluate(() =>
+        window.scrollTo({ top: 0, behavior: 'instant' }),
+      )
+      await page.setViewportSize({ width: 1440, height: 1000 })
+    } else {
+      await page.goto('/app/koval/settings/integrations/olx')
+      const workspaceLink = page.getByRole('link', {
+        name: 'Відкрити розділ OLX',
+      })
+      await expect(workspaceLink).toHaveAttribute('href', '/app/koval/olx')
+      expect(reads).toBe(0)
+      await workspaceLink.click()
+      await expect(page).toHaveURL(/\/app\/koval\/olx$/)
+      await expect(
+        page.getByRole('button', { name: 'Відключити акаунт' }),
+      ).toHaveCount(0)
+      await expect(
+        page.getByRole('link', { name: '№ 123', exact: true }),
+      ).toBeVisible()
+      if (!writeAccess) {
+        await page
+          .getByRole('button', { name: 'Фара на OLX', exact: true })
+          .click()
+        const advertSheet = page.getByRole('dialog', {
+          name: 'Оголошення OLX',
+          exact: true,
+        })
+        await expect(
+          advertSheet.getByRole('link', { name: 'Перейти до прив’язування' }),
+        ).toBeVisible()
+        await expect(
+          advertSheet.getByRole('button', {
+            name: 'Інші дії з оголошенням OLX',
+          }),
+        ).toHaveCount(0)
+        await page.keyboard.press('Escape')
+      }
+      if (writeAccess) {
+        for (const width of [1440, 390]) {
+          await page.setViewportSize({ width, height: 1000 })
+          await expect(
+            page.getByRole('table', { name: 'Оголошення цього акаунта' }),
+          ).toBeVisible()
+          expect(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= window.innerWidth,
+            ),
+          ).toBe(true)
+        }
+        await page.setViewportSize({ width: 1440, height: 1000 })
+      }
+      await page
+        .getByRole('button', { name: 'Підготувати публікацію', exact: true })
+        .click()
+      const partPicker = page.getByRole('dialog', {
+        name: 'Підготовка запчастини',
+        exact: true,
+      })
+      const partSearch = partPicker.getByRole('searchbox', {
+        name: 'Пошук запчастини',
+      })
+      await partSearch.fill('Фара')
+      const partResults = partPicker.getByRole('dialog', {
+        name: 'Результати пошуку запчастин',
+      })
+      const matchingPart = partResults.getByRole('option', {
+        name: /Фара тестова/,
+      })
+      await expect(matchingPart).toBeVisible()
+      await expect(matchingPart).toContainText('В наявності')
+      await expect(matchingPart).toContainText('5G1941006')
+      await expect(matchingPart.locator('img')).toHaveCount(0)
+      if (writeAccess) {
+        await page.setViewportSize({ width: 390, height: 844 })
+        expect((await partSearch.boundingBox())?.y).toBeLessThan(
+          (await matchingPart.boundingBox())!.y,
+        )
+        await expect(partResults).toBeInViewport({ ratio: 1 })
+      }
+      await matchingPart.click()
+      if (writeAccess) {
+        await sheet
+          .getByRole('button', { name: 'Підготовка запчастини' })
+          .click()
+        await expect(partSearch).toHaveValue('Фара')
+        await expect(partSearch).toBeFocused()
+        await expect(matchingPart).toBeVisible()
+        await matchingPart.click()
+        await page.setViewportSize({ width: 1440, height: 1000 })
+      }
+    }
+    await expect(
+      editsPrice
+        ? sheet
+            .getByRole('region', { name: 'Назва запчастини' })
+            .getByText(part.title, { exact: true })
+        : sheet.getByRole('heading', { name: part.title, exact: true }),
+    ).toBeVisible()
+    const suggestedCategory = sheet.getByRole('button', {
+      name: /^Фари.*Запчастини/,
+    })
+    await suggestedCategory.click()
+    if (editsPrice) {
+      await expect(
+        sheet.getByText(/Не вдалося завантажити характеристики/),
+      ).toBeVisible()
+      await sheet.getByRole('button', { name: 'Спробувати ще раз' }).click()
+      await expect(suggestedCategory).toHaveAttribute('aria-pressed', 'true')
+      const otherCategory = sheet.getByRole('button', {
+        name: /^Ліхтарі.*Запчастини/,
+      })
+      await expect(otherCategory).toHaveAttribute('aria-pressed', 'false')
+      const unselectedBorder = await otherCategory.evaluate(
+        (item) => getComputedStyle(item).borderTopColor,
+      )
+      await expect(suggestedCategory).not.toHaveCSS(
+        'border-top-color',
+        unselectedBorder,
+      )
+    }
+    await sheet.getByRole('button', { name: 'Стан', exact: true }).click()
+    await page.getByRole('option', { name: 'Вживане', exact: true }).click()
+    const compatibility = sheet.getByRole('textbox', {
+      name: 'Список сумісності',
+    })
+    await expect(compatibility).toHaveValue('')
+    await expect(compatibility).toHaveAttribute('readonly', '')
+    await expect(compatibility).toHaveAccessibleDescription(
+      /Залиште поле порожнім.*публічному описі/,
+    )
+    if (editsPrice) {
+      const brands = sheet.getByRole('button', { name: 'Підходить для авто' })
+      await brands.click()
+      const vw = page.getByRole('option', { name: 'Volkswagen', exact: true })
+      const audi = page.getByRole('option', { name: 'Audi', exact: true })
+      await vw.click()
+      await audi.click()
+      await expect(vw).toHaveAttribute('aria-selected', 'true')
+      await expect(audi).toHaveAttribute('aria-selected', 'true')
+      await brands.click()
+      await expect(brands).toContainText('Volkswagen, Audi')
+    }
+    await page
+      .getByRole('textbox', { name: 'Публічний опис', exact: true })
+      .fill(
+        'Передня фара Volkswagen Golf. Вживана оригінальна запчастина. Стан і комплектність перевіряйте за фотографіями.' +
+          (editsPrice ? ' Більше інформації на https://example.invalid.' : ''),
+      )
+    await sheet
+      .getByRole('button', { name: 'Тип продавця', exact: true })
+      .click()
+    await page.getByRole('option', { name: 'Бізнес', exact: true }).click()
+    await page
+      .getByLabel('Ім’я контактної особи', { exact: true })
+      .fill('Synthetic seller')
+    await page.getByRole('button', { name: 'Місто OLX', exact: true }).click()
+    await page
+      .getByRole('searchbox', { name: 'Введіть від двох літер назви міста' })
+      .fill(editsPrice ? 'Дубляни' : 'Київ')
+    if (editsPrice) {
+      await expect(
+        page.getByRole('option', {
+          name: 'Дубляни · Самбірський · Львівська область',
+        }),
+      ).toBeVisible()
+    }
+    await page
+      .getByRole('option', {
+        name: editsPrice
+          ? 'Дубляни · Львівський · Львівська область'
+          : 'Київ · Київська область',
+      })
+      .click()
+    await expect(
+      sheet.getByRole('region', { name: 'Залишилося заповнити' }),
+    ).toHaveCount(0)
+    await page
+      .getByRole('button', { name: 'Перевірити дані', exact: true })
+      .click()
+    await expect(
+      page.getByText('Структурна перевірка пройшла', { exact: true }),
+    ).toBeVisible()
+    expect(reads).toBe(partCard ? 0 : 1)
+    expect(previews).toBe(1)
+    if (editsPrice) {
+      const identity = sheet
+        .getByRole('region', { name: 'Категорія та характеристики' })
+        .locator('..')
+      const seller = sheet.getByRole('region', {
+        name: 'Продавець і місцезнаходження',
+      })
+      const pricing = sheet.getByRole('region', { name: 'Ціна та фото' })
+      const description = sheet.getByRole('region', {
+        name: 'Дані для публікації',
+      })
+
+      const left = (await identity.boundingBox())!
+      const right = (await seller.locator('..').boundingBox())!
+      const sellerBox = (await seller.boundingBox())!
+      const priceBox = (await pricing.boundingBox())!
+      const descriptionBox = (await description.boundingBox())!
+      expect(right.x).toBeGreaterThan(left.x + left.width)
+      expect(right.width).toBeCloseTo(left.width)
+      expect(right.y).toBeCloseTo(left.y)
+      expect(priceBox.y).toBeCloseTo(sellerBox.y + sellerBox.height)
+      expect(descriptionBox.y).toBeCloseTo(priceBox.y + priceBox.height)
+
+      await page.setViewportSize({ width: 390, height: 1000 })
+      await page.evaluate(() =>
+        window.scrollTo({ top: 0, behavior: 'instant' }),
+      )
+      let previousBottom = 0
+      for (const panel of [identity, seller, pricing, description]) {
+        const box = (await panel.boundingBox())!
+        expect(box.y).toBeGreaterThanOrEqual(previousBottom)
+        previousBottom = box.y + box.height
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 })
+      await page.evaluate(() =>
+        window.scrollTo({ top: 0, behavior: 'instant' }),
+      )
+      expect(attributeReads).toBe(2)
+    }
+    await expect(
+      page.getByRole('button', { name: 'Опублікувати', exact: true }),
+    ).toHaveCount(0)
+    if (writeAccess) {
+      await page
+        .getByRole('button', { name: 'Опублікувати на OLX', exact: true })
+        .click()
+      expect(creates).toBe(0)
+      const publishDialog = page.getByRole('dialog', {
+        name: 'Створити оголошення в OLX',
+      })
+      await expect(publishDialog).toContainText(part.title)
+      if (editsPrice) await expect(publishDialog).toContainText(/1\s?350[,.]50/)
+      await publishDialog
+        .getByRole('button', { name: 'Опублікувати на OLX', exact: true })
+        .click()
+      if (editsPrice) {
+        try {
+          await expect(
+            publishDialog.getByText('Надсилаємо оголошення в OLX…'),
+          ).toBeVisible()
+          await expect(
+            publishDialog.getByRole('button', {
+              name: 'Опублікувати на OLX',
+              exact: true,
+            }),
+          ).toBeDisabled()
+        } finally {
+          releasePublish()
+        }
+        const description = sheet.getByRole('textbox', {
+          name: 'Публічний опис',
+          exact: true,
+        })
+        await expect(publishDialog).not.toBeVisible()
+        await expect(description).toHaveAttribute('aria-invalid', 'true')
+        await expect(description).toHaveAccessibleDescription(
+          /Приберіть посилання/,
+        )
+        expect(creates).toBe(1)
+        await description.fill(
+          'Вживана оригінальна передня фара Volkswagen Golf. Стан і комплектність перевіряйте за фотографіями.',
+        )
+        await expect(description).not.toHaveAttribute('aria-invalid', 'true')
+        await sheet.getByRole('button', { name: 'Перевірити дані' }).click()
+        await expect(
+          sheet.getByText('Структурна перевірка пройшла'),
+        ).toBeVisible()
+        await sheet
+          .getByRole('button', { name: 'Опублікувати на OLX', exact: true })
+          .click()
+        await publishDialog
+          .getByRole('button', { name: 'Опублікувати на OLX', exact: true })
+          .click()
+        expect(previews).toBe(2)
+      }
+      const advertStatus = sheet.getByRole('region', {
+        name: 'Статус оголошення OLX',
+      })
+      await expect(
+        advertStatus.getByText(editsPrice ? 'Вимкнене' : 'На модерації', {
+          exact: true,
+        }),
+      ).toBeVisible()
+      await expect(advertStatus.getByText('Остання перевірка')).toBeVisible()
+      await expect(advertStatus.locator('time')).toHaveAttribute(
+        'datetime',
+        '2026-11-19T11:50:00Z',
+      )
+      expect(refreshes).toBe(0)
+      await advertStatus.getByRole('button', { name: 'Оновити статус' }).click()
+      await expect(
+        advertStatus.getByText('Активне', { exact: true }),
+      ).toBeVisible()
+      await expect(advertStatus.locator('time')).toHaveAttribute(
+        'datetime',
+        '2026-11-19T12:00:00Z',
+      )
+      expect(refreshes).toBe(1)
+      await expect(sheet.getByText('№ 456', { exact: true })).toBeVisible()
+      await expect(
+        sheet.getByRole('link', { name: 'Відкрити на OLX' }),
+      ).toBeVisible()
+      await expect(
+        sheet.getByRole('button', { name: 'Перевірити дані' }),
+      ).toHaveCount(0)
+      expect(creates).toBe(editsPrice ? 2 : 1)
+      await sheet.getByRole('button', { name: 'Редагувати опис' }).click()
+      const changedDescription = 'Оновлений публічний опис запчастини. '.repeat(
+        4,
+      )
+      await expect(
+        page.getByRole('textbox', { name: 'Публічний опис', exact: true }),
+      ).toBeEnabled()
+      await page
+        .getByRole('textbox', { name: 'Публічний опис', exact: true })
+        .fill(changedDescription)
+      await page
+        .getByRole('button', { name: 'Зберегти зміни', exact: true })
+        .click()
+      await expect(
+        page.getByText('Зміни збережено й передано на оновлення OLX.', {
+          exact: true,
+        }),
+      ).toBeVisible()
+      expect(publication.content).toMatchObject({
+        publicDescription: changedDescription,
+      })
+      expect(creates).toBe(editsPrice ? 2 : 1)
+      await expect(
+        page.getByRole('button', { name: 'Опублікувати на OLX', exact: true }),
+      ).toHaveCount(0)
+      if (partCard)
+        await expect(
+          sheet.getByRole('button', { name: 'Редагувати опис' }),
+        ).toBeVisible()
+      await page
+        .getByRole('button', { name: 'Інші дії з оголошенням OLX' })
+        .click()
+      await page
+        .getByRole('menuitem', { name: 'Зняти з публікації', exact: true })
+        .click()
+      await page
+        .getByRole('dialog', { name: 'Зняти оголошення з OLX' })
+        .getByRole('button', { name: 'Зняти з публікації', exact: true })
+        .click()
+      await expect(
+        sheet.getByText('Зняття очікує підтвердження OLX', {
+          exact: true,
+        }),
+      ).toBeVisible()
+      expect(refreshes).toBe(1)
+      await page
+        .getByRole('button', {
+          name: 'Оновити статус',
+          exact: true,
+        })
+        .click()
+      await expect(
+        sheet.getByText('Знято з публікації', { exact: true }),
+      ).toBeVisible()
+      expect(creates).toBe(editsPrice ? 2 : 1)
+    } else
+      await expect(
+        page.getByRole('button', { name: 'Опублікувати на OLX', exact: true }),
+      ).toBeDisabled()
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 })
+      if (partCard) await expect(sheet).toBeVisible()
+      else
+        await expect(
+          page.getByRole('heading', { name: part.title, exact: true }),
+        ).toBeVisible()
+      const a11y = await new AxeBuilder({ page })
+        .include(partCard ? '.rz-page' : '.rz-sheet')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+        .analyze()
+      expect(a11y.violations).toEqual([])
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true)
+    }
+    if (partCard) {
+      await overview.click()
+      await expect(page).toHaveURL(`/app/koval/parts/${id}`)
+      await expect(
+        page.getByRole('region', { name: 'Фото', exact: true }),
+      ).toBeVisible()
+      await page.goBack()
+      await expect(olxTab).toHaveAttribute('aria-current', 'page')
+      await expect(
+        sheet.getByText('Знято з публікації', { exact: true }),
+      ).toBeVisible()
+      await page.reload()
+      await expect(
+        sheet.getByText('Знято з публікації', { exact: true }),
+      ).toBeVisible()
+    } else {
+      await page.keyboard.press('Escape')
+      await expect(sheet).toHaveCount(0)
+      await expect(
+        page.getByRole('button', {
+          name: 'Підготувати публікацію',
+          exact: true,
+        }),
+      ).toBeFocused()
+    }
+  })

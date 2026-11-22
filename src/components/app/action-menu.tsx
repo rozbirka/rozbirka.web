@@ -25,19 +25,25 @@ export function ActionMenu({
   label,
   actions,
   triggerRef,
+  triggerContent,
 }: {
   /** Names the trigger: "Інші дії з автомобілем". */
   label: string
   actions: readonly MenuAction[]
   triggerRef?: Ref<HTMLButtonElement>
+  triggerContent?: ReactNode
 }) {
   if (actions.length === 0) return null
 
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <Button aria-label={label} ref={triggerRef} size="icon">
-          <MoreHorizontal aria-hidden />
+        <Button
+          aria-label={label}
+          ref={triggerRef}
+          size={triggerContent ? undefined : 'icon'}
+        >
+          {triggerContent ?? <MoreHorizontal aria-hidden />}
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

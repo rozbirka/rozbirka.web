@@ -48,6 +48,7 @@ export type CabinetModuleKey =
   | 'profile'
   | 'business'
   | 'integrations'
+  | 'olx'
 
 export type QuotaResource = keyof PlanUsageDto
 
@@ -132,6 +133,22 @@ export const cabinetModules: Readonly<
       group: 'stock',
       mobilePriority: 5,
     },
+  },
+  olx: {
+    key: 'olx',
+    routeSegment: '/olx',
+    allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
+    // Each OLX action has its own permission; the screen checks either OLX role.
+    ...(import.meta.env.DEV
+      ? {
+          navigation: {
+            label: 'OLX',
+            icon: Plug,
+            placement: 'primary' as const,
+            group: 'sales' as const,
+          },
+        }
+      : {}),
   },
   parts: {
     key: 'parts',

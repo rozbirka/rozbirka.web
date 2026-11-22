@@ -132,6 +132,7 @@ describe('production route boundary', () => {
     ['parts/new', 'PartsScreen'],
     ['parts/:partId', 'PartsScreen'],
     ['parts/:partId/edit', 'PartsScreen'],
+    ['parts/:partId/olx', 'PartsScreen'],
     ['scan', 'ScannerScreen'],
     ['stickers', 'StickersScreen'],
     ['customers', 'CustomersScreen'],

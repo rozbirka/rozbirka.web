@@ -164,10 +164,10 @@
 /* ── Status ───────────────────────────────────────────────────────────── */
 .rz-pill { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: var(--rz-r-full); font-size: var(--rz-fs-caption); font-weight: 500; white-space: nowrap; background: var(--rz-neutral-soft); color: var(--rz-text-muted); }
 .rz-pill::before { content: ""; width: 6px; height: 6px; border-radius: var(--rz-r-full); background: currentColor; }
-.rz-pill--ok { background: var(--rz-ok-soft); color: var(--rz-ok); }
-.rz-pill--warn { background: var(--rz-warn-soft); color: var(--rz-warn); }
-.rz-pill--danger { background: var(--rz-danger-soft); color: var(--rz-danger); }
-.rz-pill--info { background: var(--rz-info-soft); color: var(--rz-info); }
+.rz-pill--ok { background: var(--rz-ok-soft); color: var(--rz-pill-ok-ink, var(--rz-ok)); }
+.rz-pill--warn { background: var(--rz-warn-soft); color: var(--rz-pill-warn-ink, var(--rz-warn)); }
+.rz-pill--danger { background: var(--rz-danger-soft); color: var(--rz-pill-danger-ink, var(--rz-danger)); }
+.rz-pill--info { background: var(--rz-info-soft); color: var(--rz-pill-info-ink, var(--rz-info)); }
 .rz-dot { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .rz-dot::before { content: ""; width: 6px; height: 6px; border-radius: var(--rz-r-full); background: var(--rz-text-dim); }
 .rz-dot--ok::before { background: var(--rz-ok); } .rz-dot--warn::before { background: var(--rz-warn); } .rz-dot--danger::before { background: var(--rz-danger); } .rz-dot--info::before { background: var(--rz-info); }

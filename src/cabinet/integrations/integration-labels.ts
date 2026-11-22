@@ -90,11 +90,12 @@ export function integrationStatusPresentation(
     : { label: status, tone: 'neutral' }
 }
 
-/** The square badge in the list. Two letters, so a long name never wraps it. */
+/** The square badge uses the service's short mark. */
 export function integrationMark(
   code: string,
   locale: Locale = SOURCE_LOCALE,
 ): string {
+  if (code === 'OLX') return code
   const key = `mark.${code}`
   return hasLabel(key) ? label(locale, key) : code.slice(0, 2).toUpperCase()
 }

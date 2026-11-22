@@ -1615,12 +1615,16 @@ function PartForm({
     price: '',
     placement: emptyPartPlacement,
     notes: '',
+    publicDescription: '',
   }
   // The position typed before leaving for the currency setting comes back.
   const draft = useCurrencyDraft<typeof emptyPosition>(
     `intake-position:${intakeId}`,
   )
-  const [values, setValues] = useState(() => draft.initial ?? emptyPosition)
+  const [values, setValues] = useState(() => ({
+    ...emptyPosition,
+    ...draft.initial,
+  }))
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({})
@@ -1709,6 +1713,9 @@ function PartForm({
       quantity: values.quantity,
       unit: values.unit || null,
       notes: values.notes.trim() || null,
+      ...(values.publicDescription.trim()
+        ? { publicDescription: values.publicDescription }
+        : {}),
       photoKeys: media.map((item) => item.storageKey),
     }
     setBusy(true)
@@ -1798,6 +1805,7 @@ function PartForm({
         quantity: 1,
         price: '',
         notes: '',
+        publicDescription: '',
       }))
       setMedia([])
       setCompatRows([])
@@ -2066,6 +2074,18 @@ function PartForm({
                 placeholder={tf('notesPlaceholder')}
                 rows={2}
                 value={values.notes}
+              />
+            </Field>
+            <Field
+              label={tp('publicDescription')}
+              hint={tp('publicDescriptionHint')}
+            >
+              <TextArea
+                onChange={(event) =>
+                  update('publicDescription', event.target.value)
+                }
+                rows={3}
+                value={values.publicDescription}
               />
             </Field>
           </SectionPanel>

@@ -86,6 +86,9 @@ export const partFormMessages = defineMessages({
     oem: 'OEM-код',
     notesHint: 'Дефекти, комплектність, місце зберігання',
     notes: 'Нотатки',
+    publicDescription: 'Публічний опис',
+    publicDescriptionHint:
+      'Може з’явитися в оголошеннях. Внутрішні нотатки зберігаються окремо.',
     conditionDescription: 'Оберіть один із трьох сталих станів деталі.',
     conditionStep: 'Стан деталі',
     conditionVisible:
@@ -256,6 +259,9 @@ export const partFormMessages = defineMessages({
     oem: 'OEM code',
     notesHint: 'Defects, completeness, storage place',
     notes: 'Notes',
+    publicDescription: 'Public description',
+    publicDescriptionHint:
+      'May appear in listings. Internal notes are kept separately.',
     conditionDescription: 'Choose one of the three fixed part conditions.',
     conditionStep: 'Part condition',
     conditionVisible:
@@ -426,6 +432,9 @@ export const partFormMessages = defineMessages({
     oem: 'Kod OEM',
     notesHint: 'Wady, kompletność, miejsce przechowywania',
     notes: 'Notatki',
+    publicDescription: 'Opis publiczny',
+    publicDescriptionHint:
+      'Może pojawić się w ogłoszeniach. Notatki wewnętrzne są przechowywane osobno.',
     conditionDescription: 'Wybierz jeden z trzech stałych stanów części.',
     conditionStep: 'Stan części',
     conditionVisible:

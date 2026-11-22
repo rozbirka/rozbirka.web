@@ -1,9 +1,10 @@
-import type { FormEvent, ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { Dialog } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { Notice } from './notice'
+import { PickerPortalContext } from './picker-portal-context'
 import { useT } from '@/i18n/hooks'
 import { appMessages } from './app-messages'
 import { commonMessages } from '@/i18n/common-messages'
@@ -50,6 +51,8 @@ export function FormDialog({
 }: FormDialogProps) {
   const t = useT(appMessages)
   const tc = useT(commonMessages)
+  const [pickerPortalContainer, setPickerPortalContainer] =
+    useState<HTMLDivElement | null>(null)
   return (
     <Dialog.Root
       onOpenChange={(next) => {
@@ -61,6 +64,7 @@ export function FormDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="rz-scrim max-sm:p-3">
           <Dialog.Content
+            ref={setPickerPortalContainer}
             onCloseAutoFocus={onCloseAutoFocus}
             className={cn(
               'rz-dialog text-app-ink grid-rows-[auto_minmax(0,1fr)]',
@@ -102,7 +106,9 @@ export function FormDialog({
                 page-level hint grey lands a hair under 4.5:1. */}
               <div className="rz-dialog__body [&_[data-slot=field-hint]]:text-app-muted">
                 {error === null ? null : <Notice tone="danger">{error}</Notice>}
-                {children}
+                <PickerPortalContext value={pickerPortalContainer}>
+                  {children}
+                </PickerPortalContext>
               </div>
               <div className="rz-dialog__foot">
                 <Dialog.Close asChild>
@@ -172,6 +178,8 @@ export function Sheet({
   onCloseAutoFocus?: ((event: Event) => void) | undefined
 }) {
   const tc = useT(commonMessages)
+  const [pickerPortalContainer, setPickerPortalContainer] =
+    useState<HTMLDivElement | null>(null)
   return (
     <Dialog.Root
       onOpenChange={(next) => {
@@ -183,6 +191,7 @@ export function Sheet({
       <Dialog.Portal>
         <Dialog.Overlay className="bg-app-scrim fixed inset-0 z-50" />
         <Dialog.Content
+          ref={setPickerPortalContainer}
           aria-busy={pending || undefined}
           onCloseAutoFocus={onCloseAutoFocus}
           // Land on the sheet itself, not its close button: the reference
@@ -253,11 +262,15 @@ export function Sheet({
               bodyClassName,
             )}
           >
-            {children}
+            <PickerPortalContext value={pickerPortalContainer}>
+              {children}
+            </PickerPortalContext>
           </div>
           {footer === undefined ? null : (
             <div className="rz-sheet__foot flex-wrap items-center pb-[calc(12px+env(safe-area-inset-bottom))]">
-              {footer}
+              <PickerPortalContext value={pickerPortalContainer}>
+                {footer}
+              </PickerPortalContext>
             </div>
           )}
         </Dialog.Content>

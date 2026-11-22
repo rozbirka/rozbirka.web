@@ -1,4 +1,5 @@
 import {
+  useContext,
   useEffect,
   useId,
   useRef,
@@ -12,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { Field } from './field'
 import { SearchInput } from './input'
 import { useFieldControl } from './field-context'
+import { PickerPortalContext } from './picker-portal-context'
 
 interface SearchPickerProps {
   label: string
@@ -77,6 +79,7 @@ export function SearchPicker({
   onInputKeyDown,
   activeDescendant,
 }: SearchPickerProps) {
+  const portalContainer = useContext(PickerPortalContext)
   const id = useId()
   const root = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -262,7 +265,8 @@ export function SearchPicker({
       )}
       {visible ? (
         floating ? (
-          <Popover.Portal>
+          // Keep the floating list inside a modal's native scroll boundary.
+          <Popover.Portal container={portalContainer}>
             <Popover.Content
               asChild
               align="start"

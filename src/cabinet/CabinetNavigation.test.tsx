@@ -1,11 +1,16 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { expect, it, vi } from 'vitest'
+import type { OlxConnection } from '@/api/olx'
 import { LocaleProvider } from '@/i18n'
 import type { SubscriptionDto, Tenant } from '../api/types'
 import type { TenantAccessSnapshot } from './access-types'
 import { CabinetNavigation } from './CabinetNavigation'
+import { updateOlxNavigation } from './olx/olx-navigation-presence'
+
+const readOlx = vi.hoisted(() => vi.fn())
+vi.mock('@/api/olx', () => ({ olxApi: { connection: readOlx } }))
 
 const activeTenant: Tenant = {
   id: 'tenant-1',
@@ -69,18 +74,81 @@ const renderNavigation = (
   permissions = ['billing.view'],
   onLogout = vi.fn<() => Promise<void>>(),
   path = '/app/koval/settings/billing/overview',
+  access = snapshot(permissions),
 ) =>
   render(
     <MemoryRouter initialEntries={[path]}>
       <CabinetNavigation
         tenant={activeTenant}
         tenants={[activeTenant, otherTenant]}
-        snapshot={snapshot(permissions)}
+        snapshot={access}
         onSwitchTenant={vi.fn()}
         onLogout={onLogout}
       />
     </MemoryRouter>,
   )
+
+const olxConnection = (connected: boolean): OlxConnection => ({
+  mode: 'oauth',
+  available: true,
+  connected,
+  reconnectRequired: false,
+  writesAvailable: false,
+})
+
+it('hides OLX while loading and after confirming the business is disconnected', async () => {
+  let complete!: (value: OlxConnection) => void
+  const pending = new Promise<OlxConnection>((resolve) => {
+    complete = resolve
+  })
+  readOlx.mockReturnValueOnce(pending)
+  renderNavigation(['olx.publications.manage'])
+  const nav = within(
+    screen.getByRole('navigation', { name: 'Навігація кабінету' }),
+  )
+  expect(nav.queryByRole('link', { name: 'OLX' })).toBeNull()
+
+  await act(() => {
+    complete(olxConnection(false))
+    return pending
+  })
+  expect(nav.queryByRole('link', { name: 'OLX' })).toBeNull()
+})
+
+it('shows OLX under Sales for a connected business even with read-only OLX access', async () => {
+  readOlx.mockResolvedValueOnce(olxConnection(true))
+  renderNavigation(['olx.publications.manage'])
+  const nav = within(
+    screen.getByRole('navigation', { name: 'Навігація кабінету' }),
+  )
+  expect(await nav.findByRole('link', { name: 'OLX' })).toHaveAttribute(
+    'href',
+    '/app/koval/olx',
+  )
+})
+
+it('updates OLX navigation after connection changes and ignores older reads', async () => {
+  let complete!: (value: OlxConnection) => void
+  const pending = new Promise<OlxConnection>((resolve) => {
+    complete = resolve
+  })
+  readOlx.mockReturnValueOnce(pending)
+  const permissions = ['olx.publications.manage']
+  const access = snapshot(permissions)
+  renderNavigation(permissions, undefined, undefined, access)
+  const nav = within(
+    screen.getByRole('navigation', { name: 'Навігація кабінету' }),
+  )
+
+  act(() => updateOlxNavigation(access, olxConnection(true)))
+  expect(nav.getByRole('link', { name: 'OLX' })).toBeVisible()
+  act(() => updateOlxNavigation(access, olxConnection(false)))
+  await act(() => {
+    complete(olxConnection(true))
+    return pending
+  })
+  expect(nav.queryByRole('link', { name: 'OLX' })).toBeNull()
+})
 
 it('shows only released and allowed links with current-route semantics', () => {
   renderNavigation()

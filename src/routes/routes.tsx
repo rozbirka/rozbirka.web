@@ -121,6 +121,10 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
     const { CashScreen } = await import('@/cabinet/cash/CashScreen')
     return CashScreen
   }),
+  olx: cabinetScreenRoute('olx', async () => {
+    const { OlxSalesScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+    return OlxSalesScreen
+  }),
   integrations: cabinetScreenRoute('integrations', async () => {
     const { IntegrationsScreen } =
       await import('@/cabinet/integrations/IntegrationsScreen')
@@ -218,7 +222,12 @@ const commerceDetailRoutes: RouteObject[] = [
       path,
     ),
   ),
-  ...['parts/new', 'parts/:partId', 'parts/:partId/edit'].map((path) =>
+  ...[
+    'parts/new',
+    'parts/:partId',
+    'parts/:partId/edit',
+    'parts/:partId/olx',
+  ].map((path) =>
     cabinetScreenRoute(
       'parts',
       async () => {
@@ -244,6 +253,40 @@ const commerceDetailRoutes: RouteObject[] = [
       return ScannerScreen
     },
     'scan',
+  ),
+  cabinetScreenRoute(
+    'olx',
+    async () => {
+      const { OlxAlphaScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxAlphaScreen
+    },
+    'settings/integrations/olx',
+  ),
+  cabinetScreenRoute(
+    'olx',
+    async () => {
+      const { OlxListingSettingsScreen } =
+        await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxListingSettingsScreen
+    },
+    'settings/integrations/olx/listing',
+  ),
+  cabinetScreenRoute(
+    'olx',
+    async () => {
+      const { OlxReconciliationScreen } =
+        await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxReconciliationScreen
+    },
+    'olx/reconcile',
+  ),
+  cabinetScreenRoute(
+    'olx',
+    async () => {
+      const { OlxLegacyRedirect } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxLegacyRedirect
+    },
+    'olx-alpha',
   ),
   cabinetScreenRoute(
     'integrations',

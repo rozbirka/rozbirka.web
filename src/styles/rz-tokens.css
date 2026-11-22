@@ -87,6 +87,12 @@
   --rz-info: #2b62c9;    --rz-info-soft: rgb(43 98 201 / 0.11);
   --rz-neutral-soft: rgb(28 25 23 / 0.06);
 
+  /* Pill text sits on a tinted surface rather than the base canvas. */
+  --rz-pill-ok-ink: #167046;
+  --rz-pill-warn-ink: #865700;
+  --rz-pill-danger-ink: #b52b24;
+  --rz-pill-info-ink: #285cbd;
+
   --rz-shadow-popover: 0 8px 24px rgb(28 25 23 / 0.12), 0 0 0 1px rgb(28 25 23 / 0.08);
   --rz-shadow-dialog: 0 24px 64px rgb(28 25 23 / 0.18), 0 0 0 1px rgb(28 25 23 / 0.08);
   --rz-scrim: rgb(28 25 23 / 0.35);

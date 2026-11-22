@@ -20,6 +20,31 @@ import { PartsScreen } from './PartsScreen'
 import { resetOnboardingCache } from '../onboarding/use-owner-onboarding'
 import { ToastProvider } from '@/components/app'
 
+const olxMocks = vi.hoisted(() => ({
+  connection: vi.fn(),
+  startWriteOAuth: vi.fn(),
+  launchOAuth: vi.fn(),
+  publication: vi.fn(),
+  preparation: vi.fn(),
+  adverts: vi.fn(),
+  link: vi.fn(),
+  categories: vi.fn(),
+  saveDraft: vi.fn(),
+  preview: vi.fn(),
+  refreshPublication: vi.fn(),
+  remove: vi.fn(),
+  restore: vi.fn(),
+  publish: vi.fn(),
+  startPublicationJob: vi.fn(),
+  publicationJob: vi.fn(),
+  publicationJobs: vi.fn(),
+}))
+vi.mock('@/api/olx', () => ({
+  olxApi: olxMocks,
+  launchOlxOAuth: olxMocks.launchOAuth,
+}))
+vi.mock('@/api/olx-live', () => ({ olxLiveApi: olxMocks }))
+
 const inventoryMocks = vi.hoisted(() => ({
   getZones: vi.fn(),
   getSections: vi.fn(),
@@ -224,6 +249,7 @@ const onboardingFacts = {
 }
 
 beforeEach(() => {
+  for (const mock of Object.values(olxMocks)) mock.mockReset()
   resetOnboardingCache()
   onboardingMocks.get
     .mockReset()
@@ -4262,7 +4288,14 @@ it('closes editing after a lost response only when the saved changes are confirm
   )
   const field = await screen.findByLabelText('Нотатки')
   fireEvent.change(field, { target: { value: 'Перевірено' } })
-  partMocks.get.mockResolvedValue({ ...stored, notes: 'Перевірено' })
+  fireEvent.change(screen.getByLabelText('Публічний опис'), {
+    target: { value: 'Корпус із кріпленням' },
+  })
+  partMocks.get.mockResolvedValue({
+    ...stored,
+    notes: 'Перевірено',
+    publicDescription: 'Корпус із кріпленням',
+  })
   fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
 
   expect(await screen.findByText('Картка деталі')).toBeVisible()
@@ -4270,6 +4303,14 @@ it('closes editing after a lost response only when the saved changes are confirm
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.getByText('Зміни збережено.')).toBeVisible()
   expect(partMocks.update).toHaveBeenCalledOnce()
+  expect(partMocks.update).toHaveBeenCalledWith(
+    'part-1',
+    expect.objectContaining({
+      notes: 'Перевірено',
+      publicDescription: 'Корпус із кріпленням',
+    }),
+    expect.anything(),
+  )
 })
 
 it('does not reopen a part after its pending edit completes on another screen', async () => {
@@ -4437,7 +4478,10 @@ it.each([
   )
 })
 
-function openPartWithNotes(notes: string | null = 'Стара нотатка') {
+function openPartWithNotes(
+  notes: string | null = 'Стара нотатка',
+  olx = false,
+) {
   const part = {
     id: 'part-1',
     name: 'Фара',
@@ -4465,10 +4509,12 @@ function openPartWithNotes(notes: string | null = 'Стара нотатка') {
   )
   render(
     <ToastProvider>
-      <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <MemoryRouter
+        initialEntries={[`/app/yard/parts/part-1${olx ? '/olx' : ''}`]}
+      >
         <Routes>
           <Route
-            path="/app/:tenant/parts/:partId"
+            path="/app/:tenant/parts/:partId/*"
             element={<PartsScreen definition={partsDefinition as never} />}
           />
         </Routes>
@@ -4545,6 +4591,636 @@ it('checks a lost inline notes response before declaring success', async () => {
   expect(await within(region).findByRole('alert')).toBeVisible()
   expect(input).toHaveValue('Стара нотатка чернетка')
   expect(within(region).queryByText('Збережено')).toBeNull()
+})
+
+it('does not load OLX from a part card without publication permission', async () => {
+  olxMocks.connection.mockClear()
+  cabinetMock.snapshot.permissions.add('olx.integration.manage')
+  openPartWithNotes(undefined, true)
+  await screen.findByRole('region', { name: 'Нотатки' })
+  expect(screen.queryByRole('link', { name: 'OLX' })).toBeNull()
+  expect(olxMocks.connection).not.toHaveBeenCalled()
+})
+
+const connectedOlx = {
+  available: true,
+  connected: true,
+  mode: 'oauth',
+  reconnectRequired: false,
+  writesAvailable: true,
+  scope: 'v2 read write',
+}
+
+const batchContent = {
+  publicDescription: 'Опис тестової запчастини.',
+  advertiserType: 'business',
+  contactName: 'Продавець',
+  contactPhone: '',
+  cityId: 1,
+  districtId: null,
+  categoryId: 2544,
+  categoryConfirmed: true,
+  attributes: { state: ['used'] },
+}
+
+async function openOlxBulkAction(action: string) {
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  olxMocks.connection.mockResolvedValue({
+    ...connectedOlx,
+    accountId: 'seller-1',
+  })
+  const rows = [
+    ...pickableRows,
+    { ...pickableRows[0]!, id: 'part-3', name: 'Крило' },
+    { ...pickableRows[0]!, id: 'part-4', name: 'Капот' },
+  ]
+  partMocks.search.mockResolvedValue({
+    items: rows,
+    olxConnected: true,
+    page: 1,
+    pageSize: 30,
+    total: rows.length,
+    totalPages: 1,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <PartsScreen definition={partsDefinition as never} />
+    </MemoryRouter>,
+  )
+  const user = userEvent.setup()
+  await user.click(
+    (
+      await screen.findAllByRole('checkbox', { name: /Обрати всі на сторінці/ })
+    )[0]!,
+  )
+  await user.click(screen.getByRole('button', { name: 'Майданчики' }))
+  await user.click(await screen.findByRole('menuitem', { name: action }))
+  return user
+}
+
+it('assigns one OLX category to the selected drafts and skips already linked ads', async () => {
+  olxMocks.publish.mockClear()
+  olxMocks.saveDraft.mockReset().mockResolvedValue({ revision: 'next' })
+  olxMocks.categories.mockResolvedValue([
+    { id: 2544, name: 'Фари', path: 'Запчастини / Фари', photosLimit: 13 },
+  ])
+  olxMocks.publication.mockImplementation((id: string) =>
+    Promise.resolve({
+      partId: id,
+      revision: `rev-${id}`,
+      state: id === 'part-4' ? 'linked' : 'draft',
+      advertId: id === 'part-4' ? '888' : null,
+      content: {
+        ...batchContent,
+        categoryConfirmed: false,
+        categoryId: id === 'part-2' ? 2350 : 2544,
+      },
+      canWrite: true,
+    }),
+  )
+  const user = await openOlxBulkAction('Призначити категорію…')
+  await user.click(await screen.findByRole('button', { name: 'Категорія OLX' }))
+  await user.click(await screen.findByRole('option', { name: /Фари/ }))
+  expect(olxMocks.saveDraft).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'Призначити' }))
+
+  const result = await screen.findByRole('dialog', {
+    name: 'Результат призначення категорії',
+  })
+  const assigned = within(result).getByRole('region', {
+    name: 'Категорію призначено · 3',
+  })
+  expect(within(assigned).getAllByRole('listitem')).toHaveLength(3)
+  expect(
+    within(result).getByRole('region', { name: 'Уже пов’язані · 1' }),
+  ).toBeVisible()
+  expect(olxMocks.saveDraft).toHaveBeenCalledTimes(3)
+  expect(olxMocks.saveDraft).toHaveBeenCalledWith(
+    'part-1',
+    expect.objectContaining({
+      categoryId: 2544,
+      categoryConfirmed: true,
+      attributes: { state: ['used'] },
+    }),
+    'rev-part-1',
+    expect.objectContaining({ expectedAccountId: 'seller-1' }),
+  )
+  expect(olxMocks.saveDraft).toHaveBeenCalledWith(
+    'part-2',
+    expect.objectContaining({
+      categoryId: 2544,
+      categoryConfirmed: true,
+      attributes: {},
+    }),
+    'rev-part-2',
+    expect.objectContaining({ expectedAccountId: 'seller-1' }),
+  )
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+})
+
+it('queues only checked parts and shows per-part outcomes on manual refresh', async () => {
+  olxMocks.saveDraft.mockClear()
+  olxMocks.publication.mockImplementation((id: string) =>
+    Promise.resolve({
+      partId: id,
+      revision: `rev-${id}`,
+      state: id === 'part-4' ? 'linked' : 'draft',
+      advertId: id === 'part-4' ? '888' : null,
+      content:
+        id === 'part-3'
+          ? { ...batchContent, advertiserType: '' }
+          : batchContent,
+      canWrite: true,
+    }),
+  )
+  olxMocks.preview.mockImplementation(
+    (id: string, content: { advertiserType: string }) =>
+      Promise.resolve({
+        part: { title: id },
+        issues:
+          id === 'part-2'
+            ? [{ field: 'price', code: 'price_required' }]
+            : !content.advertiserType
+              ? [{ field: 'advertiser', code: 'advertiser_required' }]
+              : [],
+      }),
+  )
+  olxMocks.saveDraft.mockResolvedValue({ revision: 'reviewed-part-3' })
+  olxMocks.publish.mockClear()
+  const job = {
+    id: 'job-1',
+    status: 'queued',
+    createdAt: '2026-11-20T12:00:00Z',
+    updatedAt: '2026-11-20T12:00:00Z',
+    parts: [
+      { partId: 'part-1', revision: 'rev-part-1' },
+      { partId: 'part-3', revision: 'reviewed-part-3' },
+    ],
+    partNames: { 'part-1': 'Деталь 1', 'part-3': 'Деталь 3' },
+    results: [],
+  }
+  olxMocks.startPublicationJob.mockClear().mockResolvedValue(job)
+  olxMocks.publicationJob
+    .mockReset()
+    .mockResolvedValueOnce({
+      ...job,
+      status: 'running',
+      results: [
+        {
+          partId: 'part-1',
+          status: 'failed',
+          error: 'OLX_WRITE_REJECTED',
+          errorFields: ['description:contact_links'],
+        },
+      ],
+    })
+    .mockResolvedValueOnce({
+      ...job,
+      status: 'completed',
+      results: [
+        {
+          partId: 'part-1',
+          status: 'failed',
+          error: 'OLX_WRITE_REJECTED',
+          errorFields: ['description:contact_links'],
+        },
+        { partId: 'part-3', status: 'submitted', advertId: '999' },
+      ],
+    })
+
+  const user = await openOlxBulkAction('Опублікувати на майданчику…')
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Опублікувати на майданчику',
+  })
+  await within(sheet).findByText('Готові 1 · Очікують даних 2')
+  await user.click(within(sheet).getByRole('button', { name: 'Тип продавця' }))
+  await user.click(await screen.findByRole('option', { name: 'Бізнес' }))
+  await within(sheet).findByText('Готові 2 · Очікують даних 1')
+  await user.click(
+    within(sheet).getByRole('button', { name: /^Опублікувати$/ }),
+  )
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+  const confirmation = screen.getByRole('dialog', {
+    name: 'Опублікувати готові запчастини на OLX?',
+  })
+  await user.click(
+    within(confirmation).getByRole('button', { name: /^Опублікувати$/ }),
+  )
+
+  const result = await screen.findByRole('dialog', {
+    name: 'Результат публікації на OLX',
+  })
+  expect(await within(result).findByText('Опрацьовано 1 з 2')).toBeVisible()
+  expect(olxMocks.publicationJob).toHaveBeenCalledTimes(1)
+  expect(olxMocks.publicationJob).toHaveBeenCalledWith(
+    'job-1',
+    expect.any(Object),
+  )
+  await user.click(
+    within(result).getByRole('button', { name: 'Оновити стан завдання' }),
+  )
+  const accepted = await within(result).findByRole('region', {
+    name: 'Прийнято в обробку · 1',
+  })
+  const missing = within(result).getByRole('region', {
+    name: 'Очікують даних · 1',
+  })
+  const errors = within(result).getByRole('region', { name: 'Помилки · 1' })
+  expect(within(accepted).getByText('Оголошення № 999')).toBeVisible()
+  expect(within(errors).getByText(/Приберіть посилання/)).toBeVisible()
+  expect(within(missing).getByText('Вкажіть ціну більше нуля.')).toBeVisible()
+  expect(await within(result).findByText('Опрацьовано 2 з 2')).toBeVisible()
+  expect(olxMocks.publicationJob).toHaveBeenCalledTimes(2)
+  expect(
+    within(result).getByRole('region', { name: 'Уже пов’язані · 1' }),
+  ).toBeVisible()
+  expect(olxMocks.saveDraft).toHaveBeenCalledExactlyOnceWith(
+    'part-3',
+    expect.objectContaining({ advertiserType: 'business' }),
+    'rev-part-3',
+    expect.objectContaining({ expectedAccountId: 'seller-1' }),
+  )
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+  expect(olxMocks.startPublicationJob).toHaveBeenCalledTimes(1)
+  const [request] = olxMocks.startPublicationJob.mock.calls[0] as [
+    { operationId: string },
+  ]
+  expect(typeof request.operationId).toBe('string')
+  expect(request).toEqual({
+    operationId: request.operationId,
+    accountId: 'seller-1',
+    parts: job.parts,
+  })
+})
+
+it('closes the group sheet and cancels the read-only OLX check', async () => {
+  let checking: AbortSignal | undefined
+  olxMocks.publication.mockImplementation(
+    (_id: string, { signal }: { signal: AbortSignal }) => {
+      checking = signal
+      return new Promise((_resolve, reject) =>
+        signal.addEventListener(
+          'abort',
+          () => reject(new DOMException('Check cancelled', 'AbortError')),
+          {
+            once: true,
+          },
+        ),
+      )
+    },
+  )
+  const user = await openOlxBulkAction('Опублікувати на майданчику…')
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Опублікувати на майданчику',
+  })
+  await vi.waitFor(() => expect(checking).toBeDefined())
+  await user.click(within(sheet).getByRole('button', { name: 'Скасувати' }))
+  expect(sheet).not.toBeInTheDocument()
+  expect(checking?.aborted).toBe(true)
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+})
+
+function mockOlxPreparation() {
+  olxMocks.categories.mockResolvedValue([])
+  olxMocks.preparation.mockResolvedValue({
+    part: { title: 'Фара', status: 'available', photos: [] },
+    suggestions: [],
+  })
+}
+
+it('opens the OLX page from the part tabs without starting publication', async () => {
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  olxMocks.connection.mockResolvedValue(connectedOlx)
+  olxMocks.publication.mockResolvedValue({ state: 'draft', canWrite: true })
+  mockOlxPreparation()
+  openPartWithNotes()
+  const tabs = within(
+    await screen.findByRole('navigation', {
+      name: 'Розділи картки запчастини',
+    }),
+  )
+  expect(tabs.getByRole('link', { name: 'Огляд' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  const open = tabs.getByRole('link', { name: 'OLX' })
+  expect(open).toHaveAttribute('href', '/app/yard/parts/part-1/olx')
+  expect(olxMocks.preparation).not.toHaveBeenCalled()
+  await userEvent.click(open)
+  const publication = await screen.findByRole('region', {
+    name: 'Публікація OLX',
+  })
+  expect(
+    await within(publication).findByLabelText(/Публічний опис/),
+  ).toBeEnabled()
+  expect(
+    within(publication).getByRole('button', { name: 'Категорія OLX' }),
+  ).toHaveAccessibleDescription(/Для цієї назви немає підказок OLX/)
+  expect(screen.getByRole('heading', { name: 'Фара', level: 1 })).toBeVisible()
+  expect(screen.getByRole('link', { name: 'OLX' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(olxMocks.preparation).toHaveBeenCalledWith('part-1', expect.anything())
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('link', { name: 'Огляд' }))
+  expect(await screen.findByRole('region', { name: 'Нотатки' })).toBeVisible()
+})
+
+async function openOlxDetails() {
+  openPartWithNotes(undefined, true)
+  return within(await screen.findByRole('region', { name: 'Публікація OLX' }))
+}
+
+it('lets a manager grant publication access while the part form is still loading', async () => {
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  cabinetMock.snapshot.permissions.add('olx.integration.manage')
+  olxMocks.connection.mockResolvedValue({ ...connectedOlx, scope: 'v2 read' })
+  olxMocks.preparation.mockReturnValue(new Promise(() => undefined))
+  const start = {
+    launchUrl: 'https://api.example.test/api/v1/integrations/olx/oauth/launch',
+    ticket: 'part-write-upgrade',
+    expiresAt: new Date(Date.now() + 600_000).toISOString(),
+  }
+  olxMocks.startWriteOAuth.mockResolvedValue(start)
+
+  const publication = await openOlxDetails()
+  const grant = await publication.findByRole('button', {
+    name: 'Дозволити публікацію в OLX',
+  })
+  expect(publication.queryByLabelText(/Публічний опис/)).toBeNull()
+  expect(olxMocks.startWriteOAuth).not.toHaveBeenCalled()
+  await userEvent.click(grant)
+  expect(olxMocks.startWriteOAuth).toHaveBeenCalledTimes(1)
+  expect(olxMocks.launchOAuth).toHaveBeenCalledWith(start)
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+})
+
+it('links a selected account advert from the part card without publishing a duplicate', async () => {
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  cabinetMock.snapshot.permissions.delete('parts.manage')
+  olxMocks.connection.mockResolvedValue(connectedOlx)
+  mockOlxPreparation()
+  olxMocks.publication.mockResolvedValue({
+    state: 'draft',
+    canWrite: true,
+    canLinkExisting: true,
+    revision: 'draft-1',
+  })
+  olxMocks.adverts.mockResolvedValue({
+    page: 1,
+    hasMore: false,
+    items: [
+      { id: '123', title: 'Фара з кабінету OLX', status: 'active' },
+      {
+        id: '456',
+        title: 'Прив’язана фара',
+        status: 'active',
+        linkedPart: { partId: 'another-part', partName: 'Фара права' },
+      },
+    ],
+  })
+  const linked = {
+    state: 'update_pending',
+    advertId: '123',
+    canWrite: true,
+    canLinkExisting: false,
+    revision: 'revision-2',
+  }
+  olxMocks.link.mockImplementation(() => {
+    olxMocks.publication.mockResolvedValue(linked)
+    return Promise.resolve(linked)
+  })
+
+  const user = userEvent.setup()
+  const card = await openOlxDetails()
+  const open = await card.findByRole('button', {
+    name: 'Прив’язати оголошення OLX',
+  })
+  expect(olxMocks.adverts).not.toHaveBeenCalled()
+  await user.click(open)
+  const sheet = within(
+    await screen.findByRole('region', { name: 'Прив’язати оголошення OLX' }),
+  )
+  const confirm = await sheet.findByRole('button', {
+    name: 'Підтвердити прив’язування',
+  })
+  expect(confirm.closest('.rz-card__foot')).not.toBeNull()
+  expect(confirm).toBeDisabled()
+  expect(sheet.getByRole('radio', { name: /Прив’язана фара/ })).toBeDisabled()
+  await user.click(
+    await sheet.findByRole('radio', { name: /Фара з кабінету OLX/ }),
+  )
+  expect(sheet.getByText(/Телефон і місто/)).toBeVisible()
+  expect(olxMocks.link).not.toHaveBeenCalled()
+  await user.click(confirm)
+  expect(await card.findByText('№ 123')).toBeVisible()
+  expect(olxMocks.link).toHaveBeenCalledExactlyOnceWith(
+    'part-1',
+    '123',
+    'draft-1',
+    expect.anything(),
+  )
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+  expect(
+    card.queryByRole('button', { name: 'Прив’язати оголошення OLX' }),
+  ).toBeNull()
+  expect(card.getByText('Очікує оновлення OLX')).toBeVisible()
+  expect(screen.queryByRole('dialog')).toBeNull()
+})
+
+it('shows moderation and validation reasons and refreshes payment status on demand', async () => {
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  olxMocks.connection.mockResolvedValue(connectedOlx)
+  mockOlxPreparation()
+  olxMocks.publication.mockResolvedValue({
+    state: 'linked',
+    advertId: '123',
+    observedStatus: 'moderated',
+    moderationReason: 'OLX просить вибрати правильну категорію.',
+    error: 'OLX_WRITE_REJECTED',
+    errorFields: ['images'],
+    canWrite: true,
+  })
+  olxMocks.refreshPublication.mockResolvedValue({
+    state: 'linked',
+    advertId: '123',
+    observedStatus: 'unpaid',
+    canWrite: true,
+  })
+
+  const card = await openOlxDetails()
+  expect(await card.findByText('Відхилено модерацією')).toBeVisible()
+  expect(
+    card.getByText('OLX просить вибрати правильну категорію.'),
+  ).toBeVisible()
+  expect(card.getByRole('listitem')).toHaveTextContent('Фото')
+  expect(olxMocks.refreshPublication).not.toHaveBeenCalled()
+  await userEvent.click(card.getByRole('button', { name: 'Оновити статус' }))
+  expect(await card.findByText(/Оплатити можна в кабінеті OLX/)).toBeVisible()
+  expect(
+    card.queryByText('OLX просить вибрати правильну категорію.'),
+  ).toBeNull()
+  expect(olxMocks.refreshPublication).toHaveBeenCalledTimes(1)
+})
+
+it('asks for confirmation before restoring the same inactive OLX advert', async () => {
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  olxMocks.connection.mockResolvedValue(connectedOlx)
+  mockOlxPreparation()
+  const removed = {
+    state: 'removed',
+    advertId: '123',
+    observedStatus: 'removed_by_user',
+    removeRequested: true,
+    canWrite: true,
+    canRestore: true,
+    requiresManualRestore: true,
+  }
+  olxMocks.publication.mockResolvedValue(removed)
+  olxMocks.restore.mockResolvedValue({
+    ...removed,
+    state: 'linked',
+    observedStatus: 'active',
+    removeRequested: false,
+    canRestore: false,
+    requiresManualRestore: false,
+  })
+  const user = userEvent.setup()
+  const card = await openOlxDetails()
+  expect(
+    await card.findByText('Потрібне ручне відновлення оголошення.'),
+  ).toBeVisible()
+  await user.click(card.getByRole('button', { name: 'Відновити на OLX' }))
+  expect(olxMocks.restore).not.toHaveBeenCalled()
+  const dialog = within(
+    await screen.findByRole('dialog', {
+      name: 'Відновити оголошення OLX',
+    }),
+  )
+  await user.click(dialog.getByRole('button', { name: 'Відновити на OLX' }))
+  expect(await card.findByText('Активне')).toBeVisible()
+  expect(card.getByText('№ 123')).toBeVisible()
+  expect(olxMocks.restore).toHaveBeenCalledExactlyOnceWith(
+    'part-1',
+    expect.anything(),
+  )
+  expect(olxMocks.publish).not.toHaveBeenCalled()
+})
+
+it('refreshes the linked advert explicitly and uses its withdrawal confirmation from the part card', async () => {
+  olxMocks.refreshPublication.mockClear()
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  cabinetMock.snapshot.permissions.delete('parts.manage')
+  olxMocks.connection.mockResolvedValue(connectedOlx)
+  mockOlxPreparation()
+  const linked = {
+    state: 'linked',
+    canWrite: true,
+    advertId: '123',
+    observedStatus: 'new',
+    url: 'https://www.olx.ua/d/uk/obyavlenie/example.html',
+    checkedAt: '2026-11-19T10:42:00Z',
+    content: { categoryId: 17, categoryConfirmed: true },
+  }
+  olxMocks.publication.mockResolvedValue(linked)
+  olxMocks.categories.mockResolvedValue([
+    { id: 17, name: 'Фари', path: 'Фари' },
+  ])
+  olxMocks.refreshPublication
+    .mockRejectedValueOnce(new Error('Status unavailable'))
+    .mockResolvedValue({
+      ...linked,
+      observedStatus: 'active',
+      checkedAt: '2026-11-19T10:50:00Z',
+    })
+  olxMocks.remove.mockResolvedValue({
+    ...linked,
+    state: 'remove_pending',
+    removeRequested: true,
+  })
+  const card = await openOlxDetails()
+  const status = within(
+    await card.findByRole('region', { name: 'Статус оголошення OLX' }),
+  )
+  expect(status.getByText('На модерації')).toBeVisible()
+  const lastCheck = status.getByText('Остання перевірка').parentElement
+  expect(lastCheck?.querySelector('time')).toHaveAttribute(
+    'datetime',
+    linked.checkedAt,
+  )
+  expect(await card.findByText('Фари')).toBeVisible()
+  expect(card.getByText('№ 123')).toBeVisible()
+  expect(card.getByRole('link', { name: 'Відкрити на OLX' })).toHaveAttribute(
+    'href',
+    linked.url,
+  )
+  expect(card.queryByRole('button', { name: 'Редагувати опис' })).toBeNull()
+  expect(olxMocks.refreshPublication).not.toHaveBeenCalled()
+  const refresh = status.getByRole('button', { name: 'Оновити статус' })
+  await userEvent.click(refresh)
+  expect(await card.findByText(/Не вдалося оновити статус/)).toBeVisible()
+  expect(status.getByText('На модерації')).toBeVisible()
+  expect(lastCheck?.querySelector('time')).toHaveAttribute(
+    'datetime',
+    linked.checkedAt,
+  )
+  await userEvent.click(refresh)
+  expect(await status.findByText('Активне')).toBeVisible()
+  expect(lastCheck?.querySelector('time')).toHaveAttribute(
+    'datetime',
+    '2026-11-19T10:50:00Z',
+  )
+  expect(olxMocks.refreshPublication).toHaveBeenCalledTimes(2)
+  expect(olxMocks.refreshPublication).toHaveBeenLastCalledWith(
+    'part-1',
+    expect.anything(),
+  )
+  await userEvent.click(
+    card.getByRole('button', { name: 'Інші дії з оголошенням OLX' }),
+  )
+  await userEvent.click(
+    await screen.findByRole('menuitem', { name: 'Зняти з публікації' }),
+  )
+  const confirmation = await screen.findByRole('dialog', {
+    name: 'Зняти оголошення з OLX',
+  })
+  expect(olxMocks.remove).not.toHaveBeenCalled()
+  await userEvent.click(
+    within(confirmation).getByRole('button', { name: 'Зняти з публікації' }),
+  )
+  expect(await card.findByText('Зняття очікує підтвердження OLX')).toBeVisible()
+  expect(olxMocks.remove).toHaveBeenCalledExactlyOnceWith(
+    'part-1',
+    expect.anything(),
+  )
+})
+
+it('keeps the linked advert status usable when the OLX category catalogue fails', async () => {
+  cabinetMock.snapshot.permissions.add('olx.publications.manage')
+  olxMocks.connection.mockResolvedValue(connectedOlx)
+  mockOlxPreparation()
+  olxMocks.categories.mockRejectedValue(new Error('Catalogue unavailable'))
+  const advert = {
+    state: 'linked',
+    canWrite: true,
+    advertId: '123',
+    observedStatus: 'new',
+  }
+  olxMocks.publication.mockResolvedValue(advert)
+  olxMocks.refreshPublication.mockResolvedValue({
+    ...advert,
+    observedStatus: 'active',
+  })
+  const publication = await openOlxDetails()
+  expect(await publication.findByText('На модерації')).toBeVisible()
+  expect(publication.getByText('Ще не перевірено')).toBeVisible()
+  await userEvent.click(
+    publication.getByRole('button', { name: 'Оновити статус' }),
+  )
+  expect(await publication.findByText('Активне')).toBeVisible()
+  expect(olxMocks.refreshPublication).toHaveBeenCalledOnce()
 })
 
 it('does not expose inline note editing without parts.manage', async () => {
