@@ -5367,7 +5367,7 @@ for (const { writeAccess, partCard, linkExisting } of [
 ])
   test(`OLX live ${linkExisting ? 'links an existing advert from the part card' : `preparation and publication ${partCard ? 'from the part card' : writeAccess ? 'with write access' : 'without write access'}`}`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     await installCabinetApiBoundary(page, { olxAlpha: true })
     const id = '11111111-1111-1111-1111-111111111111'
     const editsPrice = partCard && !linkExisting
@@ -5905,8 +5905,15 @@ for (const { writeAccess, partCard, linkExisting } of [
       await expect(categoryPicker).toBeFocused()
       await categoryPicker.click()
       const categoryOptions = page.getByRole('listbox').locator('..')
-      await categoryOptions.hover()
-      await page.mouse.wheel(0, 420)
+      if (testInfo.project.use.hasTouch) {
+        await categoryOptions
+          .getByRole('option')
+          .last()
+          .scrollIntoViewIfNeeded()
+      } else {
+        await categoryOptions.hover()
+        await page.mouse.wheel(0, 420)
+      }
       await expect
         .poll(() => categoryOptions.evaluate((element) => element.scrollTop))
         .toBeGreaterThan(0)
