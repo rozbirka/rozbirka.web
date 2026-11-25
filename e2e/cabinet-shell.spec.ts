@@ -5237,17 +5237,20 @@ test('OLX listing settings and searchable part status work from the cabinet', as
 
   const olxRequests: string[] = []
   page.on('request', (request) => {
-    if (request.url().includes('/api/v1/integrations/olx/'))
-      olxRequests.push(request.url())
+    const path = new URL(request.url()).pathname
+    if (path.startsWith('/api/v1/integrations/olx/')) olxRequests.push(path)
   })
   await page.goto('/app/koval/parts')
+  // The cabinet checks connection visibility once. Part statuses come from search.
+  const connectionRead = '/api/v1/integrations/olx/connection'
+  await expect.poll(() => olxRequests).toEqual([connectionRead])
   const part = page.getByRole('row', { name: /Фара для перевірки статусу/ })
   await expect(part).toContainText('OLX · Відхилено модерацією')
   await page.getByRole('button', { name: 'Майданчики' }).click()
   await page.getByText('Потребують уваги', { exact: true }).click()
   await expect.poll(() => lastSearch?.olxStatus).toBe('attention')
   await expect(part).toBeVisible()
-  expect(olxRequests).toEqual([])
+  expect(olxRequests).toEqual([connectionRead])
 })
 
 test('OLX bulk maintenance keeps withdrawal and permanent exclusion separate', async ({
@@ -6560,6 +6563,7 @@ test('OLX marketplaces show part status and save optional settings from the part
 test('OLX reconciliation manually links the existing ID and saves completion', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
   await installCabinetApiBoundary(page, { olxAlpha: true, partsManage: true })
   const partId = '11111111-1111-1111-1111-111111111111'
   let linked = false
