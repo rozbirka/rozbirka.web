@@ -90,6 +90,7 @@ import {
   OrderTimeline,
 } from './OrderDetailCards'
 import { DeliveryConfigureCard } from './delivery/DeliveryConfigureCard'
+import { ExternalWaybillSheet } from './delivery/ExternalWaybillSheet'
 import {
   DeliveryOrderBody,
   type DeliveryIntent,
@@ -103,6 +104,7 @@ import {
   useNovaPoshtaAvailability,
 } from './delivery/nova-poshta-availability'
 import { deliveryMessages } from './delivery/messages'
+import { waybillMessages } from './delivery/waybill-messages'
 import { useDeliveryOrder } from './delivery/use-delivery-order'
 import { orderMessages } from './messages'
 import { orderFormMessages } from './order-form-messages'
@@ -1218,8 +1220,10 @@ function OrderDetailScreen({
   )
   const [deliveryEntry, setDeliveryEntry] = useState<{
     orderId: string
-    action: 'form' | 'attach'
+    action: 'form' | 'attach' | 'attached'
   } | null>(null)
+  const [externalAttachOpen, setExternalAttachOpen] = useState(false)
+  const tw = useT(waybillMessages)
   const tf = useT(deliveryFlowMessages)
   const historyTitleId = useId()
   const guard = useFirstPriceGuard()
@@ -1760,6 +1764,9 @@ function OrderDetailScreen({
             novaPoshtaAvailable={novaPoshta.available}
             notes={notesCard}
             onIntentHandled={() => setDeliveryIntent(null)}
+            onOrderChanged={() => {
+              void reload()
+            }}
             order={order}
             partsPath={partsPath}
             waybillsPath={waybillsPath}
@@ -1771,6 +1778,29 @@ function OrderDetailScreen({
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
+      {externalAttachOpen && deliveryLoad.state?.integrationId != null ? (
+        <ExternalWaybillSheet
+          key={order.id}
+          delivery={deliveryMoney}
+          integrationId={deliveryLoad.state.integrationId}
+          orderId={order.id}
+          orderNumber={order.number}
+          shipment={deliveryLoad.state.shipment}
+          onClose={() => setExternalAttachOpen(false)}
+          onAttached={(next) => {
+            setExternalAttachOpen(false)
+            setDeliveryEntry({ orderId: order.id, action: 'attached' })
+            toast?.show({
+              tone: 'ok',
+              message: tw('attachedToast', { number: String(order.number) }),
+            })
+            deliveryLoad.setMoney(next)
+            deliveryLoad.reload()
+            void reload()
+          }}
+        />
+      ) : null}
+
       {deliveryOrder ? null : (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid min-w-0 gap-3.5">
@@ -1778,6 +1808,11 @@ function OrderDetailScreen({
               <DeliveryConfigureCard
                 connection={deliveryLoad.state}
                 integrationsPath={integrationsPath}
+                onAttach={
+                  deliveryLoad.state?.integrationId == null
+                    ? null
+                    : () => setExternalAttachOpen(true)
+                }
                 mutationsAllowed={mutationsAllowed}
                 novaPoshtaAvailable={novaPoshta.available}
                 onConfigured={(next, action) => {

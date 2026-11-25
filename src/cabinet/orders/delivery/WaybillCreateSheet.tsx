@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Button, Notice, Sheet, SkeletonRows } from '@/components/app'
 import type { DeliveryOrder } from '@/api/delivery'
 import { isProblemCode, normalizeApiProblem } from '@/api/errors'
-import { shippingApi, type Shipment } from '@/api/shipping'
+import { shippingApi, type Shipment, type ShipmentDraft } from '@/api/shipping'
 import { commonMessages, useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SheetGroup } from '../sheet-group'
@@ -156,7 +156,7 @@ export function WaybillCreateSheet({
   onShipment: (shipment: Shipment) => void
   orderId: string
   orderNumber: number
-  shipment: Shipment
+  shipment: Shipment & { draft: ShipmentDraft }
 }) {
   const { locale } = useLocale()
   const format = useFormat()

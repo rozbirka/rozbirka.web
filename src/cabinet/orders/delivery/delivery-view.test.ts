@@ -84,6 +84,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   lastTrackedAt: null,
   relatedNumbers: [],
   connectionId: null,
+  importedDetails: null,
   version: 'v1',
   dispatchedAt: null,
   receivedAt: null,

@@ -49,7 +49,8 @@ import {
   contactLine,
   createdAt,
   destinationLine,
-  parcelLine,
+  shipmentParcelLine,
+  shipmentRecipient,
   routeLine,
   type WaybillStage,
 } from './waybill-view'
@@ -188,6 +189,7 @@ export function DeliveryShipmentBlock({
     source: Shipment,
     number: { value: string; sub: string } | null,
   ): ShipmentFactRow[] => {
+    const recipient = shipmentRecipient(source)
     const created = number !== null
     const cod = created ? source.codUah : delivery.outstandingUah
     // After receipt and settlement, the waybill keeps its historical COD;
@@ -206,17 +208,17 @@ export function DeliveryShipmentBlock({
       {
         key: 'recipient',
         label: t('groupRecipient'),
-        value: contactLine(source.draft.recipient),
+        value: recipient === null ? '—' : contactLine(recipient),
       },
       {
         key: 'route',
         label: t('factRoute'),
-        value: routeLine(source.sender, source.draft.recipient),
+        value: recipient === null ? '—' : routeLine(source.sender, recipient),
       },
       {
         key: 'parcel',
         label: tm('factParcel'),
-        value: parcelLine(source.draft.parcels, locale),
+        value: shipmentParcelLine(source, locale),
         mono: true,
       },
       {
@@ -351,6 +353,7 @@ export function DeliveryShipmentBlock({
     )
 
   if (stage === 'draftStale') {
+    const recipient = shipmentRecipient(shipment)
     const point = points.find((item) => item.isDefault) ?? points[0] ?? null
     return (
       <ShipmentCard
@@ -369,6 +372,10 @@ export function DeliveryShipmentBlock({
                 <FilePlus aria-hidden />
                 {t('createInvoice')}
               </Button>
+              <Button disabled={busy} onClick={actions.attach} variant="quiet">
+                <Link2 aria-hidden />
+                {tm('attachWaybill')}
+              </Button>
             </>
           ) : null
         }
@@ -376,12 +383,12 @@ export function DeliveryShipmentBlock({
           {
             key: 'recipient',
             label: t('groupRecipient'),
-            value: contactLine(shipment.draft.recipient),
+            value: recipient === null ? '—' : contactLine(recipient),
           },
           {
             key: 'to',
             label: t('factDestination'),
-            value: destinationLine(shipment.draft.recipient),
+            value: recipient === null ? '—' : destinationLine(recipient),
           },
           {
             key: 'sender',
@@ -718,10 +725,10 @@ export function DeliveryShipmentBlock({
             key: 'edit',
             label: t('edit'),
             icon: <Pencil aria-hidden />,
-            disabled: busy,
+            disabled: busy || shipment?.draft == null,
             onSelect: () => openFromMenu(actions.editWaybill),
           },
-          ...(delivery.dispatchedAt === null
+          ...(delivery.dispatchedAt === null && shipment?.draft != null
             ? [
                 {
                   key: 'dispatch',

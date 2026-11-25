@@ -170,6 +170,7 @@ export function DeliveryOrderBody({
   notes,
   onIntentHandled,
   onCustomerChange,
+  onOrderChanged,
   order,
   partsPath,
   waybillsPath = null,
@@ -188,7 +189,7 @@ export function DeliveryOrderBody({
   financePath?: string | null
   integrationsPath: string | null
   /** Continue the entry button into its form without a second click. */
-  initialAction?: 'form' | 'attach' | undefined
+  initialAction?: 'form' | 'attach' | 'attached' | undefined
   /** A header action waiting to open its dialog. */
   intent?: DeliveryIntent | null
   load: DeliveryOrderLoad
@@ -200,6 +201,7 @@ export function DeliveryOrderBody({
   notes?: ReactNode
   /** Called once the dialog asked for by `intent` has closed. */
   onIntentHandled?: () => void
+  onOrderChanged?: () => void
   order: OrderDetail
   partsPath: string | null
   /** «Накладні НП»; «Дані ТТН» and «Відкрити ТТН» open the waybill card there. */
@@ -232,6 +234,15 @@ export function DeliveryOrderBody({
         ? { kind: 'attach' }
         : null,
   )
+  useEffect(() => {
+    if (initialAction !== 'attached') return
+    const frame = window.requestAnimationFrame(() =>
+      tabListRef.current
+        ?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+        ?.focus(),
+    )
+    return () => window.cancelAnimationFrame(frame)
+  }, [initialAction])
   const [dialog, setDialog] = useState<WaybillDialog | null>(null)
   const [dialogPending, setDialogPending] = useState(false)
   const [dialogError, setDialogError] = useState<string | null>(null)
@@ -243,7 +254,9 @@ export function DeliveryOrderBody({
   // one, and «no proof yet» is only known from the last check.
   const [cancelled, setCancelled] = useState<CancelledWaybill | null>(null)
   const [nextDraft, setNextDraft] = useState<ShipmentDraft | null>(null)
-  const [attachedAt, setAttachedAt] = useState<string | null>(null)
+  const [attachedAt, setAttachedAt] = useState<string | null>(() =>
+    initialAction === 'attached' ? new Date().toISOString() : null,
+  )
   const hasDeliveryProgress =
     shipment !== null ||
     cancelled !== null ||
@@ -1051,7 +1064,7 @@ export function DeliveryOrderBody({
 
       {drawer?.kind === 'create' &&
         integrationId !== null &&
-        shipment !== null && (
+        shipment?.draft != null && (
           <WaybillCreateSheet
             delivery={delivery}
             integrationId={integrationId}
@@ -1069,7 +1082,7 @@ export function DeliveryOrderBody({
             }}
             orderId={order.id}
             orderNumber={order.number}
-            shipment={shipment}
+            shipment={{ ...shipment, draft: shipment.draft }}
           />
         )}
 
@@ -1111,7 +1124,7 @@ export function DeliveryOrderBody({
 
       {drawer?.kind === 'edit' &&
         integrationId !== null &&
-        shipment !== null && (
+        shipment?.draft != null && (
           <WaybillEditSheet
             integrationId={integrationId}
             onClose={() => setDrawer(null)}
@@ -1127,16 +1140,18 @@ export function DeliveryOrderBody({
               toast?.show({ tone: 'ok', message: tw('editConfirmed') })
             }}
             orderId={order.id}
-            shipment={shipment}
+            shipment={{ ...shipment, draft: shipment.draft }}
           />
         )}
 
       {drawer?.kind === 'attach' && integrationId !== null && (
         <ExternalWaybillSheet
+          key={order.id}
           delivery={delivery}
           integrationId={integrationId}
           onAttached={(money) => {
             load.setMoney(money)
+            onOrderChanged?.()
             setAttachedAt(new Date().toISOString())
             setCancelled(null)
             setDrawer(null)
@@ -1152,11 +1167,6 @@ export function DeliveryOrderBody({
           }}
           onClose={() => setDrawer(null)}
           onCloseAutoFocus={restoreFocus}
-          onStartDelivery={
-            mutationsAllowed
-              ? () => setDrawer({ kind: 'form', then: 'close', prefill: null })
-              : null
-          }
           orderId={order.id}
           orderNumber={order.number}
           shipment={shipment}

@@ -19,7 +19,8 @@ import { waybillMessages } from '../orders/delivery/waybill-messages'
 import {
   contactLine,
   dimensionsLine,
-  parcelLine,
+  shipmentParcelLine,
+  shipmentRecipient,
 } from '../orders/delivery/waybill-view'
 import {
   cardPaymentSignal,
@@ -146,9 +147,11 @@ export function WaybillInfoCard({
   const t = useT(waybillsMessages)
   const tw = useT(waybillMessages)
   const { locale } = useLocale()
-  const parcels = shipment.draft.parcels
+  const recipient = shipmentRecipient(shipment)
+  const parcels =
+    shipment.draft?.parcels ?? shipment.importedDetails?.parcels ?? []
   const dims = dimensionsLine(parcels)
-  const parcel = parcelLine(parcels, locale)
+  const parcel = shipmentParcelLine(shipment, locale)
   return (
     <TitledCard title={t('cardWaybill')}>
       <Facts
@@ -171,12 +174,12 @@ export function WaybillInfoCard({
           {
             key: 'recipient',
             label: t('factRecipient'),
-            value: contactLine(shipment.draft.recipient) || '—',
+            value: recipient === null ? '—' : contactLine(recipient) || '—',
           },
           {
             key: 'to',
             label: tw('factDestination'),
-            value: fullPlace(shipment.draft.recipient),
+            value: recipient === null ? '—' : fullPlace(recipient),
           },
           {
             key: 'parcel',

@@ -19,6 +19,7 @@ const shipment: Shipment = {
   integrationId: 'int-1',
   dispatchPointId: 'p1',
   connectionId: null,
+  importedDetails: null,
   orderId: 'o1',
   version: 'v1',
   state: 'Unknown',

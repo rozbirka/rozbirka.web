@@ -42,6 +42,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   integrationId: 'int-1',
   dispatchPointId: 'point-1',
   connectionId: null,
+  importedDetails: null,
   orderId: 'order-1',
   version: 'v1',
   state: 'Draft',
@@ -91,9 +92,10 @@ const preview = (
   number: '20451931554012',
   fingerprint: 'f',
   shipmentVersion: 'v1',
+  agreedTotalUah: 9600,
   providerStatus: '1',
   sender: shipment().sender,
-  recipient: shipment().draft.recipient,
+  recipient: shipment().draft!.recipient,
   codAmountUah: 4200,
   recordsDispatch: false,
   recordsReceipt: false,
@@ -136,16 +138,16 @@ it('marks a draft whose dispatch point was retired by new settings (2.9)', () =>
 
 it('writes recipient, route and parcel the way the block shows them', () => {
   const value = shipment()
-  expect(contactLine(value.draft.recipient)).toBe(
+  expect(contactLine(value.draft!.recipient)).toBe(
     'Ірина Коваль · +380 67 214 55 08',
   )
-  expect(routeLine(value.sender, value.draft.recipient)).toBe(
+  expect(routeLine(value.sender, value.draft!.recipient)).toBe(
     'Київ №12 → Львів №5',
   )
   expect(
-    routeLine(value.sender, { ...value.draft.recipient, warehouseName: null }),
+    routeLine(value.sender, { ...value.draft!.recipient, warehouseName: null }),
   ).toBe('Київ №12 → —')
-  expect(parcelLine(value.draft.parcels, 'uk')).toBe('1 місце · 4,2 кг')
+  expect(parcelLine(value.draft!.parcels, 'uk')).toBe('1 місце · 4,2 кг')
 })
 
 it('turns pieces, weight and dimensions into Core parcels and back', () => {
@@ -175,7 +177,7 @@ it('keeps a quote fresh for 24 hours only', () => {
 })
 
 it('compares an external waybill with the order without changing it (6.8–6.9)', () => {
-  const draft = shipment().draft
+  const draft = shipment().draft!
   expect(previewMismatch(preview(), draft, delivery())).toEqual({
     recipient: false,
     cod: false,

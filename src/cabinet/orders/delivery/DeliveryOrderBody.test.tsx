@@ -144,6 +144,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   lastTrackedAt: null,
   relatedNumbers: [],
   connectionId: null,
+  importedDetails: null,
   version: 'v1',
   dispatchedAt: null,
   receivedAt: null,
@@ -225,7 +226,7 @@ const load = (state: Partial<DeliveryOrderState>): DeliveryOrderLoad => ({
 
 const renderBody = (
   value: DeliveryOrderLoad,
-  initialAction?: 'form' | 'attach',
+  initialAction?: 'form' | 'attach' | 'attached',
   notes?: string,
 ) =>
   render(
@@ -1087,4 +1088,34 @@ it('keeps the manual stock-changing fallback behind confirmation and restores th
   await user.click(within(drawer).getByRole('button', { name: 'Скасувати' }))
   await waitFor(() => expect(menu).toHaveFocus())
   expect(deliveryApi.dispatch).not.toHaveBeenCalled()
+})
+
+it('shows the imported shipment after ordinary-order attachment without reopening its drawer', async () => {
+  renderBody(
+    load({
+      shipment: shipment({
+        state: 'Created',
+        number: '20451200987731',
+        draft: null,
+        dispatchPointId: null,
+        importedDetails: {
+          recipient: shipment().draft!.recipient,
+          parcels: null,
+          declaredValueUah: null,
+          payerType: null,
+          description: null,
+          weightKg: 12,
+          seatsAmount: 2,
+        },
+      }),
+    }),
+    'attached',
+  )
+  const tab = screen.getByRole('tab', { name: /Доставка/ })
+  expect(tab).toHaveAttribute('aria-selected', 'true')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('region', { name: 'Доставка · Нова пошта' }),
+  ).toHaveTextContent('Прив’язана')
+  await waitFor(() => expect(tab).toHaveFocus())
 })

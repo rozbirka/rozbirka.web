@@ -73,6 +73,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   lastTrackedAt: '2026-10-25T16:54:00Z',
   relatedNumbers: [],
   connectionId: null,
+  importedDetails: null,
   version: 'v1',
   dispatchedAt: null,
   receivedAt: null,
@@ -666,3 +667,34 @@ it.each([
     ).not.toBeInTheDocument()
   },
 )
+
+it('shows imported recipient and aggregate parcel facts without fabricating a draft', async () => {
+  vi.mocked(shippingApi.byId).mockResolvedValue(
+    shipment({
+      draft: null,
+      dispatchPointId: null,
+      importedDetails: {
+        recipient: {
+          ...shipment().draft!.recipient,
+          name: 'Імпортований отримувач',
+        },
+        parcels: null,
+        declaredValueUah: null,
+        payerType: null,
+        description: null,
+        weightKg: 12,
+        seatsAmount: 2,
+      },
+    }),
+  )
+  renderCard()
+  await screen.findByRole('heading', { name: `ТТН ${TTN}` })
+  const info = screen.getByRole('region', { name: 'Накладна' })
+  expect(info).toHaveTextContent('Імпортований отримувач')
+  expect(info).toHaveTextContent('2 місця · 12 кг')
+  expect(info).not.toHaveTextContent('60×40×30')
+  expect(
+    screen.queryByRole('button', { name: 'Редагувати' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getAllByRole('button', { name: 'Друк' })[0]).toBeEnabled()
+})

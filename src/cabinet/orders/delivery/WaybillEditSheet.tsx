@@ -75,7 +75,7 @@ export function WaybillEditSheet({
   /** Nova Poshta confirmed the change; the waybill as it now stands. */
   onSaved: (shipment: Shipment) => void
   orderId: string
-  shipment: Shipment
+  shipment: Shipment & { draft: ShipmentDraft }
 }) {
   const { locale } = useLocale()
   const t = useT(waybillMessages)

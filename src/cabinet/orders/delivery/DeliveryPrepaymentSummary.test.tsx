@@ -36,6 +36,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   integrationId: 'int-1',
   dispatchPointId: 'point-1',
   connectionId: null,
+  importedDetails: null,
   orderId: 'order-1',
   version: 'v1',
   state: 'Draft',
@@ -91,7 +92,7 @@ const showConfirmation = (delivery: DeliveryOrder, current = shipment()) => {
       onShipment={vi.fn()}
       orderId="order-1"
       orderNumber={361}
-      shipment={current}
+      shipment={{ ...current, draft: current.draft! }}
     />,
   )
   return screen.getByRole('dialog', { name: 'Створити ТТН' })
@@ -113,7 +114,7 @@ it('shows the required amount and actual customer payment even when the minimum 
         financePath={null}
         codTill={undefined}
         delivery={delivery}
-        shipment={shipment()}
+        shipment={{ ...shipment(), draft: shipment().draft! }}
         tillName={() => null}
       />
     </MemoryRouter>,
