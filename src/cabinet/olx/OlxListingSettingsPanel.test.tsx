@@ -94,7 +94,7 @@ it('keeps the selected location and other edits through dictionary and save fail
       'Київ',
     ),
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти ще раз' }))
   await screen.findByText(/Налаштування збережено/)
   expect(api.update.mock.lastCall?.[0]).toEqual({
     ...existing,
@@ -125,6 +125,10 @@ it('loads districts for a selected city and saves the new city and district toge
   fireEvent.click(await screen.findByRole('option', { name: /Львів/ }))
   const district = await screen.findByRole('combobox', { name: 'Район' })
   expect(district).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Зберегти' })).toBeDisabled()
+  expect(district).toHaveAccessibleDescription(
+    'Оберіть район для вибраного міста.',
+  )
   fireEvent.change(district, { target: { value: '21' } })
   fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }))
 

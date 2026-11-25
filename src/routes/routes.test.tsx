@@ -133,6 +133,8 @@ describe('production route boundary', () => {
     ['parts/:partId', 'PartsScreen'],
     ['parts/:partId/edit', 'PartsScreen'],
     ['parts/:partId/olx', 'PartsScreen'],
+    ['olx/messages', 'OlxMessagesScreen'],
+    ['olx/queue', 'OlxQueueScreen'],
     ['scan', 'ScannerScreen'],
     ['stickers', 'StickersScreen'],
     ['customers', 'CustomersScreen'],

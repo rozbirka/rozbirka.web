@@ -433,9 +433,6 @@ export function PartSearchPicker({
   if (inline) {
     return (
       <div>
-        {query.trim() && (
-          <div className="border-app-line border-t">{results}</div>
-        )}
         <Field className="px-4 py-3" hiddenLabel label={t('label')}>
           <SearchInput
             disabled={disabled}
@@ -444,6 +441,9 @@ export function PartSearchPicker({
             value={query}
           />
         </Field>
+        {query.trim() && (
+          <div className="border-app-line border-t">{results}</div>
+        )}
       </div>
     )
   }

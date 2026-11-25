@@ -17,8 +17,37 @@ export function readOlxProviderIssue(issue: string) {
   return { field, reason: reason ? (`provider_${reason}` as const) : undefined }
 }
 
+const validationFields: Record<string, keyof typeof olxPublicationMessages.uk> =
+  {
+    title: 'fieldTitle',
+    description: 'fieldDescription',
+    category_id: 'fieldCategory',
+    advertiser_type: 'fieldAdvertiser',
+    attributes: 'fieldAttributes',
+    contact: 'fieldContact',
+    'contact.name': 'fieldContactName',
+    'contact.phone': 'fieldPhone',
+    location: 'fieldLocation',
+    'location.city_id': 'fieldCity',
+    'location.district_id': 'fieldDistrict',
+    images: 'fieldPhotos',
+    price: 'fieldPrice',
+  }
+
+export function olxProviderFieldLabel(field: string) {
+  return field.startsWith('attributes.')
+    ? 'fieldAttributes'
+    : Object.hasOwn(validationFields, field)
+      ? validationFields[field]
+      : undefined
+}
+
 export const olxPublicationMessages = defineMessages({
   uk: {
+    diagnosticsRestricted:
+      'Оголошення потребує уваги. Причину бачить працівник із правом керування інтеграцією OLX.',
+    partExcluded:
+      'Запчастину виключено з публікації OLX. Поверніть її через меню «Майданчики» у списку деталей.',
     invalidContent:
       'Виправте дані запчастини або публічний опис і повторіть оновлення.',
     providerRejected:
@@ -124,6 +153,34 @@ export const olxPublicationMessages = defineMessages({
     loadPublicationError: 'Не вдалося завантажити стан публікації OLX.',
     partUnavailable: 'Запчастина недоступна для публікації.',
     title: 'Публікація OLX',
+    partTabDraft: 'Чернетка оголошення',
+    partTabRejected: 'Відхилено',
+    partTabReady: 'Готова до публікації',
+    partTabDraftHint: 'Назва, ціна й фото беруться з картки запчастини.',
+    partTabSource: 'З картки запчастини',
+    partTabIssues: 'Поля з помилками',
+    partTabAvailable: 'Доступно',
+    partTabReconcile: 'Потрібна звірка',
+    partTabReconcileNow: 'Звірити зараз',
+    partTabPayment: 'Потрібна оплата на OLX',
+    partTabPay: 'Оплатити на OLX',
+    partTabNoStock: 'Немає вільного залишку',
+    partTabStockRestore:
+      'Коли з’явиться вільний залишок, Розбірка перевірить можливість відновлення.',
+    partTabDescriptionLength: '{count} симв.',
+    partTabExcluded: 'Виключено',
+    partTabExclude: 'Виключити з публікації',
+    partTabInclude: 'Повернути до публікації',
+    partTabConfirmExclude: 'Виключити запчастину з OLX?',
+    partTabExcludeConsequence:
+      'Розбірка припинить публікацію й автоматичне відновлення запчастини. Активне оголошення можна зняти окремо.',
+    partTabExcludedHint:
+      'Ця запчастина виключена з публікації та автоматичного відновлення.',
+    partTabRepublish: 'Опублікувати повторно',
+    partTabSaveUpdate: 'Зберегти й оновити на OLX',
+    partTabDisconnected: 'OLX не підключено',
+    partTabIntegrations: 'Перейти до інтеграцій',
+    partTabDraftLocked: 'Редагування буде доступне після звірки з OLX.',
     save: 'Зберегти чернетку',
     saved: 'Чернетку збережено',
     saveUpdate: 'Зберегти зміни',
@@ -153,7 +210,7 @@ export const olxPublicationMessages = defineMessages({
     unknownHint:
       'Оголошення могло бути створене. Оновіть публікацію: ми перевіримо результат за нашим ідентифікатором. Повторне створення заблоковане.',
     limitedHint:
-      'OLX потребує оплати або має обмеження публікації. Автоматично нічого не оплачуємо.',
+      'Ліміт OLX вичерпано або потрібна оплата. Автоматичної оплати немає.',
     noWrite: 'Потрібно дозволити публікацію в OLX.',
     grant: 'Дозволити публікацію в OLX',
     grantHint:
@@ -181,6 +238,10 @@ export const olxPublicationMessages = defineMessages({
     open: 'Відкрити на OLX',
   },
   'en-GB': {
+    diagnosticsRestricted:
+      'The advert needs attention. Anyone with permission to manage the OLX integration can see the reason.',
+    partExcluded:
+      'This part is excluded from OLX publication. Include it from the Marketplaces menu in the parts list.',
     invalidContent:
       'Correct the part details or public description and retry the update.',
     providerRejected:
@@ -284,6 +345,34 @@ export const olxPublicationMessages = defineMessages({
     loadPublicationError: 'Could not load the OLX publication status.',
     partUnavailable: 'This part is unavailable for publication.',
     title: 'OLX publication',
+    partTabDraft: 'Advert draft',
+    partTabRejected: 'Rejected',
+    partTabReady: 'Ready to publish',
+    partTabDraftHint: 'The part record supplies the title, price and photos.',
+    partTabSource: 'From the part record',
+    partTabIssues: 'Fields with errors',
+    partTabAvailable: 'Available',
+    partTabReconcile: 'Needs reconciliation',
+    partTabReconcileNow: 'Reconcile now',
+    partTabPayment: 'Payment required on OLX',
+    partTabPay: 'Pay on OLX',
+    partTabNoStock: 'No free stock',
+    partTabStockRestore:
+      'When stock is available, Rozbirka will check whether reactivation is possible.',
+    partTabDescriptionLength: '{count} chars',
+    partTabExcluded: 'Excluded',
+    partTabExclude: 'Exclude from publication',
+    partTabInclude: 'Include in publication',
+    partTabConfirmExclude: 'Exclude this part from OLX?',
+    partTabExcludeConsequence:
+      'Rozbirka will stop publishing and automatically reactivating this part. You can withdraw an active advert separately.',
+    partTabExcludedHint:
+      'This part is excluded from publication and automatic reactivation.',
+    partTabRepublish: 'Publish again',
+    partTabSaveUpdate: 'Save and update on OLX',
+    partTabDisconnected: 'OLX is disconnected',
+    partTabIntegrations: 'Go to integrations',
+    partTabDraftLocked: 'Editing becomes available after reconciling with OLX.',
     save: 'Save draft',
     saved: 'Draft saved',
     saveUpdate: 'Save changes',
@@ -312,8 +401,7 @@ export const olxPublicationMessages = defineMessages({
     rejected: 'OLX rejected the request',
     unknownHint:
       'The advert may already exist. Refresh to look up our external identifier. Creating another advert is blocked.',
-    limitedHint:
-      'OLX requires payment or applies publication limits. Nothing is paid automatically.',
+    limitedHint: 'OLX limit reached or payment required. No automatic charges.',
     noWrite: 'OLX publication access is required.',
     grant: 'Allow OLX publication',
     grantHint:
@@ -339,6 +427,10 @@ export const olxPublicationMessages = defineMessages({
     open: 'Open on OLX',
   },
   pl: {
+    diagnosticsRestricted:
+      'Ogłoszenie wymaga uwagi. Przyczynę widzi osoba z uprawnieniem do zarządzania integracją OLX.',
+    partExcluded:
+      'Część jest wykluczona z publikacji w OLX. Przywróć ją w menu platform na liście części.',
     invalidContent:
       'Popraw dane części lub opis publiczny i ponów aktualizację.',
     providerRejected:
@@ -445,6 +537,34 @@ export const olxPublicationMessages = defineMessages({
     loadPublicationError: 'Nie udało się wczytać statusu ogłoszenia OLX.',
     partUnavailable: 'Tej części nie można opublikować.',
     title: 'Publikacja OLX',
+    partTabDraft: 'Szkic ogłoszenia',
+    partTabRejected: 'Odrzucono',
+    partTabReady: 'Gotowy do publikacji',
+    partTabDraftHint: 'Nazwa, cena i zdjęcia pochodzą z karty części.',
+    partTabSource: 'Z karty części',
+    partTabIssues: 'Pola z błędami',
+    partTabAvailable: 'Dostępne',
+    partTabReconcile: 'Wymaga uzgodnienia',
+    partTabReconcileNow: 'Uzgodnij teraz',
+    partTabPayment: 'Wymagana płatność w OLX',
+    partTabPay: 'Zapłać w OLX',
+    partTabNoStock: 'Brak dostępnego zapasu',
+    partTabStockRestore:
+      'Gdy pojawi się zapas, Rozbirka sprawdzi możliwość wznowienia.',
+    partTabDescriptionLength: '{count} znaków',
+    partTabExcluded: 'Wykluczono',
+    partTabExclude: 'Wyklucz z publikacji',
+    partTabInclude: 'Przywróć do publikacji',
+    partTabConfirmExclude: 'Wykluczyć tę część z OLX?',
+    partTabExcludeConsequence:
+      'Rozbirka wstrzyma publikację i automatyczne wznawianie tej części. Aktywne ogłoszenie możesz wycofać osobno.',
+    partTabExcludedHint:
+      'Część jest wykluczona z publikacji i automatycznego wznawiania.',
+    partTabRepublish: 'Opublikuj ponownie',
+    partTabSaveUpdate: 'Zapisz i zaktualizuj w OLX',
+    partTabDisconnected: 'OLX nie jest podłączony',
+    partTabIntegrations: 'Przejdź do integracji',
+    partTabDraftLocked: 'Edycja będzie dostępna po uzgodnieniu z OLX.',
     save: 'Zapisz szkic',
     saved: 'Szkic zapisany',
     saveUpdate: 'Zapisz zmiany',
@@ -474,7 +594,7 @@ export const olxPublicationMessages = defineMessages({
     unknownHint:
       'Ogłoszenie może już istnieć. Odśwież, aby wyszukać nasz identyfikator. Ponowne utworzenie jest zablokowane.',
     limitedHint:
-      'OLX wymaga płatności lub stosuje limity publikacji. Nic nie jest opłacane automatycznie.',
+      'Limit OLX osiągnięty lub wymagana płatność. Bez automatycznej opłaty.',
     noWrite: 'Wymagany dostęp do publikacji w OLX.',
     grant: 'Zezwól na publikację w OLX',
     grantHint:
@@ -501,3 +621,20 @@ export const olxPublicationMessages = defineMessages({
     open: 'Otwórz w OLX',
   },
 })
+
+export const olxPublicationFailures: Record<
+  string,
+  keyof typeof olxPublicationMessages.uk
+> = {
+  OLX_CONTENT_INVALID: 'invalidContent',
+  OLX_WRITE_REJECTED: 'providerRejected',
+  OLX_RECONNECT_REQUIRED: 'reconnectRequired',
+  OLX_CONNECTION_CHANGED: 'reconnectRequired',
+  OLX_NOT_CONNECTED: 'reconnectRequired',
+  OLX_WRITE_SCOPE_REQUIRED: 'noWrite',
+  OLX_PAYMENT_REQUIRED: 'paymentHint',
+  OLX_RATE_LIMITED: 'rateLimited',
+  OLX_UNAVAILABLE: 'temporaryFailure',
+  OLX_ADVERT_MISMATCH: 'advertMismatch',
+  OLX_PART_EXCLUDED: 'partExcluded',
+}

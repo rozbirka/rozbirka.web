@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 import { Link2, RefreshCw } from 'lucide-react'
 import { normalizeApiProblem } from '@/api/errors'
 import { olxLiveApi, type OlxAdvert } from '@/api/olx-live'
@@ -18,23 +24,38 @@ import {
   StatusPill,
   SearchInput,
   Segmented,
+  Sheet,
   Toolbar,
 } from '@/components/app'
 import { PartSearchPicker } from '@/components/parts/PartSearchPicker'
-import { useT } from '@/i18n'
+import { useFormat, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { RedesignTitle } from '../redesign-shell'
+import { tenantRequestScope } from '../tenant-request-scope'
+import { filterOlxAdverts } from './olx-advert-search'
 import {
   olxAdvertStatuses,
   olxAdvertTone,
   olxLiveMessages,
 } from './olx-live-messages'
 import { olxReconciliationMessages } from './olx-reconciliation-messages'
+import { readOlxAdvertCollection } from './use-olx-advert-collection'
 
 const filters = ['all', 'unlinked', 'linked'] as const
 type Filter = (typeof filters)[number]
 type Action = 'link' | 'complete'
 type Message = keyof typeof olxReconciliationMessages.uk
+const desktopLayout = '(min-width: 64rem)'
+
+function subscribeToLayout(change: () => void) {
+  const media = window.matchMedia?.(desktopLayout)
+  media?.addEventListener('change', change)
+  return () => media?.removeEventListener('change', change)
+}
+
+function usesDesktopLayout() {
+  return window.matchMedia?.(desktopLayout).matches ?? true
+}
 
 export function OlxReconciliationPanel({
   accountId,
@@ -53,10 +74,16 @@ export function OlxReconciliationPanel({
 }) {
   const t = useT(olxReconciliationMessages)
   const tl = useT(olxLiveMessages)
+  const { number } = useFormat()
   const { targetTenant } = useCabinet()
-  const [request, setRequest] = useState({ page: 1 })
+  const desktop = useSyncExternalStore(
+    subscribeToLayout,
+    usesDesktopLayout,
+    () => true,
+  )
+  const [request, setRequest] = useState({ page: 1, all: false })
   const [result, setResult] = useState<{
-    request: { page: number }
+    request: typeof request
     items: OlxAdvert[]
     hasMore: boolean
     failed: boolean
@@ -70,33 +97,32 @@ export function OlxReconciliationPanel({
   const [error, setError] = useState<Message | null>(null)
   const [busy, setBusy] = useState(false)
   const [linkedNotice, setLinkedNotice] = useState(false)
+  const [reviewed, setReviewed] = useState<ReadonlySet<string>>(() => new Set())
   const [completedAt, setCompletedAt] = useState(initialCompletedAt)
   const mutation = useRef<AbortController | null>(null)
   const listStart = useRef<HTMLDivElement>(null)
   const partPanel = useRef<HTMLDivElement>(null)
   const completedNotice = useRef<HTMLDivElement>(null)
   const dialogTrigger = useRef<HTMLButtonElement | null>(null)
+  const advertTrigger = useRef<HTMLButtonElement | null>(null)
   const loaded = result?.request === request
   const items = result?.items ?? []
   const selected = items.find(
     (item) => item.id === advertId && !item.linkedPart,
   )
   const canLink = canReadParts && canWrite
-  const searchText = search.trim().toLocaleLowerCase()
-  const advertNumber = searchText.replace(/[\s#№]/g, '')
-  const visible = items.filter((item) => {
-    if (filter !== 'all' && (filter === 'linked') !== Boolean(item.linkedPart))
-      return false
-    return (
-      item.title.toLocaleLowerCase().includes(searchText) ||
-      (advertNumber !== '' && item.id.includes(advertNumber))
-    )
-  })
+  const visible = filterOlxAdverts(items, search).filter(
+    (item) =>
+      filter === 'all' || (filter === 'linked') === Boolean(item.linkedPart),
+  )
 
   useEffect(() => {
     const controller = new AbortController()
-    const { signal } = controller
-    void olxLiveApi.adverts(request.page, { signal }).then(
+    const signal = AbortSignal.any([
+      controller.signal,
+      tenantRequestScope.signal,
+    ])
+    void readOlxAdvertCollection(request, accountId, false, signal).then(
       (page) => {
         if (signal.aborted) return
         setResult((previous) => {
@@ -106,7 +132,7 @@ export function OlxReconciliationPanel({
               item,
             ]),
           )
-          for (const advert of page.items) adverts.set(advert.id, advert)
+          for (const advert of page.adverts) adverts.set(advert.id, advert)
           return {
             request,
             items: [...adverts.values()],
@@ -126,13 +152,13 @@ export function OlxReconciliationPanel({
       },
     )
     return () => controller.abort()
-  }, [request])
+  }, [request, accountId])
 
   useEffect(() => () => mutation.current?.abort(), [])
 
   useEffect(() => {
-    if (advertId) partPanel.current?.focus()
-  }, [advertId])
+    if (advertId && desktop) partPanel.current?.focus()
+  }, [advertId, desktop])
 
   function chooseAdvert(id: string | null) {
     setAdvertId(id)
@@ -141,9 +167,15 @@ export function OlxReconciliationPanel({
     setLinkedNotice(false)
   }
 
-  function refresh(page: number) {
+  function refresh(page: number, all = false) {
     if (page === 1) chooseAdvert(null)
-    setRequest({ page })
+    setRequest({ page, all })
+  }
+
+  function markReviewed(id: string) {
+    setReviewed((current) =>
+      current.has(id) ? current : new Set(current).add(id),
+    )
   }
 
   function recordLink(advert: OlxAdvert, matched: NonNullable<typeof part>) {
@@ -161,6 +193,7 @@ export function OlxReconciliationPanel({
           ),
         },
     )
+    markReviewed(advert.id)
     chooseAdvert(null)
     setLinkedNotice(true)
   }
@@ -168,7 +201,10 @@ export function OlxReconciliationPanel({
   async function submit() {
     if (mutation.current || !confirm) return
     const controller = new AbortController()
-    const { signal } = controller
+    const signal = AbortSignal.any([
+      controller.signal,
+      tenantRequestScope.signal,
+    ])
     mutation.current = controller
     setBusy(true)
     setError(null)
@@ -228,22 +264,75 @@ export function OlxReconciliationPanel({
   }
 
   const linked = items.filter((item) => item.linkedPart).length
+  const accountTotalKnown = loaded && !result.failed && !result.hasMore
+  const progress = accountTotalKnown
+    ? t('accountCount', {
+        reviewed:
+          number(items.filter((item) => reviewed.has(item.id)).length) ?? '',
+        total: number(items.length) ?? '',
+        linked: number(linked) ?? '',
+      })
+    : t('count', {
+        loaded: number(items.length) ?? '',
+        linked: number(linked) ?? '',
+      })
   const selectedLabel = selected
     ? t('advert', { id: selected.id, title: selected.title })
     : null
+  const pickPart =
+    selected && canLink ? (
+      <PartSearchPicker
+        key={selected.id}
+        value={part}
+        query={partQuery}
+        onQueryChange={setPartQuery}
+        onSelect={setPart}
+        onClear={() => setPart(null)}
+        currency={targetTenant?.accountingCurrency ?? null}
+        disabled={busy}
+        includeUnavailable
+        disableOlxSubmissions
+        inline
+      />
+    ) : null
+  const pairActions = selected && canLink && (
+    <>
+      <Button
+        variant="quiet"
+        disabled={busy}
+        onClick={() => {
+          markReviewed(selected.id)
+          const next = visible
+            .slice(visible.indexOf(selected) + 1)
+            .find((item) => !item.linkedPart)
+          chooseAdvert(next?.id ?? null)
+          if (desktop && !next) listStart.current?.focus()
+        }}
+      >
+        {t('skip')}
+      </Button>
+      <Button
+        variant="primary"
+        disabled={!part || busy || !loaded}
+        onClick={(event) => {
+          dialogTrigger.current = event.currentTarget
+          setError(null)
+          setConfirm('link')
+        }}
+      >
+        <Link2 aria-hidden /> {t('link')}
+      </Button>
+    </>
+  )
 
   return (
     <div className="grid min-w-0 gap-3.5">
       <RedesignTitle
         title="OLX"
         aside={
-          result &&
-          !result.failed && (
-            <span className="rz-caption">
-              {t('count', {
-                loaded: String(items.length),
-                linked: String(linked),
-              })}
+          result && (
+            <span className="rz-caption" role="status">
+              {progress}
             </span>
           )
         }
@@ -322,7 +411,13 @@ export function OlxReconciliationPanel({
             <>
               {t('advertsTitle')}{' '}
               <span className="rz-caption font-normal">
-                {items.length || ''}
+                {accountTotalKnown
+                  ? t('accountUnlinked', {
+                      count: number(items.length - linked) ?? '',
+                    })
+                  : items.length > 0
+                    ? number(items.length)
+                    : null}
               </span>
             </>
           }
@@ -358,9 +453,13 @@ export function OlxReconciliationPanel({
                     ) : (
                       <button
                         aria-pressed={selected?.id === item.id}
+                        aria-haspopup={desktop ? undefined : 'dialog'}
                         className="hover:text-app-accent w-full min-w-0 py-2 text-left"
                         disabled={busy || !loaded}
-                        onClick={() => chooseAdvert(item.id)}
+                        onClick={(event) => {
+                          advertTrigger.current = event.currentTarget
+                          chooseAdvert(item.id)
+                        }}
                         type="button"
                       >
                         {identity}
@@ -420,10 +519,18 @@ export function OlxReconciliationPanel({
             <ErrorState
               title={t('loadError')}
               description={t('loadHint')}
-              onRetry={() => refresh(request.page)}
+              onRetry={() => refresh(request.page, request.all)}
             />
           ) : visible.length === 0 ? (
-            <EmptyState title={t(items.length === 0 ? 'empty' : 'noMatches')} />
+            <EmptyState
+              title={t(
+                accountTotalKnown && items.length === 0
+                  ? 'empty'
+                  : accountTotalKnown
+                    ? 'noMatchesAll'
+                    : 'noMatches',
+              )}
+            />
           ) : null}
           {result && (
             <PanelFooter
@@ -432,88 +539,78 @@ export function OlxReconciliationPanel({
               <Button
                 disabled={!loaded || busy}
                 size="sm"
-                onClick={() => refresh(1)}
+                onClick={() => refresh(1, request.all || accountTotalKnown)}
               >
                 <RefreshCw aria-hidden /> {tl('refresh')}
               </Button>
               {result.hasMore && !result.failed && (
-                <Button
-                  disabled={!loaded || busy}
-                  size="sm"
-                  onClick={() => refresh(request.page + 1)}
-                >
-                  {t('loadMore')}
-                </Button>
+                <>
+                  <Button
+                    disabled={!loaded || busy}
+                    size="sm"
+                    onClick={() => refresh(request.page + 1)}
+                  >
+                    {t('loadMore')}
+                  </Button>
+                  <Button
+                    disabled={!loaded || busy}
+                    size="sm"
+                    onClick={() => refresh(1, true)}
+                  >
+                    {tl('advertLoadAll')}
+                  </Button>
+                </>
               )}
             </PanelFooter>
           )}
         </Card>
-        <div className="grid min-w-0 gap-3.5" ref={partPanel} tabIndex={-1}>
-          <Card
-            title={
-              <span className="grid gap-1">
-                {t('matchingPart')}
-                {selectedLabel && (
-                  <span className="rz-caption font-normal">
-                    {selectedLabel}
-                  </span>
-                )}
-              </span>
-            }
-            bodyClassName={selected && canLink ? 'p-0' : 'rz-muted'}
-          >
-            {selected && canLink ? (
-              <PartSearchPicker
-                key={selected.id}
-                value={part}
-                query={partQuery}
-                onQueryChange={setPartQuery}
-                onSelect={setPart}
-                onClear={() => setPart(null)}
-                currency={targetTenant?.accountingCurrency ?? null}
-                disabled={busy}
-                includeUnavailable
-                disableOlxSubmissions
-                inline
-              />
-            ) : (
-              t('chooseFirst')
-            )}
-          </Card>
-          {selected && canLink && (
-            <div className="rz-card">
-              <div className="rz-card__body grid gap-3">
-                <p className="rz-caption m-0">{t('skipHint')}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="primary"
-                    disabled={!part || busy || !loaded}
-                    onClick={(event) => {
-                      dialogTrigger.current = event.currentTarget
-                      setError(null)
-                      setConfirm('link')
-                    }}
-                  >
-                    <Link2 aria-hidden /> {t('link')}
-                  </Button>
-                  <Button
-                    variant="quiet"
-                    disabled={busy}
-                    onClick={() => {
-                      const next = visible
-                        .slice(visible.indexOf(selected) + 1)
-                        .find((item) => !item.linkedPart)
-                      chooseAdvert(next?.id ?? null)
-                      if (!next) listStart.current?.focus()
-                    }}
-                  >
-                    {t('skip')}
-                  </Button>
+        {desktop ? (
+          <div className="grid min-w-0 gap-3.5" ref={partPanel} tabIndex={-1}>
+            <Card
+              title={
+                <span className="grid gap-1">
+                  {t('matchingPart')}
+                  {selectedLabel && (
+                    <span className="rz-caption font-normal">
+                      {selectedLabel}
+                    </span>
+                  )}
+                </span>
+              }
+              bodyClassName={pickPart ? 'p-0' : 'rz-muted'}
+            >
+              {pickPart ?? t('chooseFirst')}
+            </Card>
+            {pairActions && (
+              <div className="rz-card">
+                <div className="rz-card__body grid gap-3">
+                  <p className="rz-caption m-0">{t('skipHint')}</p>
+                  <div className="flex flex-wrap gap-2">{pairActions}</div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <Sheet
+            open={Boolean(pickPart)}
+            title={t('matchingPart')}
+            description={selectedLabel}
+            bodyClassName="px-0 pt-1"
+            footer={pairActions}
+            pending={busy}
+            onOpenChange={(open) => {
+              if (!open && confirm === null) chooseAdvert(null)
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              const trigger = advertTrigger.current
+              ;(trigger?.isConnected ? trigger : listStart.current)?.focus()
+            }}
+          >
+            {pickPart}
+            <p className="rz-caption mx-4 my-0">{t('skipHint')}</p>
+          </Sheet>
+        )}
       </div>
       <ConfirmDialog
         open={confirm !== null}
@@ -536,9 +633,9 @@ export function OlxReconciliationPanel({
         }
         effects={
           confirm === 'complete'
-            ? result?.hasMore
-              ? [t('moreToReview')]
-              : []
+            ? accountTotalKnown
+              ? [progress]
+              : [t('moreToReview')]
             : [t('linkContent'), t('keepContact'), t('keepInactive')]
         }
         confirmLabel={t(confirm === 'complete' ? 'complete' : 'link')}

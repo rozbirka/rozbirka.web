@@ -10,6 +10,20 @@
   `.dev.vars`, and `.wrangler/state`.
 - Do not switch branches or discard dirty work to start the app.
 
+## Checking Web with a local Core contract
+
+For a Core contract that has not been published yet, point both checks at the
+generated JSON in the Core worktree:
+
+```sh
+core_contract=/absolute/path/to/rozbirka.core/contracts/openapi/v1/rozbirka-core.json
+npm run contracts:check -- --core "$core_contract"
+ROZBIRKA_LOCAL_CORE_OPENAPI="$core_contract" npm run check
+```
+
+The local full check verifies generated provenance against that file. CI
+requires the published contract pin in `contracts/openapi-sources.json`.
+
 ## Existing local backend and data
 
 The selected checkout for this task is

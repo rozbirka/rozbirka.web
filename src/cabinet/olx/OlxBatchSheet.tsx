@@ -1,10 +1,16 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { Link } from 'react-router'
-import type { ApiProblem } from '@/api/contracts'
 import { normalizeApiProblem } from '@/api/errors'
 import { olxApi, type OlxConnection } from '@/api/olx'
 import {
   olxLiveApi,
+  type OlxAttribute,
   type OlxCategory,
   type OlxLivePublication,
   type OlxPrepareContent,
@@ -25,15 +31,22 @@ import {
 } from '@/components/app'
 import { commonMessages, useT } from '@/i18n'
 import { tenantRequestScope } from '../tenant-request-scope'
-import { olxBatchMessages } from './olx-batch-messages'
+import { OlxAttributeField } from './OlxAttributeField'
+import { OlxBatchPartEditor, type OlxBatchFixField } from './OlxBatchPartEditor'
+import { olxBatchMessages, olxBatchStopMessage } from './olx-batch-messages'
 import { olxIssueKeys, olxLiveMessages } from './olx-live-messages'
 import { olxPublicationMessages } from './olx-publication-messages'
-import { emptyOlxContent } from './olx-prepare-content'
+import {
+  canPrepareOlxDraft,
+  emptyOlxContent,
+  hasAttributeValue,
+} from './olx-prepare-content'
 
 export type OlxBatchMode = 'category' | 'publish'
 export interface OlxBatchPart {
   id: string
   name: string | undefined
+  expectedAdvertId?: string
 }
 
 type Status =
@@ -41,8 +54,12 @@ type Status =
   | 'blocked'
   | 'linked'
   | 'pending'
+  | 'payment'
   | 'submitted'
   | 'assigned'
+  | 'withdrawn'
+  | 'excluded'
+  | 'included'
   | 'failed'
   | 'skipped'
   | 'queued'
@@ -51,6 +68,7 @@ export interface OlxBatchResult extends OlxBatchPart {
   status: Status
   advertId?: string | null
   issues?: string[]
+  fixField?: OlxBatchFixField
   ready?: { content: OlxPrepareContent; revision: string; save: boolean }
 }
 
@@ -59,6 +77,8 @@ interface State {
   complete: boolean
 }
 type Action = 'assign' | 'check'
+// Core enforces the same limit when it accepts a publication job.
+const maxPublicationJobParts = 100
 type Message = keyof typeof olxBatchMessages.uk
 interface Setup {
   account: OlxConnection
@@ -74,6 +94,9 @@ const resultGroups = [
     badgeClass: 'text-state-info',
   },
   { status: 'assigned', heading: 'assigned' },
+  { status: 'withdrawn', heading: 'withdrawnGroup' },
+  { status: 'excluded', heading: 'excludedGroup' },
+  { status: 'included', heading: 'includedGroup' },
   { status: 'blocked', heading: 'blockedGroup', action: 'fix' },
   {
     status: 'linked',
@@ -82,9 +105,11 @@ const resultGroups = [
     badgeClass: 'text-app-muted',
   },
   { status: 'failed', heading: 'failedGroup', action: 'details' },
+  { status: 'payment', heading: 'paymentGroup', action: 'details' },
   { status: 'pending', heading: 'pending', action: 'details' },
   { status: 'skipped', heading: 'skipped', action: 'details' },
   { status: 'queued', heading: 'jobQueued' },
+  { status: 'ready', heading: 'readyGroup' },
 ] as const satisfies readonly {
   status: Status
   heading: Message
@@ -94,34 +119,10 @@ const resultGroups = [
   action?: Message
 }[]
 
-function stopMessage(problem: ApiProblem): Message | undefined {
-  switch (problem.code) {
-    case 'OLX_CONNECTION_CHANGED':
-    case 'OLX_NOT_CONNECTED':
-    case 'OLX_RECONNECT_REQUIRED':
-      return 'connectionChanged'
-    case 'OLX_RATE_LIMITED':
-      return 'rateLimit'
-    case 'OLX_WRITE_DISABLED':
-    case 'OLX_WRITE_SCOPE_REQUIRED':
-      return 'permissionChanged'
-    default:
-      return problem.kind === 'forbidden' || problem.kind === 'session-expired'
-        ? 'permissionChanged'
-        : undefined
-  }
-}
-
-function canPrepare(publication: OlxLivePublication) {
+function canWrite(account: OlxConnection | undefined) {
   return (
-    !publication.advertId && ['draft', 'rejected'].includes(publication.state)
-  )
-}
-
-function canWrite(setup: Setup | null) {
-  return (
-    setup?.account.writesAvailable === true &&
-    setup.account.scope?.split(' ').includes('write') === true
+    account?.writesAvailable === true &&
+    account.scope?.split(' ').includes('write') === true
   )
 }
 
@@ -129,6 +130,8 @@ export function OlxBatchSheet({
   initialMode,
   parts,
   partsHref,
+  reconciledAccountId,
+  expectedAccountId,
   onChanged,
   onJobStarted,
   onClose,
@@ -137,6 +140,8 @@ export function OlxBatchSheet({
   initialMode: OlxBatchMode
   parts: readonly OlxBatchPart[]
   partsHref: string
+  reconciledAccountId?: string
+  expectedAccountId?: string
   onChanged: () => void
   onJobStarted: (job: OlxPublicationJob, review: OlxBatchResult[]) => void
   onClose: () => void
@@ -151,10 +156,20 @@ export function OlxBatchSheet({
   const [setupError, setSetupError] = useState<Message | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [categoryId, setCategoryId] = useState('')
+  const [attributeCatalog, setAttributeCatalog] = useState<{
+    categoryId: string
+    items: OlxAttribute[] | null
+  } | null>(null)
+  const [attributeAttempt, setAttributeAttempt] = useState(0)
+  const [sharedAttributes, setSharedAttributes] = useState<
+    OlxPrepareContent['attributes']
+  >({})
   const [sellerType, setSellerType] = useState('')
   const [showSellerType, setShowSellerType] = useState(false)
   const [state, setState] = useState<State | null>(null)
-  const [busy, setBusy] = useState<Action | 'start' | null>(null)
+  const [busy, setBusy] = useState<Action | 'start' | 'recheck' | null>(null)
+  const [fixingRow, setFixingRow] = useState<OlxBatchResult | null>(null)
+  const [fixSaving, setFixSaving] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [startError, setStartError] = useState<Message | null>(null)
   const startRequest = useRef<StartOlxPublicationJob | null>(null)
@@ -164,11 +179,45 @@ export function OlxBatchSheet({
   const working = useRef(false)
   const resultBody = useRef<HTMLDivElement>(null)
   const ready = state?.rows.filter((row) => row.status === 'ready') ?? []
-  const canPublish = canWrite(setup)
+  const exceedsJobLimit = ready.length > maxPublicationJobParts
+  const canPublish = canWrite(setup?.account)
+  const categoryDetails =
+    attributeCatalog?.categoryId === categoryId ? attributeCatalog : null
+  const batchAttributes = categoryDetails?.items?.filter(
+    (attribute) => attribute.values.length > 0,
+  )
+  const result = Boolean(state?.complete)
+
+  useEffect(() => {
+    if (mode !== 'category' || !categoryId || result) return
+    const controller = new AbortController()
+    const signal = AbortSignal.any([
+      controller.signal,
+      tenantRequestScope.signal,
+    ])
+    void olxLiveApi.attributes(Number(categoryId), { signal }).then(
+      (items) => {
+        if (!signal.aborted) setAttributeCatalog({ categoryId, items })
+      },
+      () => {
+        if (!signal.aborted) setAttributeCatalog({ categoryId, items: null })
+      },
+    )
+    return () => controller.abort()
+  }, [categoryId, attributeAttempt, mode, result])
+
+  function changeCategory(value: string) {
+    if (value === categoryId) return
+    setCategoryId(value)
+    setAttributeCatalog(null)
+    setSharedAttributes({})
+  }
 
   function previewIssue(issue: OlxPreviewIssue) {
     const key = olxIssueKeys.find((code) => code === issue.code)
     if (!key) return tl('checkIssue')
+    if (key === 'attribute_required' && issue.field === 'state')
+      return tl('missingState')
     if (
       key === 'attribute_required' ||
       key === 'attribute_invalid' ||
@@ -176,6 +225,117 @@ export function OlxBatchSheet({
     )
       return `${tl(key)} (${issue.field})`
     return tl(key)
+  }
+
+  async function previewRow(
+    part: OlxBatchPart,
+    publication: OlxLivePublication,
+    defaultSellerType: string,
+    signal: AbortSignal,
+  ): Promise<OlxBatchResult> {
+    if (publication.excluded)
+      return {
+        ...part,
+        advertId: publication.advertId ?? null,
+        status: 'excluded',
+      }
+    if (!canPrepareOlxDraft(publication))
+      return {
+        ...part,
+        advertId: publication.advertId ?? null,
+        status: publication.advertId ? 'linked' : 'pending',
+      }
+
+    const current = publication.content ?? emptyOlxContent
+    const content = {
+      ...current,
+      advertiserType: current.advertiserType || defaultSellerType,
+    }
+    const preview = await olxLiveApi.preview(part.id, content, { signal })
+    signal.throwIfAborted()
+    const issues = preview.issues
+    if (issues.some(({ code }) => code === 'advertiser_required'))
+      setShowSellerType(true)
+    const row = { ...part, name: preview.part.title }
+    if (issues.length > 0) {
+      let fixField: OlxBatchFixField | undefined
+      if (publication.canWrite && preview.part.status === 'available') {
+        if (issues.some(({ code }) => code === 'price_required'))
+          fixField = 'price'
+        else if (issues.some(({ code }) => code === 'description_length'))
+          fixField = 'description'
+      }
+      return {
+        ...row,
+        status: 'blocked',
+        issues: issues.map(previewIssue),
+        ...(fixField ? { fixField } : {}),
+      }
+    }
+    if (!publication.revision || !publication.canWrite)
+      return { ...row, status: 'failed', issues: [t('permissionChanged')] }
+    return {
+      ...row,
+      status: 'ready',
+      ready: {
+        content,
+        revision: publication.revision,
+        save: content.advertiserType !== current.advertiserType,
+      },
+    }
+  }
+
+  function closeFix() {
+    setFixingRow(null)
+    setFixSaving(false)
+    resultBody.current?.focus()
+  }
+
+  async function recheckFixedRow(part: OlxBatchPart) {
+    closeFix()
+    onChanged()
+    const signal = scope.current
+    if (!signal || signal.aborted || working.current) return
+
+    working.current = true
+    preparedRevisions.current.delete(part.id)
+    setBusy('recheck')
+    setStartError(null)
+    try {
+      const publication = await olxLiveApi.publication(part.id, { signal })
+      const checked = await previewRow(part, publication, sellerType, signal)
+      setState(
+        (current) =>
+          current && {
+            ...current,
+            rows: current.rows.map((row) =>
+              row.id === part.id ? checked : row,
+            ),
+          },
+      )
+    } catch (failure) {
+      if (signal.aborted) return
+      const message = olxBatchStopMessage(normalizeApiProblem(failure))
+      if (message) setStop(message)
+      setState(
+        (current) =>
+          current && {
+            ...current,
+            rows: current.rows.map((row) =>
+              row.id === part.id
+                ? {
+                    ...part,
+                    status: 'failed',
+                    issues: [t(message ?? 'repairCheckFailed')],
+                  }
+                : row,
+            ),
+          },
+      )
+    } finally {
+      working.current = false
+      if (!signal.aborted) setBusy(null)
+    }
   }
 
   async function run(
@@ -190,8 +350,8 @@ export function OlxBatchSheet({
     const category = connection.categories.find(
       ({ id }) => String(id) === categoryId,
     )
-    if (action === 'assign' && !category) return
-    if (action !== 'assign' && !canWrite(connection)) return
+    if (action === 'assign' && (!category || !categoryDetails)) return
+    if (action !== 'assign' && !canWrite(connection?.account)) return
     if (parts.length === 0) return
     startRequest.current = null
     preparedRevisions.current.clear()
@@ -206,6 +366,9 @@ export function OlxBatchSheet({
     const results = new Map<string, OlxBatchResult>()
     setState({ rows: [...results.values()], complete: false })
     const options = { signal, expectedAccountId }
+    const commonValues = Object.entries(sharedAttributes).filter(([, values]) =>
+      hasAttributeValue(values),
+    )
 
     for (const candidate of parts) {
       if (signal.aborted) break
@@ -224,16 +387,29 @@ export function OlxBatchSheet({
             }
           const publication = await olxLiveApi.publication(part.id, { signal })
           const current = publication.content ?? emptyOlxContent
-          if (!canPrepare(publication)) {
+          if (action === 'check') {
+            result = await previewRow(
+              part,
+              publication,
+              defaultSellerType,
+              signal,
+            )
+          } else if (!canPrepareOlxDraft(publication)) {
             result = {
               ...part,
               advertId: publication.advertId ?? null,
               status: publication.advertId ? 'linked' : 'pending',
             }
-          } else if (action === 'assign' && category) {
+          } else if (category) {
+            const sameCategory = current.categoryId === category.id
+            const attributes = sameCategory ? current.attributes : {}
+            const missingValues = commonValues.filter(
+              ([code]) => !hasAttributeValue(attributes[code]),
+            )
             if (
               !current.categoryConfirmed ||
-              current.categoryId !== category.id
+              !sameCategory ||
+              missingValues.length > 0
             ) {
               await olxLiveApi.saveDraft(
                 part.id,
@@ -241,10 +417,10 @@ export function OlxBatchSheet({
                   ...current,
                   categoryId: category.id,
                   categoryConfirmed: true,
-                  attributes:
-                    current.categoryId === category.id
-                      ? current.attributes
-                      : {},
+                  attributes: {
+                    ...attributes,
+                    ...Object.fromEntries(missingValues),
+                  },
                 },
                 publication.revision ?? null,
                 options,
@@ -253,50 +429,13 @@ export function OlxBatchSheet({
             }
             result = { ...part, status: 'assigned' }
           } else {
-            const content = {
-              ...current,
-              advertiserType: current.advertiserType || defaultSellerType,
-            }
-            const preview = await olxLiveApi.preview(part.id, content, {
-              signal,
-            })
-            if (signal.aborted) break
-            if (
-              preview.issues.some(({ code }) => code === 'advertiser_required')
-            )
-              setShowSellerType(true)
-            part = { ...part, name: preview.part.title }
-            result = {
-              ...part,
-              status: 'blocked',
-              issues: preview.issues.map(previewIssue),
-            }
-            if (
-              result.issues?.length === 0 &&
-              publication.revision &&
-              publication.canWrite
-            )
-              result = {
-                ...part,
-                status: 'ready',
-                ready: {
-                  content,
-                  revision: publication.revision,
-                  save: content.advertiserType !== current.advertiserType,
-                },
-              }
-            else if (result.issues?.length === 0)
-              result = {
-                ...part,
-                status: 'failed',
-                issues: [t('permissionChanged')],
-              }
+            result = { ...part, status: 'skipped' }
           }
         }
       } catch (failure) {
         if (signal.aborted) break
         const problem = normalizeApiProblem(failure)
-        const message = stopMessage(problem)
+        const message = olxBatchStopMessage(problem)
         if (message) {
           halt = true
           setStop(message)
@@ -337,6 +476,8 @@ export function OlxBatchSheet({
       !accountId ||
       !canPublish ||
       working.current ||
+      fixingRow !== null ||
+      exceedsJobLimit ||
       ready.length === 0
     )
       return
@@ -345,6 +486,20 @@ export function OlxBatchSheet({
     setConfirm(false)
     setStartError(null)
     try {
+      if (reconciledAccountId) {
+        const current = await olxApi.connection({ signal })
+        if (
+          current.accountId !== reconciledAccountId ||
+          !current.reconciliationCompletedAt
+        ) {
+          setStop('connectionChanged')
+          return
+        }
+        if (!canWrite(current)) {
+          setStop('permissionChanged')
+          return
+        }
+      }
       if (!startRequest.current) {
         const checked = []
         for (const row of ready) {
@@ -388,7 +543,7 @@ export function OlxBatchSheet({
             ? 'jobAlreadyRunning'
             : problem.code === 'OLX_BATCH_INVALID'
               ? 'jobLimit'
-              : (stopMessage(problem) ?? 'jobStartFailed'),
+              : (olxBatchStopMessage(problem) ?? 'jobStartFailed'),
         )
       }
     } finally {
@@ -422,6 +577,15 @@ export function OlxBatchSheet({
           setSetupError('connectionRequired')
           return
         }
+        if (
+          (expectedAccountId && account.accountId !== expectedAccountId) ||
+          (reconciledAccountId &&
+            (account.accountId !== reconciledAccountId ||
+              !account.reconciliationCompletedAt))
+        ) {
+          setSetupError('connectionChanged')
+          return
+        }
         const categories =
           initialMode === 'category'
             ? await olxLiveApi.categories({ signal })
@@ -436,12 +600,11 @@ export function OlxBatchSheet({
       }
     })()
     return () => controller.abort()
-  }, [attempt, initialMode])
+  }, [attempt, expectedAccountId, reconciledAccountId, initialMode])
 
   const blocked = !setup || Boolean(busy) || Boolean(stop)
   const progress = state?.rows.length ?? 0
-  const result = Boolean(state?.complete)
-  const mutationBusy = busy === 'assign' || busy === 'start'
+  const mutationBusy = busy === 'assign' || busy === 'start' || fixSaving
   useEffect(() => {
     if (result) resultBody.current?.focus()
   }, [result])
@@ -495,7 +658,7 @@ export function OlxBatchSheet({
           ) : !result && mode === 'category' ? (
             <Button
               variant="primary"
-              disabled={blocked || !categoryId}
+              disabled={blocked || !categoryDetails}
               onClick={() => void run('assign')}
             >
               {t('assignAction')}
@@ -503,7 +666,12 @@ export function OlxBatchSheet({
           ) : !result ? (
             <Button
               variant="primary"
-              disabled={blocked || ready.length === 0}
+              disabled={
+                blocked ||
+                fixingRow !== null ||
+                exceedsJobLimit ||
+                ready.length === 0
+              }
               onClick={() => setConfirm(true)}
             >
               {t('publishAction')}
@@ -514,7 +682,7 @@ export function OlxBatchSheet({
     >
       <div
         ref={resultBody}
-        tabIndex={result ? -1 : undefined}
+        tabIndex={-1}
         className="grid min-w-0 gap-4 outline-none"
       >
         {setupError ? (
@@ -548,12 +716,56 @@ export function OlxBatchSheet({
               placeholder={tl('choose')}
               value={categoryId}
               hint={t('categoryHint')}
-              onValueChange={setCategoryId}
+              onValueChange={changeCategory}
               options={setup.categories.map((category) => ({
                 value: String(category.id),
                 label: category.path.split(' / ').join(' → ') || category.name,
               }))}
             />
+            {categoryId &&
+              (!categoryDetails ? (
+                <SkeletonFields count={2} label={tl('loading')} />
+              ) : categoryDetails.items === null ? (
+                <Notice
+                  tone="warn"
+                  action={
+                    <Button
+                      disabled={blocked}
+                      onClick={() => {
+                        setAttributeCatalog(null)
+                        setAttributeAttempt((value) => value + 1)
+                      }}
+                    >
+                      {tl('retry')}
+                    </Button>
+                  }
+                >
+                  {t('assignAttributesError')}
+                </Notice>
+              ) : batchAttributes?.length ? (
+                <SectionPanel
+                  title={t('assignAttributes')}
+                  description={t('assignAttributesHint')}
+                  variant="plain"
+                >
+                  <div className="grid min-w-0 gap-3">
+                    {batchAttributes.map((attribute) => (
+                      <OlxAttributeField
+                        key={attribute.code}
+                        attribute={{ ...attribute, required: false }}
+                        disabled={blocked}
+                        value={sharedAttributes[attribute.code] ?? []}
+                        onChange={(value) =>
+                          setSharedAttributes((current) => ({
+                            ...current,
+                            [attribute.code]: value,
+                          }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </SectionPanel>
+              ) : null)}
             <Notice tone="info">{t('assignHint')}</Notice>
           </>
         ) : !result ? (
@@ -565,6 +777,7 @@ export function OlxBatchSheet({
               aside={
                 state &&
                 !blocked &&
+                !fixingRow &&
                 canPublish && (
                   <Button
                     variant="quiet"
@@ -586,8 +799,8 @@ export function OlxBatchSheet({
                 <div className="grid min-w-0 gap-1">
                   <strong className="rz-strong">OLX</strong>
                   {canPublish && (
-                    <span className="rz-caption">
-                      {state && !busy
+                    <span className="rz-caption" aria-live="polite">
+                      {state && busy !== 'check'
                         ? t('readiness', {
                             ready: ready.length,
                             blocked: state.rows.filter(
@@ -604,7 +817,7 @@ export function OlxBatchSheet({
               <SelectPicker
                 label={tl('advertiser')}
                 showLabel
-                disabled={blocked || !canPublish}
+                disabled={blocked || !canPublish || fixingRow !== null}
                 placeholder={tl('choose')}
                 value={sellerType}
                 hint={t('sellerHint')}
@@ -619,6 +832,16 @@ export function OlxBatchSheet({
                   { value: 'private', label: tl('private') },
                 ]}
               />
+            )}
+            {canPublish && parts.length > maxPublicationJobParts && (
+              <Notice tone={exceedsJobLimit && !busy ? 'warn' : 'info'}>
+                {exceedsJobLimit && !busy
+                  ? t('jobLimitExceeded', {
+                      ready: ready.length,
+                      limit: maxPublicationJobParts,
+                    })
+                  : t('jobLimit')}
+              </Notice>
             )}
             {canPublish ? (
               <Notice tone="info">{t('publishHint')}</Notice>
@@ -637,20 +860,45 @@ export function OlxBatchSheet({
           <p className="rz-caption m-0" role="status">
             {busy === 'start'
               ? t('jobStarting')
-              : t('progress', { done: progress, total: parts.length })}
+              : busy === 'recheck'
+                ? t('repairChecking')
+                : t('progress', { done: progress, total: parts.length })}
           </p>
         )}
         {state && state.rows.length > 0 && (
           <OlxBatchResults
             rows={state.rows}
             partsHref={partsHref}
-            busy={Boolean(busy)}
+            busy={Boolean(busy) || fixSaving}
             onNavigate={onClose}
+            {...(mode === 'publish' &&
+            !result &&
+            !stop &&
+            setup?.account.accountId &&
+            !startError
+              ? {
+                  repair: {
+                    activeId: fixingRow?.id,
+                    onOpen: setFixingRow,
+                    editor: fixingRow?.fixField ? (
+                      <OlxBatchPartEditor
+                        key={fixingRow.id}
+                        partId={fixingRow.id}
+                        field={fixingRow.fixField}
+                        accountId={setup.account.accountId}
+                        onClose={closeFix}
+                        onPendingChange={setFixSaving}
+                        onSaved={() => void recheckFixedRow(fixingRow)}
+                      />
+                    ) : null,
+                  },
+                }
+              : {})}
           />
         )}
       </div>
       <ConfirmDialog
-        open={confirm}
+        open={confirm && !exceedsJobLimit}
         title={t('confirmTitle')}
         consequence={t('confirmText', { count: ready.length })}
         confirmLabel={t('publishAction')}
@@ -667,17 +915,16 @@ export function OlxBatchResults({
   partsHref,
   busy,
   onNavigate,
-  selection,
+  repair,
 }: {
   rows: OlxBatchResult[]
   partsHref: string
   busy: boolean
-  onNavigate: () => void
-  selection?: {
-    eligible: ReadonlySet<string>
-    checked: ReadonlySet<string>
-    disabled: boolean
-    onToggle: (id: string) => void
+  onNavigate?: () => void
+  repair?: {
+    activeId: string | undefined
+    onOpen: (row: OlxBatchResult) => void
+    editor: ReactNode
   }
 }) {
   const t = useT(olxBatchMessages)
@@ -702,23 +949,6 @@ export function OlxBatchResults({
                   key={row.id}
                   className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2"
                 >
-                  {selection?.eligible.has(row.id) && (
-                    <input
-                      type="checkbox"
-                      className="rz-check"
-                      aria-label={t(
-                        row.status === 'pending'
-                          ? 'retryVerifyPart'
-                          : 'retrySelectPart',
-                        {
-                          name: row.name ?? row.id,
-                        },
-                      )}
-                      checked={selection.checked.has(row.id)}
-                      disabled={selection.disabled}
-                      onChange={() => selection.onToggle(row.id)}
-                    />
-                  )}
                   <div className="grid min-w-0 flex-[1_1_10rem] gap-0.5">
                     <span className="rz-strong break-words">
                       {row.name ?? row.id}
@@ -743,25 +973,43 @@ export function OlxBatchResults({
                       {t(group.badge)}
                     </span>
                   )}
-                  {'action' in group && !busy && (
+                  {repair && row.fixField && !busy ? (
                     <Button
-                      asChild
                       size="sm"
                       variant="quiet"
-                      className={
-                        group.status === 'failed'
-                          ? 'text-state-danger'
-                          : 'text-brand-text'
-                      }
+                      className="text-brand-text"
+                      aria-label={`${t('fix')} · ${row.name ?? row.id}`}
+                      aria-expanded={repair.activeId === row.id}
+                      disabled={repair.activeId !== undefined}
+                      onClick={() => repair.onOpen(row)}
                     >
-                      <Link
-                        to={`${partsHref}/${encodeURIComponent(row.id)}/olx`}
-                        aria-label={`${t(group.action)} · ${row.name ?? row.id}`}
-                        onClick={onNavigate}
-                      >
-                        {t(group.action)}
-                      </Link>
+                      {t('fix')}
                     </Button>
+                  ) : (
+                    'action' in group &&
+                    !busy && (
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="quiet"
+                        className={
+                          group.status === 'failed'
+                            ? 'text-state-danger'
+                            : 'text-brand-text'
+                        }
+                      >
+                        <Link
+                          to={`${partsHref}/${encodeURIComponent(row.id)}/olx`}
+                          aria-label={`${t(group.action)} · ${row.name ?? row.id}`}
+                          onClick={onNavigate}
+                        >
+                          {t(group.action)}
+                        </Link>
+                      </Button>
+                    )
+                  )}
+                  {repair?.activeId === row.id && (
+                    <div className="w-full min-w-0">{repair.editor}</div>
                   )}
                 </li>
               ))}

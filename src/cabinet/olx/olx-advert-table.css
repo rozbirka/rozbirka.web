@@ -1,0 +1,64 @@
+@media (max-width: 767px) {
+  .rz-table tbody .olx-advert-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+    align-items: center;
+  }
+
+  .rz-table .olx-advert-row > :is(th, td) {
+    width: auto;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .rz-table .olx-advert-row > th {
+    grid-area: 1 / 1;
+  }
+
+  .olx-advert-row .rz-cell-main {
+    display: grid;
+    gap: 2px;
+  }
+
+  .olx-advert-row .rz-cell-main > :first-child {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .rz-table .olx-advert-row > td:has([data-olx-cell='price']) {
+    grid-area: 1 / 2;
+  }
+
+  .rz-table .olx-advert-row > td:has([data-olx-cell='number']) {
+    grid-area: 2 / 1;
+  }
+
+  .rz-table .olx-advert-row > td:has([data-olx-cell='stock']) {
+    grid-area: 2 / 2;
+  }
+
+  .rz-table .olx-advert-row > td:has([data-olx-cell='status']) {
+    grid-area: 3 / 1 / 4 / -1;
+  }
+
+  .rz-table .olx-advert-row > .rz-col-check {
+    grid-area: 4 / 1;
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .rz-table .olx-advert-row > td:has([data-olx-cell='actions']) {
+    grid-area: 4 / 2;
+  }
+
+  .rz-table .olx-advert-row > .rz-num {
+    justify-content: flex-end;
+  }
+
+  .rz-table
+    .olx-advert-row
+    > td:has([data-olx-cell]:not([data-olx-cell='stock']))::before {
+    content: none;
+  }
+}

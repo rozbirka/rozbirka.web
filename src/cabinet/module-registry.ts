@@ -139,16 +139,12 @@ export const cabinetModules: Readonly<
     routeSegment: '/olx',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
     // Each OLX action has its own permission; the screen checks either OLX role.
-    ...(import.meta.env.DEV
-      ? {
-          navigation: {
-            label: 'OLX',
-            icon: Plug,
-            placement: 'primary' as const,
-            group: 'sales' as const,
-          },
-        }
-      : {}),
+    navigation: {
+      label: 'OLX',
+      icon: Plug,
+      placement: 'primary',
+      group: 'sales',
+    },
   },
   parts: {
     key: 'parts',

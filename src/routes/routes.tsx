@@ -274,11 +274,27 @@ const commerceDetailRoutes: RouteObject[] = [
   cabinetScreenRoute(
     'olx',
     async () => {
+      const { OlxMessagesScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxMessagesScreen
+    },
+    'olx/messages',
+  ),
+  cabinetScreenRoute(
+    'olx',
+    async () => {
       const { OlxReconciliationScreen } =
         await import('@/cabinet/olx/OlxAlphaScreen')
       return OlxReconciliationScreen
     },
     'olx/reconcile',
+  ),
+  cabinetScreenRoute(
+    'olx',
+    async () => {
+      const { OlxQueueScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxQueueScreen
+    },
+    'olx/queue',
   ),
   cabinetScreenRoute(
     'olx',

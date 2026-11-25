@@ -10,7 +10,7 @@ export const permissionMessages = defineMessages({
     'olx.integration.manage.hint': 'Підключення та відключення акаунта OLX.',
     'olx.publications.manage': 'Керування публікаціями OLX',
     'olx.publications.manage.hint':
-      'Публікація, перевірка статусів і керування оголошеннями.',
+      'Керування оголошеннями, читання повідомлень OLX і відповіді покупцям.',
 
     'cars.view': 'Перегляд автомобілів',
     'cars.view.hint': 'Список автомобілів та їхні картки.',
@@ -74,7 +74,7 @@ export const permissionMessages = defineMessages({
     'olx.integration.manage.hint': 'Connect and disconnect an OLX account.',
     'olx.publications.manage': 'Manage OLX publications',
     'olx.publications.manage.hint':
-      'Publish parts, check statuses and manage adverts.',
+      'Manage adverts, read OLX messages and reply to buyers.',
     'cars.view': 'View vehicles',
     'cars.view.hint': 'View the vehicle list and vehicle details.',
     'cars.manage': 'Manage vehicles',
@@ -137,7 +137,7 @@ export const permissionMessages = defineMessages({
     'olx.integration.manage.hint': 'Podłączanie i odłączanie konta OLX.',
     'olx.publications.manage': 'Zarządzanie ogłoszeniami OLX',
     'olx.publications.manage.hint':
-      'Publikowanie części, sprawdzanie stanów i zarządzanie ogłoszeniami.',
+      'Zarządzanie ogłoszeniami, czytanie wiadomości OLX i odpowiadanie kupującym.',
 
     'cars.view': 'Przeglądanie aut',
     'cars.view.hint': 'Lista aut i ich karty.',

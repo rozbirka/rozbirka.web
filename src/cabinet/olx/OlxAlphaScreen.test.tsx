@@ -10,6 +10,7 @@ import { clearOlxPartReturn, saveOlxPartReturn } from './olx-part-oauth-return'
 
 const mocks = vi.hoisted(() => ({
   liveAdverts: vi.fn(),
+  localAdverts: vi.fn(),
   listingSettings: vi.fn(),
   connection: vi.fn(),
   connect: vi.fn(),
@@ -48,7 +49,7 @@ vi.mock('@/api/olx-listing-settings', () => ({
   olxListingSettingsApi: { get: mocks.listingSettings },
 }))
 vi.mock('@/api/olx-live', () => ({
-  olxLiveApi: { adverts: mocks.liveAdverts },
+  olxLiveApi: { adverts: mocks.liveAdverts, localAdverts: mocks.localAdverts },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: () => mocks.cabinet }))
 vi.mock('@/components/parts/PartSearchPicker', () => ({
@@ -89,6 +90,7 @@ beforeEach(() => {
     hasMore: false,
     checkedAt: '2026-11-18T12:00:00Z',
   })
+  mocks.localAdverts.mockResolvedValue({ items: [], page: 1, hasMore: false })
   mocks.cabinet.snapshot.permissions = new Set([
     'olx.integration.manage',
     'olx.publications.manage',
@@ -235,7 +237,9 @@ it('keeps connection when disconnect confirmation is cancelled', async () => {
     await screen.findByRole('button', { name: 'Відключити акаунт' }),
   )
   const dialog = await screen.findByRole('dialog')
-  expect(dialog).toHaveTextContent('Оголошення на OLX залишаться без змін')
+  expect(dialog).toHaveTextContent(
+    'активні оголошення можна зняти в кабінеті OLX',
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Скасувати' }))
   expect(mocks.disconnect).not.toHaveBeenCalled()
 })
@@ -261,7 +265,58 @@ it('does not infer OAuth success from the callback query alone', async () => {
     await screen.findByRole('button', { name: 'Підключити OLX' }),
   ).toBeInTheDocument()
   expect(screen.queryByText('Підключено')).not.toBeInTheDocument()
+  expect(
+    screen.getByText(/Розбірка не отримала підтвердження підключення/),
+  ).toBeVisible()
   expect(mocks.listingSettings).not.toHaveBeenCalled()
+})
+
+it('shows verification during OAuth return and offers to retry a cancelled connection', async () => {
+  let finish!: (value: unknown) => void
+  mocks.connection.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  mocks.startOAuth.mockResolvedValue({
+    launchUrl: 'https://api.example.test/api/v1/integrations/olx/oauth/launch',
+    ticket: 'retry',
+    expiresAt: '2026-11-17T18:00:00Z',
+  })
+  const { unmount } = render(
+    <MemoryRouter
+      initialEntries={['/app/test/settings/integrations/olx?olx=connected']}
+    >
+      <OlxAlphaScreen />
+    </MemoryRouter>,
+  )
+  expect(
+    screen.getByRole('heading', { name: 'Завершуємо підключення' }),
+  ).toBeVisible()
+  finish({ available: true, connected: false, mode: 'oauth' })
+  await screen.findByText(/Розбірка не отримала підтвердження/)
+  unmount()
+  mocks.connection.mockResolvedValueOnce({
+    available: true,
+    connected: false,
+    mode: 'oauth',
+  })
+  render(
+    <MemoryRouter
+      initialEntries={['/app/test/settings/integrations/olx?olx=cancelled']}
+    >
+      <OlxAlphaScreen />
+    </MemoryRouter>,
+  )
+  const retry = await screen.findByRole('button', { name: 'Спробувати ще раз' })
+  expect(
+    screen.getByText('Підключення скасовано. Ви можете почати знову.'),
+  ).toBeVisible()
+  fireEvent.click(retry)
+  await waitFor(() => expect(mocks.launchOAuth).toHaveBeenCalledOnce())
+  expect(
+    screen.queryByText('Підключення скасовано. Ви можете почати знову.'),
+  ).not.toBeInTheDocument()
 })
 
 it('stays on the account after OAuth when a city is already saved', async () => {
@@ -502,7 +557,7 @@ it('forwards the outcome of the existing OAuth return to the account route', asy
       </Routes>
     </MemoryRouter>,
   )
-  await screen.findByRole('button', { name: 'Підключити OLX' })
+  await screen.findByRole('button', { name: 'Спробувати ще раз' })
   expect(screen.getByTestId('location')).toHaveTextContent(
     '/app/test/settings/integrations/olx',
   )

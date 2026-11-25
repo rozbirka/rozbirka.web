@@ -6,7 +6,7 @@ import {
   useNavigate,
   useSearchParams,
 } from 'react-router'
-import { Settings } from 'lucide-react'
+import { LoaderCircle, Settings } from 'lucide-react'
 import {
   Button,
   DateValue,
@@ -40,15 +40,24 @@ import type { TenantAccessSnapshot } from '../access-types'
 import { cabinetPath } from '../cabinet-paths'
 import { Crumbs, RedesignShell, RedesignTitle } from '../redesign-shell'
 import { IntegrationCrumbs } from '../integrations/IntegrationsScreen'
+import { canCreateOrder } from '../orders/order-create-access'
+import { tenantRequestScope } from '../tenant-request-scope'
 import {
   OlxConnectionPanel,
   OlxPermissionsCard,
   type ConnectionAction,
 } from './OlxConnectionPanel'
 import { olxConnectionMessages } from './olx-connection-messages'
+import { olxBatchMessages } from './olx-batch-messages'
+import { OlxPublicationQueue } from './OlxPublicationQueue'
+import { OlxCatalogPanel } from './OlxCatalogPanel'
+import { olxCatalogMessages } from './olx-catalog-messages'
+import { olxChatMessages } from './olx-chat-messages'
 import { olxError, olxStatus } from './olx-messages'
 import { OlxLiveWorkspace } from './OlxLiveWorkspace'
 import { OlxListingSettingsPanel } from './OlxListingSettingsPanel'
+import { OlxMessagesWorkspace } from './OlxMessagesWorkspace'
+import { OlxMessagesSkeleton } from './OlxMessagesSkeleton'
 import { OlxPublicationReadiness } from './OlxPublicationReadiness'
 import { OlxReconciliationPanel } from './OlxReconciliationPanel'
 import { olxReconciliationMessages } from './olx-reconciliation-messages'
@@ -59,7 +68,13 @@ import {
   readOlxPartReturn,
 } from './olx-part-oauth-return'
 
-type OlxSection = 'account' | 'sales' | 'listing' | 'reconcile'
+type OlxSection =
+  | 'account'
+  | 'sales'
+  | 'listing'
+  | 'reconcile'
+  | 'queue'
+  | 'messages'
 
 export function OlxAlphaScreen() {
   return <OlxScreen section="account" />
@@ -71,6 +86,14 @@ export function OlxSalesScreen() {
 
 export function OlxReconciliationScreen() {
   return <OlxScreen section="reconcile" />
+}
+
+export function OlxQueueScreen() {
+  return <OlxScreen section="queue" />
+}
+
+export function OlxMessagesScreen() {
+  return <OlxScreen section="messages" />
 }
 
 export function OlxListingSettingsScreen() {
@@ -145,30 +168,44 @@ function OlxWorkspace({
   const { permissions } = snapshot
   const t = useT(olxConnectionMessages)
   const tr = useT(olxReconciliationMessages)
+  const tb = useT(olxBatchMessages)
+  const tcatalog = useT(olxCatalogMessages)
+  const tm = useT(olxChatMessages)
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const toast = useOptionalToast()
   const reconcile = section === 'reconcile'
-  const sales = section === 'sales' || reconcile
+  const queue = section === 'queue'
+  const messages = section === 'messages'
+  const sales = section === 'sales' || reconcile || queue || messages
   const listing = section === 'listing'
   const setupLocation = listing && params.get('setup') === 'location'
   const accountHref = cabinetPath(slug, 'integrations', 'olx')
   const salesHref = cabinetPath(slug, 'olx')
+  const catalogHref = `${salesHref}?view=catalog`
+  const queueHref = cabinetPath(slug, 'olx', 'queue')
+  const messagesHref = cabinetPath(slug, 'olx', 'messages')
   const reconcileHref = cabinetPath(slug, 'olx', 'reconcile')
   const listingHref = cabinetPath(slug, 'integrations', 'olx/listing')
-  const [outcome] = useState(() =>
-    section === 'account' ? params.get('olx') : null,
+  const [outcome, setOutcome] = useState(() =>
+    section === 'account' ? olxPartOutcome(params.get('olx')) : null,
   )
   const canManage = permissions.has('olx.integration.manage')
   const canPublish = permissions.has('olx.publications.manage')
   const canRead = sales ? canPublish : canManage || canPublish
   const canReadParts = permissions.has('parts.view')
+  const catalog =
+    section === 'sales' && canReadParts && params.get('view') === 'catalog'
   const canEdit = permissions.has('parts.manage')
+  const canReadQueue = canPublish && canReadParts && canEdit
+  const queueOwner = `${snapshot.tenantId}:${snapshot.userId}:${snapshot.generation}`
   const [connection, setConnection] = useState<OlxConnection | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [disconnected, setDisconnected] = useState(false)
+  const [tenantSignal] = useState(() => tenantRequestScope.signal)
   const [query, setQuery] = useState('')
   const [part, setPart] = useState<{ id: string; name: string } | null>(null)
   const [listingActions, setListingActions] = useState<HTMLDivElement | null>(
@@ -177,16 +214,26 @@ function OlxWorkspace({
   const life = useRef<AbortController | null>(null)
   const inFlight = useRef(false)
   const showedConnectionToast = useRef(false)
+  const returnVerified =
+    connection?.mode === 'oauth' &&
+    connection.available &&
+    connection.connected &&
+    !connection.reconnectRequired
+  const verifyingReturn =
+    canManage && outcome === 'connected' && !connection && !loadError
+  const unconfirmedReturn =
+    canManage && outcome === 'connected' && connection && !returnVerified
   useEffect(() => {
     if (
       outcome === 'connected' &&
-      connection?.connected &&
+      canManage &&
+      returnVerified &&
       !showedConnectionToast.current
     ) {
       showedConnectionToast.current = true
       toast?.show({ tone: 'ok', message: t('connectionSuccess') })
     }
-  }, [connection?.connected, outcome, toast, t])
+  }, [canManage, outcome, returnVerified, toast, t])
   useEffect(() => {
     if (section !== 'account' || !params.has('olx')) return
     const clearOutcome = () =>
@@ -203,18 +250,13 @@ function OlxWorkspace({
       return
     }
     if (!connection) return
-    if (
-      connection.mode !== 'oauth' ||
-      !connection.available ||
-      !connection.connected ||
-      connection.reconnectRequired
-    ) {
+    if (!returnVerified) {
       clearOutcome()
       return
     }
 
     const controller = new AbortController()
-    const { signal } = controller
+    const signal = AbortSignal.any([controller.signal, tenantSignal])
     void olxListingSettingsApi.get({ signal }).then(
       (settings) => {
         if (signal.aborted) return
@@ -232,32 +274,46 @@ function OlxWorkspace({
       },
     )
     return () => controller.abort()
-  }, [canManage, connection, listingHref, navigate, params, section, setParams])
+  }, [
+    canManage,
+    connection,
+    listingHref,
+    navigate,
+    params,
+    returnVerified,
+    section,
+    setParams,
+    tenantSignal,
+  ])
   useEffect(() => {
     const controller = new AbortController()
     life.current = controller
+    const signal = AbortSignal.any([controller.signal, tenantSignal])
     if (canRead)
-      void olxApi.connection({ signal: controller.signal }).then(
+      void olxApi.connection({ signal }).then(
         (value) => {
-          if (controller.signal.aborted) return
+          if (signal.aborted) return
           setConnection(value)
           updateOlxNavigation(snapshot, value)
         },
         () => {
-          if (!controller.signal.aborted) setLoadError(true)
+          if (!signal.aborted) setLoadError(true)
         },
       )
     return () => controller.abort()
-  }, [canRead, attempt, snapshot])
+  }, [canRead, attempt, snapshot, tenantSignal])
   async function changeConnection(
     action: ConnectionAction,
     account = '',
   ): Promise<boolean> {
-    const signal = life.current?.signal
-    if (inFlight.current || !signal || signal.aborted) return false
+    const currentLife = life.current
+    if (!canManage || inFlight.current || !currentLife) return false
+    const signal = AbortSignal.any([currentLife.signal, tenantSignal])
+    if (signal.aborted) return false
     inFlight.current = true
     setBusy(true)
     setError(null)
+    if (action === 'connect' || action === 'write') setOutcome(null)
     try {
       if (
         (action === 'connect' || action === 'write') &&
@@ -281,6 +337,11 @@ function OlxWorkspace({
       setConnection(next)
       updateOlxNavigation(snapshot, next)
       setPart(null)
+      if (action === 'disconnect' && !next.connected) {
+        setOutcome(null)
+        setDisconnected(true)
+        toast?.show({ tone: 'info', message: t('disconnectedNoticeTitle') })
+      }
       return true
     } catch (problem) {
       const code = normalizeApiProblem(problem).code
@@ -332,17 +393,33 @@ function OlxWorkspace({
           : outcome === 'access_changed' || outcome === 'connection_changed'
             ? 'accessChanged'
             : 'failed'
-  if (reconcile && connection && !real)
+  if ((reconcile || messages) && connection && !real)
     return <Navigate replace to={salesHref} />
   const reconcileReady = reconcile && real && canBrowse && connection.accountId
-  const salesTabs = sales && real && canBrowse && (
-    <nav aria-label={tr('tabs')} className="rz-tabs">
-      <Link to={salesHref} aria-current={!reconcile ? 'page' : undefined}>
+  const salesTabs = sales && real && (canBrowse || (queue && canReadQueue)) && (
+    <nav aria-label={tr('tabs')} className="rz-tabs flex-wrap">
+      <Link
+        to={salesHref}
+        aria-current={section === 'sales' && !catalog ? 'page' : undefined}
+      >
         {tr('advertsTab')}
+      </Link>
+      <Link to={messagesHref} aria-current={messages ? 'page' : undefined}>
+        {tm('tab')}
       </Link>
       <Link to={reconcileHref} aria-current={reconcile ? 'page' : undefined}>
         {tr('tab')}
       </Link>
+      {canReadParts && (
+        <Link to={catalogHref} aria-current={catalog ? 'page' : undefined}>
+          {tcatalog('title')}
+        </Link>
+      )}
+      {canReadQueue && (
+        <Link to={queueHref} aria-current={queue ? 'page' : undefined}>
+          {tb('queueTab')}
+        </Link>
+      )}
     </nav>
   )
 
@@ -385,7 +462,7 @@ function OlxWorkspace({
       {!reconcileReady && (
         <header className="grid gap-2">
           <RedesignTitle title={t('title')} />
-          {sales && real && canBrowse && (
+          {sales && !messages && real && (canBrowse || queue) && (
             <div>
               <StatusPill>{t('manualMode')}</StatusPill>
             </div>
@@ -403,8 +480,10 @@ function OlxWorkspace({
         </nav>
       )}
       {!reconcile && salesTabs}
-      {!canRead && <Notice tone="danger">{t('noAccess')}</Notice>}
-      {connection && (listing || (sales && !reconcile && canBrowse)) && (
+      {(!canRead || (queue && !canReadQueue)) && (
+        <Notice tone="danger">{t('noAccess')}</Notice>
+      )}
+      {connection && (listing || (section === 'sales' && canBrowse)) && (
         <OlxPublicationReadiness
           connection={connection}
           canManage={canManage}
@@ -414,7 +493,7 @@ function OlxWorkspace({
           showReady={listing}
         />
       )}
-      {listing && canRead && (
+      {listing && canRead && connection?.available && (
         <div className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_20rem]">
           <OlxListingSettingsPanel
             canManage={canManage}
@@ -439,7 +518,10 @@ function OlxWorkspace({
           <OlxPermissionsCard canManage={canManage} canPublish={canPublish} />
         </div>
       )}
-      {!listing && loadError && (
+      {listing && connection?.available === false && (
+        <Notice tone="warn">{t('unavailableHint')}</Notice>
+      )}
+      {loadError && (
         <ErrorState
           title={t('error')}
           description={t('errorHint')}
@@ -449,11 +531,34 @@ function OlxWorkspace({
           }}
         />
       )}
-      {!listing && !loadError && canRead && !connection && (
-        <SkeletonRows label={t('loading')} rows={3} />
+      {verifyingReturn && (
+        <EmptyState
+          className="rz-card"
+          title={t('returnVerifying')}
+          description={t('returnVerifyingHint')}
+          icon={
+            <LoaderCircle aria-hidden className="motion-safe:animate-spin" />
+          }
+        />
       )}
-      {outcome && outcome !== 'connected' && (
-        <Notice tone="warn">{t(outcomeMessage)}</Notice>
+      {!loadError &&
+        canRead &&
+        !connection &&
+        !verifyingReturn &&
+        (messages ? (
+          <OlxMessagesSkeleton canReadParts={canReadParts} />
+        ) : (
+          <SkeletonRows label={t('loading')} rows={3} />
+        ))}
+      {canManage && outcome && outcome !== 'connected' && (
+        <Notice tone={outcome === 'failed' ? 'danger' : 'warn'} role="status">
+          {t(outcomeMessage)}
+        </Notice>
+      )}
+      {unconfirmedReturn && (
+        <Notice tone="warn" role="status">
+          {t('returnUnconfirmed')}
+        </Notice>
       )}
       {connection && !listing && (
         <>
@@ -471,10 +576,12 @@ function OlxWorkspace({
               busy={busy}
               error={error}
               onAction={changeConnection}
+              retryConnection={Boolean(outcome && outcome !== 'connected')}
+              disconnected={disconnected}
               {...(canBrowse ? { workspaceHref: salesHref } : {})}
             />
           )}
-          {sales && !canBrowse && (
+          {sales && !queue && !canBrowse && (
             <EmptyState
               className="rz-card"
               title={t(
@@ -489,18 +596,104 @@ function OlxWorkspace({
                     ? 'reconnectHint'
                     : 'salesConnectHint',
               )}
+              actions={
+                messages && canManage ? (
+                  <Button asChild>
+                    <Link to={accountHref}>{tm('settings')}</Link>
+                  </Button>
+                ) : undefined
+              }
             />
           )}
-          {sales && !reconcile && real && canBrowse && (
+          {messages && real && canBrowse && connection.accountId && (
+            <OlxMessagesWorkspace
+              key={connection.accountId}
+              accountId={connection.accountId}
+              accountHref={accountHref}
+              canManageConnection={canManage}
+              canReadParts={canReadParts}
+              partsHref={cabinetPath(slug, 'parts')}
+              newOrderHref={
+                canCreateOrder(snapshot)
+                  ? cabinetPath(slug, 'orders', 'new')
+                  : undefined
+              }
+            />
+          )}
+          {queue && real && canReadQueue && (
+            <OlxPublicationQueue
+              canSeeDiagnostics={canManage}
+              owner={queueOwner}
+              queueHref={queueHref}
+              listingHref={listingHref}
+              activeAccountId={
+                canBrowse &&
+                connection.writesAvailable === true &&
+                connection.scope?.split(' ').includes('write')
+                  ? connection.accountId
+                  : null
+              }
+              partsHref={cabinetPath(slug, 'parts')}
+            />
+          )}
+          {section === 'sales' && !catalog && real && canBrowse && (
             <OlxLiveWorkspace
+              canSeeDiagnostics={canManage}
               key={connection.accountId}
               canReadParts={canReadParts}
               canEditParts={canEdit}
+              {...(connection.accountId
+                ? { accountId: connection.accountId }
+                : {})}
+              canWrite={
+                connection.writesAvailable === true &&
+                connection.scope?.split(' ').includes('write') === true
+              }
               partsHref={cabinetPath(slug, 'parts')}
               reconcileHref={reconcileHref}
               currency={currency}
+              onOpenPart={(id) =>
+                void navigate(
+                  `${cabinetPath(slug, 'parts')}/${encodeURIComponent(id)}/olx`,
+                )
+              }
+              onJobStarted={(job, review) =>
+                void navigate(
+                  `${queueHref}?job=${encodeURIComponent(job.id)}`,
+                  {
+                    state: { owner: queueOwner, jobId: job.id, review },
+                  },
+                )
+              }
             />
           )}
+          {catalog &&
+            real &&
+            canBrowse &&
+            (connection.accountId && connection.reconciliationCompletedAt ? (
+              <OlxCatalogPanel
+                key={connection.accountId}
+                accountId={connection.accountId}
+                owner={queueOwner}
+                queueHref={queueHref}
+                canPrepare={
+                  canEdit &&
+                  connection.writesAvailable === true &&
+                  connection.scope?.split(' ').includes('write') === true
+                }
+                partsHref={cabinetPath(slug, 'parts')}
+              />
+            ) : (
+              <EmptyState
+                title={tr('title')}
+                description={tr('intro')}
+                actions={
+                  <Button asChild>
+                    <Link to={reconcileHref}>{tr('tab')}</Link>
+                  </Button>
+                }
+              />
+            ))}
           {reconcile && real && canBrowse && connection.accountId && (
             <OlxReconciliationPanel
               key={connection.accountId}
@@ -512,7 +705,7 @@ function OlxWorkspace({
               tabs={salesTabs}
             />
           )}
-          {sales && !real && canBrowse && canReadParts && (
+          {sales && !queue && !real && canBrowse && canReadParts && (
             <SectionPanel title={t('part')} className="overflow-visible">
               <PartSearchPicker
                 includeUnavailable

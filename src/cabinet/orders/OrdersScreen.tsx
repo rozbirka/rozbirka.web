@@ -1,9 +1,12 @@
 import { NewOrderItems } from './NewOrderItems'
 import {
+  newOrderDraftItem,
   orderItemPrice,
   restoreOrderItems,
   validOrderDraftItem,
+  type OrderDraftItem,
 } from './order-draft-items'
+import { canCreateOrder } from './order-create-access'
 import { CustomerSearchPicker } from '@/components/customers/CustomerSearchPicker'
 import { localizeApiError } from '@/api/error-localization'
 import { CabinetLoadingContent } from '../loading-screen'
@@ -115,8 +118,9 @@ import {
   type OrderDetail,
   type OrderListItem,
 } from '@/api/orders'
-import { type PartPickerItem } from '@/components/parts/PartSearchPicker'
+import { partsApi } from '@/api/parts'
 import { useCabinet } from '../CabinetContext'
+import { cabinetPath } from '../cabinet-paths'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
@@ -235,7 +239,10 @@ export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
     return (
       <>
         <OrderDirectory definition={definition} />
-        <OrderForm definition={definition} />
+        <OrderForm
+          key={new URLSearchParams(location.search).get('olxPartId')}
+          definition={definition}
+        />
       </>
     )
   return id ? (
@@ -265,14 +272,6 @@ function canMutate(
     'allowed'
   )
 }
-
-const canCreateOrder = (
-  definition: CabinetModuleScreenProps['definition'],
-  cabinet: ReturnType<typeof useCabinet>,
-) =>
-  canMutate(definition, cabinet) &&
-  cabinet.snapshot?.permissions.has('parts.view') === true &&
-  cabinet.snapshot.permissions.has('customers.view')
 
 /** The statuses the list filters by, in the order a sale moves through them. */
 const ORDER_STATUS_FILTERS = [
@@ -306,7 +305,10 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const navigate = useNavigate()
   const { currency: accountingCurrency } = useAccountingCurrency()
-  const createAllowed = canCreateOrder(definition, cabinet)
+  const createAllowed = canCreateOrder(
+    cabinet.status === 'ready' ? cabinet.snapshot : null,
+    definition,
+  )
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
   /** False until the first answer: the list shows skeleton rows, not «empty». */
@@ -631,12 +633,12 @@ interface OrderFormDraft {
   unitPrice?: string
   notes: string
   draftItems: {
-    part: PartPickerItem
+    part: OrderDraftItem['part']
     quantity: number
     unitPrice: number | string
     priceBeforeEdit?: string | undefined
   }[]
-  selectedPartDraft?: PartPickerItem | null
+  selectedPartDraft?: OrderDraftItem['part'] | null
   editingPartId?: string | null
 }
 
@@ -677,12 +679,19 @@ export function OrderForm({
     `order-form:${createContext?.customer.id ?? 'new'}`,
   )
   const restored = draft.initial
+  const olxPartId = createContext ? null : params.get('olxPartId')
+  const prefillPartId =
+    !restored && canCreateOrder(cabinet.snapshot, definition) ? olxPartId : null
+  const [prefillResult, setPrefillResult] = useState<
+    'added' | 'unavailable' | 'failed' | null
+  >(null)
+  const loadingPart = prefillPartId !== null && prefillResult === null
   const [partQuery, setPartQuery] = useState(() => restored?.partQuery ?? '')
   const [customerId, setCustomerId] = useState(
     () =>
       restored?.customerId ??
       createContext?.customer.id ??
-      params.get('customerId') ??
+      (olxPartId ? null : params.get('customerId')) ??
       '',
   )
   const [customerQuery, setCustomerQuery] = useState(
@@ -707,6 +716,33 @@ export function OrderForm({
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!prefillPartId || prefillResult !== null) return
+    const controller = new AbortController()
+    void partsApi
+      .get(prefillPartId, { signal: controller.signal })
+      .then((part) => {
+        if (controller.signal.aborted) return
+        if (part.quantityAvailable < 1) {
+          setPrefillResult('unavailable')
+          return
+        }
+        setDraftItems([
+          newOrderDraftItem({
+            id: part.id,
+            name: part.name,
+            externalCode: part.oemCode,
+            quantityAvailable: part.quantityAvailable,
+            effectiveSalePrice: part.effectiveSalePrice,
+          }),
+        ])
+        setPrefillResult('added')
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setPrefillResult('failed')
+      })
+    return () => controller.abort()
+  }, [prefillPartId, prefillResult])
   const draftItemsValid =
     draftItems.length > 0 &&
     draftItems.every((item) =>
@@ -733,7 +769,7 @@ export function OrderForm({
     setCustomerConflict(null)
   }
   const linkedCustomerId =
-    createContext?.customer.id ?? params.get('customerId')
+    createContext?.customer.id ?? (olxPartId ? null : params.get('customerId'))
   useEffect(() => {
     if (!linkedCustomerId || !customerSearchAllowed || createContext) return
     const controller = new AbortController()
@@ -891,7 +927,9 @@ export function OrderForm({
   )
   const backPath = createContext?.onClose
     ? location.pathname
-    : location.pathname.replace(/\/new$/, '')
+    : olxPartId && cabinet.targetTenant
+      ? cabinetPath(cabinet.targetTenant.slug, 'olx', 'messages')
+      : location.pathname.replace(/\/new$/, '')
   const closeCreate = () => {
     if (createContext) createContext.onClose()
     else void navigate(backPath, { replace: true })
@@ -909,13 +947,20 @@ export function OrderForm({
       onSubmit={(event) => void submit(event)}
     >
       {error && <Notice tone="danger">{error}</Notice>}
+      {loadingPart && <Notice role="status">{tc('loading')}</Notice>}
+      {prefillResult === 'unavailable' && (
+        <Notice tone="warn">{t('olxPartUnavailable')}</Notice>
+      )}
+      {prefillResult === 'failed' && (
+        <Notice tone="warn">{t('olxPartLoadFailed')}</Notice>
+      )}
       <NewOrderItems
         items={draftItems}
         onChange={setDraftItems}
         currency={guard.currency}
         priceHint={itemPrices.hint}
         inputCurrency={itemPrices.currency}
-        disabled={busy}
+        disabled={busy || loadingPart}
         pricesDisabled={itemPrices.disabled}
         query={partQuery}
         onQueryChange={setPartQuery}
@@ -923,7 +968,11 @@ export function OrderForm({
       {itemPrices.note}
       {customerSearchAllowed && (
         <SheetGroup
-          hint={customerId ? undefined : t('customerDescription')}
+          hint={
+            customerId
+              ? undefined
+              : t(olxPartId ? 'olxBuyerHint' : 'customerDescription')
+          }
           title={t('customerTitle')}
         >
           <div className="grid gap-3">
