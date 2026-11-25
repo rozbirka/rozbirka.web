@@ -480,12 +480,14 @@ export const shippingApi = {
     integrationId: string,
     orderId: string,
     number: string,
-    agreedTotalUah: number,
+    agreedTotalUah: number | null,
   ): Promise<ExternalShipmentPreview> {
     const data = (
       await apiClient.post<ExternalShipmentPreview>(
         `${orders(integrationId, orderId)}/external/preview`,
-        { number, agreedTotalUah },
+        agreedTotalUah === null
+          ? { number, useCarrierAmount: true }
+          : { number, agreedTotalUah },
       )
     ).data
     return {

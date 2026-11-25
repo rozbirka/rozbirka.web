@@ -65,6 +65,8 @@ export function ExternalWaybillSheet({
       ? String(delivery.agreedTotalUah)
       : '',
   )
+  const [carrierAmount, setCarrierAmount] = useState(false)
+  const [amountVisible, setAmountVisible] = useState(false)
   const [phase, setPhase] = useState<Phase>('entry')
   const [preview, setPreview] = useState<ExternalShipmentPreview | null>(null)
   const [fieldError, setFieldError] = useState<string | null>(null)
@@ -85,19 +87,22 @@ export function ExternalWaybillSheet({
   const digits = number.replace(/\D/g, '')
   const agreedTotal = parseAgreedTotal(amount, { allowZero: true })
   const busy = phase === 'checking' || phase === 'confirming'
-  const valid = digits.length === 14 && agreedTotal !== null
+  const valid =
+    digits.length === 14 && (amount.trim() === '' || agreedTotal !== null)
   const fail = (message: string) => {
     setError(message)
     window.requestAnimationFrame(() => alertRef.current?.focus())
   }
   const problemMessage = (problem: unknown) =>
-    isProblemCode(problem, 'shipment_cod_mismatch')
-      ? te('codMismatch')
-      : isProblemCode(problem, 'shipment_payment_currency_mismatch')
-        ? te('currencyMismatch')
-        : isProblemCode(problem, 'shipment_identity_unverified')
-          ? te('identityIncomplete')
-          : deliveryProblemMessage(problem, locale)
+    isProblemCode(problem, 'shipment_amount_required')
+      ? te('amountRequired')
+      : isProblemCode(problem, 'shipment_cod_mismatch')
+        ? te('codMismatch')
+        : isProblemCode(problem, 'shipment_payment_currency_mismatch')
+          ? te('currencyMismatch')
+          : isProblemCode(problem, 'shipment_identity_unverified')
+            ? te('identityIncomplete')
+            : deliveryProblemMessage(problem, locale)
   const invalidate = () => {
     setPreview(null)
     setPhase('entry')
@@ -119,6 +124,11 @@ export function ExternalWaybillSheet({
         agreedTotal,
       )
       if (!mounted.current) return
+      setAmountVisible(true)
+      if (amount.trim() === '') {
+        setAmount(String(next.agreedTotalUah))
+        setCarrierAmount(true)
+      }
       setPreview(next)
       setChanged(stale)
       setPhase('preview')
@@ -128,6 +138,11 @@ export function ExternalWaybillSheet({
       setChanged(false)
       setPhase('entry')
       const normalized = normalizeApiProblem(problem)
+      if (
+        isProblemCode(problem, 'shipment_amount_required') ||
+        isProblemCode(problem, 'shipment_cod_mismatch')
+      )
+        setAmountVisible(true)
       if (
         normalized.status === 404 ||
         normalized.kind === 'not-found' ||
@@ -258,6 +273,11 @@ export function ExternalWaybillSheet({
           placeholder="20451931 5540"
           onChange={(event) => {
             setNumber(event.target.value)
+            setAmountVisible(false)
+            if (carrierAmount || agreedTotal === null) {
+              setAmount('')
+              setCarrierAmount(false)
+            }
             invalidate()
           }}
           onKeyDown={(event) => {
@@ -268,32 +288,37 @@ export function ExternalWaybillSheet({
           }}
         />
       </Field>
-      <Field
-        label={td('goodsLabel')}
-        hint={te('amountHint')}
-        required
-        error={
-          amount !== '' && agreedTotal === null ? te('amountError') : undefined
-        }
-      >
-        <TextInput
-          className="font-mono text-left"
-          dir="ltr"
-          inputMode="decimal"
-          value={amount}
-          disabled={busy}
-          onChange={(event) => {
-            setAmount(event.target.value)
-            invalidate()
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !busy && !showPreview && valid) {
-              event.preventDefault()
-              void check()
-            }
-          }}
-        />
-      </Field>
+      {amountVisible ? (
+        <Field
+          label={td('goodsLabel')}
+          hint={te('amountHint')}
+          required
+          error={
+            amount !== '' && agreedTotal === null
+              ? te('amountError')
+              : undefined
+          }
+        >
+          <TextInput
+            className="font-mono text-left"
+            dir="ltr"
+            inputMode="decimal"
+            value={amount}
+            disabled={busy}
+            onChange={(event) => {
+              setAmount(event.target.value)
+              setCarrierAmount(false)
+              invalidate()
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !busy && !showPreview && valid) {
+                event.preventDefault()
+                void check()
+              }
+            }}
+          />
+        </Field>
+      ) : null}
       {showPreview &&
       preview !== null &&
       recipient !== null &&
@@ -356,9 +381,9 @@ export function ExternalWaybillSheet({
                 : t('effectNotSent')}
           </Notice>
         </>
-      ) : (
+      ) : amountVisible ? (
         <Notice tone="info">{te('review')}</Notice>
-      )}
+      ) : null}
     </Sheet>
   )
 }
