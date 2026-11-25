@@ -33,14 +33,18 @@ test('landing buttons open distinct login and registration forms', async ({
 test('pricing keeps registration intent and the selected plan after reload', async ({
   page,
 }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/')
   await expect(page.locator('#root')).toHaveAttribute(
     'data-app-hydrated',
     'true',
   )
-  await page
-    .getByRole('link', { name: 'Почати 14 днів безкоштовно', exact: true })
-    .click()
+  const startTrial = page.getByRole('link', {
+    name: 'Почати 14 днів безкоштовно',
+    exact: true,
+  })
+  await startTrial.scrollIntoViewIfNeeded()
+  await startTrial.click()
   await expect(page).toHaveURL('/login?purpose=registration&plan=pro_monthly')
   await expect(
     page.getByRole('heading', { name: 'Створіть обліковий запис' }),
