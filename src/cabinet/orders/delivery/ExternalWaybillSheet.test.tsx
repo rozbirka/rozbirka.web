@@ -203,9 +203,11 @@ it('allows manual entry after carrier amount cannot safely be inferred', async (
   const { user } = show()
   await user.type(screen.getByLabelText(/Номер накладної/), number)
   await user.click(screen.getByRole('button', { name: 'Перевірити накладну' }))
-  await screen.findByText(/Вкажіть погоджену суму вручну/)
+  const error = await screen.findByText(/Вкажіть погоджену суму вручну/)
+  await waitFor(() => expect(error.closest('[tabindex="-1"]')).toHaveFocus())
   expect(screen.getByLabelText(/Погоджена сума замовлення/)).toHaveValue('')
   await user.type(screen.getByLabelText(/Погоджена сума замовлення/), '1000')
+  expect(screen.getByLabelText(/Погоджена сума замовлення/)).toHaveValue('1000')
   await user.click(screen.getByRole('button', { name: 'Перевірити накладну' }))
   await screen.findByText('Попередній перегляд')
   expect(shippingApi.previewExternal).toHaveBeenLastCalledWith(
