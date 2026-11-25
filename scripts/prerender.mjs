@@ -46,16 +46,9 @@ for (const marker of productHeadMarkers) {
   }
 }
 
-const stylesheetMatch = appShell.match(stylesheetPattern)
-if (!stylesheetMatch?.[1]) {
+if (!stylesheetPattern.test(appShell)) {
   throw new Error('Production stylesheet was not found in dist/index.html')
 }
-const css = await readFile(resolve('dist', stylesheetMatch[1].slice(1)), 'utf8')
-const heroFont = await readFile(resolve('dist/fonts/VisueltPro-Hero.woff2'))
-const criticalCss = css.replace(
-  /url\(["']?\/fonts\/VisueltPro-Hero\.woff2["']?\)/,
-  `url("data:font/woff2;base64,${heroFont.toString('base64')}")`,
-)
 // Render the prerendered page before starting hydration downloads.
 const entryScript = appShell.match(
   /<script type="module"[^>]*>[\s\S]*?<\/script>/,
@@ -87,7 +80,6 @@ if (!appShell.includes(charsetMeta)) {
 }
 const template = appShell
   .replace(charsetMeta, `${charsetMeta}\n${googleTagManager}`)
-  .replace(stylesheetPattern, `<style>${criticalCss}</style>`)
   .replace(entryScript, '')
   .replace(/<link rel="modulepreload"[^>]*>/g, '')
   .replace('</body>', `${hydrationScript}</body>`)
