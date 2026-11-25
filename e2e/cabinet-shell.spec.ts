@@ -4757,6 +4757,9 @@ test('OLX messages show photos inline, preserve uncertain replies and mark a con
   await expect.poll(() => historyReads).toBe(3)
   await expect(sentReply).toBeVisible()
   await expect(composer).toBeEnabled()
+  await expect(
+    page.getByRole('button', { name: 'Оновити повідомлення' }),
+  ).toBeEnabled()
   messages.push(
     {
       id: 'df3195d5-a1fb-4313-a135-a58023e9182f',
@@ -4773,9 +4776,18 @@ test('OLX messages show photos inline, preserve uncertain replies and mark a con
       attachments: [],
     },
   )
-  await page.evaluate(() =>
-    document.dispatchEvent(new Event('visibilitychange')),
-  )
+  await page.evaluate(() => {
+    // Headless WebKit can report a background tab as hidden.
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    })
+    try {
+      document.dispatchEvent(new Event('visibilitychange'))
+    } finally {
+      Reflect.deleteProperty(document, 'visibilityState')
+    }
+  })
   await expect(history.getByText('Дякую, отримав відповідь.')).toBeVisible()
   await expect(sentReply).toHaveCount(1)
   expect(replies).toBe(2)
@@ -7532,7 +7544,10 @@ for (const { writeAccess, partCard, linkExisting } of [
     await installCabinetApiBoundary(page, { olxAlpha: true })
     const id = '11111111-1111-1111-1111-111111111111'
     const editsPrice = partCard && !linkExisting
-    if (editsPrice)
+    if (editsPrice) {
+      // This full publication flow includes viewport changes, editing, and an axe scan.
+      test.setTimeout(60_000)
+      await page.emulateMedia({ reducedMotion: 'reduce' })
       await page.route('**/api/v1/tenants', (route) =>
         fulfillData(
           route,
@@ -7543,6 +7558,7 @@ for (const { writeAccess, partCard, linkExisting } of [
           ),
         ),
       )
+    }
     const part = {
       partId: id,
       title: editsPrice ? 'Цапфа RL Rivian' : 'Передня фара Volkswagen Golf',
@@ -8170,7 +8186,7 @@ for (const { writeAccess, partCard, linkExisting } of [
       })
       await checklist.getByRole('button', { name: 'Оберіть категорію' }).click()
       await expect(categoryPicker).toBeFocused()
-      await categoryPicker.click()
+      await categoryPicker.press('Enter')
       const categoryOptions = page.getByRole('listbox').locator('..')
       if (testInfo.project.use.hasTouch) {
         await categoryOptions
