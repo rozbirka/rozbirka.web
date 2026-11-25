@@ -2,6 +2,7 @@ import { defineMessages } from '@/i18n'
 
 export const olxListingSettingsMessages = defineMessages({
   uk: {
+    saveAgain: 'Зберегти ще раз',
     title: 'Налаштування оголошень',
     setupCityTitle: 'Оберіть місто для нових оголошень',
     setupCityHint: 'Місто й район підставлятимуться в нові оголошення OLX.',
@@ -56,6 +57,7 @@ export const olxListingSettingsMessages = defineMessages({
     invalidDescriptionSuffix: 'Текст має містити щонайбільше 9000 символів.',
   },
   'en-GB': {
+    saveAgain: 'Save again',
     title: 'Listing settings',
     setupCityTitle: 'Choose a city for new listings',
     setupCityHint: 'New OLX listings will use this city and district.',
@@ -111,6 +113,7 @@ export const olxListingSettingsMessages = defineMessages({
     invalidDescriptionSuffix: 'Enter up to 9,000 characters.',
   },
   pl: {
+    saveAgain: 'Zapisz ponownie',
     title: 'Ustawienia ogłoszeń',
     setupCityTitle: 'Wybierz miasto dla nowych ogłoszeń',
     setupCityHint: 'Nowe ogłoszenia OLX będą używać tego miasta i dzielnicy.',

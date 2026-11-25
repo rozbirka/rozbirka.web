@@ -20,9 +20,7 @@ function subscribe(listener: () => void) {
 }
 
 function canShowOlx(snapshot: TenantAccessSnapshot) {
-  return (
-    import.meta.env.DEV && snapshot.permissions.has('olx.publications.manage')
-  )
+  return snapshot.permissions.has('olx.publications.manage')
 }
 
 export function updateOlxNavigation(

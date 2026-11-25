@@ -1,4 +1,8 @@
-import { orderItemPrice, type OrderDraftItem } from './order-draft-items'
+import {
+  newOrderDraftItem,
+  orderItemPrice,
+  type OrderDraftItem,
+} from './order-draft-items'
 import { useEffect, useRef } from 'react'
 import { Check, Pencil, Undo2, X } from 'lucide-react'
 import { Button, Field, QuantityStepper } from '@/components/app'
@@ -94,20 +98,7 @@ export function NewOrderItems({
               part.quantityAvailable < 1
             )
               return
-            onChange([
-              ...items,
-              {
-                part,
-                quantity: 1,
-                unitPrice:
-                  part.effectiveSalePrice === null
-                    ? ''
-                    : String(part.effectiveSalePrice),
-                ...(part.effectiveSalePrice === null
-                  ? { priceBeforeEdit: '' }
-                  : {}),
-              },
-            ])
+            onChange([...items, newOrderDraftItem(part)])
             onQueryChange('')
             focusId.current = part.id
           }}

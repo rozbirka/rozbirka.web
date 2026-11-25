@@ -31,6 +31,12 @@ export const orderFormMessages = defineMessages({
     customerDescription:
       'Замовлення можна створити й без клієнта — тоді поле лишається порожнім.',
     noCustomerChosen: 'Клієнта не обрано',
+    olxBuyerHint:
+      'Перевірте ім’я й телефон покупця. Виберіть клієнта або додайте його вручну.',
+    olxPartUnavailable:
+      'Запчастини з оголошення вже немає в наявності. Можна вибрати іншу запчастину.',
+    olxPartLoadFailed:
+      'Не вдалося завантажити запчастину з оголошення. Знайдіть її на складі.',
     searchCustomer: 'Пошук клієнта',
     pickCustomer: 'Обрати клієнта {name}',
     noPhone: 'без телефону',
@@ -87,6 +93,12 @@ export const orderFormMessages = defineMessages({
     customerDescription:
       'An order can be created without a customer — the field just stays empty.',
     noCustomerChosen: 'No customer chosen',
+    olxBuyerHint:
+      'Check the buyer’s name and phone number. Select a customer or add them manually.',
+    olxPartUnavailable:
+      'The part from the listing is no longer in stock. You can choose another part.',
+    olxPartLoadFailed:
+      'Could not load the part from the listing. Find it in your inventory.',
     searchCustomer: 'Search customers',
     pickCustomer: 'Choose customer {name}',
     noPhone: 'no phone',
@@ -139,6 +151,12 @@ export const orderFormMessages = defineMessages({
     customerDescription:
       'Zamówienie można utworzyć bez klienta — wtedy pole zostaje puste.',
     noCustomerChosen: 'Nie wybrano klienta',
+    olxBuyerHint:
+      'Sprawdź imię i numer telefonu kupującego. Wybierz klienta lub dodaj go ręcznie.',
+    olxPartUnavailable:
+      'Części z ogłoszenia nie ma już w magazynie. Możesz wybrać inną część.',
+    olxPartLoadFailed:
+      'Nie udało się załadować części z ogłoszenia. Wyszukaj ją w magazynie.',
     searchCustomer: 'Szukaj klienta',
     pickCustomer: 'Wybierz klienta {name}',
     noPhone: 'bez telefonu',

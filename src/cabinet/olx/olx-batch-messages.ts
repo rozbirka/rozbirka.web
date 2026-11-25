@@ -1,33 +1,83 @@
+import type { ApiProblem } from '@/api/contracts'
 import { defineMessages } from '@/i18n'
 
 export const olxBatchMessages = defineMessages({
   uk: {
+    withdrawBatch: 'Зняти з OLX',
+    withdrawBatchHint: 'Знімемо прив’язані оголошення.',
+    excludeBatch: 'Виключити з публікації',
+    excludeBatchHint: 'Діє для майбутніх публікацій і відновлень.',
+    includeBatch: 'Повернути до публікації',
+    includeBatchHint: 'Скасуємо виключення. Публікація й відновлення окремо.',
+    withdrawnGroup: 'Знято з OLX',
+    excludedGroup: 'Виключено з публікації',
+    includedGroup: 'Повернено до публікації',
+    withdrawNoAdvert: 'Немає прив’язаного оголошення.',
+    withdrawPending:
+      'Очікуємо підтвердження зняття. Перевірте статус у картці.',
+    partBusy: 'Цю запчастину вже опрацьовують. Спробуйте пізніше.',
     retryAction: 'Повторити вибране',
     retryJob: 'Повтор',
     retrySelectPart: 'Вибрати для повтору · {name}',
     retryVerifyPart: 'Вибрати для звірки · {name}',
     retryTitle: 'Опрацювати вибрані позиції ще раз?',
     retryConsequence:
-      'До завдання підуть {count} вибраних позицій. Опублікуємо готові чернетки. Якщо результат попереднього запиту невідомий, перевіримо, чи оголошення вже є.',
+      'Повторимо {count} позицій. Готові опублікуємо, невідомі результати звіримо з OLX.',
     retryUnavailable:
       'Виберіть доступні позиції із завершеного або зупиненого завдання.',
-    retryMultipleMatches:
-      'OLX повернув кілька збігів. Перевірте оголошення в кабінеті OLX.',
-    jobsTitle: 'Завдання OLX',
+    retryMultipleMatches: 'Кілька збігів. Перевірте оголошення в OLX.',
+    queueTab: 'Черга',
+    queueHistory: 'Попередні завдання',
+    queueJobDate: 'Завдання від',
+    queueChecked: 'Стан перевірено',
+    queueProcessed: 'Опрацьовано',
+    queueOfTotal: 'з {total}',
+    queueAll: 'Усі',
+    queueAccepted: 'Прийнято',
+    queueRejected: 'Відхилено',
+    queueReconcile: 'Потрібна звірка',
+    queueSearch: 'Назва або OEM',
+    queueStartedBy: 'Запустив {name}',
+    queueAuthor: 'Запустив',
+    queueSending: 'Надсилається',
+    queueProviderStatus: 'Статус OLX {status}',
+    queueRepair: 'Виправити й повторити',
+    queueRepairTitle: 'Виправити для OLX',
+    queueRepairSubmit: 'Зберегти й повторити',
+    queueRepairFromPart: 'З картки запчастини',
+    queueRepairAdvert: 'Оголошення OLX',
+    queueRepairOpenPart: 'Відкрити картку',
+    queueRepairOpenSettings: 'Відкрити налаштування оголошень',
+    queueRepairHint: 'Виправте позначені поля й перевірте дані.',
+    queueRepairRejected: 'OLX відхилив оголошення',
+    queueRepairQueued: 'Позицію додано до черги повторно.',
+    queueRepairUnavailable:
+      'Запчастина або її оголошення змінилися. Перевірте стан у картці.',
+    queueRepairChanged: 'Чернетка змінилася. Відкрийте шторку ще раз.',
+    queueStatus: 'Стан',
+    queuePart: 'Деталь',
+    queueResult: 'Результат',
+    queueNoMatches: 'За цими умовами позицій немає.',
+    queueDate: 'Дата',
+    queuePositions: 'Позицій',
     jobQueued: 'У черзі',
     jobStopped: 'Зупинено',
     jobCompleted: 'Опрацювання завершено',
+    jobCompletedWithIssues: 'Завершено · потрібна увага',
     jobRefresh: 'Оновити стан завдання',
     jobLoadFailed: 'Не вдалося завантажити завдання OLX',
     jobEmpty: 'Завдань з публікації ще немає.',
-    jobContinues: 'Публікація триватиме після закриття цього вікна.',
+    jobContinues:
+      'Публікація триває у фоні. Щоб перечитати стан, натисніть «Оновити стан завдання».',
     jobStarting: 'Зберігаємо завдання публікації…',
     jobAlreadyRunning:
-      'Для цього акаунта OLX уже виконується завдання. Його можна відкрити в розділі «Завдання OLX».',
+      'Акаунт уже має активне завдання. Відкрийте вкладку «Черга» в розділі OLX.',
     jobLimit:
       'За один запуск можна опублікувати до 100 підготовлених запчастин.',
+    jobLimitExceeded:
+      'До публікації готово {ready}. Ліміт на завдання — {limit}. Зменште вибір і перевірте його ще раз.',
     jobStartFailed:
-      'Не вдалося підтвердити запуск. Повторіть дію або перегляньте «Завдання OLX».',
+      'Не вдалося підтвердити запуск. Повторіть дію або відкрийте вкладку «Черга» в розділі OLX.',
     marketplaces: 'Майданчики',
     assign: 'Призначити категорію…',
     publish: 'Опублікувати на майданчику…',
@@ -41,10 +91,12 @@ export const olxBatchMessages = defineMessages({
     reviewLoading: 'Перевіряємо запчастини…',
     categoryHint: 'Категорія OLX обирається окремо від типу деталі.',
     count: 'Вибрано запчастин · {count}',
-    started: 'Вибрано {count} · Запущено о {time}',
-    resultHint: 'Помилка однієї запчастини не зупиняє інші.',
-    assignHint:
-      'Якщо категорія зміниться, заповніть її характеристики заново в кожній картці.',
+    assignHint: 'Зміна категорії скине характеристики попередньої категорії.',
+    assignAttributes: 'Спільні характеристики',
+    assignAttributesHint:
+      'Заповнимо порожні поля у вибраних чернетках. Значення в тій самій категорії збережуться.',
+    assignAttributesError:
+      'Не вдалося завантажити характеристики. Категорію можна призначити окремо.',
     publishHint:
       'Готові запчастини підуть в обробку після підтвердження. Решта чекатимуть, поки ви заповните дані.',
     sellerHint:
@@ -55,9 +107,16 @@ export const olxBatchMessages = defineMessages({
     confirmText:
       'Відправимо оголошень · {count}. OLX окремо підтвердить статус кожного.',
     pending: 'Потрібно перевірити статус',
+    paymentGroup: 'Ліміт або оплата OLX',
     submittedGroup: 'Прийнято в обробку',
     submittedHint: 'Оголошення стануть активними після підтвердження OLX.',
     blockedGroup: 'Очікують даних',
+    readyGroup: 'Готові до публікації',
+    repairChecking: 'Перевіряємо виправлену запчастину…',
+    repairUnavailable:
+      'Запчастина або її оголошення змінилися. Оновіть перевірку.',
+    repairSaveFailed: 'Не вдалося зберегти опис. Спробуйте ще раз.',
+    repairCheckFailed: 'Зміни збережено. Повторіть перевірку даних.',
     linkedGroup: 'Уже пов’язані',
     failedGroup: 'Помилки',
     processing: 'Обробляється',
@@ -72,7 +131,7 @@ export const olxBatchMessages = defineMessages({
     failedAction: 'Не вдалося виконати дію для цієї запчастини.',
     connectionRequired: 'Підключіть акаунт OLX у налаштуваннях інтеграції.',
     connectionChanged:
-      'Підключення OLX змінилося. Відкрийте групову дію знову.',
+      'Підключення OLX або стан звірки змінилися. Оновіть сторінку.',
     permissionChanged:
       'Доступ до публікації змінився. Перевірте права та підключення OLX.',
     rateLimit:
@@ -81,30 +140,77 @@ export const olxBatchMessages = defineMessages({
     reviewNext: 'Перейти до публікації',
   },
   'en-GB': {
+    withdrawBatch: 'Withdraw from OLX',
+    withdrawBatchHint: 'Withdraw the linked adverts.',
+    excludeBatch: 'Exclude from publication',
+    excludeBatchHint: 'Skip these parts when publishing or restoring.',
+    includeBatch: 'Include in publication',
+    includeBatchHint: 'Clear the exclusion. Publish or reactivate separately.',
+    withdrawnGroup: 'Withdrawn from OLX',
+    excludedGroup: 'Excluded from publication',
+    includedGroup: 'Included in publication',
+    withdrawNoAdvert: 'No linked advert.',
+    withdrawPending: 'Withdrawal pending. Check the part’s OLX status.',
+    partBusy: 'Part in use. Try again later.',
     retryAction: 'Retry selected',
     retryJob: 'Retry',
     retrySelectPart: 'Select for retry · {name}',
     retryVerifyPart: 'Select for verification · {name}',
     retryTitle: 'Process the selected parts again?',
     retryConsequence:
-      'The job will include {count} selected parts. Ready drafts will be published. When the previous outcome is unknown, we will check for an existing advert.',
+      'Retry {count} parts. Publish ready drafts and check unknown outcomes with OLX.',
     retryUnavailable: 'Select eligible parts from a completed or stopped job.',
-    retryMultipleMatches:
-      'OLX returned multiple matches. Check the adverts in your OLX account.',
-    jobsTitle: 'OLX jobs',
+    retryMultipleMatches: 'Multiple matches. Check the adverts in OLX.',
+    queueTab: 'Queue',
+    queueHistory: 'Previous jobs',
+    queueJobDate: 'Job from',
+    queueChecked: 'Status checked',
+    queueProcessed: 'Processed',
+    queueOfTotal: 'of {total}',
+    queueAll: 'All',
+    queueAccepted: 'Accepted',
+    queueRejected: 'Rejected',
+    queueReconcile: 'Needs reconciliation',
+    queueSearch: 'Name or OEM',
+    queueStartedBy: 'Started by {name}',
+    queueAuthor: 'Started by',
+    queueSending: 'Submitting',
+    queueProviderStatus: 'OLX status {status}',
+    queueRepair: 'Fix and retry',
+    queueRepairTitle: 'Fix for OLX',
+    queueRepairSubmit: 'Save and retry',
+    queueRepairFromPart: 'From the part record',
+    queueRepairAdvert: 'OLX advert',
+    queueRepairOpenPart: 'Open part record',
+    queueRepairOpenSettings: 'Open listing settings',
+    queueRepairHint: 'Fix the marked fields and check the details.',
+    queueRepairRejected: 'OLX rejected the advert',
+    queueRepairQueued: 'The part was added to the queue again.',
+    queueRepairUnavailable:
+      'The part or advert changed. Check its status in the part record.',
+    queueRepairChanged: 'The draft changed. Open the panel again.',
+    queueStatus: 'Status',
+    queuePart: 'Part',
+    queueResult: 'Result',
+    queueNoMatches: 'No matching parts.',
+    queueDate: 'Date',
+    queuePositions: 'Parts',
     jobQueued: 'Queued',
     jobStopped: 'Stopped',
     jobCompleted: 'Processing complete',
+    jobCompletedWithIssues: 'Complete · needs attention',
     jobRefresh: 'Refresh job status',
     jobLoadFailed: 'Could not load OLX publication jobs',
     jobEmpty: 'There are no publication jobs yet.',
-    jobContinues: 'Publication will continue after you close this window.',
+    jobContinues:
+      'Publication runs in the background. Select Refresh job status to check its progress.',
     jobStarting: 'Saving the publication job…',
-    jobAlreadyRunning:
-      'This OLX account already has a running job. Open it in OLX jobs.',
+    jobAlreadyRunning: 'A job is running. Open the Queue tab in OLX.',
     jobLimit: 'You can submit up to 100 prepared parts in one job.',
+    jobLimitExceeded:
+      '{ready} parts are ready. The job limit is {limit}. Narrow your selection and check again.',
     jobStartFailed:
-      'Could not confirm the launch. Try again or check OLX jobs.',
+      'Could not confirm the launch. Try again or open the Queue tab in OLX.',
     marketplaces: 'Marketplaces',
     assign: 'Assign category…',
     publish: 'Publish on a marketplace…',
@@ -118,9 +224,12 @@ export const olxBatchMessages = defineMessages({
     reviewLoading: 'Checking parts…',
     categoryHint: 'The OLX category is separate from the part type.',
     count: 'Parts selected · {count}',
-    started: 'Selected {count} · Started at {time}',
-    resultHint: 'An error on one part does not stop the others.',
-    assignHint: 'Complete the new category attributes in each part record.',
+    assignHint: 'Changing category clears the previous category attributes.',
+    assignAttributes: 'Shared attributes',
+    assignAttributesHint:
+      'We’ll fill empty fields in the selected drafts and keep existing values in the same category.',
+    assignAttributesError:
+      'Could not load attributes. You can still assign the category.',
     publishHint:
       'Ready parts are sent for processing after confirmation. Other parts wait for the missing data.',
     sellerHint: 'This applies to drafts with no seller type.',
@@ -130,9 +239,16 @@ export const olxBatchMessages = defineMessages({
     confirmText:
       'Adverts to submit · {count}. OLX will confirm each status separately.',
     pending: 'Check status',
+    paymentGroup: 'OLX limit or payment',
     submittedGroup: 'Accepted for processing',
     submittedHint: 'Adverts become active after OLX confirms them.',
     blockedGroup: 'Needs data',
+    readyGroup: 'Ready to publish',
+    repairChecking: 'Checking the updated part…',
+    repairUnavailable:
+      'The part or its listing has changed. Check the data again.',
+    repairSaveFailed: 'Could not save the description. Try again.',
+    repairCheckFailed: 'Changes were saved. Check the data again.',
     linkedGroup: 'Already linked',
     failedGroup: 'Errors',
     processing: 'Processing',
@@ -147,7 +263,7 @@ export const olxBatchMessages = defineMessages({
     failedAction: 'Could not complete the action for this part.',
     connectionRequired: 'Connect an OLX account in integration settings.',
     connectionChanged:
-      'The OLX connection changed. Open the group action again.',
+      'The OLX connection or reconciliation changed. Reload the page.',
     permissionChanged:
       'Publishing access changed. Check the OLX connection and your permissions.',
     rateLimit:
@@ -156,31 +272,78 @@ export const olxBatchMessages = defineMessages({
     reviewNext: 'Continue to publication',
   },
   pl: {
+    withdrawBatch: 'Wycofaj z OLX',
+    withdrawBatchHint: 'Wycofamy powiązane ogłoszenia.',
+    excludeBatch: 'Wyklucz z publikacji',
+    excludeBatchHint: 'Pomiń przy publikacji i wznawianiu.',
+    includeBatch: 'Przywróć do publikacji',
+    includeBatchHint: 'Usuń wykluczenie. Opublikuj lub wznów osobno.',
+    withdrawnGroup: 'Wycofano z OLX',
+    excludedGroup: 'Wykluczono z publikacji',
+    includedGroup: 'Przywrócono do publikacji',
+    withdrawNoAdvert: 'Brak powiązanego ogłoszenia.',
+    withdrawPending: 'Wycofanie w toku. Sprawdź status części.',
+    partBusy: 'Część jest w trakcie zmian. Spróbuj później.',
     retryAction: 'Ponów wybrane',
     retryJob: 'Ponowienie',
     retrySelectPart: 'Wybierz do ponowienia · {name}',
     retryVerifyPart: 'Wybierz do sprawdzenia · {name}',
     retryTitle: 'Przetworzyć wybrane części ponownie?',
     retryConsequence:
-      'Zadanie obejmie {count} wybranych części. Opublikujemy gotowe wersje robocze. Gdy wynik wcześniejszej próby jest nieznany, sprawdzimy, czy ogłoszenie już istnieje.',
+      'Ponowimy {count} pozycji. Opublikujemy gotowe szkice, a niepewne wyniki sprawdzimy w OLX.',
     retryUnavailable:
       'Wybierz dostępne części z ukończonego lub zatrzymanego zadania.',
-    retryMultipleMatches:
-      'OLX zwrócił kilka wyników. Sprawdź ogłoszenia na swoim koncie OLX.',
-    jobsTitle: 'Zadania OLX',
+    retryMultipleMatches: 'Kilka wyników. Sprawdź ogłoszenia w OLX.',
+    queueTab: 'Kolejka',
+    queueHistory: 'Poprzednie zadania',
+    queueJobDate: 'Zadanie z',
+    queueChecked: 'Sprawdzono stan',
+    queueProcessed: 'Przetworzono',
+    queueOfTotal: 'z {total}',
+    queueAll: 'Wszystkie',
+    queueAccepted: 'Przyjęte',
+    queueRejected: 'Odrzucone',
+    queueReconcile: 'Wymaga uzgodnienia',
+    queueSearch: 'Nazwa lub OEM',
+    queueStartedBy: 'Uruchomił(a) {name}',
+    queueAuthor: 'Uruchomił(a)',
+    queueSending: 'Wysyłanie',
+    queueProviderStatus: 'Status OLX {status}',
+    queueRepair: 'Popraw i ponów',
+    queueRepairTitle: 'Popraw dla OLX',
+    queueRepairSubmit: 'Zapisz i ponów',
+    queueRepairFromPart: 'Z karty części',
+    queueRepairAdvert: 'Ogłoszenie OLX',
+    queueRepairOpenPart: 'Otwórz kartę części',
+    queueRepairOpenSettings: 'Otwórz ustawienia ogłoszeń',
+    queueRepairHint: 'Popraw oznaczone pola i sprawdź dane.',
+    queueRepairRejected: 'OLX odrzucił ogłoszenie',
+    queueRepairQueued: 'Część ponownie dodano do kolejki.',
+    queueRepairUnavailable:
+      'Część lub ogłoszenie się zmieniły. Sprawdź stan w karcie części.',
+    queueRepairChanged: 'Szkic się zmienił. Otwórz panel ponownie.',
+    queueStatus: 'Stan',
+    queuePart: 'Część',
+    queueResult: 'Wynik',
+    queueNoMatches: 'Brak pasujących części.',
+    queueDate: 'Data',
+    queuePositions: 'Pozycje',
     jobQueued: 'W kolejce',
     jobStopped: 'Zatrzymano',
     jobCompleted: 'Przetwarzanie zakończone',
+    jobCompletedWithIssues: 'Zakończono · wymaga uwagi',
     jobRefresh: 'Odśwież status zadania',
     jobLoadFailed: 'Nie udało się wczytać zadań OLX',
     jobEmpty: 'Brak zadań publikacji.',
-    jobContinues: 'Publikacja będzie kontynuowana po zamknięciu tego okna.',
+    jobContinues:
+      'Publikacja działa w tle. Wybierz Odśwież status zadania, aby sprawdzić postęp.',
     jobStarting: 'Zapisywanie zadania publikacji…',
-    jobAlreadyRunning:
-      'Dla tego konta OLX trwa już zadanie. Otwórz je w sekcji Zadania OLX.',
+    jobAlreadyRunning: 'Zadanie już trwa. Otwórz kartę Kolejka w sekcji OLX.',
     jobLimit: 'W jednym zadaniu możesz wysłać do 100 przygotowanych części.',
+    jobLimitExceeded:
+      'Gotowe części: {ready}. Limit zadania to {limit}. Zmniejsz wybór i sprawdź ponownie.',
     jobStartFailed:
-      'Nie udało się potwierdzić uruchomienia. Ponów próbę lub sprawdź zadania OLX.',
+      'Nie udało się potwierdzić uruchomienia. Ponów próbę lub otwórz kartę Kolejka w sekcji OLX.',
     marketplaces: 'Platformy sprzedaży',
     assign: 'Przypisz kategorię…',
     publish: 'Opublikuj na platformie…',
@@ -194,10 +357,12 @@ export const olxBatchMessages = defineMessages({
     reviewLoading: 'Sprawdzamy części…',
     categoryHint: 'Kategorię OLX wybiera się niezależnie od typu części.',
     count: 'Wybrane części · {count}',
-    started: 'Wybrano {count} · Uruchomiono o {time}',
-    resultHint: 'Błąd jednej części nie zatrzymuje pozostałych.',
-    assignHint:
-      'Uzupełnij parametry nowej kategorii osobno w każdej karcie części.',
+    assignHint: 'Zmiana kategorii usuwa parametry poprzedniej kategorii.',
+    assignAttributes: 'Wspólne parametry',
+    assignAttributesHint:
+      'Uzupełnimy puste pola w wybranych szkicach. Zachowamy wartości w tej samej kategorii.',
+    assignAttributesError:
+      'Nie udało się wczytać parametrów. Nadal możesz przypisać kategorię.',
     publishHint:
       'Gotowe części trafią do przetwarzania po potwierdzeniu. Pozostałe poczekają na uzupełnienie danych.',
     sellerHint: 'Dotyczy szkiców bez wybranego typu sprzedawcy.',
@@ -207,9 +372,16 @@ export const olxBatchMessages = defineMessages({
     confirmText:
       'Ogłoszenia do wysłania · {count}. OLX potwierdzi każdy status osobno.',
     pending: 'Sprawdź status',
+    paymentGroup: 'Limit lub płatność OLX',
     submittedGroup: 'Przyjęte do przetwarzania',
     submittedHint: 'Ogłoszenia staną się aktywne po potwierdzeniu przez OLX.',
     blockedGroup: 'Wymagają danych',
+    readyGroup: 'Gotowe do publikacji',
+    repairChecking: 'Sprawdzamy poprawioną część…',
+    repairUnavailable:
+      'Część lub jej ogłoszenie uległy zmianie. Sprawdź dane ponownie.',
+    repairSaveFailed: 'Nie udało się zapisać opisu. Spróbuj ponownie.',
+    repairCheckFailed: 'Zmiany zapisano. Sprawdź dane ponownie.',
     linkedGroup: 'Już powiązane',
     failedGroup: 'Błędy',
     processing: 'Przetwarzanie',
@@ -224,7 +396,7 @@ export const olxBatchMessages = defineMessages({
     failedAction: 'Nie udało się wykonać operacji dla tej części.',
     connectionRequired: 'Połącz konto OLX w ustawieniach integracji.',
     connectionChanged:
-      'Połączenie z OLX się zmieniło. Otwórz ponownie operację grupową.',
+      'Połączenie OLX lub stan uzgadniania uległy zmianie. Odśwież stronę.',
     permissionChanged:
       'Zmienił się dostęp do publikacji. Sprawdź połączenie i uprawnienia OLX.',
     rateLimit:
@@ -233,3 +405,24 @@ export const olxBatchMessages = defineMessages({
     reviewNext: 'Przejdź do publikacji',
   },
 })
+
+export function olxBatchStopMessage(
+  problem: Pick<ApiProblem, 'code'> & Partial<Pick<ApiProblem, 'kind'>>,
+): keyof typeof olxBatchMessages.uk | undefined {
+  switch (problem.code) {
+    case 'OLX_CONNECTION_CHANGED':
+    case 'OLX_NOT_CONNECTED':
+    case 'OLX_RECONNECT_REQUIRED':
+      return 'connectionChanged'
+    case 'OLX_RATE_LIMITED':
+      return 'rateLimit'
+    case 'OLX_DISABLED':
+    case 'OLX_WRITE_DISABLED':
+    case 'OLX_WRITE_SCOPE_REQUIRED':
+      return 'permissionChanged'
+    default:
+      return problem.kind === 'forbidden' || problem.kind === 'session-expired'
+        ? 'permissionChanged'
+        : undefined
+  }
+}

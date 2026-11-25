@@ -221,7 +221,7 @@ function ListingSettingsForm({
   const locationReady =
     cityId !== null &&
     districts != null &&
-    (districts.length === 0 || district !== undefined)
+    (districts.length === 0 ? districtId === null : district !== undefined)
 
   const request: OlxListingSettingsRequest = {
     contactName: trimToNull(draft.contactName),
@@ -238,7 +238,7 @@ function ListingSettingsForm({
     changed &&
     !busy &&
     (!choosingInitialLocation || locationReady) &&
-    (!changedLocation || cityId === null || Boolean(districts))
+    (!changedLocation || cityId === null || locationReady)
 
   function change(values: Partial<OlxListingSettingsRequest>) {
     setDraft((current) => ({ ...current, ...values }))
@@ -313,8 +313,9 @@ function ListingSettingsForm({
           ? 'notSet'
           : 'unavailable',
     )
-  const needsDistrict =
-    canManage && changedLocation && Boolean(districts?.length)
+  const needsDistrict = canManage && Boolean(districts?.length)
+  const districtHint =
+    needsDistrict && !district ? t('invalidDistrictId') : t('districtHint')
 
   const actions = canManage && (
     <>
@@ -421,7 +422,7 @@ function ListingSettingsForm({
               fieldErrors.districtId) && (
               <Field
                 label={t('districtId')}
-                hint={canManage ? t('districtHint') : undefined}
+                hint={canManage ? districtHint : undefined}
                 error={fieldError('districtId')}
                 required={needsDistrict}
               >
@@ -529,7 +530,18 @@ function ListingSettingsForm({
       {state === 'invalid' && (
         <Notice tone="danger">{t('validationError')}</Notice>
       )}
-      {state === 'error' && <Notice tone="danger">{t('saveError')}</Notice>}
+      {state === 'error' && (
+        <Notice
+          tone="danger"
+          action={
+            <Button form={formId} type="submit" disabled={!canSave}>
+              {t('saveAgain')}
+            </Button>
+          }
+        >
+          {t('saveError')}
+        </Notice>
+      )}
       {actions &&
         (actionsHost ? (
           createPortal(actions, actionsHost)

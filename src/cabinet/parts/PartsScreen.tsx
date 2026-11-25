@@ -5,15 +5,26 @@ import { PartSourceFilter } from './PartSourceFilter'
 import { PartLocationCard } from './PartLocationCard'
 import { PartNotesCard } from './PartNotesCard'
 import { PartOlxPage } from './PartOlxPage'
+import { PartOlxDiagnostics } from './PartOlxDiagnostics'
 import { PartOlxListStatus } from './PartOlxListStatus'
+import { PartMarketplaceCard } from './PartMarketplaceCard'
+import { PartMarketplaceForm } from './PartMarketplaceForm'
+import { partMarketplaceMessages } from './part-marketplace-messages'
+import {
+  savePartOlxDraft,
+  usePartOlxConnection,
+  type PartOlxDraft,
+} from './part-olx-marketplace'
 import {
   OlxBatchSheet,
   type OlxBatchMode,
   type OlxBatchPart,
-  type OlxBatchResult,
 } from '../olx/OlxBatchSheet'
-import { OlxPublicationJobsSheet } from '../olx/OlxPublicationJobsSheet'
-import type { OlxPublicationJob } from '@/api/olx-live'
+import {
+  OlxBatchMaintenanceSheet,
+  type OlxBatchMaintenanceMode,
+} from '../olx/OlxBatchMaintenanceSheet'
+import type { OlxQueueNavigationState } from '../olx/OlxPublicationQueue'
 import { olxBatchMessages } from '../olx/olx-batch-messages'
 import { PartPriceDrawer } from './PartPriceDrawer'
 import { PartPeekHeaderSkeleton, PartPeekSkeleton } from './PartPeekSkeleton'
@@ -25,6 +36,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -168,6 +180,7 @@ import { placementMessages as movePlacementMessages } from '../inventory/placeme
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { tenantRequestScope } from '../tenant-request-scope'
 import {
   emptyRow,
   filledRows,
@@ -379,6 +392,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [pageMeta, setPageMeta] = useState<{
     page: number
     totalPages: number
+    total: number
   } | null>(null)
   const [settledSearchKey, setSettledSearchKey] = useState<string | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
@@ -397,16 +411,23 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const isEdit = location.pathname.endsWith('/edit')
   const isOlx = useMatch('/app/:tenant/parts/:partId/olx') !== null
   const { status, targetTenant, snapshot } = cabinet
-  const canViewOlx =
+  const sourceOwner = `${snapshot?.tenantId}:${snapshot?.userId}:${snapshot?.generation}`
+  const canReadPartOlx =
     status === 'ready' &&
     Boolean(targetTenant) &&
     snapshot?.tenantId === targetTenant?.id &&
-    snapshot?.permissions.has('parts.view') === true &&
-    snapshot.permissions.has('olx.publications.manage')
+    snapshot?.permissions.has('parts.view') === true
+  const canPublishOlx =
+    canReadPartOlx && snapshot.permissions.has('olx.publications.manage')
+  const hasOlxIntegrationPermission =
+    canReadPartOlx && snapshot.permissions.has('olx.integration.manage')
+  const canCheckOlx =
+    (canPublishOlx || hasOlxIntegrationPermission) && (Boolean(partId) || isNew)
+  const { result: olxConnection } = usePartOlxConnection(canCheckOlx)
+  const olxAvailable = olxConnection?.available === true
+  const canViewOlx = canPublishOlx && olxAvailable
   const olxSettingsHref =
-    canViewOlx &&
-    targetTenant &&
-    snapshot?.permissions.has('olx.integration.manage')
+    olxAvailable && hasOlxIntegrationPermission && targetTenant
       ? cabinetPath(targetTenant.slug, 'integrations', 'olx')
       : null
   const createDecision = evaluateModuleAccess(
@@ -422,21 +443,21 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const canManage = manageDecision.kind === 'allowed'
 
   const [reloadToken, setReloadToken] = useState(0)
-  // v2 list (module 11, frames 1.2–1.3): a working set of picked rows whose
-  // and the part opened beside the list. Filters reset both; paging keeps the picks.
+  // Filters reset the selection and peek. Paging keeps the picks.
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  const [filterPickedNames, setFilterPickedNames] = useState<
+    ReadonlyMap<string, string>
+  >(new Map())
+  const [filterPickStatus, setFilterPickStatus] = useState<
+    'loading' | 'failed' | null
+  >(null)
+  const filterPickRequest = useRef<AbortController | null>(null)
   const [olxBatch, setOlxBatch] = useState<{
-    mode: OlxBatchMode
+    mode: OlxBatchMode | OlxBatchMaintenanceMode
     parts: OlxBatchPart[]
     owner: string
   } | null>(null)
   const marketplacesTrigger = useRef<HTMLButtonElement>(null)
-  const olxJobsTrigger = useRef<HTMLButtonElement>(null)
-  const [olxJobs, setOlxJobs] = useState<{
-    owner: string
-    initial: OlxPublicationJob | null
-    review: OlxBatchResult[]
-  } | null>(null)
   const [peekId, setPeekId] = useState<string | null>(null)
   const navigateList = useNavigate()
   const toast = useOptionalToast()
@@ -526,6 +547,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   )
   const searchKey = JSON.stringify(searchRequest)
   const selectionScope = JSON.stringify({
+    owner: sourceOwner,
     ...searchRequest,
     page: undefined,
     pageSize: undefined,
@@ -534,8 +556,15 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   if (pickScope !== selectionScope) {
     setPickScope(selectionScope)
     setPicked(new Set())
+    setFilterPickedNames(new Map())
+    setFilterPickStatus(null)
+    setOlxBatch(null)
     setPeekId(null)
   }
+  useLayoutEffect(
+    () => () => filterPickRequest.current?.abort(),
+    [selectionScope, isNew, partId],
+  )
   const filteredCarKey = filters.carIds.join(',')
   const filteredCars = useMemo(
     () =>
@@ -705,7 +734,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           if (controller.signal.aborted) return
           setItems(page.items)
           setOlxConnected(page.olxConnected === true)
-          setPageMeta({ page: page.page, totalPages: page.totalPages })
+          setPageMeta({
+            page: page.page,
+            totalPages: page.totalPages,
+            total: page.total,
+          })
           setFacets(nextFacets)
           setError(null)
           setSettledSearchKey(searchKey)
@@ -736,6 +769,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   if (isNew)
     return (
       <PartForm
+        canViewOlx={canViewOlx}
         canViewCars={links.cars}
         canViewIntakes={links.intakes}
         requireLatestMutation={requireLatestMutation}
@@ -746,13 +780,22 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     return (
       <PartEdit
         key={partId}
+        canViewOlx={canViewOlx}
         canViewCars={links.cars}
         canViewIntakes={links.intakes}
         partId={partId}
         requireLatestMutation={requireLatestMutation}
       />
     )
-  if (partId && isOlx && status === 'ready' && targetTenant && !canViewOlx)
+  if (
+    partId &&
+    isOlx &&
+    status === 'ready' &&
+    targetTenant &&
+    !canViewOlx &&
+    !olxSettingsHref &&
+    (!canCheckOlx || olxConnection !== undefined)
+  )
     return (
       <Navigate to={cabinetPath(targetTenant.slug, 'parts', partId)} replace />
     )
@@ -767,6 +810,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         canManage={canManage}
         isOlx={isOlx}
         canViewOlx={canViewOlx}
+        showOlxMarketplace={!canCheckOlx || olxAvailable}
         olxScopeKey={JSON.stringify([targetTenant?.id, snapshot?.generation])}
         olxSettingsHref={olxSettingsHref}
         links={links}
@@ -903,15 +947,58 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     filters.carIds.length === 1
       ? filteredCars.find((car) => car.id === filters.carIds[0])
       : undefined
-  const sourceOwner = `${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`
   const canManageOlx =
     olxConnected &&
     canManage &&
     cabinet.snapshot?.tenantId === cabinet.targetTenant?.id &&
     cabinet.snapshot?.permissions.has('olx.publications.manage') === true
 
-  function openOlxBatch(mode: OlxBatchMode) {
-    const names = new Map(items.map((part) => [part.id, part.name]))
+  function cancelFilterSelection() {
+    filterPickRequest.current?.abort()
+    filterPickRequest.current = null
+    setFilterPickStatus(null)
+  }
+
+  async function selectAllByFilter() {
+    if (!canManageOlx || filterPickRequest.current) return
+    const controller = new AbortController()
+    filterPickRequest.current = controller
+    const signal = AbortSignal.any([
+      controller.signal,
+      tenantRequestScope.signal,
+    ])
+    setFilterPickStatus('loading')
+    try {
+      const request = { ...searchRequest, page: 1, pageSize: 100 }
+      const first = await partsApi.search(request, { signal })
+      const names = new Map(first.items.map((part) => [part.id, part.name]))
+      for (let page = 2; page <= first.totalPages; page++) {
+        signal.throwIfAborted()
+        const next = await partsApi.search({ ...request, page }, { signal })
+        if (next.page !== page || next.total !== first.total)
+          throw new Error('Filtered results changed during selection')
+        for (const part of next.items) names.set(part.id, part.name)
+      }
+      signal.throwIfAborted()
+      if (first.page !== 1 || names.size !== first.total)
+        throw new Error('Filtered selection is incomplete')
+      setFilterPickedNames(names)
+      setPicked(new Set(names.keys()))
+    } catch {
+      if (!signal.aborted) setFilterPickStatus('failed')
+    } finally {
+      if (filterPickRequest.current === controller) {
+        filterPickRequest.current = null
+        setFilterPickStatus((current) =>
+          current === 'loading' ? null : current,
+        )
+      }
+    }
+  }
+
+  function openOlxBatch(mode: OlxBatchMode | OlxBatchMaintenanceMode) {
+    const names = new Map(filterPickedNames)
+    for (const part of items) names.set(part.id, part.name)
     setOlxBatch({
       mode,
       owner: sourceOwner,
@@ -957,6 +1044,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const directoryPath = isNew
     ? location.pathname.replace(/\/new$/, '')
     : location.pathname
+
+  const queueHref = targetTenant
+    ? cabinetPath(targetTenant.slug, 'olx', 'queue')
+    : ''
 
   const emptyActions =
     manageDecision.kind === 'allowed' || createDecision.kind === 'allowed' ? (
@@ -1004,16 +1095,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         createDecision.kind === 'allowed' ||
         createBlockedReason !== null ? (
           <>
-            {canManageOlx && (
-              <Button
-                ref={olxJobsTrigger}
-                onClick={() =>
-                  setOlxJobs({ owner: sourceOwner, initial: null, review: [] })
-                }
-              >
-                {to('jobsTitle')}
-              </Button>
-            )}
             {manageDecision.kind === 'allowed' ? (
               <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
                 <Button asChild>
@@ -1084,36 +1165,86 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           ]}
           additionalActions={
             canManageOlx ? (
-              <ActionMenu
-                label={to('marketplaces')}
-                triggerRef={marketplacesTrigger}
-                triggerContent={
-                  <>
-                    <Store aria-hidden />
-                    {to('marketplaces')}
-                    <ChevronDown aria-hidden />
-                  </>
-                }
-                actions={[
-                  {
-                    key: 'publish-olx',
-                    label: to('publish'),
-                    icon: <Send aria-hidden />,
-                    onSelect: () => openOlxBatch('publish'),
-                  },
-                  {
-                    key: 'category-olx',
-                    label: to('assign'),
-                    icon: <Tag aria-hidden />,
-                    onSelect: () => openOlxBatch('category'),
-                  },
-                ]}
-              />
+              <>
+                {!loading &&
+                  !listError &&
+                  pageMeta &&
+                  pageMeta.total > items.length && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void selectAllByFilter()}
+                    >
+                      {t('selectAllFiltered', { count: pageMeta.total })}
+                    </Button>
+                  )}
+                <ActionMenu
+                  label={to('marketplaces')}
+                  triggerRef={marketplacesTrigger}
+                  triggerContent={
+                    <>
+                      <Store aria-hidden />
+                      {to('marketplaces')}
+                      <ChevronDown aria-hidden />
+                    </>
+                  }
+                  actions={[
+                    {
+                      key: 'publish-olx',
+                      label: to('publish'),
+                      icon: <Send aria-hidden />,
+                      onSelect: () => openOlxBatch('publish'),
+                    },
+                    {
+                      key: 'category-olx',
+                      label: to('assign'),
+                      icon: <Tag aria-hidden />,
+                      onSelect: () => openOlxBatch('category'),
+                    },
+                    {
+                      key: 'withdraw-olx',
+                      label: to('withdrawBatch') + '…',
+                      destructive: true,
+                      onSelect: () => openOlxBatch('remove'),
+                    },
+                    {
+                      key: 'exclude-olx',
+                      label: to('excludeBatch') + '…',
+                      onSelect: () => openOlxBatch('exclude'),
+                    },
+                    {
+                      key: 'include-olx',
+                      label: to('includeBatch') + '…',
+                      onSelect: () => openOlxBatch('include'),
+                    },
+                  ]}
+                />
+              </>
             ) : null
+          }
+          busy={
+            filterPickStatus === 'loading' ? (
+              <>
+                <span role="status" className="rz-caption">
+                  {t('selectAllFilteredLoading')}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={cancelFilterSelection}
+                >
+                  {tc('cancel')}
+                </Button>
+              </>
+            ) : undefined
           }
           count={picked.size}
           noun={t('bulkNoun', { count: picked.size })}
-          onClear={() => setPicked(new Set())}
+          onClear={() => {
+            cancelFilterSelection()
+            setFilterPickedNames(new Map())
+            setPicked(new Set())
+          }}
           onSelectPage={() =>
             setPicked(new Set([...picked, ...items.map((part) => part.id)]))
           }
@@ -1121,31 +1252,46 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         />
       ) : null}
 
-      {canManageOlx && olxBatch?.owner === sourceOwner && (
-        <OlxBatchSheet
-          initialMode={olxBatch.mode}
-          parts={olxBatch.parts}
-          partsHref={directoryPath}
-          onChanged={() => setReloadToken((value) => value + 1)}
-          onJobStarted={(job, review) => {
-            setOlxBatch(null)
-            setOlxJobs({ owner: sourceOwner, initial: job, review })
-          }}
-          onClose={() => setOlxBatch(null)}
-          returnFocus={() => marketplacesTrigger.current?.focus()}
-        />
+      {filterPickStatus === 'failed' && picked.size > 0 && (
+        <Notice tone="danger" role="alert">
+          {t('selectAllFilteredFailed')}
+        </Notice>
       )}
 
-      {canManageOlx && olxJobs?.owner === sourceOwner && (
-        <OlxPublicationJobsSheet
-          initial={olxJobs.initial}
-          review={olxJobs.review}
-          partsHref={directoryPath}
-          onClose={() => setOlxJobs(null)}
-          onChanged={() => setReloadToken((value) => value + 1)}
-          returnFocus={() => olxJobsTrigger.current?.focus()}
-        />
-      )}
+      {canManageOlx &&
+        olxBatch?.owner === sourceOwner &&
+        (olxBatch.mode === 'category' || olxBatch.mode === 'publish' ? (
+          <OlxBatchSheet
+            initialMode={olxBatch.mode}
+            parts={olxBatch.parts}
+            partsHref={directoryPath}
+            onChanged={() => setReloadToken((value) => value + 1)}
+            onJobStarted={(job, review) => {
+              setOlxBatch(null)
+              void navigateList(
+                `${queueHref}?job=${encodeURIComponent(job.id)}`,
+                {
+                  state: {
+                    owner: sourceOwner,
+                    jobId: job.id,
+                    review,
+                  } satisfies OlxQueueNavigationState,
+                },
+              )
+            }}
+            onClose={() => setOlxBatch(null)}
+            returnFocus={() => marketplacesTrigger.current?.focus()}
+          />
+        ) : (
+          <OlxBatchMaintenanceSheet
+            mode={olxBatch.mode}
+            parts={olxBatch.parts}
+            partsHref={directoryPath}
+            onChanged={() => setReloadToken((value) => value + 1)}
+            onClose={() => setOlxBatch(null)}
+            returnFocus={() => marketplacesTrigger.current?.focus()}
+          />
+        ))}
 
       <div
         className="rz-toolbar"
@@ -1569,7 +1715,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           rows={items}
           selection={{
             selected: picked,
-            onChange: setPicked,
+            onChange: (selection) => {
+              cancelFilterSelection()
+              if (selection.size === 0) setFilterPickedNames(new Map())
+              setPicked(selection)
+            },
             rowLabel: (part) => t('selectPart', { name: part.name }),
           }}
         />
@@ -1604,6 +1754,7 @@ function PartDetailScreen({
   canViewOlx,
   olxScopeKey,
   olxSettingsHref,
+  showOlxMarketplace,
   links,
   requireLatestMutation,
   tenantSlug,
@@ -1621,6 +1772,7 @@ function PartDetailScreen({
   canViewOlx: boolean
   olxScopeKey: string
   olxSettingsHref: string | null
+  showOlxMarketplace: boolean
   links: {
     cars: boolean
     intakes: boolean
@@ -1637,6 +1789,8 @@ function PartDetailScreen({
   placementRevision: number
 }) {
   const navigate = useNavigate()
+  const tm = useT(partMarketplaceMessages)
+  const savedState = useLocation().state as { olxDraftFailed?: boolean } | null
   const [placementOpen, setPlacementOpen] = useState(false)
   const [priceOpen, setPriceOpen] = useState(false)
   const priceTrigger = useRef<HTMLButtonElement>(null)
@@ -1964,7 +2118,7 @@ function PartDetailScreen({
           )}
         </div>
 
-        {detail && canViewOlx && (
+        {detail && (canViewOlx || olxSettingsHref) && (
           <nav className="rz-tabs" aria-label={t('partSections')}>
             <Link to={partHref} aria-current={!isOlx ? 'page' : undefined}>
               {t('overviewTab')}
@@ -1982,6 +2136,9 @@ function PartDetailScreen({
           <Notice tone="danger">{deleteError}</Notice>
         ) : null}
         {copyError === null ? null : <Notice tone="danger">{copyError}</Notice>}
+        {savedState?.olxDraftFailed && (
+          <Notice tone="warn">{tm('settingsNotSaved')}</Notice>
+        )}
 
         {error ? (
           <ErrorState
@@ -2003,7 +2160,7 @@ function PartDetailScreen({
             label={t('loading')}
           />
         ) : isOlx ? (
-          canViewOlx && (
+          canViewOlx ? (
             <PartOlxPage
               key={olxScopeKey}
               partId={partId}
@@ -2011,11 +2168,18 @@ function PartDetailScreen({
               available={
                 detail.status === 'available' && detail.quantityAvailable > 0
               }
+              quantityAvailable={detail.quantityAvailable}
               canEditPart={canManage}
               settingsHref={olxSettingsHref}
               onPartSaved={onPriceSaved}
             />
-          )
+          ) : olxSettingsHref ? (
+            <PartOlxDiagnostics
+              key={olxScopeKey}
+              partId={partId}
+              settingsHref={olxSettingsHref}
+            />
+          ) : null
         ) : (
           <div className="flex flex-wrap items-start gap-4">
             <div className="grid min-w-0 flex-[1_1_480px] gap-4">
@@ -2592,6 +2756,19 @@ function PartDetailScreen({
                 ) : null}
               </Card>
 
+              {showOlxMarketplace && (
+                <PartMarketplaceCard
+                  key={olxScopeKey}
+                  partId={partId}
+                  qrCode={detail.qrCode}
+                  href={
+                    canViewOlx || olxSettingsHref ? `${partHref}/olx` : null
+                  }
+                  hasStock={detail.quantityAvailable > 0}
+                  canManagePublications={canViewOlx}
+                  canSeeDiagnostics={olxSettingsHref !== null}
+                />
+              )}
               <PartLocationCard
                 zones={zones}
                 allowed={links.inventory}
@@ -2670,6 +2847,7 @@ interface PartFormValues {
   partType: string
   desiredSalePrice: string
   placement?: PartPlacement
+  olxDraft?: PartOlxDraft
 }
 
 const emptyPartForm: PartFormValues = {
@@ -3943,11 +4121,13 @@ function validFormNumbers(values: PartFormValues) {
 
 function PartForm({
   title,
+  canViewOlx,
   canViewCars,
   canViewIntakes,
   requireLatestMutation,
 }: {
   title: string
+  canViewOlx: boolean
   canViewCars: boolean
   canViewIntakes: boolean
   requireLatestMutation: ReturnType<
@@ -4218,6 +4398,16 @@ function PartForm({
           placementFailed = true
         }
       }
+      const olxSaved = await savePartOlxDraft(
+        created.id,
+        values.olxDraft,
+        () =>
+          requireLatestMutation({
+            permission: 'olx.publications.manage',
+            quota: false,
+          }).signal,
+      )
+      if (scope.signal.aborted) return
       guard.afterSave(pricing)
       toast?.show({
         tone: placementFailed ? 'danger' : 'ok',
@@ -4227,6 +4417,7 @@ function PartForm({
         cabinetPath(cabinet.targetTenant!.slug, 'parts', created.id),
         {
           replace: true,
+          state: { olxDraftFailed: !olxSaved },
         },
       )
     } catch (failure) {
@@ -4362,6 +4553,21 @@ function PartForm({
           }
           variant="panel"
         />
+        {canViewOlx && (
+          <PartMarketplaceForm
+            part={{
+              name: values.name,
+              publicDescription: values.publicDescription,
+              price: price.disabled ? null : validFormNumbers(values).price,
+              photoCount: mediaItems.length,
+            }}
+            value={values.olxDraft}
+            onChange={(olxDraft) =>
+              setValues((current) => ({ ...current, olxDraft }))
+            }
+            disabled={pending}
+          />
+        )}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
     </FormPage>
@@ -4372,11 +4578,13 @@ const CREATE_PART_FORM = 'create-part-form'
 
 function PartEdit({
   partId,
+  canViewOlx,
   canViewCars,
   canViewIntakes,
   requireLatestMutation,
 }: {
   partId: string
+  canViewOlx: boolean
   canViewCars: boolean
   canViewIntakes: boolean
   requireLatestMutation: ReturnType<
@@ -4520,12 +4728,25 @@ function PartEdit({
     setError(null)
     const pricing =
       price.hasPrice && !price.disabled && priceRestriction === null
-    const finishSave = () => {
+    const finishSave = async (signal: AbortSignal) => {
       if (!mountedRef.current) return
       requireLatestMutation({ quota: false })
+      const olxSaved = await savePartOlxDraft(
+        partId,
+        values.olxDraft,
+        () =>
+          requireLatestMutation({
+            permission: 'olx.publications.manage',
+            quota: false,
+          }).signal,
+      )
+      if (!mountedRef.current || signal.aborted) return
       guard.afterSave(pricing)
       toast?.show({ tone: 'ok', message: t('saved') })
-      void navigate(backTo, { replace: true })
+      void navigate(backTo, {
+        replace: true,
+        state: { olxDraftFailed: !olxSaved },
+      })
     }
     try {
       if (
@@ -4557,7 +4778,7 @@ function PartEdit({
         { signal: scope.signal },
       )
       if (scope.signal.aborted) return
-      finishSave()
+      await finishSave(scope.signal)
     } catch (failure) {
       if (!mountedRef.current) return
       if (!isLostResponse(failure)) {
@@ -4600,7 +4821,7 @@ function PartEdit({
           storedPhotoKeys.length === photoKeys.length &&
           storedPhotoKeys.every((key, index) => key === photoKeys[index]) &&
           (price.disabled || fresh.desiredSalePrice === (parsed.price ?? null))
-        if (landed) finishSave()
+        if (landed) await finishSave(scope.signal)
         else {
           setStatus(null)
           setError(tl('notSaved'))
@@ -4999,6 +5220,25 @@ function PartEdit({
                 setItems={setMediaItems}
                 variant="panel"
               />
+              {canViewOlx && (
+                <PartMarketplaceForm
+                  partId={partId}
+                  part={{
+                    name: values.name,
+                    publicDescription: values.publicDescription,
+                    price:
+                      price.disabled || priceRestriction
+                        ? detail?.effectiveSalePrice
+                        : validFormNumbers(values).price,
+                    photoCount: mediaItems.length,
+                  }}
+                  value={values.olxDraft}
+                  onChange={(olxDraft) =>
+                    setValues((current) => current && { ...current, olxDraft })
+                  }
+                  disabled={pending || deleting}
+                />
+              )}
             </div>
 
             <PanelFooter

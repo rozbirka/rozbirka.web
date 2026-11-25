@@ -3,11 +3,25 @@ import type { Locale, SupportedCurrency } from '@/i18n'
 import { amountPrecisionError } from '../currency/amount-precision'
 
 export interface OrderDraftItem {
-  part: PartPickerItem
+  part: Pick<
+    PartPickerItem,
+    'id' | 'name' | 'externalCode' | 'quantityAvailable' | 'effectiveSalePrice'
+  >
   quantity: number
   unitPrice: string
   /** Previous confirmed price while its replacement is being entered. */
   priceBeforeEdit?: string | undefined
+}
+
+export function newOrderDraftItem(
+  part: OrderDraftItem['part'],
+): OrderDraftItem {
+  return {
+    part,
+    quantity: 1,
+    unitPrice: String(part.effectiveSalePrice ?? ''),
+    ...(part.effectiveSalePrice == null ? { priceBeforeEdit: '' } : {}),
+  }
 }
 
 /** Accept older currency-return drafts without losing their unfinished edits. */
@@ -15,12 +29,12 @@ export function restoreOrderItems(
   draft:
     | {
         draftItems?: readonly {
-          part: PartPickerItem
+          part: OrderDraftItem['part']
           quantity: number
           unitPrice: string | number
           priceBeforeEdit?: string | undefined
         }[]
-        selectedPartDraft?: PartPickerItem | null
+        selectedPartDraft?: OrderDraftItem['part'] | null
         quantity?: string
         unitPrice?: string
         editingPartId?: string | null

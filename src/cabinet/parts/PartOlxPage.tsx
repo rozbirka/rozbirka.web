@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { ArrowLeft, Link2 } from 'lucide-react'
+import { Link2 } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
 import { normalizeApiProblem } from '@/api/errors'
 import { launchOlxOAuth, olxApi, type OlxConnection } from '@/api/olx'
@@ -7,12 +7,12 @@ import type { OlxLivePublication } from '@/api/olx-live'
 import type { PartDetail } from '@/api/parts'
 import {
   Button,
+  EmptyState,
   ErrorState,
   Notice,
-  PanelFooter,
   SkeletonRows,
 } from '@/components/app'
-import { commonMessages, useT } from '@/i18n'
+import { useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { OlxLinkAdvertPanel } from '../olx/OlxLinkAdvertPanel'
 import { OlxPreparationPanel } from '../olx/OlxPreparationPanel'
@@ -32,19 +32,20 @@ export function PartOlxPage({
   partId,
   partDetails,
   available,
+  quantityAvailable,
   canEditPart,
   settingsHref,
   onPartSaved,
 }: {
   partId: string
-  partDetails: Pick<PartDetail, 'condition' | 'oemCode'>
+  partDetails: Pick<PartDetail, 'condition' | 'name' | 'oemCode'>
   available: boolean
+  quantityAvailable: number
   canEditPart: boolean
   settingsHref: string | null
   onPartSaved: (part: PartDetail) => void
 }) {
   const t = useT(olxPublicationMessages)
-  const tc = useT(commonMessages)
   const ta = useT(olxConnectionMessages)
   const titleId = useId()
   const { snapshot } = useCabinet()
@@ -72,11 +73,7 @@ export function PartOlxPage({
   const [grantError, setGrantError] = useState<string | null>(null)
   const pendingGrant = useRef(false)
   const connectionSignal = useRef<AbortSignal | null>(null)
-  const [editorActions, setEditorActions] = useState<HTMLDivElement | null>(
-    null,
-  )
-  const [linkActions, setLinkActions] = useState<HTMLDivElement | null>(null)
-  const [statusTarget, setStatusTarget] = useState<HTMLDivElement | null>(null)
+  const linkTrigger = useRef<HTMLButtonElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => {
@@ -101,11 +98,6 @@ export function PartOlxPage({
     return () => controller.abort()
   }, [attempt])
 
-  const settingsLink = settingsHref && (
-    <Button asChild>
-      <Link to={settingsHref}>{t('settings')}</Link>
-    </Button>
-  )
   const connectionNotice =
     connection &&
     (connection.mode !== 'oauth' || !connection.available
@@ -125,11 +117,6 @@ export function PartOlxPage({
     sameOlxAccount &&
     returned?.outcome === 'connected' &&
     connection?.scope?.split(/\s+/).includes('write') === true
-
-  function openLinkView(open: boolean) {
-    setLinking(open)
-    heading.current?.focus()
-  }
 
   async function grantPublication() {
     const signal = connectionSignal.current
@@ -201,12 +188,13 @@ export function PartOlxPage({
           tabIndex={-1}
           className="rz-h-title scroll-mt-4 focus:outline-none"
         >
-          {t(linking ? 'linkExisting' : 'title')}
+          {t('title')}
         </h2>
-        {!linking && publication?.canLinkExisting && !publication.advertId && (
+        {publication?.canLinkExisting && !publication.advertId && (
           <Button
+            ref={linkTrigger}
             disabled={busy || grantBusy}
-            onClick={() => openLinkView(true)}
+            onClick={() => setLinking(true)}
           >
             <Link2 aria-hidden />
             {t('linkExisting')}
@@ -245,15 +233,20 @@ export function PartOlxPage({
       ) : !connection ? (
         <SkeletonRows rows={3} label={t('loadingPublication')} />
       ) : connectionNotice ? (
-        <>
-          <Notice tone={connection.reconnectRequired ? 'danger' : 'info'}>
-            {connectionNotice}
-          </Notice>
-          {settingsLink && <div>{settingsLink}</div>}
-        </>
+        <EmptyState
+          title={t('partTabDisconnected')}
+          description={connectionNotice}
+          actions={
+            settingsHref && (
+              <Button asChild variant="primary">
+                <Link to={settingsHref}>{t('partTabIntegrations')}</Link>
+              </Button>
+            )
+          }
+        />
       ) : (
         <>
-          <div className={linking ? 'hidden' : 'grid min-w-0 gap-3'}>
+          <div className="grid min-w-0 gap-3">
             <OlxPublicationReadiness
               connection={connection}
               canManage={Boolean(settingsHref)}
@@ -269,12 +262,18 @@ export function PartOlxPage({
               )}
             <div className="contents" inert={grantBusy}>
               <OlxPreparationPanel
+                canSeeDiagnostics={settingsHref !== null}
                 key={editorRevision}
                 id={partId}
                 partDetails={partDetails}
                 canEdit={canEditPart && available}
-                actionsTarget={editorActions}
-                page={{ partAvailable: available, statusTarget }}
+                actionsTarget={null}
+                page={{
+                  partAvailable: available,
+                  quantityAvailable,
+                  accountId: connection.accountId ?? null,
+                  canManage: canEditPart,
+                }}
                 onPartSaved={onPartSaved}
                 onPublicationChange={setPublication}
                 onMutationBusy={setBusy}
@@ -284,41 +283,29 @@ export function PartOlxPage({
                   restoredDraft?.editingDescription ?? false
                 }
               />
-              <PanelFooter
-                standalone
-                leading={<div ref={setStatusTarget} />}
-                className="sm:sticky sm:bottom-0 sm:z-10 [&:not(:has(button,a,.rz-skel))]:hidden"
-              >
-                <div ref={setEditorActions} className="contents" />
-              </PanelFooter>
             </div>
           </div>
           {linking && publication && (
-            <>
-              <OlxLinkAdvertPanel
-                partId={partId}
-                revision={publication.revision ?? null}
-                available={available}
-                actionsTarget={linkActions}
-                onBusy={setBusy}
-                onLinked={(value) => {
-                  setPublication(value)
-                  setEditorRevision((revision) => revision + 1)
-                  openLinkView(false)
-                }}
-              />
-              <PanelFooter standalone>
-                <Button
-                  variant="quiet"
-                  disabled={busy}
-                  onClick={() => openLinkView(false)}
-                >
-                  <ArrowLeft aria-hidden />
-                  {tc('back')}
-                </Button>
-                <div ref={setLinkActions} className="contents" />
-              </PanelFooter>
-            </>
+            <OlxLinkAdvertPanel
+              partId={partId}
+              partLabel={[partDetails.name, partDetails.oemCode]
+                .filter(Boolean)
+                .join(' · ')}
+              accountId={connection.accountId ?? undefined}
+              revision={publication.revision ?? null}
+              available={available}
+              onClose={() => setLinking(false)}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault()
+                ;(linkTrigger.current ?? heading.current)?.focus()
+              }}
+              onBusy={setBusy}
+              onLinked={(value) => {
+                setPublication(value)
+                setEditorRevision((revision) => revision + 1)
+                setLinking(false)
+              }}
+            />
           )}
         </>
       )}

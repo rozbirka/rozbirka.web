@@ -5,6 +5,8 @@ import type { components } from './generated/core'
 type Schema = components['schemas']
 export type OlxAdvertPage = Schema['OlxAdvertPage']
 export type OlxAdvert = Schema['OlxAdvertView']
+export type OlxLocalAdvert = Schema['OlxLocalAdvertView']
+export type OlxLocalAdvertPage = Schema['OlxLocalAdvertPage']
 export type OlxCategory = Schema['OlxCategoryView']
 export type OlxAttribute = Schema['OlxAttributeView']
 export type OlxCity = Schema['OlxCityView']
@@ -166,13 +168,37 @@ export const olxLiveApi = {
   },
   async remove(
     id: string,
-    options: RequestOptions = {},
+    {
+      expectedAccountId,
+      expectedAdvertId,
+      ...options
+    }: RequestOptions & {
+      expectedAccountId?: string
+      expectedAdvertId?: string
+    } = {},
   ): Promise<OlxLivePublication> {
     return (
       await apiClient.post<OlxLivePublication>(
         `${live}/parts/${encodeURIComponent(id)}/remove`,
         {},
-        { ...options, timeout: 100000 },
+        {
+          ...options,
+          params: { expectedAccountId, expectedAdvertId },
+          timeout: 100000,
+        },
+      )
+    ).data
+  },
+  async setExclusion(
+    id: string,
+    request: Schema['OlxSetExclusionRequest'],
+    options: RequestOptions = {},
+  ): Promise<OlxLivePublication> {
+    return (
+      await apiClient.put<OlxLivePublication>(
+        `${live}/parts/${encodeURIComponent(id)}/exclusion`,
+        request,
+        options,
       )
     ).data
   },
@@ -198,13 +224,28 @@ export const olxLiveApi = {
   },
   async adverts(
     page: number,
-    options: RequestOptions = {},
+    {
+      expectedAccountId,
+      ...options
+    }: RequestOptions & { expectedAccountId?: string } = {},
   ): Promise<OlxAdvertPage> {
     return (
       await apiClient.get<OlxAdvertPage>(`${live}/adverts`, {
         ...options,
-        params: { page },
+        params: { page, expectedAccountId },
         timeout: 45000,
+      })
+    ).data
+  },
+  async localAdverts(
+    page: number,
+    expectedAccountId: string,
+    options: RequestOptions = {},
+  ): Promise<OlxLocalAdvertPage> {
+    return (
+      await apiClient.get<OlxLocalAdvertPage>(`${live}/adverts/local`, {
+        ...options,
+        params: { page, expectedAccountId },
       })
     ).data
   },

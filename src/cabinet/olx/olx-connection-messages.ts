@@ -2,6 +2,26 @@ import { defineMessages } from '@/i18n'
 
 export const olxConnectionMessages = defineMessages({
   uk: {
+    returnVerifying: 'Завершуємо підключення',
+    returnVerifyingHint: 'Перевіряємо дозвіл, отриманий від OLX.',
+    returnUnconfirmed:
+      'Розбірка не отримала підтвердження підключення. Спробуйте підключити OLX ще раз.',
+    retryConnection: 'Спробувати ще раз',
+    reconnectTitle: 'Потрібне повторне підключення',
+    reconnectImpact:
+      'Підтвердьте доступ повторно, щоб відновити оновлення цін, наявності й фото.',
+    reconnectLimited:
+      'Оголошення не оновлюються. Повторно підключити акаунт може працівник із правом керування інтеграцією OLX.',
+    disconnectAccount: 'Акаунт {account} буде відключено від бізнесу.',
+    disconnectSync: 'Синхронізація цін, наявності й фото зупиниться.',
+    disconnectAdverts:
+      'Після відключення активні оголошення можна зняти в кабінеті OLX.',
+    disconnectRestore:
+      'Повторне підключення того самого акаунта відновить зв’язки із запчастинами.',
+    disconnectSwitch: 'Інший акаунт матиме власні оголошення й прив’язки.',
+    disconnectedNoticeTitle: 'Акаунт OLX відключено.',
+    disconnectedNotice:
+      'Синхронізацію зупинено. Підключіть той самий акаунт, щоб відновити зв’язки із запчастинами.',
     temporaryStatus: 'Тимчасова помилка',
     rightsTitle: 'Ваші права',
     rightsHint: 'Права на OLX надає власник у розділі «Команда».',
@@ -81,6 +101,27 @@ export const olxConnectionMessages = defineMessages({
     part: 'Запчастина',
   },
   'en-GB': {
+    returnVerifying: 'Finishing the connection',
+    returnVerifyingHint: 'We’re checking the access granted by OLX.',
+    returnUnconfirmed:
+      'Rozbirka could not confirm the connection. Try connecting OLX again.',
+    retryConnection: 'Try again',
+    reconnectTitle: 'Reconnect your account',
+    reconnectImpact:
+      'Approve access again to resume updates to prices, stock and photos.',
+    reconnectLimited:
+      'Adverts are no longer updated. Someone with permission to manage the OLX connection can reconnect the account.',
+    disconnectAccount:
+      'Account {account} will be disconnected from this business.',
+    disconnectSync: 'Updates to prices, stock and photos will stop.',
+    disconnectAdverts:
+      'After disconnecting, you can take down active adverts in your OLX account.',
+    disconnectRestore:
+      'Reconnecting the same account restores its links to parts.',
+    disconnectSwitch: 'A different account has its own adverts and links.',
+    disconnectedNoticeTitle: 'OLX account disconnected.',
+    disconnectedNotice:
+      'Synchronisation has stopped. Reconnect the same account to restore its links to parts.',
     temporaryStatus: 'Temporary error',
     rightsTitle: 'Your permissions',
     rightsHint: 'The owner grants OLX permissions in Team.',
@@ -162,6 +203,26 @@ export const olxConnectionMessages = defineMessages({
     part: 'Part',
   },
   pl: {
+    returnVerifying: 'Kończymy łączenie',
+    returnVerifyingHint: 'Sprawdzamy dostęp przyznany przez OLX.',
+    returnUnconfirmed:
+      'Rozbirka nie otrzymała potwierdzenia połączenia. Spróbuj połączyć OLX ponownie.',
+    retryConnection: 'Spróbuj ponownie',
+    reconnectTitle: 'Połącz konto ponownie',
+    reconnectImpact:
+      'Zatwierdź dostęp ponownie, aby wznowić aktualizacje cen, dostępności i zdjęć.',
+    reconnectLimited:
+      'Ogłoszenia nie są aktualizowane. Konto może ponownie połączyć osoba z uprawnieniem do zarządzania integracją OLX.',
+    disconnectAccount: 'Konto {account} zostanie odłączone od tej firmy.',
+    disconnectSync: 'Aktualizacje cen, dostępności i zdjęć zostaną wstrzymane.',
+    disconnectAdverts:
+      'Po odłączeniu możesz wycofać aktywne ogłoszenia na swoim koncie OLX.',
+    disconnectRestore:
+      'Ponowne połączenie tego samego konta przywróci powiązania z częściami.',
+    disconnectSwitch: 'Inne konto ma własne ogłoszenia i powiązania.',
+    disconnectedNoticeTitle: 'Konto OLX odłączone.',
+    disconnectedNotice:
+      'Synchronizacja jest wstrzymana. Połącz ponownie to samo konto, aby przywrócić powiązania z częściami.',
     temporaryStatus: 'Błąd tymczasowy',
     rightsTitle: 'Twoje uprawnienia',
     rightsHint: 'Właściciel nadaje uprawnienia do OLX w sekcji „Zespół”.',

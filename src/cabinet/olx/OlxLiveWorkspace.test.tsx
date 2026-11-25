@@ -7,6 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router'
 import { LocaleProvider } from '@/i18n'
 import { OlxLiveWorkspace } from './OlxLiveWorkspace'
 
@@ -18,6 +19,8 @@ const api = vi.hoisted(() => ({
   remove: vi.fn(),
   city: vi.fn(),
   adverts: vi.fn(),
+  localAdverts: vi.fn(),
+  setExclusion: vi.fn(),
   preparation: vi.fn(),
   categories: vi.fn(),
   attributes: vi.fn(),
@@ -26,6 +29,8 @@ const api = vi.hoisted(() => ({
   preview: vi.fn(),
 }))
 vi.mock('@/api/olx-live', () => ({ olxLiveApi: api }))
+const account = vi.hoisted(() => ({ connection: vi.fn() }))
+vi.mock('@/api/olx', () => ({ olxApi: account }))
 const coreParts = vi.hoisted(() => ({ get: vi.fn(), compatibilities: vi.fn() }))
 vi.mock('@/api/parts', () => ({ partsApi: coreParts }))
 vi.mock('@/components/parts/PartSearchPicker', () => ({
@@ -49,6 +54,14 @@ const part = {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  account.connection.mockResolvedValue({
+    available: true,
+    connected: true,
+    mode: 'oauth',
+    accountId: 'seller-1',
+    scope: 'v2 read write',
+    writesAvailable: true,
+  })
   api.publication.mockResolvedValue({
     partId: 'part-1',
     revision: null,
@@ -99,6 +112,96 @@ beforeEach(() => {
     category: null,
     issues: [{ field: 'category', code: 'category_required' }],
   })
+})
+
+it('searches the whole account on demand and excludes the selected part without removing its advert', async () => {
+  const checkedAt = '2026-11-23T12:30:00Z'
+  const second = {
+    id: '456',
+    title: 'Бампер на OLX',
+    status: 'limited',
+    price: 800,
+    currency: 'UAH',
+    linkedPart: {
+      partId: 'part-2',
+      partName: 'Бампер задній',
+      quantityAvailable: 2,
+      oemCode: '5G6807421',
+      excluded: false,
+    },
+  }
+  api.adverts.mockImplementation((page: number) =>
+    Promise.resolve({
+      page,
+      checkedAt,
+      hasMore: page === 1,
+      items:
+        page === 1
+          ? [{ id: '123', title: 'Фара на OLX', status: 'active' }]
+          : [second],
+    }),
+  )
+  api.localAdverts.mockResolvedValue({
+    page: 1,
+    hasMore: false,
+    items: [
+      {
+        partId: 'draft-1',
+        partName: 'Деталь без категорії',
+        publicationState: 'draft',
+        requiresData: true,
+        excluded: false,
+        quantityAvailable: 1,
+      },
+    ],
+  })
+  api.setExclusion.mockResolvedValue({ partId: 'part-2', excluded: true })
+
+  render(
+    <MemoryRouter>
+      <OlxLiveWorkspace
+        canReadParts
+        canEditParts
+        accountId="seller-1"
+        canWrite
+        partsHref="/app/koval/parts"
+      />
+    </MemoryRouter>,
+  )
+  await screen.findByText('Деталь без категорії')
+  fireEvent.change(screen.getByRole('searchbox'), {
+    target: { value: '5G6807421' },
+  })
+  expect(api.adverts).toHaveBeenCalledTimes(1)
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Завантажити весь список' }),
+  )
+
+  const row = await screen.findByRole('row', { name: /Бампер задній/ })
+  expect(row).toHaveTextContent('5G6807421')
+  expect(within(row).getByText('Обмежене', { exact: true })).toBeVisible()
+  expect(within(row).queryByText('Потрібна оплата на OLX')).toBeNull()
+  expect(within(row).getByText('2', { exact: true })).toBeVisible()
+  fireEvent.click(within(row).getByRole('checkbox'))
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Виключити з публікації' }),
+  )
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Виключити з публікації',
+  })
+  const submit = within(dialog).getByRole('button', {
+    name: 'Виключити з публікації',
+  })
+  await waitFor(() => expect(submit).toBeEnabled())
+  fireEvent.click(submit)
+  await waitFor(() =>
+    expect(api.setExclusion).toHaveBeenCalledWith(
+      'part-2',
+      { expectedAccountId: 'seller-1', excluded: true },
+      expect.anything(),
+    ),
+  )
+  expect(api.remove).not.toHaveBeenCalled()
 })
 it('reads real adverts on opening and refreshes only after an explicit action', async () => {
   render(<OlxLiveWorkspace canReadParts={false} />)
@@ -535,7 +638,7 @@ it('shows the provider reason against the affected fields and clears only the fi
     ],
   })
 
-  render(<OlxLiveWorkspace canReadParts canEditParts />)
+  render(<OlxLiveWorkspace canReadParts canEditParts canSeeDiagnostics />)
   choosePartToPrepare()
   fireEvent.click(
     await screen.findByRole('button', { name: /^Фари.*Запчастини/ }),

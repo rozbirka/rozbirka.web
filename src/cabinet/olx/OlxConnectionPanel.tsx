@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowUpRight, Link2 } from 'lucide-react'
 import { Link } from 'react-router'
 import {
@@ -74,6 +74,8 @@ export function OlxConnectionPanel({
   error,
   onAction,
   workspaceHref,
+  retryConnection = false,
+  disconnected = false,
 }: {
   connection: OlxConnection
   canManage: boolean
@@ -81,17 +83,23 @@ export function OlxConnectionPanel({
   busy: boolean
   error: string | null
   workspaceHref?: string
+  retryConnection?: boolean
+  disconnected?: boolean
   onAction: (action: ConnectionAction, account?: string) => Promise<boolean>
 }) {
   const t = useT(olxConnectionMessages)
   const [account, setAccount] = useState('alpha-seller-1')
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
+  const disconnectTrigger = useRef<HTMLButtonElement>(null)
+  const connectTrigger = useRef<HTMLButtonElement>(null)
+  const accountBody = useRef<HTMLDivElement>(null)
   const real = connection.mode === 'oauth'
   const needsConnection = !connection.connected || connection.reconnectRequired
   const canVerify = real && connection.available && !needsConnection
   const writable = connection.scope?.split(/\s+/).includes('write') === true
   const firstConnection = real && connection.available && !connection.connected
   const temporaryError = canManage && connection.hasTemporarySyncError
+  const wasDisconnected = real && !connection.connected && disconnected
   const status = connection.reconnectRequired
     ? 'reconnect'
     : temporaryError
@@ -102,7 +110,10 @@ export function OlxConnectionPanel({
       <Card
         title={
           <span className="flex flex-wrap items-center gap-2">
-            {t(firstConnection ? 'connectTitle' : 'account')}
+            {t(
+              firstConnection && !wasDisconnected ? 'connectTitle' : 'account',
+            )}
+            {wasDisconnected && <StatusPill>{t('disconnected')}</StatusPill>}
             {real && connection.connected && (
               <StatusPill
                 tone={
@@ -121,20 +132,29 @@ export function OlxConnectionPanel({
         headerClassName="min-h-0 border-0 pt-4 pb-0"
         bodyClassName="grid gap-3 pt-2"
       >
-        <div className="grid gap-3" aria-busy={busy}>
+        <div
+          ref={accountBody}
+          tabIndex={-1}
+          className="grid gap-3"
+          aria-busy={busy}
+        >
           {!connection.available && (
             <Notice>
               {t('unavailable')} {t('unavailableHint')}
             </Notice>
           )}
-          {firstConnection && (
-            <>
-              <p className="rz-caption m-0">{t('oneAccount')}</p>
-              <Notice>{t('connectEffect')}</Notice>
-              {canManage && (
-                <p className="rz-caption m-0">{t('disconnectedHint')}</p>
-              )}
-            </>
+          {wasDisconnected ? (
+            <Notice>{t('disconnectedNotice')}</Notice>
+          ) : (
+            firstConnection && (
+              <>
+                <p className="rz-caption m-0">{t('oneAccount')}</p>
+                <Notice>{t('connectEffect')}</Notice>
+                {canManage && (
+                  <p className="rz-caption m-0">{t('disconnectedHint')}</p>
+                )}
+              </>
+            )
           )}
           {connection.connected && (
             <FactRows
@@ -188,12 +208,19 @@ export function OlxConnectionPanel({
             onGrant={() => void onAction('write')}
           />
           {real && connection.reconnectRequired && (
-            <Notice tone="warn">{t('reconnectHint')}</Notice>
+            <Notice tone="danger" block>
+              <p className="m-0 font-medium">{t('reconnectTitle')}</p>
+              <p className="m-0 mt-1">
+                {t(canManage ? 'reconnectImpact' : 'reconnectLimited')}
+              </p>
+            </Notice>
           )}
           {canVerify && temporaryError && (
             <Notice tone="warn">{t('temporarySync')}</Notice>
           )}
-          {!canManage && <p className="rz-caption m-0">{t('noManage')}</p>}
+          {!canManage && !connection.reconnectRequired && (
+            <p className="rz-caption m-0">{t('noManage')}</p>
+          )}
           {error && !confirmDisconnect && (
             <Notice tone="danger">{error}</Notice>
           )}
@@ -212,6 +239,7 @@ export function OlxConnectionPanel({
           <div className="flex flex-wrap items-center gap-2">
             {connection.available && needsConnection && (
               <Button
+                ref={connectTrigger}
                 variant="primary"
                 disabled={busy || (!real && !account.trim())}
                 aria-busy={busy}
@@ -222,7 +250,9 @@ export function OlxConnectionPanel({
                   real
                     ? connection.reconnectRequired
                       ? 'reconnectAction'
-                      : 'connect'
+                      : retryConnection
+                        ? 'retryConnection'
+                        : 'connect'
                     : 'simulatorConnect',
                 )}
               </Button>
@@ -234,6 +264,7 @@ export function OlxConnectionPanel({
             )}
             {connection.connected && (
               <Button
+                ref={disconnectTrigger}
                 variant="quiet"
                 disabled={busy}
                 onClick={() => setConfirmDisconnect(true)}
@@ -269,10 +300,32 @@ export function OlxConnectionPanel({
         open={confirmDisconnect}
         onOpenChange={setConfirmDisconnect}
         title={t('disconnectTitle')}
-        consequence={t('disconnectHint')}
+        consequence={
+          real && connection.accountId
+            ? t('disconnectAccount', { account: connection.accountId })
+            : t('disconnectHint')
+        }
+        effects={
+          real
+            ? [
+                t('disconnectSync'),
+                t('disconnectAdverts'),
+                t('disconnectRestore'),
+                t('disconnectSwitch'),
+              ]
+            : []
+        }
         confirmLabel={t('disconnect')}
         pending={busy}
         error={error}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          ;(
+            disconnectTrigger.current ??
+            connectTrigger.current ??
+            accountBody.current
+          )?.focus()
+        }}
         onConfirm={() => {
           void onAction('disconnect').then((success) => {
             if (success) setConfirmDisconnect(false)

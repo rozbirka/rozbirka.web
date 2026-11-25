@@ -147,6 +147,31 @@ it('offers disconnected OLX through OAuth settings without creating a generic in
   expect(screen.getByText(/Підключено 1 із 2/)).toBeVisible()
 })
 
+it('shows OLX only when Core enables it in a production build', async () => {
+  vi.stubEnv('DEV', false)
+  try {
+    allowOlx()
+    const candidate = {
+      connected: false,
+      mode: 'oauth',
+      reconnectRequired: false,
+      writesAvailable: false,
+    } as const
+    vi.mocked(olxApi.connection)
+      .mockResolvedValueOnce({ ...candidate, available: false })
+      .mockResolvedValueOnce({ ...candidate, available: true })
+    const off = renderScreen()
+    await screen.findByRole('link', { name: /Нова пошта/ })
+    expect(olxApi.connection).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('link', { name: /OLX/ })).toBeNull()
+    off.unmount()
+    renderScreen()
+    expect(await screen.findByRole('link', { name: /OLX/ })).toBeVisible()
+  } finally {
+    vi.unstubAllEnvs()
+  }
+})
+
 it('keeps Nova Poshta visible when saved OLX status cannot be loaded', async () => {
   allowOlx()
   vi.mocked(olxApi.connection).mockRejectedValue(new Error('offline'))

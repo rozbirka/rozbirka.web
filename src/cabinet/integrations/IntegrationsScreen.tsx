@@ -96,9 +96,8 @@ export function IntegrationsScreen() {
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}`
   const canReadOlx =
-    import.meta.env.DEV &&
-    (cabinet.snapshot?.permissions.has('olx.integration.manage') === true ||
-      cabinet.snapshot?.permissions.has('olx.publications.manage') === true)
+    cabinet.snapshot?.permissions.has('olx.integration.manage') === true ||
+    cabinet.snapshot?.permissions.has('olx.publications.manage') === true
   const [olxLoaded, setOlxLoaded] = useState<{
     key: string
     connection: OlxConnection | null
