@@ -812,7 +812,10 @@ it('attaches an external waybill after its preview (6.1–6.3, 6.12)', async () 
   const sheet = await screen.findByRole('dialog', {
     name: 'Прив’язати наявну ТТН',
   })
-  expect(sheet).toHaveTextContent('Перевірте дані накладної')
+  expect(sheet).not.toHaveTextContent('Перевірте дані накладної')
+  expect(
+    within(sheet).queryByLabelText(/Погоджена сума замовлення/),
+  ).not.toBeInTheDocument()
   await user.type(
     within(sheet).getByLabelText(/Номер накладної/),
     '2045 1200 9877 31',
@@ -822,6 +825,9 @@ it('attaches an external waybill after its preview (6.1–6.3, 6.12)', async () 
   )
 
   expect(await within(sheet).findByText('Попередній перегляд')).toBeVisible()
+  expect(within(sheet).getByLabelText(/Погоджена сума замовлення/)).toHaveValue(
+    '9600',
+  )
   expect(sheet).toHaveTextContent('Київ №12 → Львів №5')
   expect(sheet).toHaveTextContent('Створено, не відправлено')
   expect(sheet).toHaveTextContent('Оплата не змінюється.')

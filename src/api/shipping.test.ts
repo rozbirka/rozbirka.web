@@ -207,6 +207,17 @@ it('previews an ordinary order with the explicit total and normalizes omitted nu
   )
 })
 
+it('explicitly requests carrier amount inference only when the total is empty', async () => {
+  const post = vi
+    .spyOn(apiClient, 'post')
+    .mockResolvedValue({ data: { agreedTotalUah: 23970 } })
+  await shippingApi.previewExternal('int-1', 'order-1', '20451200987731', null)
+  expect(post).toHaveBeenCalledWith(
+    '/integrations/int-1/shipping/orders/order-1/external/preview',
+    { number: '20451200987731', useCarrierAmount: true },
+  )
+})
+
 it('confirms the manually reviewed amount for an ordinary order with a null shipment version', async () => {
   const post = vi
     .spyOn(apiClient, 'post')
