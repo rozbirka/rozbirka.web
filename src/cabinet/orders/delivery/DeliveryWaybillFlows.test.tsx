@@ -120,6 +120,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   integrationId: 'int-1',
   dispatchPointId: 'point-1',
   connectionId: null,
+  importedDetails: null,
   orderId: 'order-1',
   version: 'v1',
   state: 'Draft',
@@ -535,7 +536,7 @@ it('turns an unanswered create into a result check with a candidate (4.11, 5.14)
         number: TTN,
         createdAt: null,
         sender: shipment().sender,
-        recipient: shipment().draft.recipient,
+        recipient: shipment().draft!.recipient,
         codUah: 4200,
         fingerprint: 'fp',
         canConfirm: true,
@@ -703,8 +704,8 @@ it('shows edited data only after Nova Poshta confirms it (5.2–5.4)', async () 
     created({
       version: 'v2',
       draft: {
-        ...created().draft,
-        recipient: { ...created().draft.recipient, phone: '+380672145509' },
+        ...created().draft!,
+        recipient: { ...created().draft!.recipient, phone: '+380672145509' },
       },
     }),
   )
@@ -792,9 +793,10 @@ it('attaches an external waybill after its preview (6.1–6.3, 6.12)', async () 
     number: TTN,
     fingerprint: 'fp',
     shipmentVersion: 'v1',
+    agreedTotalUah: 9600,
     providerStatus: '1',
     sender: shipment().sender,
-    recipient: { ...shipment().draft.recipient, warehouseName: null },
+    recipient: { ...shipment().draft!.recipient, warehouseName: null },
     codAmountUah: 4200,
     recordsDispatch: false,
     recordsReceipt: false,
@@ -810,7 +812,7 @@ it('attaches an external waybill after its preview (6.1–6.3, 6.12)', async () 
   const sheet = await screen.findByRole('dialog', {
     name: 'Прив’язати наявну ТТН',
   })
-  expect(sheet).toHaveTextContent('Прив’язка пройде, якщо')
+  expect(sheet).toHaveTextContent('Перевірте дані накладної')
   await user.type(
     within(sheet).getByLabelText(/Номер накладної/),
     '2045 1200 9877 31',
@@ -846,9 +848,10 @@ it('explains external waybill refusals next to the number (6.6, 6.9, 6.10)', asy
       number: TTN,
       fingerprint: 'fp',
       shipmentVersion: 'v1',
+      agreedTotalUah: 9600,
       providerStatus: '1',
       sender: shipment().sender,
-      recipient: { ...shipment().draft.recipient, name: 'Ірина Ковальчук' },
+      recipient: { ...shipment().draft!.recipient, name: 'Ірина Ковальчук' },
       codAmountUah: 4000,
       recordsDispatch: false,
       recordsReceipt: false,
@@ -883,9 +886,9 @@ it('explains external waybill refusals next to the number (6.6, 6.9, 6.10)', asy
   ).toBeVisible()
 
   await user.click(check)
-  expect(await within(sheet).findByText('Розбіжності')).toBeVisible()
+  expect(await within(sheet).findByText('Попередній перегляд')).toBeVisible()
   expect(sheet).toHaveTextContent('Ірина Ковальчук')
-  expect(sheet).toHaveTextContent('Прив’язати не можна')
+  expect(sheet).toHaveTextContent('Післяплата НП не збігається')
   expect(
     within(sheet).getByRole('button', { name: 'Прив’язати до замовлення' }),
   ).toBeDisabled()
@@ -896,9 +899,10 @@ it('checks an external waybill again when it changed meanwhile (6.11)', async ()
     number: TTN,
     fingerprint: 'fp',
     shipmentVersion: 'v1',
+    agreedTotalUah: 9600,
     providerStatus: '1',
     sender: shipment().sender,
-    recipient: shipment().draft.recipient,
+    recipient: shipment().draft!.recipient,
     codAmountUah: 4200,
     recordsDispatch: false,
     recordsReceipt: false,
@@ -936,7 +940,7 @@ it('checks an external waybill again when it changed meanwhile (6.11)', async ()
 
   expect(await within(sheet).findByText('Стан ТТН змінився')).toBeVisible()
   expect(sheet).toHaveTextContent('змінився на «Отримано»')
-  expect(sheet).toHaveTextContent('Прив’язування не підтверджує оплату.')
+  expect(sheet).toHaveTextContent('прив’язування не підтверджує оплату.')
 })
 
 it('explains a missing deposit in words and keeps creation out of reach (4.13)', async () => {
@@ -981,7 +985,7 @@ it('keeps editing reachable to waive prepayment for a newly trusted customer on 
   vi.mocked(integrationsApi.divisions).mockResolvedValueOnce({
     items: [
       {
-        ref: current.draft.recipient.warehouseRef,
+        ref: current.draft!.recipient.warehouseRef,
         name: 'Відділення №5',
         receivingAllowed: true,
       },
@@ -1055,8 +1059,8 @@ it('edits recipient surname and given name separately before the parcel is dispa
     initial: {
       ...original,
       draft: {
-        ...original.draft,
-        recipient: { ...original.draft.recipient, name: 'Соболь Владислав' },
+        ...original.draft!,
+        recipient: { ...original.draft!.recipient, name: 'Соболь Владислав' },
       },
     },
   })
@@ -1091,9 +1095,9 @@ it('blocks recreation with a missing given name instead of promoting the patrony
     initial: {
       ...original,
       draft: {
-        ...original.draft,
+        ...original.draft!,
         recipient: {
-          ...original.draft.recipient,
+          ...original.draft!.recipient,
           name: 'Соболь Владислав Ігорович',
         },
       },
@@ -1186,8 +1190,8 @@ it.each([
     'changed recipient',
     {
       draft: {
-        ...created().draft,
-        recipient: { ...created().draft.recipient, phone: '+380672145509' },
+        ...created().draft!,
+        recipient: { ...created().draft!.recipient, phone: '+380672145509' },
       },
     },
   ],
@@ -1354,4 +1358,93 @@ it('shows the return status and reverse waybill inside delivery while its action
       name: 'Повернення посилки · Нова пошта',
     }),
   ).toBeVisible()
+})
+
+it('attaches over a different ordinary draft recipient after explicit review', async () => {
+  vi.mocked(shippingApi.previewExternal).mockResolvedValue({
+    number: TTN,
+    fingerprint: 'different',
+    shipmentVersion: 'v1',
+    agreedTotalUah: 9600,
+    providerStatus: '1',
+    sender: {
+      ...shipment().sender,
+      name: 'Новий відправник',
+      warehouseRef: 'another-sender',
+    },
+    recipient: {
+      ...shipment().draft!.recipient,
+      name: 'Інший отримувач',
+      warehouseRef: 'another-branch',
+      warehouseName: 'Відділення №99',
+    },
+    codAmountUah: 4200,
+    recordsDispatch: false,
+    recordsReceipt: false,
+  })
+  vi.mocked(shippingApi.confirmExternal).mockResolvedValue(money())
+  vi.mocked(shippingApi.get).mockResolvedValue(created())
+  const { user, block } = await renderFlow({ initial: shipment() })
+  await user.click(
+    within(block()).getByRole('button', {
+      name: 'Прив’язати накладну з кабінету НП',
+    }),
+  )
+  const sheet = await screen.findByRole('dialog', {
+    name: 'Прив’язати наявну ТТН',
+  })
+  await user.type(within(sheet).getByLabelText(/Номер накладної/), TTN)
+  await user.click(
+    within(sheet).getByRole('button', { name: 'Перевірити накладну' }),
+  )
+  await within(sheet).findByText('Інший отримувач · +380 67 214 55 08')
+  expect(sheet).toHaveTextContent('Новий відправник')
+  expect(sheet).toHaveTextContent('№99')
+  const confirm = within(sheet).getByRole('button', {
+    name: 'Прив’язати до замовлення',
+  })
+  expect(confirm).toBeEnabled()
+  await user.click(confirm)
+  expect(shippingApi.confirmExternal).toHaveBeenCalledWith(
+    'int-1',
+    'order-1',
+    expect.objectContaining({ fingerprint: 'different' }),
+  )
+})
+
+it('renders an imported-only shipment with aggregate facts and guards draft editing', async () => {
+  const { user, block } = await renderFlow({
+    initial: created({
+      draft: null,
+      dispatchPointId: null,
+      importedDetails: {
+        recipient: {
+          ...shipment().draft!.recipient,
+          name: 'Імпортований отримувач',
+        },
+        parcels: null,
+        declaredValueUah: null,
+        payerType: null,
+        description: null,
+        weightKg: 12,
+        seatsAmount: 2,
+      },
+    }),
+  })
+  expect(block()).toHaveTextContent('Імпортований отримувач')
+  expect(block()).toHaveTextContent('2 місця · 12 кг')
+  expect(
+    within(block()).queryByRole('button', { name: 'Передати перевізнику' }),
+  ).not.toBeInTheDocument()
+  await user.click(within(block()).getByRole('button', { name: 'Ще' }))
+  expect(
+    screen.queryByRole('menuitem', { name: 'Позначити як передано' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('menuitem', { name: 'Редагувати' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  expect(
+    screen.getByRole('menuitem', { name: 'Скасувати ТТН' }),
+  ).not.toHaveAttribute('aria-disabled', 'true')
 })

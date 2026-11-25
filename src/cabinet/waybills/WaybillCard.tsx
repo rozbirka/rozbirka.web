@@ -407,12 +407,16 @@ export function WaybillCard({
               ? [
                   print,
                   refreshAction,
-                  {
-                    key: 'edit',
-                    label: tw('edit'),
-                    icon: <Pencil aria-hidden />,
-                    onSelect: () => open('edit'),
-                  },
+                  ...(current.draft === null
+                    ? []
+                    : [
+                        {
+                          key: 'edit',
+                          label: tw('edit'),
+                          icon: <Pencil aria-hidden />,
+                          onSelect: () => open('edit'),
+                        },
+                      ]),
                   {
                     key: 'cancel',
                     label: tw('cancelWaybill'),
@@ -710,7 +714,7 @@ export function WaybillCard({
         />
       ) : null}
 
-      {sheet === 'edit' && integrationId !== null ? (
+      {sheet === 'edit' && integrationId !== null && current.draft !== null ? (
         <WaybillEditSheet
           integrationId={integrationId}
           onClose={() => setSheet(null)}
@@ -726,7 +730,7 @@ export function WaybillCard({
             toast?.show({ tone: 'ok', message: tw('editConfirmed') })
           }}
           orderId={current.orderId}
-          shipment={current}
+          shipment={{ ...current, draft: current.draft }}
         />
       ) : null}
 

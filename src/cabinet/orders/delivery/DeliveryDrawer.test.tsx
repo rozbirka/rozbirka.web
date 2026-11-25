@@ -78,6 +78,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   lastTrackedAt: null,
   relatedNumbers: [],
   connectionId: null,
+  importedDetails: null,
   version: 'v1',
   dispatchedAt: null,
   receivedAt: null,
@@ -358,8 +359,8 @@ it('requires a separate surname when the recipient only has a given name and sen
   renderDrawer({
     ...current,
     draft: {
-      ...current.draft,
-      recipient: { ...current.draft.recipient, name: 'Владислав' },
+      ...current.draft!,
+      recipient: { ...current.draft!.recipient, name: 'Владислав' },
     },
   })
   expect(screen.getByLabelText('Ім’я')).toHaveValue('Владислав')
@@ -392,9 +393,9 @@ it('preserves an optional patronymic and validates the given name separately', a
   renderDrawer({
     ...current,
     draft: {
-      ...current.draft,
+      ...current.draft!,
       recipient: {
-        ...current.draft.recipient,
+        ...current.draft!.recipient,
         name: 'Соболь Владислав Ігорович',
       },
     },

@@ -121,6 +121,7 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   integrationId: 'int-1',
   dispatchPointId: 'point-1',
   connectionId: null,
+  importedDetails: null,
   orderId: 'order-1',
   version: 'v1',
   state: 'Created',

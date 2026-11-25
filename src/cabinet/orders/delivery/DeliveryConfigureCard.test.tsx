@@ -24,6 +24,7 @@ const props = () => ({
   integrationsPath: '/app/garage/settings/integrations' as string | null,
   mutationsAllowed: true,
   onConfigured: vi.fn(),
+  onAttach: vi.fn(),
   orderId: 'order-1',
 })
 
@@ -120,8 +121,14 @@ it.each(['form', 'attach'] as const)(
             : 'Прив’язати накладну з кабінету НП',
       }),
     )
-    expect(value.onConfigured).toHaveBeenCalledWith(money, action)
-    expect(configure).toHaveBeenCalledWith('order-1')
+    if (action === 'form') {
+      expect(value.onConfigured).toHaveBeenCalledWith(money, action)
+      expect(configure).toHaveBeenCalledWith('order-1')
+    } else {
+      expect(value.onAttach).toHaveBeenCalledTimes(1)
+      expect(configure).not.toHaveBeenCalled()
+      expect(value.onConfigured).not.toHaveBeenCalled()
+    }
   },
 )
 

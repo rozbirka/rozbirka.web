@@ -10,26 +10,23 @@ import {
 import { commonMessages, useLocale, useT } from '@/i18n'
 import { SheetGroup } from '../sheet-group'
 import { uah } from './delivery-money'
+import { agreedTotal as parseAgreedTotal } from './delivery-labels'
+import { trackingSignal } from '../../waybills/waybill-presentation'
 import { deliveryDrawerMessages } from './drawer-messages'
-import { deliveryMessages } from './messages'
+import { externalMessages } from './external-messages'
 import { deliveryProblemMessage } from './nova-poshta-availability'
-import {
-  SummaryList,
-  TitledNotice,
-  type SummaryRow,
-} from './WaybillCreateSheet'
+import { SummaryList, TitledNotice } from './WaybillCreateSheet'
 import { waybillMessages } from './waybill-messages'
 import {
   contactLine,
+  importedParcelLine,
   previewIncomplete,
-  previewMismatch,
   routeLine,
+  shipmentRecipient,
   withKnownNames,
 } from './waybill-view'
 
 type Phase = 'entry' | 'checking' | 'preview' | 'confirming'
-
-/** The delivery state a preview reports, in the module's words. */
 const stateKey = (preview: ExternalShipmentPreview) =>
   preview.recordsReceipt
     ? ('stateReceived' as const)
@@ -37,86 +34,96 @@ const stateKey = (preview: ExternalShipmentPreview) =>
       ? ('stateSent' as const)
       : ('stateNotSent' as const)
 
-/**
- * «Прив’язати наявну ТТН» (6.1–6.11): a waybill made in the Nova Poshta
- * cabinet becomes the order's. The number is checked first and its preview
- * shown with what attaching changes; nothing in the order is rewritten to
- * match it. Core attaches only the preview it showed — if the waybill moved
- * on in between, the sheet checks it again and says what changed (6.11).
- *
- * Core compares the waybill with the order's draft (recipient and dispatch
- * point), so an order without one is sent to the delivery form first.
- */
+/** Preview is read-only. Only explicit confirmation imports carrier facts. */
 export function ExternalWaybillSheet({
   delivery,
   integrationId,
   onAttached,
   onClose,
   onCloseAutoFocus,
-  onStartDelivery,
   orderId,
   orderNumber,
   shipment,
 }: {
-  delivery: DeliveryOrder
+  delivery: DeliveryOrder | null
   integrationId: string
-  /** Core attached it; the order's money summary as it now stands. */
   onAttached: (money: DeliveryOrder) => void
   onClose: () => void
   onCloseAutoFocus?: ((event: Event) => void) | undefined
-  /** Opens the delivery form when there is no draft to compare with. */
-  onStartDelivery: (() => void) | null
   orderId: string
   orderNumber: number
-  /** The order's draft, which the waybill is compared with. */
   shipment: Shipment | null
 }) {
   const { locale } = useLocale()
   const t = useT(waybillMessages)
   const td = useT(deliveryDrawerMessages)
-  const tm = useT(deliveryMessages)
+  const te = useT(externalMessages)
   const tc = useT(commonMessages)
-  const draft = shipment?.state === 'Draft' ? shipment : null
   const [number, setNumber] = useState('')
+  const [amount, setAmount] = useState(
+    delivery != null && delivery.agreedTotalUah > 0
+      ? String(delivery.agreedTotalUah)
+      : '',
+  )
   const [phase, setPhase] = useState<Phase>('entry')
   const [preview, setPreview] = useState<ExternalShipmentPreview | null>(null)
   const [fieldError, setFieldError] = useState<string | null>(null)
-  const [unverified, setUnverified] = useState(false)
   const [changed, setChanged] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const alertRef = useRef<HTMLDivElement | null>(null)
-
+  const pending = useRef(false)
+  const mounted = useRef(true)
   useEffect(() => {
-    if (draft === null) return
+    mounted.current = true
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus())
-    return () => window.cancelAnimationFrame(frame)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      mounted.current = false
+      window.cancelAnimationFrame(frame)
+    }
   }, [])
-
   const digits = number.replace(/\D/g, '')
+  const agreedTotal = parseAgreedTotal(amount, { allowZero: true })
   const busy = phase === 'checking' || phase === 'confirming'
-
+  const valid = digits.length === 14 && agreedTotal !== null
   const fail = (message: string) => {
     setError(message)
     window.requestAnimationFrame(() => alertRef.current?.focus())
   }
-
+  const problemMessage = (problem: unknown) =>
+    isProblemCode(problem, 'shipment_cod_mismatch')
+      ? te('codMismatch')
+      : isProblemCode(problem, 'shipment_payment_currency_mismatch')
+        ? te('currencyMismatch')
+        : isProblemCode(problem, 'shipment_identity_unverified')
+          ? te('identityIncomplete')
+          : deliveryProblemMessage(problem, locale)
+  const invalidate = () => {
+    setPreview(null)
+    setPhase('entry')
+    setChanged(false)
+    setFieldError(null)
+    setError(null)
+  }
   const check = async (stale = false) => {
+    if (!valid || (pending.current && !stale)) return
+    pending.current = true
     setPhase('checking')
     setFieldError(null)
-    setUnverified(false)
     setError(null)
     try {
       const next = await shippingApi.previewExternal(
         integrationId,
         orderId,
         digits,
+        agreedTotal,
       )
+      if (!mounted.current) return
       setPreview(next)
       setChanged(stale)
       setPhase('preview')
     } catch (problem) {
+      if (!mounted.current) return
       setPreview(null)
       setChanged(false)
       setPhase('entry')
@@ -129,136 +136,86 @@ export function ExternalWaybillSheet({
         setFieldError(t('notFound'))
       else if (isProblemCode(problem, 'shipment_already_linked'))
         setFieldError(t('alreadyLinked'))
-      else if (isProblemCode(problem, 'shipment_identity_unverified'))
-        setUnverified(true)
       else {
-        fail(deliveryProblemMessage(problem, locale))
+        fail(problemMessage(problem))
         return
       }
       window.requestAnimationFrame(() => inputRef.current?.focus())
+    } finally {
+      pending.current = false
     }
   }
-
   const confirm = async () => {
-    if (preview === null) return
+    if (preview === null || pending.current) return
+    pending.current = true
     setPhase('confirming')
     setError(null)
     try {
-      onAttached(
-        await shippingApi.confirmExternal(integrationId, orderId, preview),
+      const attached = await shippingApi.confirmExternal(
+        integrationId,
+        orderId,
+        preview,
       )
+      if (mounted.current) onAttached(attached)
     } catch (problem) {
+      if (!mounted.current) return
       if (isProblemCode(problem, 'shipment_preview_stale')) {
         await check(true)
         return
       }
       setPhase('preview')
-      fail(deliveryProblemMessage(problem, locale))
+      fail(problemMessage(problem))
+    } finally {
+      pending.current = false
     }
   }
-
-  const reset = () => {
-    setPreview(null)
-    setChanged(false)
-    setPhase('entry')
-    setNumber('')
-    window.requestAnimationFrame(() => inputRef.current?.focus())
-  }
-
   const incomplete = preview !== null && previewIncomplete(preview)
-  const mismatch =
-    preview === null
-      ? { recipient: false, cod: false }
-      : previewMismatch(preview, draft?.draft ?? null, delivery)
-  const mismatched = mismatch.recipient || mismatch.cod
+  const codMismatch =
+    delivery !== null &&
+    preview?.codAmountUah != null &&
+    !preview.recordsReceipt &&
+    preview.codAmountUah !==
+      Math.max(
+        0,
+        Math.round((preview.agreedTotalUah - delivery.appliedUah) * 100) / 100,
+      )
   const blockedWhy = incomplete
     ? t('incompleteWhy')
-    : mismatched
-      ? t('diffWhy')
+    : codMismatch
+      ? te('codMismatch')
       : undefined
   const showPreview = preview !== null && phase !== 'entry'
-
-  const previewRows = (value: ExternalShipmentPreview): SummaryRow[] => {
-    const recipient = withKnownNames(value.recipient, draft?.draft.recipient)
-    const sender = withKnownNames(value.sender, draft?.sender)
-    const state: SummaryRow = {
-      label: t('previewState'),
-      value: t(stateKey(value)),
-      ...(changed ? { tone: 'warn' as const } : {}),
-    }
-    if (changed) return [state]
-    if (incomplete)
-      return [
-        { label: t('groupRecipient'), value: contactLine(recipient) },
-        {
-          label: t('factRoute'),
-          value: routeLine(sender, recipient),
-          tone: 'danger',
-        },
-        {
-          label: t('groupCod'),
-          value:
-            value.codAmountUah === null ? '—' : uah(value.codAmountUah, locale),
-        },
-      ]
-    return [
-      { label: t('groupRecipient'), value: contactLine(recipient), tone: 'ok' },
-      {
-        label: t('factRoute'),
-        value: routeLine(sender, recipient),
-        tone: 'ok',
-      },
-      {
-        label: t('groupCod'),
-        value:
-          value.codAmountUah === null
-            ? '—'
-            : value.recordsDispatch
-              ? uah(value.codAmountUah, locale)
-              : t('codMatchesValue', {
-                  amount: uah(value.codAmountUah, locale),
-                }),
-        tone: 'ok',
-      },
-      state,
-    ]
-  }
-
-  const effect = (value: ExternalShipmentPreview) =>
-    changed ? (
-      <Notice tone="warn">{t('effectNoPayment')}</Notice>
-    ) : incomplete ? (
-      <Notice tone="warn">{t('incompleteText')}</Notice>
-    ) : value.recordsReceipt ? (
-      <Notice tone="warn">{t('effectReceived')}</Notice>
-    ) : value.recordsDispatch ? (
-      <Notice tone="info">{t('effectSent')}</Notice>
-    ) : (
-      <Notice tone="info">{t('effectNotSent')}</Notice>
-    )
-
+  const recipient =
+    preview === null
+      ? null
+      : withKnownNames(
+          preview.recipient,
+          shipment === null ? null : shipmentRecipient(shipment),
+        )
+  const sender =
+    preview === null ? null : withKnownNames(preview.sender, shipment?.sender)
+  const details = preview?.importedDetails
+  const parcels = importedParcelLine(details ?? null, locale)
   return (
     <Sheet
+      open
+      title={td('attachTitle')}
       description={t('attachDescription', { number: String(orderNumber) })}
+      onCloseAutoFocus={onCloseAutoFocus}
+      onOpenChange={(open) => {
+        if (!open && !busy) onClose()
+      }}
       footer={
         <>
           <Button disabled={busy} onClick={onClose}>
             {tc('cancel')}
           </Button>
-          {draft === null && onStartDelivery !== null ? (
-            <Button onClick={onStartDelivery}>{tm('startDelivery')}</Button>
-          ) : null}
-          {showPreview ? (
-            <Button disabled={busy} onClick={reset}>
-              {t('attachOther')}
-            </Button>
-          ) : null}
           {showPreview ? (
             <Button
               aria-busy={phase === 'confirming'}
               disabled={busy || blockedWhy !== undefined}
-              onClick={() => void confirm()}
               title={blockedWhy}
+              onClick={() => void confirm()}
               variant="primary"
             >
               {td('attachSubmit')}
@@ -266,7 +223,7 @@ export function ExternalWaybillSheet({
           ) : (
             <Button
               aria-busy={phase === 'checking'}
-              disabled={busy || draft === null || digits.length < 10}
+              disabled={busy || !valid}
               onClick={() => void check()}
               variant="primary"
             >
@@ -275,12 +232,6 @@ export function ExternalWaybillSheet({
           )}
         </>
       }
-      onCloseAutoFocus={onCloseAutoFocus}
-      onOpenChange={(open) => {
-        if (!open && !busy) onClose()
-      }}
-      open
-      title={td('attachTitle')}
     >
       {error === null ? null : (
         <div ref={alertRef} tabIndex={-1}>
@@ -292,10 +243,6 @@ export function ExternalWaybillSheet({
           {t('staleText', { state: t(stateKey(preview)) })}
         </TitledNotice>
       ) : null}
-      {draft === null ? (
-        <Notice tone="warn">{t('attachNeedsDraft')}</Notice>
-      ) : null}
-
       <Field
         error={fieldError ?? undefined}
         hint={td('attachHint')}
@@ -304,89 +251,114 @@ export function ExternalWaybillSheet({
       >
         <TextInput
           className="h-12 font-mono text-page tabular-nums"
-          disabled={draft === null}
           inputMode="numeric"
-          onChange={(event) => {
-            setNumber(event.target.value)
-            setFieldError(null)
-            setUnverified(false)
-          }}
-          onKeyDown={(event) => {
-            if (
-              event.key === 'Enter' &&
-              !busy &&
-              !showPreview &&
-              digits.length >= 10
-            )
-              void check()
-          }}
-          placeholder="20451931 5540"
-          readOnly={busy || showPreview}
+          disabled={busy}
           ref={inputRef}
           value={number}
+          placeholder="20451931 5540"
+          onChange={(event) => {
+            setNumber(event.target.value)
+            invalidate()
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !busy && !showPreview && valid) {
+              event.preventDefault()
+              void check()
+            }
+          }}
         />
       </Field>
-
-      {unverified ? (
-        <TitledNotice title={t('diffTitle')} tone="danger">
-          {t('diffText')}
-        </TitledNotice>
-      ) : null}
-
-      {!showPreview && !unverified && draft !== null ? (
-        <TitledNotice title={td('attachConditions')} tone="warn">
-          {t('attachConditionsText', {
-            amount: uah(delivery.outstandingUah, locale),
-          })}
-        </TitledNotice>
-      ) : null}
-
-      {showPreview && preview !== null && mismatched && !incomplete ? (
+      <Field
+        label={td('goodsLabel')}
+        hint={te('amountHint')}
+        required
+        error={
+          amount !== '' && agreedTotal === null ? te('amountError') : undefined
+        }
+      >
+        <TextInput
+          className="font-mono text-left"
+          dir="ltr"
+          inputMode="decimal"
+          value={amount}
+          disabled={busy}
+          onChange={(event) => {
+            setAmount(event.target.value)
+            invalidate()
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !busy && !showPreview && valid) {
+              event.preventDefault()
+              void check()
+            }
+          }}
+        />
+      </Field>
+      {showPreview &&
+      preview !== null &&
+      recipient !== null &&
+      sender !== null ? (
         <>
-          <SheetGroup title={t('diffGroup')}>
+          <SheetGroup title={t('previewGroup')}>
             <SummaryList
               rows={[
-                ...(mismatch.recipient
-                  ? [
-                      {
-                        label: t('diffRecipientWaybill'),
-                        value: preview.recipient.name,
-                        tone: 'danger' as const,
-                      },
-                      {
-                        label: t('diffRecipientOrder'),
-                        value: draft?.draft.recipient.name ?? '—',
-                      },
-                    ]
-                  : []),
-                ...(mismatch.cod && preview.codAmountUah !== null
-                  ? [
-                      {
-                        label: t('diffCodWaybill'),
-                        value: uah(preview.codAmountUah, locale),
-                        tone: 'danger' as const,
-                      },
-                      {
-                        label: t('diffCodOrder'),
-                        value: uah(delivery.outstandingUah, locale),
-                      },
-                    ]
-                  : []),
+                {
+                  label: t('factSender'),
+                  value: contactLine(sender) || te('unknown'),
+                },
+                {
+                  label: t('groupRecipient'),
+                  value: contactLine(recipient) || te('unknown'),
+                },
+                { label: t('factRoute'), value: routeLine(sender, recipient) },
+                {
+                  label: te('provider'),
+                  value: /^\d+$/.test(preview.providerStatus)
+                    ? (trackingSignal(
+                        'Created',
+                        preview.providerStatus,
+                        null,
+                        locale,
+                      )?.label ?? te('unknown'))
+                    : preview.providerStatus || te('unknown'),
+                },
+                { label: te('parcels'), value: parcels },
+                {
+                  label: te('declared'),
+                  value:
+                    details?.declaredValueUah == null
+                      ? te('unknown')
+                      : uah(details.declaredValueUah, locale),
+                },
+                {
+                  label: te('amount'),
+                  value: uah(preview.agreedTotalUah, locale),
+                },
+                {
+                  label: t('groupCod'),
+                  value:
+                    preview.codAmountUah === null
+                      ? te('unknown')
+                      : uah(preview.codAmountUah, locale),
+                },
+                { label: t('previewState'), value: t(stateKey(preview)) },
               ]}
             />
           </SheetGroup>
-          <TitledNotice title={t('diffTitle')} tone="danger">
-            {t('diffText')}
-          </TitledNotice>
+          {blockedWhy === undefined ? null : (
+            <Notice tone="danger">{blockedWhy}</Notice>
+          )}
+          <Notice tone="info">
+            {preview.recordsReceipt
+              ? t('effectReceived')
+              : preview.recordsDispatch
+                ? t('effectSent')
+                : t('effectNotSent')}
+          </Notice>
         </>
-      ) : showPreview && preview !== null ? (
-        <>
-          <SheetGroup title={t('previewGroup')}>
-            <SummaryList rows={previewRows(preview)} />
-          </SheetGroup>
-          <SheetGroup title={t('previewChanges')}>{effect(preview)}</SheetGroup>
-        </>
-      ) : null}
+      ) : (
+        <Notice tone="info">{te('review')}</Notice>
+      )}
     </Sheet>
   )
 }

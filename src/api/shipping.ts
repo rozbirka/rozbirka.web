@@ -60,6 +60,29 @@ export interface ShipmentDraft {
   dispatchPointId?: string | null
 }
 
+/** Facts supplied by the carrier; missing parcel dimensions are not invented. */
+export interface ImportedShipmentDetails {
+  recipient: ShippingContact
+  parcels: ParcelInput[] | null
+  declaredValueUah: number | null
+  payerType: string | null
+  description: string | null
+  weightKg: number | null
+  seatsAmount: number | null
+}
+
+const withImportedNulls = (
+  details: ImportedShipmentDetails,
+): ImportedShipmentDetails => ({
+  ...details,
+  parcels: details.parcels ?? null,
+  declaredValueUah: details.declaredValueUah ?? null,
+  payerType: details.payerType ?? null,
+  description: details.description ?? null,
+  weightKg: details.weightKg ?? null,
+  seatsAmount: details.seatsAmount ?? null,
+})
+
 export interface ShipmentEvent {
   code: string
   name: string
@@ -70,7 +93,7 @@ export interface ShipmentEvent {
 export interface Shipment {
   id: string
   integrationId: string
-  dispatchPointId: string
+  dispatchPointId: string | null
   /**
    * The carrier cabinet this waybill was created in. Null for waybills older
    * than connection tracking; they belong to the current cabinet.
@@ -82,7 +105,8 @@ export interface Shipment {
   state: string
   number: string | null
   sender: ShippingContact
-  draft: ShipmentDraft
+  draft: ShipmentDraft | null
+  importedDetails: ImportedShipmentDetails | null
   quoteUah: number | null
   returnEstimateUah: number
   codUah: number | null
@@ -165,7 +189,9 @@ export interface ShipmentPage {
 export interface ExternalShipmentPreview {
   number: string
   fingerprint: string
-  shipmentVersion: string
+  shipmentVersion: string | null
+  agreedTotalUah: number
+  importedDetails?: ImportedShipmentDetails | null
   providerStatus: string
   sender: ShippingContact
   recipient: ShippingContact
@@ -216,6 +242,11 @@ const withRecoveryNulls = (
  */
 const withCollections = (shipment: Shipment): Shipment => ({
   ...shipment,
+  dispatchPointId: shipment.dispatchPointId ?? null,
+  importedDetails:
+    shipment.importedDetails == null
+      ? null
+      : withImportedNulls(shipment.importedDetails),
   connectionId: shipment.connectionId ?? null,
   dispatchedAt: shipment.dispatchedAt ?? null,
   receivedAt: shipment.receivedAt ?? null,
@@ -236,7 +267,10 @@ const withCollections = (shipment: Shipment): Shipment => ({
     ...event,
     occurredAt: event.occurredAt ?? null,
   })),
-  draft: { ...shipment.draft, parcels: shipment.draft?.parcels ?? [] },
+  draft:
+    shipment.draft == null
+      ? null
+      : { ...shipment.draft, parcels: shipment.draft.parcels ?? [] },
 })
 
 const withListNulls = (item: ShipmentListItem): ShipmentListItem => ({
@@ -446,14 +480,23 @@ export const shippingApi = {
     integrationId: string,
     orderId: string,
     number: string,
+    agreedTotalUah: number,
   ): Promise<ExternalShipmentPreview> {
     const data = (
       await apiClient.post<ExternalShipmentPreview>(
         `${orders(integrationId, orderId)}/external/preview`,
-        { number },
+        { number, agreedTotalUah },
       )
     ).data
-    return { ...data, codAmountUah: data.codAmountUah ?? null }
+    return {
+      ...data,
+      shipmentVersion: data.shipmentVersion ?? null,
+      codAmountUah: data.codAmountUah ?? null,
+      importedDetails:
+        data.importedDetails == null
+          ? null
+          : withImportedNulls(data.importedDetails),
+    }
   },
   /** Answers with the order's delivery summary, which attaching may advance. */
   async confirmExternal(
@@ -461,7 +504,7 @@ export const shippingApi = {
     orderId: string,
     preview: Pick<
       ExternalShipmentPreview,
-      'number' | 'fingerprint' | 'shipmentVersion'
+      'number' | 'fingerprint' | 'shipmentVersion' | 'agreedTotalUah'
     >,
   ): Promise<DeliveryOrder> {
     return normalizeDeliveryOrder(
@@ -472,6 +515,7 @@ export const shippingApi = {
             number: preview.number,
             fingerprint: preview.fingerprint,
             shipmentVersion: preview.shipmentVersion,
+            agreedTotalUah: preview.agreedTotalUah,
           },
         )
       ).data,

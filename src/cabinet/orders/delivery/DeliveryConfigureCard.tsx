@@ -26,6 +26,7 @@ export function DeliveryConfigureCard({
   mutationsAllowed,
   novaPoshtaAvailable = true,
   onConfigured,
+  onAttach,
   orderId,
 }: {
   connection: Pick<
@@ -36,6 +37,7 @@ export function DeliveryConfigureCard({
   mutationsAllowed: boolean
   /** False for a business outside Ukraine, where Core has no Nova Poshta. */
   novaPoshtaAvailable?: boolean
+  onAttach: (() => void) | null
   onConfigured: (delivery: DeliveryOrder, action: 'form' | 'attach') => void
   orderId: string
 }) {
@@ -94,8 +96,8 @@ export function DeliveryConfigureCard({
               {t('startDelivery')}
             </Button>
             <Button
-              disabled={busy}
-              onClick={() => configure('attach')}
+              disabled={busy || onAttach === null}
+              onClick={onAttach ?? undefined}
               variant="quiet"
             >
               <Link2 aria-hidden />

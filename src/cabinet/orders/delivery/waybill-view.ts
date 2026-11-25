@@ -1,6 +1,7 @@
 import type { DeliveryOrder } from '@/api/delivery'
 import type {
   ExternalShipmentPreview,
+  ImportedShipmentDetails,
   ParcelInput,
   Shipment,
   ShipmentDraft,
@@ -44,7 +45,8 @@ export function waybillStage(
       // has to be checked against the new sender before it can be quoted.
       // An empty list is a points read that failed, not a retired point.
       return activePointIds.length > 0 &&
-        !activePointIds.includes(shipment.dispatchPointId)
+        (shipment.dispatchPointId === null ||
+          !activePointIds.includes(shipment.dispatchPointId))
         ? 'draftStale'
         : 'draft'
     case 'Creating':
@@ -134,6 +136,33 @@ export const parcelLine = (
         weight: weightOf(parcels),
       })
 
+/** Imported waybills can carry aggregate parcel facts without dimensions. */
+export const shipmentRecipient = (shipment: Shipment) =>
+  shipment.draft?.recipient ?? shipment.importedDetails?.recipient ?? null
+
+export const shipmentParcelLine = (
+  shipment: Shipment,
+  locale: Locale,
+): string => {
+  const parcels = shipment.draft?.parcels ?? shipment.importedDetails?.parcels
+  if (parcels != null && parcels.length > 0) return parcelLine(parcels, locale)
+  const details = shipment.importedDetails
+  return importedParcelLine(details ?? null, locale)
+}
+
+export const importedParcelLine = (
+  details: ImportedShipmentDetails | null,
+  locale: Locale,
+): string => {
+  if (details?.parcels != null && details.parcels.length > 0)
+    return parcelLine(details.parcels, locale)
+  if (details?.seatsAmount == null && details?.weightKg == null) return '—'
+  return tr(locale, 'factParcelValue', {
+    count: details?.seatsAmount ?? '—',
+    weight: details?.weightKg ?? '—',
+  })
+}
+
 /** `60×40×30` of the first piece, as the form types it. */
 export const dimensionsLine = (parcels: readonly ParcelInput[]): string => {
   const first = parcels[0]
@@ -220,6 +249,7 @@ export const withKnownNames = (
   known: ShippingContact | null | undefined,
 ): ShippingContact =>
   contact.warehouseRef === known?.warehouseRef &&
+  contact.settlementRef === known.settlementRef &&
   (contact.warehouseName == null || contact.warehouseName === '')
     ? {
         ...contact,

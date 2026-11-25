@@ -49,7 +49,7 @@ it('restores the nulls Core omits, so a draft is never mistaken for a waybill', 
     trackingStatus: null,
   })
   expect(shipment?.events).toEqual([])
-  expect(shipment?.draft.parcels).toEqual([])
+  expect(shipment?.draft?.parcels).toEqual([])
 })
 
 it('restores the lifecycle fields Core omits, so no access or sync problem is invented', async () => {
@@ -136,15 +136,94 @@ it('confirms an external waybill with exactly what the preview showed', async ()
     number: '204500',
     fingerprint: 'fp',
     shipmentVersion: 'v2',
+    agreedTotalUah: 1250,
   })
 
   expect(post).toHaveBeenCalledWith(
     '/integrations/int-1/shipping/orders/order-1/external/confirm',
-    { number: '204500', fingerprint: 'fp', shipmentVersion: 'v2' },
+    {
+      number: '204500',
+      fingerprint: 'fp',
+      shipmentVersion: 'v2',
+      agreedTotalUah: 1250,
+    },
   )
   expect(delivery).toMatchObject({
     workflowState: 'Open',
     refundDueUah: 0,
     refundAllocations: [],
   })
+})
+
+it('reads an imported waybill without inventing a local draft or parcel dimensions', async () => {
+  vi.spyOn(apiClient, 'get').mockResolvedValue({
+    data: {
+      id: 'imported',
+      state: 'Created',
+      sender: {},
+      importedDetails: {
+        recipient: { name: 'Recipient' },
+        weightKg: 12,
+        seatsAmount: 2,
+      },
+    },
+  })
+  expect(await shippingApi.get('int-1', 'order-1')).toMatchObject({
+    dispatchPointId: null,
+    draft: null,
+    importedDetails: {
+      parcels: null,
+      declaredValueUah: null,
+      payerType: null,
+      description: null,
+      weightKg: 12,
+      seatsAmount: 2,
+    },
+  })
+})
+
+it('previews an ordinary order with the explicit total and normalizes omitted nullable facts', async () => {
+  const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+    data: {
+      number: '20451200987731',
+      fingerprint: 'fp',
+      agreedTotalUah: 0,
+    },
+  })
+  expect(
+    await shippingApi.previewExternal('int-1', 'order-1', '20451200987731', 0),
+  ).toMatchObject({
+    shipmentVersion: null,
+    importedDetails: null,
+    codAmountUah: null,
+    agreedTotalUah: 0,
+  })
+  expect(post).toHaveBeenCalledWith(
+    '/integrations/int-1/shipping/orders/order-1/external/preview',
+    {
+      number: '20451200987731',
+      agreedTotalUah: 0,
+    },
+  )
+})
+
+it('confirms the manually reviewed amount for an ordinary order with a null shipment version', async () => {
+  const post = vi
+    .spyOn(apiClient, 'post')
+    .mockResolvedValue({ data: { orderId: 'order-1', payments: [] } })
+  await shippingApi.confirmExternal('int-1', 'order-1', {
+    number: '20451200987731',
+    fingerprint: 'fp',
+    shipmentVersion: null,
+    agreedTotalUah: 0,
+  })
+  expect(post).toHaveBeenCalledWith(
+    '/integrations/int-1/shipping/orders/order-1/external/confirm',
+    {
+      number: '20451200987731',
+      fingerprint: 'fp',
+      shipmentVersion: null,
+      agreedTotalUah: 0,
+    },
+  )
 })

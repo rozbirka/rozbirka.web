@@ -41,7 +41,10 @@ const AGREED_TOTAL_MAX = 9_999_999_999
  * The agreed order total as Core will take it: an ordinary hryvnia figure that
  * also stays under Core's ceiling.
  */
-export function agreedTotal(input: string): number | null {
-  const value = hryvnia(input)
+export function agreedTotal(
+  input: string,
+  options: { allowZero?: boolean } = {},
+): number | null {
+  const value = hryvnia(input, options)
   return value !== null && value <= AGREED_TOTAL_MAX ? value : null
 }
