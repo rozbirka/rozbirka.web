@@ -138,6 +138,7 @@ export interface Shipment {
    * False while the integration is switched off: the status is the last one
    * known and nothing that reaches the carrier is allowed.
    */
+  legacyOperationsAvailable?: boolean
   trackingEnabled: boolean
 }
 

@@ -848,7 +848,7 @@ it('attaches an external waybill after its preview (6.1–6.3, 6.12)', async () 
 
 it('explains external waybill refusals next to the number (6.6, 6.9, 6.10)', async () => {
   vi.mocked(shippingApi.previewExternal)
-    .mockRejectedValueOnce(problem('NOT_FOUND', 'not-found', 404))
+    .mockRejectedValueOnce(problem('shipment_not_found', 'not-found', 404))
     .mockRejectedValueOnce(problem('shipment_already_linked'))
     .mockResolvedValueOnce({
       number: TTN,
@@ -880,7 +880,7 @@ it('explains external waybill refusals next to the number (6.6, 6.9, 6.10)', asy
   await user.click(check)
   expect(
     await within(sheet).findByText(
-      'Накладну з таким номером не знайдено в кабінеті Нової пошти. Перевірте цифри.',
+      'Накладну не знайдено у підключеному кабінеті Нової пошти. Перевірте номер і кабінет, у якому її створено.',
     ),
   ).toBeVisible()
 
@@ -1453,4 +1453,29 @@ it('renders an imported-only shipment with aggregate facts and guards draft edit
   expect(
     screen.getByRole('menuitem', { name: 'Скасувати ТТН' }),
   ).not.toHaveAttribute('aria-disabled', 'true')
+})
+
+it('keeps JWT-only imported waybills readable without offering legacy edit or cancellation', async () => {
+  const initial = {
+    ...created({ draft: null, dispatchPointId: null }),
+    legacyOperationsAvailable: false,
+  }
+  const { user, block } = await renderFlow({ initial })
+  expect(block()).toHaveTextContent(
+    /Для цієї накладної НП не надала ідентифікатор/,
+  )
+  expect(
+    within(block()).getByRole('button', { name: 'Друк етикетки' }),
+  ).toBeEnabled()
+  expect(
+    within(block()).getByRole('button', { name: 'Оновити статус' }),
+  ).toBeEnabled()
+  await user.click(within(block()).getByRole('button', { name: 'Ще' }))
+  expect(
+    screen.queryByRole('menuitem', { name: 'Редагувати' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('menuitem', { name: 'Скасувати ТТН' }),
+  ).not.toBeInTheDocument()
+  expect(shippingApi.cancel).not.toHaveBeenCalled()
 })

@@ -43,6 +43,7 @@ import {
 } from './delivery-money'
 import { deliveryFlowMessages } from './flow-messages'
 import { deliveryMessages } from './messages'
+import { externalMessages } from './external-messages'
 import { TitledNotice } from './WaybillCreateSheet'
 import { waybillMessages } from './waybill-messages'
 import {
@@ -159,6 +160,7 @@ export function DeliveryShipmentBlock({
   const tr = useT(npRecoveryMessages)
   const tf = useT(deliveryFlowMessages)
   const tt = useT(deliveryTrustMessages)
+  const te = useT(externalMessages)
   const when = (value: string | null) =>
     value === null ? '' : (format.dateTime(value) ?? value)
   const manage = canManage && carrierReady
@@ -719,7 +721,9 @@ export function DeliveryShipmentBlock({
             },
           },
         ]),
-    ...(manage && stage === 'created'
+    ...(manage &&
+    stage === 'created' &&
+    shipment.legacyOperationsAvailable !== false
       ? [
           {
             key: 'edit',
@@ -804,7 +808,18 @@ export function DeliveryShipmentBlock({
           : fact,
       )}
       hint={hint}
-      notices={<TrackingRetryNotice state={shipment} />}
+      notices={
+        <>
+          {manage &&
+          stage === 'created' &&
+          shipment.legacyOperationsAvailable === false ? (
+            <p className="rz-caption m-0 text-pretty">
+              {te('legacyOperationsUnavailable')}
+            </p>
+          ) : null}
+          <TrackingRetryNotice state={shipment} />
+        </>
+      }
       numberRef={numberRef}
       pill={pill}
     />
