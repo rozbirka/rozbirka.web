@@ -38,7 +38,7 @@ export type PaymentOutcome =
 export function OrderPaymentDrawer({
   accountingCurrency,
   allowedCurrencies,
-  allowCarrierFee = false,
+  expectedCarrierPayment,
   paymentHint,
   busy,
   emptyTillsMessage,
@@ -56,8 +56,8 @@ export function OrderPaymentDrawer({
   accountingCurrency: string | null
   /** Optional payment constraints for an endpoint that accepts fewer currencies. */
   allowedCurrencies?: readonly string[]
-  /** Delivery receipts may include a confirmed fee withheld by the carrier. */
-  allowCarrierFee?: boolean
+  /** Gross COD still due; the entered amount is the actual net receipt. */
+  expectedCarrierPayment?: number
   paymentHint?: string
   emptyTillsMessage?: string
   validatePayment?: (payment: ConfirmPayment) => string | null
@@ -88,8 +88,6 @@ export function OrderPaymentDrawer({
   const [currency, setCurrency] = useState<string | null>(null)
   const [reselectFrom, setReselectFrom] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const [hasFee, setHasFee] = useState(false)
-  const [feeDraft, setFeeDraft] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -148,16 +146,20 @@ export function OrderPaymentDrawer({
       ? (validatePayment?.({ accountId: till.id, amount, currency: active }) ??
         null)
       : null
-  const fee = allowCarrierFee && hasFee ? parseAmount(feeDraft) : 0
+  const carrierReceipt = expectedCarrierPayment !== undefined
+  const fee =
+    carrierReceipt && amount !== null
+      ? (Math.round(expectedCarrierPayment * 100) - Math.round(amount * 100)) /
+        100
+      : 0
   const feeError =
-    allowCarrierFee &&
-    hasFee &&
-    (fee === null ||
-      fee < 0 ||
-      amount === null ||
-      fee >= amount ||
-      amountPrecisionError(fee, 'UAH', locale) !== null)
-      ? t('feeInvalid')
+    carrierReceipt &&
+    (expectedCarrierPayment <= 0 ||
+      active !== 'UAH' ||
+      (amount !== null && amount > expectedCarrierPayment))
+      ? t('receiptInvalid', {
+          amount: format.money(expectedCarrierPayment, 'UAH') ?? '',
+        })
       : null
   const valid =
     till !== undefined &&
@@ -225,7 +227,7 @@ export function OrderPaymentDrawer({
                 ),
                 added,
               ]
-              if (allowCarrierFee) onSave(payments, added, fee ?? 0)
+              if (carrierReceipt) onSave(payments, added, fee)
               else onSave(payments, added)
             }}
             variant="primary"
@@ -289,7 +291,10 @@ export function OrderPaymentDrawer({
         </p>
       </section>
 
-      <section aria-labelledby={`${groupId}-paid`} className="grid gap-3.5">
+      <section
+        aria-labelledby={`${groupId}-paid`}
+        className="grid min-h-fit gap-3.5"
+      >
         <h3 className="rz-h-card m-0" id={`${groupId}-paid`}>
           {t('actualPayment')}
         </h3>
@@ -388,10 +393,18 @@ export function OrderPaymentDrawer({
               </fieldset>
             )}
 
+            {carrierReceipt ? (
+              <div className="rz-inset flex min-h-fit flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <span className="rz-muted">{t('expectedCod')}</span>
+                <span className="rz-num">
+                  {format.money(expectedCarrierPayment, 'UAH')}
+                </span>
+              </div>
+            ) : null}
             <Field
-              error={precision ?? paymentError ?? undefined}
-              label={t('amount')}
-              hint={allowCarrierFee ? t('customerGrossHint') : undefined}
+              error={precision ?? feeError ?? paymentError ?? undefined}
+              label={t(carrierReceipt ? 'actualReceived' : 'amount')}
+              hint={carrierReceipt ? t('actualReceivedHint') : undefined}
             >
               <MoneyInput
                 className="h-12 text-page"
@@ -403,49 +416,24 @@ export function OrderPaymentDrawer({
                 value={draft}
               />
             </Field>
-            {allowCarrierFee ? (
-              <>
-                <label className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    className="rz-checkbox"
-                    checked={hasFee}
-                    disabled={busy}
-                    onChange={(event) => {
-                      setHasFee(event.target.checked)
-                      setFeeDraft('')
-                    }}
-                  />
-                  {t('carrierFee')}
-                </label>
-                {hasFee ? (
-                  <Field
-                    label={t('feeAmount')}
-                    error={feeError ?? undefined}
-                    hint={t('feeHint')}
-                  >
-                    <MoneyInput
-                      currency="UAH"
-                      inputMode="decimal"
-                      readOnly={busy}
-                      onChange={(event) => setFeeDraft(event.target.value)}
-                      placeholder="0"
-                      value={feeDraft}
-                    />
-                  </Field>
-                ) : null}
-                {amount !== null && amount > 0 && feeError === null ? (
-                  <p className="rz-inset m-0 text-pretty">
-                    {t('netReceipt', {
-                      amount:
-                        format.money(
-                          Math.round((amount - (fee ?? 0)) * 100) / 100,
-                          'UAH',
-                        ) ?? '',
-                    })}
-                  </p>
-                ) : null}
-              </>
+            {carrierReceipt && amount !== null && amount > 0 && valid ? (
+              <div className="rz-inset grid min-h-fit gap-3" aria-live="polite">
+                <dl className="m-0 grid gap-2">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <dt className="rz-muted">{t('withheldByCarrier')}</dt>
+                    <dd className="rz-num m-0">{format.money(fee, 'UAH')}</dd>
+                  </div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <dt className="rz-muted">{t('creditedToOrder')}</dt>
+                    <dd className="rz-num m-0">
+                      {format.money(expectedCarrierPayment, 'UAH')}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="rz-caption m-0 text-pretty">
+                  {t('withheldConfirmation')}
+                </p>
+              </div>
             ) : null}
           </>
         )}

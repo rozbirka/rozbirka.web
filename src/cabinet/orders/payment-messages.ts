@@ -6,15 +6,15 @@ import { defineMessages } from '@/i18n'
  */
 export const paymentMessages = defineMessages({
   uk: {
-    carrierFee: 'Перевізник утримав комісію',
-    feeAmount: 'Утримана комісія, грн',
-    feeHint:
-      'Вкажіть підтверджену комісію з виписки. Це витрата розбірки, а не борг клієнта.',
-    feeInvalid:
-      'Вкажіть невід’ємну комісію, меншу за суму оплати, до двох знаків після коми.',
-    customerGrossHint:
-      'Сума, яку клієнт сплатив за замовлення, до утримання комісії.',
-    netReceipt: 'У касу надійшло: {amount}',
+    expectedCod: 'Очікувана післяплата',
+    actualReceived: 'Фактично отримано',
+    actualReceivedHint:
+      'Вкажіть суму, яка фактично надійшла в обрану касу після утримань перевізника.',
+    receiptInvalid: 'Вкажіть отриману суму більше нуля й не більше {amount}.',
+    withheldByCarrier: 'Утримано перевізником',
+    creditedToOrder: 'Зарахуємо в оплату замовлення',
+    withheldConfirmation:
+      'Перевірте різницю перед збереженням. Її буде записано як утримання перевізника, а післяплату — погашено повністю.',
 
     eyebrow: 'Замовлення #{number} · оплата',
     title: 'Додати платіж',
@@ -76,15 +76,16 @@ export const paymentMessages = defineMessages({
     and: ' і ',
   },
   'en-GB': {
-    carrierFee: 'The carrier withheld a fee',
-    feeAmount: 'Withheld fee, UAH',
-    feeHint:
-      'Enter the confirmed statement fee. It is the yard’s expense, not customer debt.',
-    feeInvalid:
-      'Enter a nonnegative fee smaller than the payment, with up to two decimal places.',
-    customerGrossHint:
-      'The amount the customer paid for the order before the fee was withheld.',
-    netReceipt: 'Received in the till: {amount}',
+    expectedCod: 'Expected cash on delivery',
+    actualReceived: 'Actually received',
+    actualReceivedHint:
+      'Enter the amount actually received in the selected till after carrier deductions.',
+    receiptInvalid:
+      'Enter a received amount greater than zero and no more than {amount}.',
+    withheldByCarrier: 'Withheld by the carrier',
+    creditedToOrder: 'Credited to the order',
+    withheldConfirmation:
+      'Check the difference before saving. It will be recorded as a carrier deduction and the cash on delivery will be settled in full.',
 
     eyebrow: 'Order #{number} · payment',
     title: 'Add payment',
@@ -141,15 +142,16 @@ export const paymentMessages = defineMessages({
     and: ' and ',
   },
   pl: {
-    carrierFee: 'Przewoźnik potrącił prowizję',
-    feeAmount: 'Potrącona prowizja, UAH',
-    feeHint:
-      'Podaj potwierdzoną prowizję z wyciągu. To koszt firmy, a nie dług klienta.',
-    feeInvalid:
-      'Podaj nieujemną prowizję mniejszą od płatności, do dwóch miejsc po przecinku.',
-    customerGrossHint:
-      'Kwota zapłacona przez klienta za zamówienie przed potrąceniem prowizji.',
-    netReceipt: 'Wpłynęło do kasy: {amount}',
+    expectedCod: 'Oczekiwana kwota pobrania',
+    actualReceived: 'Faktycznie otrzymano',
+    actualReceivedHint:
+      'Podaj kwotę faktycznie otrzymaną w wybranej kasie po potrąceniach przewoźnika.',
+    receiptInvalid:
+      'Podaj otrzymaną kwotę większą od zera i nie większą niż {amount}.',
+    withheldByCarrier: 'Potrącone przez przewoźnika',
+    creditedToOrder: 'Zaliczymy na poczet zamówienia',
+    withheldConfirmation:
+      'Sprawdź różnicę przed zapisaniem. Zostanie zapisana jako potrącenie przewoźnika, a pobranie zostanie rozliczone w całości.',
 
     eyebrow: 'Zamówienie #{number} · płatność',
     title: 'Dodaj płatność',

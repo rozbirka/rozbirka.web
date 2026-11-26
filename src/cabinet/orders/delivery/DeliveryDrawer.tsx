@@ -110,6 +110,9 @@ export function DeliveryDrawer({
   delivery,
   dispatchPoints,
   integrationId,
+  initialAppliedUah = 0,
+  initialCustomerTrusted = false,
+  initialDepositRequired = true,
   onClose,
   onCloseAutoFocus,
   onMoneyChanged,
@@ -123,7 +126,10 @@ export function DeliveryDrawer({
   customerName: string | null
   customerPhone: string | null
   /** The order's money: the post-payment is whatever it still owes. */
-  delivery: DeliveryOrder
+  delivery: DeliveryOrder | null
+  initialAppliedUah?: number
+  initialCustomerTrusted?: boolean
+  initialDepositRequired?: boolean
   dispatchPoints: NovaPoshtaDispatchPoint[]
   integrationId: string
   onClose: () => void
@@ -144,7 +150,17 @@ export function DeliveryDrawer({
   const td = useT(deliveryDrawerMessages)
   const tc = useT(commonMessages)
   const tt = useT(deliveryTrustMessages)
-  const [waiveDeposit, setWaiveDeposit] = useState(delivery.depositWaived)
+  const [configured, setConfigured] = useState<DeliveryOrder | null>(null)
+  const currentDelivery = delivery ?? configured
+  const customerTrusted =
+    currentDelivery?.customerTrusted ?? initialCustomerTrusted
+  const depositRequired =
+    currentDelivery?.depositRequired ?? initialDepositRequired
+  const appliedUah = currentDelivery?.appliedUah ?? initialAppliedUah
+  const agreedTotalUah = currentDelivery?.agreedTotalUah ?? 0
+  const [waiveDeposit, setWaiveDeposit] = useState(
+    delivery?.depositWaived ?? initialCustomerTrusted,
+  )
   const saved =
     (shipment?.state === 'Draft' ? shipment.draft : null) ?? prefill ?? null
   const activePoint = (id: string | null | undefined) =>
@@ -199,7 +215,7 @@ export function DeliveryDrawer({
   // Core keeps the agreed hryvnia total apart from the order lines and only
   // learns it here; an order configured without one has to be told what the
   // goods cost before the post-payment means anything.
-  const askGoods = delivery.agreedTotalUah <= 0
+  const askGoods = agreedTotalUah <= 0
   const [goods, setGoods] = useState('')
 
   const [busy, setBusy] = useState(false)
@@ -250,11 +266,11 @@ export function DeliveryDrawer({
   const placesValue = /^\d+$/.test(places.trim()) ? Number(places) : null
   const weightValue = decimal(weight)
   const dimsValue = parseDimensions(dims)
-  const goodsValue = askGoods ? hryvnia(goods) : delivery.agreedTotalUah
-  const declared = askGoods ? (goodsValue ?? 0) : delivery.agreedTotalUah
+  const goodsValue = askGoods ? hryvnia(goods) : agreedTotalUah
+  const declared = askGoods ? (goodsValue ?? 0) : agreedTotalUah
   const balance = askGoods
-    ? Math.max(0, (goodsValue ?? 0) - delivery.appliedUah)
-    : delivery.outstandingUah
+    ? Math.max(0, (goodsValue ?? 0) - appliedUah)
+    : (currentDelivery?.outstandingUah ?? 0)
 
   const problems = (): FieldKey[] =>
     ORDER.filter((key) => {
@@ -324,15 +340,15 @@ export function DeliveryDrawer({
     setBusy(true)
     setError(null)
     try {
-      const waiver = delivery.customerTrusted && waiveDeposit
-      if (waiver !== delivery.depositWaived) {
-        onMoneyChanged(
-          await deliveryApi.configure(
-            orderId,
-            askGoods ? goodsValue! : undefined,
-            waiver,
-          ),
+      const waiver = customerTrusted && waiveDeposit
+      if (waiver !== currentDelivery?.depositWaived) {
+        const next = await deliveryApi.configure(
+          orderId,
+          askGoods ? goodsValue! : undefined,
+          currentDelivery === null && !customerTrusted ? undefined : waiver,
         )
+        setConfigured(next)
+        onMoneyChanged(next)
       } else if (askGoods && goodsValue !== null) {
         onMoneyChanged(await deliveryApi.configure(orderId, goodsValue))
       }
@@ -682,7 +698,7 @@ export function DeliveryDrawer({
       </SheetGroup>
 
       <SheetGroup hint={t('codRule')} n="5" title={t('groupCod')}>
-        {delivery.depositRequired && delivery.customerTrusted ? (
+        {depositRequired && customerTrusted ? (
           <div className="rz-inset grid gap-2">
             <div className="flex items-center gap-3">
               <Switch
@@ -699,7 +715,7 @@ export function DeliveryDrawer({
           </div>
         ) : (
           <p className="rz-caption m-0">
-            {tt(delivery.depositRequired ? 'required' : 'policyOff')}
+            {tt(depositRequired ? 'required' : 'policyOff')}
           </p>
         )}
         {askGoods ? (

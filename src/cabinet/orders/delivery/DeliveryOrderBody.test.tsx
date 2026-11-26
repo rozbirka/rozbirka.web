@@ -330,7 +330,8 @@ it('offers the next step in the block that needs it (module 46 §9)', async () =
   expect(screen.queryByRole('button', { name: 'Створити ТТН' })).toBeNull()
 })
 
-it('does not claim payment was received before the hryvnia total is agreed', () => {
+it('does not claim payment was received before the hryvnia total is agreed', async () => {
+  const user = userEvent.setup()
   renderBody(
     load({
       money: delivery({
@@ -351,6 +352,7 @@ it('does not claim payment was received before the hryvnia total is agreed', () 
   expect(screen.getByRole('tab', { name: /Продаж/ })).toHaveTextContent(
     'Суму не визначено',
   )
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
   const steps = screen.getByRole('list', { name: 'Етапи доставки' })
   const paidStep = within(steps).getAllByRole('listitem')[0]!
   expect(paidStep).not.toHaveAttribute('aria-current')
@@ -495,6 +497,26 @@ it.each(['missing', 'draft'])(
   },
 )
 
+it('shows payment and delivery progress only on the delivery tab', async () => {
+  const user = userEvent.setup()
+  renderBody(load({ shipment: shipment() }))
+  expect(screen.getByRole('tab', { name: /Продажі/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  expect(
+    screen.queryByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeNull()
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
+  expect(
+    screen.getByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeVisible()
+  await user.click(screen.getByRole('tab', { name: /Продажі/ }))
+  expect(
+    screen.queryByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeNull()
+})
+
 it('shows delivery progress only after a parcel has been configured', async () => {
   const user = userEvent.setup()
   renderBody(load({ shipment: null }))
@@ -513,7 +535,8 @@ it('shows delivery progress only after a parcel has been configured', async () =
 
 it.each(['dispatchedAt', 'receivedAt'] as const)(
   'preserves recorded %s history even when the shipment is unavailable',
-  (field) => {
+  async (field) => {
+    const user = userEvent.setup()
     renderBody(
       load({
         integrationId: null,
@@ -521,6 +544,7 @@ it.each(['dispatchedAt', 'receivedAt'] as const)(
         money: delivery({ [field]: '2026-10-28T08:14:00Z' }),
       }),
     )
+    await user.click(screen.getByRole('tab', { name: /Доставка/ }))
     const progress = screen.getByRole('region', {
       name: 'Стан оплати та доставки',
     })
@@ -725,7 +749,7 @@ it('speaks British English on both halves of the card', async () => {
     </LocaleProvider>,
   )
 
-  expect(screen.getByRole('list', { name: 'Delivery stages' })).toBeVisible()
+  expect(screen.queryByRole('list', { name: 'Delivery stages' })).toBeNull()
   expect(screen.getByRole('region', { name: 'Items' })).toBeVisible()
   const payment = screen.getByRole('region', { name: 'Payment' })
   // The pill and the «Paid» fact both say it.
@@ -733,6 +757,7 @@ it('speaks British English on both halves of the card', async () => {
   expect(within(payment).getByText('Received')).toBeVisible()
 
   await user.click(screen.getByRole('tab', { name: /Delivery/ }))
+  expect(screen.getByRole('list', { name: 'Delivery stages' })).toBeVisible()
   const carrier = screen.getByRole('region', { name: 'Delivery · Nova Poshta' })
   await user.click(within(carrier).getByRole('button', { name: 'More' }))
   expect(
@@ -946,6 +971,7 @@ it('shows no-prepayment as complete in both progress views while the order still
       shipment: shipment(),
     }),
   )
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
   const progress = screen.getByRole('region', {
     name: 'Стан оплати та доставки',
   })
@@ -979,6 +1005,7 @@ it('marks the received minimum prepayment complete in both views and keeps the C
       shipment: shipment({ codUah: 38200 }),
     }),
   )
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
   const progress = screen.getByRole('region', {
     name: 'Стан оплати та доставки',
   })
@@ -1003,7 +1030,8 @@ it('marks the received minimum prepayment complete in both views and keeps the C
   )
 })
 
-it('explains payment and delivery independently when the parcel is received before COD', () => {
+it('explains payment and delivery independently when the parcel is received before COD', async () => {
+  const user = userEvent.setup()
   renderBody(
     load({
       money: delivery({
@@ -1017,6 +1045,7 @@ it('explains payment and delivery independently when the parcel is received befo
       shipment: shipment(),
     }),
   )
+  await user.click(screen.getByRole('tab', { name: /Доставка/ }))
   const progress = screen.getByRole('region', {
     name: 'Стан оплати та доставки',
   })
@@ -1034,8 +1063,10 @@ it.each([
   ['Cancelled', 'Скасовано'],
 ])(
   'keeps the carrier outcome truthful in the milestone: %s',
-  (state, label) => {
+  async (state, label) => {
+    const user = userEvent.setup()
     renderBody(load({ shipment: shipment({ state, number: null }) }))
+    await user.click(screen.getByRole('tab', { name: /Доставка/ }))
     const progress = screen.getByRole('region', {
       name: 'Стан оплати та доставки',
     })
@@ -1048,7 +1079,8 @@ it.each([
 
 it.each(['Cancelled', 'AwaitingGoods', 'AwaitingRefund'])(
   'does not expect a new payment once order settlement has stopped: %s',
-  (workflowState) => {
+  async (workflowState) => {
+    const user = userEvent.setup()
     renderBody(
       load({
         money: delivery({
@@ -1059,6 +1091,7 @@ it.each(['Cancelled', 'AwaitingGoods', 'AwaitingRefund'])(
         shipment: shipment(),
       }),
     )
+    await user.click(screen.getByRole('tab', { name: /Доставка/ }))
     const progress = screen.getByRole('region', {
       name: 'Стан оплати та доставки',
     })

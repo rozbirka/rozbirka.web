@@ -41,6 +41,7 @@ export interface DeliveryOrderState {
   points: NovaPoshtaDispatchPoint[]
   shipment: Shipment | null
   customerPhone: string | null
+  customerTrusted?: boolean
 }
 
 export interface DeliveryOrderLoad {
@@ -164,6 +165,8 @@ export function useDeliveryOrder(
         disconnected: null,
         points: points.filter((point) => point.isActive),
         customerPhone: customer?.phone ?? null,
+        customerTrusted:
+          customer?.isActive === true && customer.isTrustedForDelivery === true,
       }
     }
 

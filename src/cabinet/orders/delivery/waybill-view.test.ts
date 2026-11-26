@@ -3,6 +3,7 @@ import type { DeliveryOrder } from '@/api/delivery'
 import type { ExternalShipmentPreview, Shipment } from '@/api/shipping'
 import {
   contactLine,
+  destinationLine,
   parcelLine,
   parcelsFrom,
   parseDimensions,
@@ -135,6 +136,34 @@ it('marks a draft whose dispatch point was retired by new settings (2.9)', () =>
   // A failed points read is not a retired point.
   expect(waybillStage(delivery(), shipment(), [])).toBe('draft')
 })
+
+it.each([
+  ['місто Дубляни', 'Дубляни'],
+  [' Місто Дубляни, Львівська обл.', 'Дубляни'],
+  ['м. Дубляни', 'Дубляни'],
+  ['с. Дубляни', 'Дубляни'],
+  ['смт Дубляни', 'Дубляни'],
+  ['Дубляни', 'Дубляни'],
+  ['Містове', 'Містове'],
+])(
+  'formats settlement %s consistently in route and destination',
+  (name, expected) => {
+    const contact = {
+      ...shipment().sender,
+      settlementName: name,
+      warehouseName: 'Відділення №1 (до 30 кг): вул. Львівська, 17а',
+    }
+    const recipient = {
+      ...shipment().draft!.recipient,
+      settlementName: 'місто Харків',
+      warehouseName: 'Відділення №1: вул. Прикладна, 1',
+    }
+    expect(routeLine(contact, recipient)).toBe(`${expected} №1 → Харків №1`)
+    expect(destinationLine(contact)).toBe(
+      `${expected} · Відділення №1 (до 30 кг)`,
+    )
+  },
+)
 
 it('writes recipient, route and parcel the way the block shows them', () => {
   const value = shipment()

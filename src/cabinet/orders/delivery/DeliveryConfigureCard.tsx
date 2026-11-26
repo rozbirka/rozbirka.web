@@ -1,33 +1,19 @@
-import { useState } from 'react'
 import { Link2, Truck } from 'lucide-react'
-import { Button, Card, Notice } from '@/components/app'
-import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
-import { useLocale, useT } from '@/i18n'
+import { Button, Card } from '@/components/app'
+import { useT } from '@/i18n'
 import { deliveryMessages } from './messages'
 import { ShipmentCard } from './DeliveryOrderCard'
-import { deliveryProblemMessage } from './nova-poshta-availability'
 import { DeliveryConnectionCard } from './DeliveryConnectionCard'
 import type { DeliveryOrderState } from './use-delivery-order'
 
-/**
- * The one step that turns an ordinary order into a delivery order.
- *
- * It asks for nothing. Saying that an order ships is not the same decision as
- * saying what the recipient still owes on it — goods that are already paid for
- * owe nothing at all — and the hryvnia figure is taken later, where the
- * post-payment is actually set.
- *
- * A delivery order is a Nova Poshta order, so outside Ukraine the card only
- * says why it is not offered.
- */
+/** Opens delivery setup without changing the order until the draft is saved. */
 export function DeliveryConfigureCard({
   connection,
   integrationsPath,
   mutationsAllowed,
   novaPoshtaAvailable = true,
-  onConfigured,
+  onStart,
   onAttach,
-  orderId,
 }: {
   connection: Pick<
     DeliveryOrderState,
@@ -38,32 +24,9 @@ export function DeliveryConfigureCard({
   /** False for a business outside Ukraine, where Core has no Nova Poshta. */
   novaPoshtaAvailable?: boolean
   onAttach: (() => void) | null
-  onConfigured: (delivery: DeliveryOrder, action: 'form' | 'attach') => void
-  orderId: string
+  onStart: () => void
 }) {
-  const { locale } = useLocale()
   const t = useT(deliveryMessages)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const configure = (action: 'form' | 'attach') => {
-    if (
-      busy ||
-      !mutationsAllowed ||
-      !novaPoshtaAvailable ||
-      connection.integrationId === null
-    )
-      return
-    setBusy(true)
-    setError(null)
-    void deliveryApi
-      .configure(orderId)
-      .then((delivery) => onConfigured(delivery, action))
-      .catch((problem: unknown) => {
-        setError(deliveryProblemMessage(problem, locale))
-      })
-      .finally(() => setBusy(false))
-  }
 
   if (!novaPoshtaAvailable)
     return (
@@ -86,17 +49,12 @@ export function DeliveryConfigureCard({
       actions={
         mutationsAllowed ? (
           <>
-            <Button
-              aria-busy={busy}
-              disabled={busy}
-              onClick={() => configure('form')}
-              variant="primary"
-            >
+            <Button onClick={onStart} variant="primary">
               <Truck aria-hidden />
               {t('startDelivery')}
             </Button>
             <Button
-              disabled={busy || onAttach === null}
+              disabled={onAttach === null}
               onClick={onAttach ?? undefined}
               variant="quiet"
             >
@@ -108,7 +66,6 @@ export function DeliveryConfigureCard({
       }
       facts={null}
       hint={t('configureNote')}
-      notices={error === null ? null : <Notice tone="danger">{error}</Notice>}
     />
   )
 }

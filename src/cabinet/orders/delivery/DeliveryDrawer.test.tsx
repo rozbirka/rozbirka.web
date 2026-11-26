@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi } from '@/api/integrations'
 import type { DeliveryOrder } from '@/api/delivery'
-import { shippingApi, type Shipment } from '@/api/shipping'
+import { shippingApi, type Shipment, type ShipmentDraft } from '@/api/shipping'
 import { LocaleProvider } from '@/i18n'
 import { DeliveryDrawer } from './DeliveryDrawer'
 import { customersApi } from '@/api/customers'
@@ -147,6 +147,9 @@ const money = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
 const renderDrawer = (
   current: Shipment | null,
   {
+    prefill = null,
+    initialAppliedUah = 0,
+    initialCustomerTrusted = false,
     customerSearchAllowed = false,
     delivery = money(),
     onSaved = vi.fn(),
@@ -154,8 +157,11 @@ const renderDrawer = (
     customerPhone = '+380503381172',
     customerName = 'Олійник Ірина',
   }: {
+    prefill?: ShipmentDraft | null
+    initialAppliedUah?: number
+    initialCustomerTrusted?: boolean
     customerSearchAllowed?: boolean
-    delivery?: DeliveryOrder
+    delivery?: DeliveryOrder | null
     onSaved?: (shipment: Shipment) => void
     onMoneyChanged?: (delivery: DeliveryOrder) => void
     customerPhone?: string | null
@@ -165,6 +171,9 @@ const renderDrawer = (
   render(
     <LocaleProvider locale="uk" syncDocumentLang={false}>
       <DeliveryDrawer
+        prefill={prefill}
+        initialAppliedUah={initialAppliedUah}
+        initialCustomerTrusted={initialCustomerTrusted}
         customerName={customerName}
         customerPhone={customerPhone}
         customerSearchAllowed={customerSearchAllowed}
@@ -460,4 +469,91 @@ it('preserves manually entered recipient names when a customer is selected', asy
   expect(screen.getByLabelText('Ім’я')).toHaveValue('Владислав')
   expect(screen.getByLabelText('По батькові')).toHaveValue('Ігорович')
   expect(screen.getByLabelText('Телефон')).toHaveValue('+380634181690')
+})
+
+it('validates an unsaved delivery without configuring the ordinary order', async () => {
+  const user = userEvent.setup()
+  renderDrawer(null, { delivery: null })
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  expect(screen.getByRole('alert')).toBeVisible()
+  expect(deliveryApi.configure).not.toHaveBeenCalled()
+  expect(shippingApi.saveDraft).not.toHaveBeenCalled()
+})
+
+it.each([false, true])(
+  'configures only on save and preserves trusted default %s',
+  async (trusted) => {
+    const user = userEvent.setup()
+    const onSaved = vi.fn()
+    const configured = money({
+      agreedTotalUah: 500,
+      appliedUah: 150,
+      outstandingUah: 350,
+      customerTrusted: trusted,
+      depositWaived: trusted,
+    })
+    vi.mocked(deliveryApi.configure).mockResolvedValue(configured)
+    vi.mocked(shippingApi.saveDraft).mockImplementation(() => {
+      expect(deliveryApi.configure).toHaveBeenCalledTimes(1)
+      return Promise.resolve(shipment())
+    })
+    renderDrawer(null, {
+      delivery: null,
+      prefill: draft,
+      initialAppliedUah: 150,
+      initialCustomerTrusted: trusted,
+      onSaved,
+    })
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Відділення/)).toHaveValue(
+        draft.recipient.warehouseRef,
+      ),
+    )
+    await user.type(screen.getByLabelText(/Погоджена сума замовлення/), '500')
+    expect(deliveryApi.configure).not.toHaveBeenCalled()
+    expect(shippingApi.saveDraft).not.toHaveBeenCalled()
+    expect(screen.getAllByText('350,00 UAH')[0]).toBeVisible()
+    if (trusted) expect(screen.getByRole('switch')).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+    await waitFor(() =>
+      expect(onSaved).toHaveBeenCalledWith(
+        expect.objectContaining({ state: 'Draft' }),
+      ),
+    )
+    expect(deliveryApi.configure).toHaveBeenCalledWith(
+      'order-1',
+      500,
+      trusted ? true : undefined,
+    )
+    expect(shippingApi.saveDraft).toHaveBeenCalledWith(
+      'integration-1',
+      'order-1',
+      expect.objectContaining({ declaredValueUah: 500 }),
+    )
+  },
+)
+
+it('keeps a failed draft visible and retries without configuring again', async () => {
+  const user = userEvent.setup()
+  const onSaved = vi.fn()
+  vi.mocked(deliveryApi.configure).mockResolvedValue(
+    money({ agreedTotalUah: 500 }),
+  )
+  vi.mocked(shippingApi.saveDraft)
+    .mockRejectedValueOnce(new Error('unavailable'))
+    .mockResolvedValue(shipment())
+  renderDrawer(null, { delivery: null, prefill: draft, onSaved })
+  await waitFor(() =>
+    expect(screen.getByLabelText(/Відділення/)).toHaveValue(
+      draft.recipient.warehouseRef,
+    ),
+  )
+  await user.type(screen.getByLabelText(/Погоджена сума замовлення/), '500')
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  expect(await screen.findByRole('alert')).toBeVisible()
+  expect(onSaved).not.toHaveBeenCalled()
+  expect(screen.getByLabelText('Прізвище')).toHaveValue('Олійник')
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1))
+  expect(deliveryApi.configure).toHaveBeenCalledTimes(1)
 })
