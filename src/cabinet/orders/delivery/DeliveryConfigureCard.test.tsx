@@ -2,7 +2,6 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
-import type { DeliveryOrder } from '@/api/delivery'
 import { LocaleProvider } from '@/i18n'
 import { DeliveryConfigureCard } from './DeliveryConfigureCard'
 import type { DeliveryOrderState } from './use-delivery-order'
@@ -23,9 +22,8 @@ const props = () => ({
   connection: connection(),
   integrationsPath: '/app/garage/settings/integrations' as string | null,
   mutationsAllowed: true,
-  onConfigured: vi.fn(),
+  onStart: vi.fn(),
   onAttach: vi.fn(),
-  orderId: 'order-1',
 })
 
 beforeEach(() => vi.clearAllMocks())
@@ -105,8 +103,6 @@ it.each(['form', 'attach'] as const)(
   async (action) => {
     const value = props()
     value.connection = connection({ integrationId: 'int-1', carrier: null })
-    const money = { orderId: 'order-1' } as DeliveryOrder
-    configure.mockResolvedValue(money)
     const user = userEvent.setup()
     render(
       <MemoryRouter>
@@ -122,12 +118,12 @@ it.each(['form', 'attach'] as const)(
       }),
     )
     if (action === 'form') {
-      expect(value.onConfigured).toHaveBeenCalledWith(money, action)
-      expect(configure).toHaveBeenCalledWith('order-1')
+      expect(value.onStart).toHaveBeenCalledTimes(1)
+      expect(configure).not.toHaveBeenCalled()
     } else {
       expect(value.onAttach).toHaveBeenCalledTimes(1)
       expect(configure).not.toHaveBeenCalled()
-      expect(value.onConfigured).not.toHaveBeenCalled()
+      expect(value.onStart).not.toHaveBeenCalled()
     }
   },
 )

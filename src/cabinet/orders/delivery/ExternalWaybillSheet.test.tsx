@@ -377,8 +377,7 @@ it('opens ordinary-order attachment without configuring delivery', async () => {
         integrationsPath={null}
         mutationsAllowed
         onAttach={onAttach}
-        onConfigured={vi.fn()}
-        orderId="order-1"
+        onStart={vi.fn()}
       />
     </MemoryRouter>,
   )

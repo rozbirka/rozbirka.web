@@ -49,14 +49,23 @@ export function DeliveryRecordPaymentDrawer({
         ) / 100
 
   const record = async (payment: ConfirmPayment, feeUah: number) => {
-    if (pending || payment.currency !== 'UAH' || payment.amount > ceiling)
+    const gross = codWaybill === null ? payment.amount : ceiling
+    if (
+      pending ||
+      payment.currency !== 'UAH' ||
+      payment.amount <= 0 ||
+      payment.amount > ceiling ||
+      gross <= 0 ||
+      feeUah < 0 ||
+      feeUah >= gross
+    )
       return
     setPending(true)
     setOutcome(null)
     try {
       await onRecord({
         accountId: payment.accountId,
-        amountUah: payment.amount,
+        amountUah: gross,
         feeUah: codWaybill === null ? 0 : feeUah,
         kind: codWaybill === null ? 'prepayment' : 'cod',
       })
@@ -79,9 +88,9 @@ export function DeliveryRecordPaymentDrawer({
     <OrderPaymentDrawer
       accountingCurrency={accountingCurrency}
       allowedCurrencies={UAH_ONLY}
-      allowCarrierFee={codWaybill !== null}
+      {...(codWaybill === null ? {} : { expectedCarrierPayment: ceiling })}
       paymentHint={
-        requireFullBalance
+        codWaybill === null && requireFullBalance
           ? tf('actualReceiptWithWaybill')
           : tf('actualReceiptHint')
       }
@@ -102,7 +111,9 @@ export function DeliveryRecordPaymentDrawer({
       validatePayment={(payment) =>
         payment.amount > ceiling
           ? t('recordOverLimit', { amount: uah(ceiling, locale) })
-          : requireFullBalance && payment.amount !== ceiling
+          : codWaybill === null &&
+              requireFullBalance &&
+              payment.amount !== ceiling
             ? tf('fullBalanceRequired', { amount: uah(ceiling, locale) })
             : null
       }

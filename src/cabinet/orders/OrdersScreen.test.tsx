@@ -14,6 +14,7 @@ import type { OrderDetail } from '@/api/orders'
 import { useCabinet } from '../CabinetContext'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { OrdersScreen } from './OrdersScreen'
+import type { ShipmentDraft } from '@/api/shipping'
 import { saveCurrencyDraft } from '../currency/form-draft'
 
 const orderMocks = vi.hoisted(() => ({
@@ -39,9 +40,15 @@ const integrationMocks = vi.hoisted(() => ({
   list: vi.fn(),
   dispatchPoints: vi.fn(),
   preferences: vi.fn(),
+  settlements: vi.fn(),
+  divisions: vi.fn(),
 }))
-const shippingMocks = vi.hoisted(() => ({ get: vi.fn() }))
-const deliveryMocks = vi.hoisted(() => ({ get: vi.fn(), setCustomer: vi.fn() }))
+const shippingMocks = vi.hoisted(() => ({ get: vi.fn(), saveDraft: vi.fn() }))
+const deliveryMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  setCustomer: vi.fn(),
+  configure: vi.fn(),
+}))
 const customerMocks = vi.hoisted(() => ({
   list: vi.fn(),
   search: vi.fn(),
@@ -61,6 +68,7 @@ vi.mock('@/api/shipping', () => ({ shippingApi: shippingMocks }))
 vi.mock('@/api/delivery', () => ({
   deliveryApi: {
     get: deliveryMocks.get,
+    configure: deliveryMocks.configure,
     setCustomer: deliveryMocks.setCustomer,
   },
 }))
@@ -3118,6 +3126,7 @@ it('reuses the customer drawer after booking delivery and refreshes customer and
       <OrdersScreen definition={definition} />
     </MemoryRouter>,
   )
+  await user.click(await screen.findByRole('tab', { name: /Доставка/ }))
   await screen.findByRole('region', { name: 'Стан оплати та доставки' })
   const card = screen.getByRole('region', { name: 'Клієнт' })
   await user.click(
@@ -3749,4 +3758,185 @@ it('hides previously loaded order rows when a background refresh loses permissio
     await vi.advanceTimersByTimeAsync(10_000)
   })
   expect(screen.queryByRole('link', { name: '#368' })).not.toBeInTheDocument()
+})
+
+it.each(['cancel', 'close', 'escape'] as const)(
+  'opening delivery and dismissing with %s keeps ordinary confirmation available',
+  async (dismiss) => {
+    integrationMocks.list.mockResolvedValue([
+      { id: 'int-1', code: 'nova_poshta', status: 'active' },
+    ])
+    deliveryMocks.configure.mockReturnValue(
+      new Promise(() => {
+        /* intentionally pending until the sheet is dismissed */
+      }),
+    )
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>,
+    )
+    await user.click(
+      await screen.findByRole('button', { name: 'Оформити доставку' }),
+    )
+    expect(deliveryMocks.configure).not.toHaveBeenCalled()
+    const drawer = await screen.findByRole('dialog', {
+      name: 'Оформлення доставки',
+    })
+    await user.type(within(drawer).getByLabelText('Прізвище'), 'Незбережене')
+    if (dismiss === 'escape') await user.keyboard('{Escape}')
+    else
+      await user.click(
+        within(drawer).getByRole('button', {
+          name: dismiss === 'cancel' ? 'Скасувати' : 'Закрити',
+        }),
+      )
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(
+      screen.getAllByRole('button', { name: 'Підтвердити замовлення' })[0],
+    ).toBeEnabled()
+    expect(deliveryMocks.configure).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('region', { name: 'Стан оплати та доставки' }),
+    ).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Оформити доставку' }))
+    expect(await screen.findByLabelText('Прізвище')).toHaveValue('')
+    expect(deliveryMocks.configure).not.toHaveBeenCalled()
+  },
+)
+
+it('switches an ordinary order to delivery only after its draft is saved', async () => {
+  integrationMocks.list.mockResolvedValue([
+    { id: 'int-1', code: 'nova_poshta', status: 'active' },
+  ])
+  integrationMocks.dispatchPoints.mockResolvedValue([
+    {
+      id: 'point-1',
+      name: 'Основна',
+      isActive: true,
+      isDefault: true,
+      senderName: 'Тестовий Відправник',
+    },
+  ])
+  integrationMocks.settlements.mockResolvedValue({
+    items: [
+      {
+        ref: 'city-1',
+        name: 'Львів',
+        prohibitedSending: false,
+        prohibitedIssuance: false,
+      },
+    ],
+    page: 1,
+    lastPage: 1,
+  })
+  integrationMocks.divisions.mockResolvedValue({
+    items: [
+      { ref: 'division-1', name: 'Відділення №1', receivingAllowed: true },
+    ],
+    page: 1,
+    lastPage: 1,
+  })
+  const configured = {
+    orderId: 'order-1',
+    agreedTotalUah: 500,
+    appliedUah: 0,
+    outstandingUah: 500,
+    netReceivedUah: 0,
+    feesUah: 0,
+    requiredDepositUah: 0,
+    depositShortfallUah: 0,
+    depositSatisfied: false,
+    depositWaived: false,
+    depositRequired: true,
+    customerTrusted: false,
+    dispatchedAt: null,
+    receivedAt: null,
+    returnedAt: null,
+    awaitingCodReconciliation: false,
+    payments: [],
+    workflowState: 'Open',
+    refundDueUah: 0,
+    refundAllocations: [],
+  }
+  let saveDraft!: (value: unknown) => void
+  deliveryMocks.configure.mockImplementation(() => {
+    deliveryMocks.get.mockResolvedValue(configured)
+    return Promise.resolve(configured)
+  })
+  shippingMocks.saveDraft.mockReturnValue(
+    new Promise((resolve) => {
+      saveDraft = resolve
+    }),
+  )
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Оформити доставку' }),
+  )
+  await user.type(screen.getByLabelText('Прізвище'), 'Тестовий')
+  await user.type(screen.getByLabelText('Ім’я'), 'Отримувач')
+  await user.type(screen.getByLabelText('Телефон'), '+380671234567')
+  await user.type(
+    screen.getByRole('combobox', { name: 'Населений пункт' }),
+    'Львів',
+  )
+  await user.click(await screen.findByRole('button', { name: 'Львів' }))
+  await waitFor(() => expect(screen.getByLabelText('Відділення')).toBeEnabled())
+  await user.selectOptions(screen.getByLabelText('Відділення'), 'division-1')
+  await user.type(screen.getByLabelText('Вага'), '1')
+  await user.type(screen.getByLabelText('Габарити'), '20×15×10')
+  await user.type(screen.getByLabelText(/Погоджена сума замовлення/), '500')
+  expect(deliveryMocks.configure).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'Зберегти чернетку' }))
+  await waitFor(() => expect(shippingMocks.saveDraft).toHaveBeenCalledTimes(1))
+  expect(
+    screen.getByRole('dialog', { name: 'Оформлення доставки' }),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Зберегти чернетку' }),
+  ).toBeDisabled()
+  const nextDraft = {
+    id: 'shipment-1',
+    integrationId: 'int-1',
+    orderId: 'order-1',
+    state: 'Draft',
+    number: null,
+    draft: shippingMocks.saveDraft.mock.calls[0]![2] as ShipmentDraft,
+    trackingCode: null,
+    trackingStatus: null,
+    dispatchedAt: null,
+    receivedAt: null,
+    quoteAt: null,
+    quoteUah: null,
+    relatedNumbers: [],
+    events: [],
+  }
+  shippingMocks.get.mockResolvedValue(nextDraft)
+  await act(async () => {
+    saveDraft(nextDraft)
+    await Promise.resolve()
+  })
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(await screen.findByRole('tab', { name: /Доставка/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  expect(
+    screen.getByRole('region', { name: 'Стан оплати та доставки' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Підтвердити замовлення' }),
+  ).toBeNull()
+  expect(deliveryMocks.configure).toHaveBeenCalledTimes(1)
+  expect(deliveryMocks.configure).toHaveBeenCalledWith(
+    'order-1',
+    500,
+    undefined,
+  )
 })

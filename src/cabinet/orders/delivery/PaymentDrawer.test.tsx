@@ -133,7 +133,9 @@ it.each([null, '20451200987731'])(
   async (codWaybill) => {
     const user = userEvent.setup()
     const { onRecord, onClose } = renderDrawer('record', {}, { codWaybill })
-    const amount = await screen.findByLabelText('Сума')
+    const amount = await screen.findByLabelText(
+      codWaybill === null ? 'Сума' : 'Фактично отримано',
+    )
     await user.type(amount, '3 600,00')
     await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
     expect(onRecord).toHaveBeenCalledWith({
@@ -384,50 +386,100 @@ it('compares a fractional deposit remainder in kopecks without rejecting its exa
   })
 })
 
-it('records the customer gross and confirmed carrier fee separately in the standard drawer', async () => {
+it('settles the full COD and derives the withheld amount from actual receipt', async () => {
   const user = userEvent.setup()
-  const { onRecord } = renderDrawer(
+  const { onRecord, onClose } = renderDrawer(
     'record',
-    {},
+    { agreedTotalUah: 23970, appliedUah: 0, outstandingUah: 23970 },
     { codWaybill: '99000000000001' },
   )
-  await user.type(await screen.findByLabelText('Сума'), '3600')
-  await user.click(
-    screen.getByRole('checkbox', { name: 'Перевізник утримав комісію' }),
-  )
-  await user.type(screen.getByLabelText('Утримана комісія, грн'), '18')
-  expect(screen.getByText(/У касу надійшло:/)).toHaveTextContent(
-    /3\s582,00\sUAH/,
-  )
+  const amount = await screen.findByLabelText('Фактично отримано')
+  expect(amount).toHaveValue('')
+  expect(
+    screen.getByText('Очікувана післяплата').parentElement,
+  ).toHaveTextContent(/23\s970,00\sUAH/)
+  expect(
+    screen.queryByRole('checkbox', { name: 'Перевізник утримав комісію' }),
+  ).toBeNull()
+  expect(screen.queryByLabelText('Утримана комісія, грн')).toBeNull()
+  await user.type(amount, '23 850,15')
+  expect(
+    screen.getByText('Утримано перевізником').parentElement,
+  ).toHaveTextContent(/119,85\sUAH/)
+  expect(
+    screen.getByText('Зарахуємо в оплату замовлення').parentElement,
+  ).toHaveTextContent(/23\s970,00\sUAH/)
   await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
   expect(onRecord).toHaveBeenCalledWith({
     accountId: 'cash-1',
-    amountUah: 3600,
-    feeUah: 18,
+    amountUah: 23970,
+    feeUah: 119.85,
+    kind: 'cod',
+  })
+  expect(onClose).toHaveBeenCalledOnce()
+})
+
+it.each(['0', '-1', '3600.01', '3582.001'])(
+  'refuses invalid actual COD receipt %s without recording money',
+  async (value) => {
+    const user = userEvent.setup()
+    const { onRecord } = renderDrawer(
+      'record',
+      {},
+      { codWaybill: '99000000000001' },
+    )
+    await user.type(await screen.findByLabelText('Фактично отримано'), value)
+    expect(
+      screen.getByRole('button', { name: 'Записати оплату' }),
+    ).toBeDisabled()
+    expect(onRecord).not.toHaveBeenCalled()
+  },
+)
+
+it('credits only the outstanding COD after prepayment using exact kopecks', async () => {
+  const user = userEvent.setup()
+  const { onRecord } = renderDrawer(
+    'record',
+    { agreedTotalUah: 500, appliedUah: 186, outstandingUah: 314 },
+    { codWaybill: '99000000000001' },
+  )
+  await user.type(await screen.findByLabelText('Фактично отримано'), '312.43')
+  await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
+  expect(onRecord).toHaveBeenCalledWith({
+    accountId: 'cash-1',
+    amountUah: 314,
+    feeUah: 1.57,
     kind: 'cod',
   })
 })
 
-it('refuses an invalid fee and clears it when the fee option is switched off', async () => {
+it('keeps the actual receipt after a failed COD save and prevents concurrent saves', async () => {
   const user = userEvent.setup()
-  const { onRecord } = renderDrawer(
+  let rejectSave: (reason: unknown) => void = () => undefined
+  const { onRecord, onClose } = renderDrawer(
     'record',
     {},
-    { codWaybill: '99000000000001' },
+    {
+      codWaybill: '99000000000001',
+      onRecord: () =>
+        new Promise((_resolve, reject) => {
+          rejectSave = reject
+        }),
+    },
   )
-  await user.type(await screen.findByLabelText('Сума'), '100')
-  await user.click(
-    screen.getByRole('checkbox', { name: 'Перевізник утримав комісію' }),
-  )
-  await user.type(screen.getByLabelText('Утримана комісія, грн'), '100')
-  expect(screen.getByRole('button', { name: 'Записати оплату' })).toBeDisabled()
-  await user.click(
-    screen.getByRole('checkbox', { name: 'Перевізник утримав комісію' }),
-  )
+  const amount = await screen.findByLabelText('Фактично отримано')
+  await user.type(amount, '3582')
   await user.click(screen.getByRole('button', { name: 'Записати оплату' }))
-  expect(onRecord).toHaveBeenCalledWith(
-    expect.objectContaining({ amountUah: 100, feeUah: 0 }),
-  )
+  expect(screen.getByRole('button', { name: 'Записуємо…' })).toBeDisabled()
+  expect(amount).toHaveAttribute('readonly')
+  expect(onRecord).toHaveBeenCalledTimes(1)
+  await act(async () => {
+    rejectSave({ kind: 'network', message: 'Offline' })
+    await Promise.resolve()
+  })
+  expect(amount).toHaveValue('3582')
+  expect(screen.getByRole('button', { name: 'Записати оплату' })).toBeEnabled()
+  expect(onClose).not.toHaveBeenCalled()
 })
 
 it('requires the full remaining balance after creation and explains that recording does not change carrier COD', async () => {

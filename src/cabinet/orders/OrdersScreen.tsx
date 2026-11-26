@@ -89,6 +89,7 @@ import {
   OrderSteps,
   OrderTimeline,
 } from './OrderDetailCards'
+import { DeliveryDrawer } from './delivery/DeliveryDrawer'
 import { DeliveryConfigureCard } from './delivery/DeliveryConfigureCard'
 import { ExternalWaybillSheet } from './delivery/ExternalWaybillSheet'
 import {
@@ -1220,9 +1221,13 @@ function OrderDetailScreen({
   )
   const [deliveryEntry, setDeliveryEntry] = useState<{
     orderId: string
-    action: 'form' | 'attach' | 'attached'
+    action: 'form' | 'attach' | 'attached' | 'draft'
   } | null>(null)
   const [externalAttachOpen, setExternalAttachOpen] = useState(false)
+  const [deliveryFormOrderId, setDeliveryFormOrderId] = useState<string | null>(
+    null,
+  )
+  const configuredDeliveryRef = useRef<DeliveryOrder | null>(null)
   const tw = useT(waybillMessages)
   const tf = useT(deliveryFlowMessages)
   const historyTitleId = useId()
@@ -1778,6 +1783,51 @@ function OrderDetailScreen({
         <Notice tone="danger">{error}</Notice>
       ) : null}
 
+      {deliveryFormOrderId === order.id &&
+      deliveryLoad.state?.integrationId != null ? (
+        <DeliveryDrawer
+          key={order.id}
+          customerName={order.customerName}
+          customerPhone={deliveryLoad.state.customerPhone}
+          customerSearchAllowed={customerSearchAllowed}
+          delivery={null}
+          initialAppliedUah={order.payments
+            .filter((payment) => payment.currency === 'UAH')
+            .reduce((sum, payment) => sum + payment.amount, 0)}
+          initialCustomerTrusted={deliveryLoad.state.customerTrusted ?? false}
+          initialDepositRequired={
+            cabinet.targetTenant?.requireDeliveryDeposit ?? true
+          }
+          dispatchPoints={deliveryLoad.state.points}
+          integrationId={deliveryLoad.state.integrationId}
+          onClose={() => {
+            setDeliveryFormOrderId(null)
+            // Configuration can succeed before saving the shipment fails.
+            // Only an explicit save attempt can populate this ref.
+            if (configuredDeliveryRef.current !== null) {
+              deliveryLoad.setMoney(configuredDeliveryRef.current)
+              deliveryLoad.reload()
+              void reload()
+            }
+          }}
+          onMoneyChanged={(next) => {
+            configuredDeliveryRef.current = next
+          }}
+          onSaved={(next) => {
+            setDeliveryFormOrderId(null)
+            setDeliveryEntry({ orderId: order.id, action: 'draft' })
+            if (configuredDeliveryRef.current !== null)
+              deliveryLoad.setMoney(configuredDeliveryRef.current)
+            deliveryLoad.setShipment(next)
+            deliveryLoad.reload()
+            void reload()
+          }}
+          orderId={order.id}
+          orderNumber={order.number}
+          shipment={null}
+        />
+      ) : null}
+
       {externalAttachOpen && deliveryLoad.state?.integrationId != null ? (
         <ExternalWaybillSheet
           key={order.id}
@@ -1815,11 +1865,10 @@ function OrderDetailScreen({
                 }
                 mutationsAllowed={mutationsAllowed}
                 novaPoshtaAvailable={novaPoshta.available}
-                onConfigured={(next, action) => {
-                  setDeliveryEntry({ orderId: order.id, action })
-                  deliveryLoad.setMoney(next)
+                onStart={() => {
+                  configuredDeliveryRef.current = null
+                  setDeliveryFormOrderId(order.id)
                 }}
-                orderId={order.id}
               />
             ) : null}
             {itemsEditable ? (

@@ -189,7 +189,7 @@ export function DeliveryOrderBody({
   financePath?: string | null
   integrationsPath: string | null
   /** Continue the entry button into its form without a second click. */
-  initialAction?: 'form' | 'attach' | 'attached' | undefined
+  initialAction?: 'form' | 'attach' | 'attached' | 'draft' | undefined
   /** A header action waiting to open its dialog. */
   intent?: DeliveryIntent | null
   load: DeliveryOrderLoad
@@ -720,7 +720,7 @@ export function DeliveryOrderBody({
         </div>
       )}
 
-      {hasDeliveryProgress ? (
+      {hasDeliveryProgress && tab === 'shipping' ? (
         <DeliveryLifecycle
           paymentKnown={delivery.agreedTotalUah > 0}
           paymentExpected={!closing}

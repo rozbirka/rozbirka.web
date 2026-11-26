@@ -396,7 +396,11 @@ it('asks for the post-payment by hand without a till and books it as cod (9.4, 9
   const sheet = await screen.findByRole('dialog', { name: 'Додати платіж' })
   expect(sheet).toHaveTextContent('Фактична оплата')
   expect(sheet).toHaveTextContent('Валюту обліку ще не обрано')
-  await user.type(await within(sheet).findByLabelText('Сума'), '4200')
+  expect(within(sheet).getByText('Очікувана післяплата')).toBeVisible()
+  await user.type(
+    await within(sheet).findByLabelText('Фактично отримано'),
+    '4200',
+  )
   await user.click(
     within(sheet).getByRole('button', { name: 'Записати оплату' }),
   )

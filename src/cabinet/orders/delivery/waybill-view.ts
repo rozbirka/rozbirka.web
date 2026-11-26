@@ -91,11 +91,12 @@ export const contactLine = (contact: Pick<ShippingContact, 'name' | 'phone'>) =>
     .filter((part) => part !== '')
     .join(' · ')
 
-/** `Київ` out of `м. Київ, Київська обл.` — the town a clerk says. */
+/** `Київ` out of `місто Київ` or `м. Київ, Київська обл.`. */
 const town = (name: string | null | undefined): string =>
   (name ?? '')
     .split(',')[0]
-    ?.replace(/^(м\.|с\.|смт)\s*/u, '')
+    ?.trim()
+    .replace(/^(?:місто\s+|(?:м\.|с\.|смт)\s*)/iu, '')
     .trim() ?? ''
 
 /** `№12` out of `Відділення №12 (до 30 кг): вул. Богатирська, 6`. */
