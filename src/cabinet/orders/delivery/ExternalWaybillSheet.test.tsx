@@ -450,3 +450,95 @@ it('does not publish a late attachment result into an order screen that has unmo
   )
   expect(onAttached).not.toHaveBeenCalled()
 })
+
+it.each([
+  ['nova_poshta_unauthorized', /Нова пошта не дозволила перевірити накладну/],
+  ['nova_poshta_unavailable', /сервіс Нової пошти тимчасово недоступний/],
+  ['nova_poshta_ratelimited', /Нова пошта тимчасово обмежила запити/],
+  ['nova_poshta_invalidresponse', /Нова пошта повернула некоректну відповідь/],
+])(
+  'distinguishes %s from a missing waybill and keeps retry available',
+  async (code, message) => {
+    vi.mocked(shippingApi.previewExternal).mockRejectedValueOnce({
+      kind: 'server',
+      code,
+      status: 502,
+      message: 'Provider failure',
+    })
+    const { user } = show()
+    await user.type(screen.getByLabelText(/Номер накладної/), number)
+    await user.keyboard('{Enter}')
+    const error = await screen.findByText(message)
+    await waitFor(() => expect(error.closest('[tabindex="-1"]')).toHaveFocus())
+    expect(screen.getByLabelText(/Номер накладної/)).toHaveValue(number)
+    expect(screen.queryByText(/Накладну.*не знайдено/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText(/Погоджена сума замовлення/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Прив’язати до замовлення' }),
+    ).not.toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: 'Перевірити накладну' }),
+    )
+    await screen.findByText('Попередній перегляд')
+    expect(shippingApi.confirmExternal).not.toHaveBeenCalled()
+  },
+)
+
+it('shows a number error only for the confirmed carrier lookup miss', async () => {
+  vi.mocked(shippingApi.previewExternal).mockRejectedValueOnce({
+    kind: 'not-found',
+    code: 'shipment_not_found',
+    status: 404,
+    message: 'Missing',
+  })
+  const { user } = show()
+  await user.type(screen.getByLabelText(/Номер накладної/), number)
+  await user.keyboard('{Enter}')
+  await screen.findByText(/Накладну не знайдено у підключеному кабінеті/)
+  await waitFor(() =>
+    expect(screen.getByLabelText(/Номер накладної/)).toHaveFocus(),
+  )
+  expect(screen.getByLabelText(/Номер накладної/)).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
+})
+
+it('treats an upstream HTTP 404 as a provider response failure, not an absent waybill', async () => {
+  vi.mocked(shippingApi.previewExternal).mockRejectedValueOnce({
+    kind: 'not-found',
+    code: 'nova_poshta_notfound',
+    status: 404,
+    message: 'Provider endpoint missing',
+  })
+  const { user } = show()
+  await user.type(screen.getByLabelText(/Номер накладної/), number)
+  await user.keyboard('{Enter}')
+  await screen.findByText(/Нова пошта повернула некоректну відповідь/)
+  expect(screen.queryByText(/Накладну.*не знайдено/)).not.toBeInTheDocument()
+  expect(screen.getByLabelText(/Номер накладної/)).not.toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
+  expect(shippingApi.confirmExternal).not.toHaveBeenCalled()
+})
+
+it('does not misreport a missing order or integration as an absent waybill', async () => {
+  vi.mocked(shippingApi.previewExternal).mockRejectedValueOnce({
+    kind: 'not-found',
+    code: 'NOT_FOUND',
+    status: 404,
+    message: 'Order missing',
+  })
+  const { user } = show()
+  await user.type(screen.getByLabelText(/Номер накладної/), number)
+  await user.keyboard('{Enter}')
+  await screen.findByRole('alert')
+  expect(screen.queryByText(/Накладну.*не знайдено/)).not.toBeInTheDocument()
+  expect(screen.getByLabelText(/Номер накладної/)).not.toHaveAttribute(
+    'aria-invalid',
+    'true',
+  )
+})

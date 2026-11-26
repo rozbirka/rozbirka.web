@@ -58,6 +58,7 @@ import {
 } from '../orders/delivery/WaybillEditSheet'
 import { WaybillReconcileSheet } from '../orders/delivery/WaybillReconcileSheet'
 import { waybillMessages } from '../orders/delivery/waybill-messages'
+import { externalMessages } from '../orders/delivery/external-messages'
 import { createdAt } from '../orders/delivery/waybill-view'
 import type { ShipmentFactRow } from '../orders/delivery/DeliveryOrderCard'
 import {
@@ -146,6 +147,7 @@ export function WaybillCard({
   const tw = useT(waybillMessages)
   const tm = useT(deliveryMessages)
   const tr = useT(npRecoveryMessages)
+  const te = useT(externalMessages)
   const { locale } = useLocale()
   const format = useFormat()
   const toast = useOptionalToast()
@@ -407,7 +409,8 @@ export function WaybillCard({
               ? [
                   print,
                   refreshAction,
-                  ...(current.draft === null
+                  ...(current.draft === null ||
+                  current.legacyOperationsAvailable === false
                     ? []
                     : [
                         {
@@ -417,17 +420,21 @@ export function WaybillCard({
                           onSelect: () => open('edit'),
                         },
                       ]),
-                  {
-                    key: 'cancel',
-                    label: tw('cancelWaybill'),
-                    icon: <Ban aria-hidden />,
-                    quiet: true,
-                    onSelect: () => {
-                      remember()
-                      setDialogError(null)
-                      setDialog({ kind: 'cancel' })
-                    },
-                  },
+                  ...(current.legacyOperationsAvailable === false
+                    ? []
+                    : [
+                        {
+                          key: 'cancel',
+                          label: tw('cancelWaybill'),
+                          icon: <Ban aria-hidden />,
+                          quiet: true,
+                          onSelect: () => {
+                            remember()
+                            setDialogError(null)
+                            setDialog({ kind: 'cancel' })
+                          },
+                        },
+                      ]),
                   toOrder(true),
                 ]
               : [print, refreshAction, toOrder(true)]
@@ -593,6 +600,13 @@ export function WaybillCard({
           {t('lostText')}
         </TitledNotice>
       )}
+      {rights.manage &&
+      currentStage === 'created' &&
+      current.legacyOperationsAvailable === false ? (
+        <p className="rz-caption m-0 text-pretty">
+          {te('legacyOperationsUnavailable')}
+        </p>
+      ) : null}
       {live && lost === null && current.state === 'Created' ? (
         <TrackingRetryNotice state={current} />
       ) : null}

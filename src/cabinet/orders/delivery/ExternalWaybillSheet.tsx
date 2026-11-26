@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Field, Notice, Sheet, TextInput } from '@/components/app'
 import type { DeliveryOrder } from '@/api/delivery'
-import { isProblemCode, normalizeApiProblem } from '@/api/errors'
+import { isProblemCode } from '@/api/errors'
 import {
   shippingApi,
   type ExternalShipmentPreview,
@@ -102,7 +102,16 @@ export function ExternalWaybillSheet({
           ? te('currencyMismatch')
           : isProblemCode(problem, 'shipment_identity_unverified')
             ? te('identityIncomplete')
-            : deliveryProblemMessage(problem, locale)
+            : isProblemCode(problem, 'nova_poshta_unauthorized')
+              ? te('authorizationFailed')
+              : isProblemCode(problem, 'nova_poshta_ratelimited')
+                ? te('providerRateLimited')
+                : isProblemCode(problem, 'nova_poshta_invalidresponse') ||
+                    isProblemCode(problem, 'nova_poshta_notfound')
+                  ? te('providerInvalidResponse')
+                  : isProblemCode(problem, 'nova_poshta_unavailable')
+                    ? te('providerUnavailable')
+                    : deliveryProblemMessage(problem, locale)
   const invalidate = () => {
     setPreview(null)
     setPhase('entry')
@@ -137,18 +146,13 @@ export function ExternalWaybillSheet({
       setPreview(null)
       setChanged(false)
       setPhase('entry')
-      const normalized = normalizeApiProblem(problem)
       if (
         isProblemCode(problem, 'shipment_amount_required') ||
         isProblemCode(problem, 'shipment_cod_mismatch')
       )
         setAmountVisible(true)
-      if (
-        normalized.status === 404 ||
-        normalized.kind === 'not-found' ||
-        isProblemCode(problem, 'nova_poshta_notfound')
-      )
-        setFieldError(t('notFound'))
+      if (isProblemCode(problem, 'shipment_not_found'))
+        setFieldError(te('notFound'))
       else if (isProblemCode(problem, 'shipment_already_linked'))
         setFieldError(t('alreadyLinked'))
       else {

@@ -698,3 +698,25 @@ it('shows imported recipient and aggregate parcel facts without fabricating a dr
   ).not.toBeInTheDocument()
   expect(screen.getAllByRole('button', { name: 'Друк' })[0]).toBeEnabled()
 })
+
+it('does not offer legacy edit or cancellation for a JWT-only imported waybill', async () => {
+  const imported = {
+    ...shipment({ draft: null }),
+    legacyOperationsAvailable: false,
+  }
+  vi.mocked(shippingApi.byId).mockResolvedValue(imported)
+  renderCard()
+  await screen.findByText(/Для цієї накладної НП не надала ідентифікатор/)
+  expect(screen.getAllByRole('button', { name: 'Друк' })[0]).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Оновити статус' })).toBeEnabled()
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Інші дії з накладною' }))
+  expect(
+    screen.queryByRole('menuitem', { name: 'Редагувати' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('menuitem', { name: 'Скасувати ТТН' }),
+  ).not.toBeInTheDocument()
+  expect(shippingApi.cancel).not.toHaveBeenCalled()
+})
