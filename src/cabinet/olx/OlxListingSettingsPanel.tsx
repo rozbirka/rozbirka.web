@@ -77,29 +77,41 @@ export function OlxListingSettingsPanel({
   canManage,
   actionsHost = null,
   setupLocation,
+  initialSettings = null,
+  onSettingsChange,
 }: {
   canManage: boolean
   actionsHost?: HTMLElement | null
   setupLocation?: LocationSetup
+  initialSettings?: OlxListingSettingsView | null
+  onSettingsChange?: (settings: OlxListingSettingsView) => void
 }) {
   const t = useT(olxListingSettingsMessages)
-  const [load, setLoad] = useState<LoadState>({ kind: 'loading' })
+  const [load, setLoad] = useState<LoadState>(() =>
+    initialSettings
+      ? { kind: 'ready', settings: initialSettings }
+      : { kind: 'loading' },
+  )
   const [attempt, setAttempt] = useState(0)
   const [tenantSignal] = useState(() => tenantRequestScope.signal)
 
   useEffect(() => {
+    if (initialSettings) return
     const controller = new AbortController()
     const signal = AbortSignal.any([controller.signal, tenantSignal])
     void olxListingSettingsApi.get({ signal }).then(
       (settings) => {
-        if (!signal.aborted) setLoad({ kind: 'ready', settings })
+        if (!signal.aborted) {
+          setLoad({ kind: 'ready', settings })
+          onSettingsChange?.(settings)
+        }
       },
       () => {
         if (!signal.aborted) setLoad({ kind: 'error' })
       },
     )
     return () => controller.abort()
-  }, [attempt, tenantSignal])
+  }, [attempt, tenantSignal, initialSettings, onSettingsChange])
 
   if (load.kind === 'error') {
     return (
@@ -131,6 +143,7 @@ export function OlxListingSettingsPanel({
       tenantSignal={tenantSignal}
       actionsHost={actionsHost}
       setupLocation={setupLocation}
+      onSettingsChange={onSettingsChange}
     />
   )
 }
@@ -141,12 +154,14 @@ function ListingSettingsForm({
   tenantSignal,
   actionsHost,
   setupLocation,
+  onSettingsChange,
 }: {
   initial: OlxListingSettingsView
   canManage: boolean
   tenantSignal: AbortSignal
   actionsHost: HTMLElement | null
   setupLocation: LocationSetup | undefined
+  onSettingsChange: ((settings: OlxListingSettingsView) => void) | undefined
 }) {
   const t = useT(olxListingSettingsMessages)
   const formId = useId()
@@ -263,6 +278,7 @@ function ListingSettingsForm({
       const updated = await olxListingSettingsApi.update(request, { signal })
       if (signal.aborted) return
       setSaved(updated)
+      onSettingsChange?.(updated)
       setDraft(updated)
       setState('saved')
       toast?.show({ tone: 'ok', message: t('saved') })

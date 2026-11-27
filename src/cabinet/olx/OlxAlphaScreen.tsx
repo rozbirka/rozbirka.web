@@ -33,7 +33,10 @@ import {
   type OlxPublication,
 } from '@/api/olx'
 import { normalizeApiProblem } from '@/api/errors'
-import { olxListingSettingsApi } from '@/api/olx-listing-settings'
+import {
+  olxListingSettingsApi,
+  type OlxListingSettingsView,
+} from '@/api/olx-listing-settings'
 import { useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import type { TenantAccessSnapshot } from '../access-types'
@@ -77,7 +80,19 @@ type OlxSection =
   | 'messages'
 
 export function OlxAlphaScreen() {
-  return <OlxScreen section="account" />
+  const { pathname } = useLocation()
+  const path = pathname.replace(/\/$/, '')
+  const last = path.split('/').at(-1)
+  const section: OlxSection = path.includes('/settings/integrations/olx')
+    ? last === 'listing'
+      ? 'listing'
+      : 'account'
+    : last === 'messages' || last === 'reconcile' || last === 'queue'
+      ? last
+      : last === 'olx'
+        ? 'sales'
+        : 'account'
+  return <OlxScreen section={section} />
 }
 
 export function OlxSalesScreen() {
@@ -96,9 +111,7 @@ export function OlxMessagesScreen() {
   return <OlxScreen section="messages" />
 }
 
-export function OlxListingSettingsScreen() {
-  return <OlxScreen section="listing" />
-}
+export const OlxListingSettingsScreen = OlxAlphaScreen
 
 export function OlxLegacyRedirect() {
   const { targetTenant, snapshot } = useCabinet()
@@ -144,7 +157,7 @@ function OlxScreen({ section }: { section: OlxSection }) {
   return (
     <div className="min-h-dvh bg-app-canvas text-app-ink">
       <OlxWorkspace
-        key={`${targetTenant.id}:${snapshot.generation}:${section}`}
+        key={`${targetTenant.id}:${snapshot.userId}:${snapshot.generation}`}
         section={section}
         slug={targetTenant.slug}
         snapshot={snapshot}
@@ -200,6 +213,8 @@ function OlxWorkspace({
   const canReadQueue = canPublish && canReadParts && canEdit
   const queueOwner = `${snapshot.tenantId}:${snapshot.userId}:${snapshot.generation}`
   const [connection, setConnection] = useState<OlxConnection | null>(null)
+  const [listingSettings, setListingSettings] =
+    useState<OlxListingSettingsView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -395,7 +410,6 @@ function OlxWorkspace({
             : 'failed'
   if ((reconcile || messages) && connection && !real)
     return <Navigate replace to={salesHref} />
-  const reconcileReady = reconcile && real && canBrowse && connection.accountId
   const salesTabs = sales && real && (canBrowse || (queue && canReadQueue)) && (
     <nav aria-label={tr('tabs')} className="rz-tabs flex-wrap">
       <Link
@@ -459,16 +473,16 @@ function OlxWorkspace({
         ) : undefined
       }
     >
-      {!reconcileReady && (
-        <header className="grid gap-2">
-          <RedesignTitle title={t('title')} />
-          {sales && !messages && real && (canBrowse || queue) && (
-            <div>
+      <header>
+        <RedesignTitle
+          title={t('title')}
+          aside={
+            sales && !messages && real && (canBrowse || queue) ? (
               <StatusPill>{t('manualMode')}</StatusPill>
-            </div>
-          )}
-        </header>
-      )}
+            ) : undefined
+          }
+        />
+      </header>
       {!sales && canRead && (listing || (real && connection.connected)) && (
         <nav aria-label={t('settingsTabs')} className="rz-tabs">
           <Link to={accountHref} aria-current={!listing ? 'page' : undefined}>
@@ -479,7 +493,7 @@ function OlxWorkspace({
           </Link>
         </nav>
       )}
-      {!reconcile && salesTabs}
+      {salesTabs}
       {(!canRead || (queue && !canReadQueue)) && (
         <Notice tone="danger">{t('noAccess')}</Notice>
       )}
@@ -498,6 +512,8 @@ function OlxWorkspace({
           <OlxListingSettingsPanel
             canManage={canManage}
             actionsHost={listingActions}
+            initialSettings={listingSettings}
+            onSettingsChange={setListingSettings}
             {...(setupLocation
               ? {
                   setupLocation: {
@@ -702,7 +718,15 @@ function OlxWorkspace({
               canManage={canManage}
               canReadParts={canReadParts}
               canWrite={connection.scope?.split(' ').includes('write') ?? false}
-              tabs={salesTabs}
+              tabs={null}
+              showHeader={false}
+              onCompleted={(completedAt) => {
+                setConnection((current) =>
+                  current && current.accountId === connection.accountId
+                    ? { ...current, reconciliationCompletedAt: completedAt }
+                    : current,
+                )
+              }}
             />
           )}
           {sales && !queue && !real && canBrowse && canReadParts && (

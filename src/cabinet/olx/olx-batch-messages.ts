@@ -67,6 +67,8 @@ export const olxBatchMessages = defineMessages({
     jobRefresh: 'Оновити стан завдання',
     jobLoadFailed: 'Не вдалося завантажити завдання OLX',
     jobEmpty: 'Завдань з публікації ще немає.',
+    jobEmptyHint:
+      'Тут з’являться стан і результати публікацій, які ви запустите з Розбірки.',
     jobContinues:
       'Публікація триває у фоні. Щоб перечитати стан, натисніть «Оновити стан завдання».',
     jobStarting: 'Зберігаємо завдання публікації…',
@@ -202,6 +204,8 @@ export const olxBatchMessages = defineMessages({
     jobRefresh: 'Refresh job status',
     jobLoadFailed: 'Could not load OLX publication jobs',
     jobEmpty: 'There are no publication jobs yet.',
+    jobEmptyHint:
+      'The status and results of publications started from Rozbirka will appear here.',
     jobContinues:
       'Publication runs in the background. Select Refresh job status to check its progress.',
     jobStarting: 'Saving the publication job…',
@@ -335,6 +339,8 @@ export const olxBatchMessages = defineMessages({
     jobRefresh: 'Odśwież status zadania',
     jobLoadFailed: 'Nie udało się wczytać zadań OLX',
     jobEmpty: 'Brak zadań publikacji.',
+    jobEmptyHint:
+      'Tutaj pojawią się status i wyniki publikacji uruchomionych z Rozbirki.',
     jobContinues:
       'Publikacja działa w tle. Wybierz Odśwież status zadania, aby sprawdzić postęp.',
     jobStarting: 'Zapisywanie zadania publikacji…',

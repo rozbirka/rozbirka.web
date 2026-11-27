@@ -64,6 +64,8 @@ export function OlxReconciliationPanel({
   canReadParts,
   canWrite,
   tabs,
+  showHeader = true,
+  onCompleted,
 }: {
   accountId: string
   initialCompletedAt: string | null
@@ -71,6 +73,8 @@ export function OlxReconciliationPanel({
   canReadParts: boolean
   canWrite: boolean
   tabs: ReactNode
+  showHeader?: boolean
+  onCompleted?: (completedAt: string) => void
 }) {
   const t = useT(olxReconciliationMessages)
   const tl = useT(olxLiveMessages)
@@ -215,6 +219,7 @@ export function OlxReconciliationPanel({
         })
         if (signal.aborted) return
         setCompletedAt(result.completedAt)
+        onCompleted?.(result.completedAt)
       } else if (confirm === 'link' && canLink && selected && part) {
         const publication = await olxLiveApi.publication(part.id, { signal })
         if (signal.aborted) return
@@ -327,16 +332,18 @@ export function OlxReconciliationPanel({
 
   return (
     <div className="grid min-w-0 gap-3.5">
-      <RedesignTitle
-        title="OLX"
-        aside={
-          result && (
-            <span className="rz-caption" role="status">
-              {progress}
-            </span>
-          )
-        }
-      />
+      {showHeader && (
+        <RedesignTitle
+          title="OLX"
+          aside={
+            result && (
+              <span className="rz-caption" role="status">
+                {progress}
+              </span>
+            )
+          }
+        />
+      )}
       {tabs}
       {completedAt ? (
         <div ref={completedNotice} tabIndex={-1}>
