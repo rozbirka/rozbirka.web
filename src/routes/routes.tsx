@@ -122,8 +122,8 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
     return CashScreen
   }),
   olx: cabinetScreenRoute('olx', async () => {
-    const { OlxSalesScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
-    return OlxSalesScreen
+    const { OlxAlphaScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+    return OlxAlphaScreen
   }),
   integrations: cabinetScreenRoute('integrations', async () => {
     const { IntegrationsScreen } =
@@ -265,34 +265,32 @@ const commerceDetailRoutes: RouteObject[] = [
   cabinetScreenRoute(
     'olx',
     async () => {
-      const { OlxListingSettingsScreen } =
-        await import('@/cabinet/olx/OlxAlphaScreen')
-      return OlxListingSettingsScreen
+      const { OlxAlphaScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxAlphaScreen
     },
     'settings/integrations/olx/listing',
   ),
   cabinetScreenRoute(
     'olx',
     async () => {
-      const { OlxMessagesScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
-      return OlxMessagesScreen
+      const { OlxAlphaScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxAlphaScreen
     },
     'olx/messages',
   ),
   cabinetScreenRoute(
     'olx',
     async () => {
-      const { OlxReconciliationScreen } =
-        await import('@/cabinet/olx/OlxAlphaScreen')
-      return OlxReconciliationScreen
+      const { OlxAlphaScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxAlphaScreen
     },
     'olx/reconcile',
   ),
   cabinetScreenRoute(
     'olx',
     async () => {
-      const { OlxQueueScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
-      return OlxQueueScreen
+      const { OlxAlphaScreen } = await import('@/cabinet/olx/OlxAlphaScreen')
+      return OlxAlphaScreen
     },
     'olx/queue',
   ),

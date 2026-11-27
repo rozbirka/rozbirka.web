@@ -130,6 +130,8 @@ it('shows provider candidates without resolving, then confirms only the explicit
   expect(screen.queryByText(/Чернетка отримувача/)).toBeNull()
   expect(onResolved).not.toHaveBeenCalled()
   expect(post).not.toHaveBeenCalled()
+  // Search focuses its results on the next frame; finish that before using Enter.
+  await waitFor(() => expect(card.parentElement).toHaveFocus())
   within(card).getByRole('button', { name: 'Підтвердити цю ТТН' }).focus()
   await user.keyboard('{Enter}')
   await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1))

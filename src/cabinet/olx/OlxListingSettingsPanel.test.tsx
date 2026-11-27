@@ -55,6 +55,30 @@ it('allows reading saved defaults without an integration permission', async () =
   expect(api.update).not.toHaveBeenCalled()
 })
 
+it('restores loaded settings without a loading flash and reports saved values to the tab owner', async () => {
+  const onSettingsChange = vi.fn()
+  render(
+    <OlxListingSettingsPanel
+      canManage
+      initialSettings={existing}
+      onSettingsChange={onSettingsChange}
+    />,
+  )
+  expect(screen.getByLabelText('Ім’я контакту')).toHaveValue('Олег')
+  expect(screen.queryByRole('status', { name: 'Завантаження…' })).toBeNull()
+  expect(api.get).not.toHaveBeenCalled()
+  fireEvent.change(screen.getByLabelText('Ім’я контакту'), {
+    target: { value: 'Дмитро' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() =>
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...existing,
+      contactName: 'Дмитро',
+    }),
+  )
+})
+
 it('keeps the selected location and other edits through dictionary and save failures', async () => {
   api.city.mockRejectedValueOnce(new Error('catalog unavailable'))
   api.districts.mockRejectedValueOnce(new Error('catalog unavailable'))

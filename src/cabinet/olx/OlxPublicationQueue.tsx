@@ -20,6 +20,7 @@ import {
   DataTable,
   DateValue,
   ErrorState,
+  EmptyState,
   Notice,
   Pagination,
   SearchInput,
@@ -749,6 +750,12 @@ function QueueView({
             <OlxBatchResults rows={review} partsHref={partsHref} busy={false} />
           )}
         </>
+      ) : id === null && jobs?.length === 0 ? (
+        <EmptyState
+          title={t('jobEmpty')}
+          description={t('jobEmptyHint')}
+          actions={refreshButton}
+        />
       ) : id === null && jobs ? (
         <SectionPanel title={t('queueHistory')} aside={refreshButton}>
           <DataTable

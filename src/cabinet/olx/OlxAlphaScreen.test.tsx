@@ -1,9 +1,16 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import {
   OlxAlphaScreen,
   OlxLegacyRedirect,
+  OlxListingSettingsScreen,
   OlxSalesScreen,
 } from './OlxAlphaScreen'
 import { clearOlxPartReturn, saveOlxPartReturn } from './olx-part-oauth-return'
@@ -12,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   liveAdverts: vi.fn(),
   localAdverts: vi.fn(),
   listingSettings: vi.fn(),
+  completeReconciliation: vi.fn(),
   connection: vi.fn(),
   connect: vi.fn(),
   disconnect: vi.fn(),
@@ -49,7 +57,14 @@ vi.mock('@/api/olx-listing-settings', () => ({
   olxListingSettingsApi: { get: mocks.listingSettings },
 }))
 vi.mock('@/api/olx-live', () => ({
-  olxLiveApi: { adverts: mocks.liveAdverts, localAdverts: mocks.localAdverts },
+  olxLiveApi: {
+    adverts: mocks.liveAdverts,
+    localAdverts: mocks.localAdverts,
+    completeReconciliation: mocks.completeReconciliation,
+  },
+}))
+vi.mock('./OlxCatalogPanel', () => ({
+  OlxCatalogPanel: () => <p>Каталог запчастин доступний</p>,
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: () => mocks.cabinet }))
 vi.mock('@/components/parts/PartSearchPicker', () => ({
@@ -113,6 +128,98 @@ const show = (sales = false) =>
       {sales ? <OlxSalesScreen /> : <OlxAlphaScreen />}
     </MemoryRouter>,
   )
+it('keeps settings navigation and loaded data stable between account and listing tabs', async () => {
+  mocks.connection.mockResolvedValue({
+    available: true,
+    connected: true,
+    accountId: 'seller-1',
+    mode: 'oauth',
+  })
+  mocks.listingSettings.mockResolvedValue({
+    contactName: 'Олег',
+    contactPhone: null,
+    cityId: null,
+    districtId: null,
+    descriptionSuffix: null,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/test/settings/integrations/olx']}>
+      <Routes>
+        <Route
+          path="/app/test/settings/integrations/olx"
+          element={<OlxAlphaScreen />}
+        />
+        <Route
+          path="/app/test/settings/integrations/olx/listing"
+          element={<OlxListingSettingsScreen />}
+        />
+        <Route path="/app/test/olx" element={<OlxAlphaScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const tabs = await screen.findByRole('navigation', {
+    name: 'Налаштування OLX',
+  })
+  fireEvent.click(screen.getByRole('link', { name: 'Налаштування оголошень' }))
+  expect(tabs).toBeInTheDocument()
+  expect(await screen.findByLabelText('Ім’я контакту')).toHaveValue('Олег')
+  fireEvent.click(screen.getByRole('link', { name: 'Акаунт' }))
+  expect(tabs).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('link', { name: 'Налаштування оголошень' }))
+  expect(screen.getByLabelText('Ім’я контакту')).toHaveValue('Олег')
+  fireEvent.click(screen.getByRole('link', { name: 'Акаунт' }))
+  fireEvent.click(screen.getByRole('link', { name: 'Відкрити розділ OLX' }))
+  expect(
+    screen.getByRole('navigation', { name: 'Робота з OLX' }),
+  ).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('link', { name: 'Налаштування OLX' }))
+  expect(
+    screen.getByRole('link', { name: 'Налаштування оголошень' }),
+  ).toBeInTheDocument()
+  expect(mocks.connection).toHaveBeenCalledOnce()
+  expect(mocks.listingSettings).toHaveBeenCalledOnce()
+})
+it('opens the catalog immediately after reconciliation and remembers completion on return', async () => {
+  mocks.connection.mockResolvedValue({
+    available: true,
+    connected: true,
+    accountId: 'seller-1',
+    mode: 'oauth',
+    reconciliationCompletedAt: null,
+  })
+  mocks.completeReconciliation.mockResolvedValue({
+    completedAt: '2026-11-27T15:00:00Z',
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/test/olx/reconcile']}>
+      <Routes>
+        <Route path="/app/test/olx/reconcile" element={<OlxAlphaScreen />} />
+        <Route path="/app/test/olx" element={<OlxAlphaScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const complete = await screen.findByRole('button', {
+    name: 'Завершити звірку',
+  })
+  await waitFor(() => expect(complete).toBeEnabled())
+  expect(screen.getByText('Переглянуто 0 з 0 · прив’язано 0')).toBeVisible()
+  fireEvent.click(complete)
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Завершити звірку?',
+  })
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Завершити звірку' }),
+  )
+  await screen.findByText('Звірку завершено.')
+  fireEvent.click(screen.getByRole('link', { name: 'Усі запчастини' }))
+  expect(
+    await screen.findByText('Каталог запчастин доступний'),
+  ).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('link', { name: 'Прив’язування' }))
+  expect(await screen.findByText('Звірку завершено.')).toBeInTheDocument()
+  expect(mocks.connection).toHaveBeenCalledOnce()
+})
+
 it('shows a clearly labelled simulator and refreshes the selected advert lazily', async () => {
   show(true)
   fireEvent.click(await screen.findByRole('button', { name: 'Вибрати крило' }))
