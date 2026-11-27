@@ -202,6 +202,7 @@ it('opens the catalog immediately after reconciliation and remembers completion 
     name: 'Завершити звірку',
   })
   await waitFor(() => expect(complete).toBeEnabled())
+  expect(screen.getByText('Переглянуто 0 з 0 · прив’язано 0')).toBeVisible()
   fireEvent.click(complete)
   const dialog = await screen.findByRole('dialog', {
     name: 'Завершити звірку?',

@@ -428,6 +428,13 @@ export function OlxReconciliationPanel({
               </span>
             </>
           }
+          aside={
+            !showHeader && result ? (
+              <span className="rz-caption" role="status">
+                {progress}
+              </span>
+            ) : undefined
+          }
           bodyClassName="p-0"
         >
           {visible.length > 0 && (
