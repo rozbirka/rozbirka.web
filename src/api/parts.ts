@@ -45,6 +45,8 @@ export interface PartDetail {
   salePrice: number | null
   effectiveSalePrice: number | null
   soldAt: string | null
+  categoryId?: number | null
+  categoryName?: string | null
   partType: string | null
   photos: {
     id: string
@@ -274,7 +276,16 @@ const normalizeCompatibilities = (
   })),
 })
 
+export interface PartCategory {
+  id: number
+  parentId?: number | null
+  olxCategoryId: number
+  name: string
+  isLeaf: boolean
+}
+
 export interface CreatePartRequest {
+  categoryId?: number
   sourceType: string
   carId?: string | null
   intakeId?: string | null
@@ -299,6 +310,7 @@ export interface CreatePartRequest {
   desiredSalePrice?: number | null
 }
 export interface UpdatePartRequest {
+  categoryId?: number | null
   name?: string | null
   /** Omit to preserve, null to clear the manufacturer’s code. */
   oemCode?: string | null
@@ -332,6 +344,14 @@ const normalizeItem = (item: PartListItem): PartListItem => ({
 })
 
 export const partsApi = {
+  async categories(options: RequestOptions = {}): Promise<PartCategory[]> {
+    return (
+      await apiClient.get<PartCategory[]>(
+        '/parts/categories',
+        requestConfig(options),
+      )
+    ).data
+  },
   async list(options: PartListOptions = {}): Promise<Page<PartListItem>> {
     const { signal, pageSize = 30, carIds, intakeIds, ...params } = options
     const response = await apiClient.get<Page<PartListItem>>('/parts', {

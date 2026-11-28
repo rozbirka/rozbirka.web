@@ -91,6 +91,7 @@ vi.mock('@/api/feature-flags', () => ({
 }))
 
 const partMocks = vi.hoisted(() => ({
+  categories: vi.fn().mockResolvedValue([]),
   list: vi.fn().mockResolvedValue({
     items: [],
     page: 1,
@@ -266,6 +267,7 @@ beforeEach(() => {
   tenantMocks.list
     .mockReset()
     .mockImplementation(() => Promise.resolve([cabinetMock.tenant]))
+  partMocks.categories.mockReset().mockResolvedValue([])
   partMocks.list.mockReset().mockResolvedValue({
     items: [],
     page: 1,
@@ -417,7 +419,24 @@ it('returns from the new-part drawer to the parts directory', async () => {
   expect(screen.getByText('Екран деталей')).toBeVisible()
 })
 
-it('opens the newly created part instead of leaving the creation drawer open', async () => {
+it('suggests a category by part name and opens the new part after saving the choice', async () => {
+  partMocks.categories.mockResolvedValueOnce([
+    { id: 10, olxCategoryId: 2357, name: 'Автозапчастини', isLeaf: false },
+    {
+      id: 11,
+      parentId: 10,
+      olxCategoryId: 2371,
+      name: 'Фари та освітлення',
+      isLeaf: false,
+    },
+    {
+      id: 12,
+      parentId: 11,
+      olxCategoryId: 2544,
+      name: 'Передні фари',
+      isLeaf: true,
+    },
+  ])
   const router = createMemoryRouter(
     [
       {
@@ -440,11 +459,13 @@ it('opens the newly created part instead of leaving the creation drawer open', a
   )
 
   fireEvent.change(screen.getByLabelText('Назва'), {
-    target: { value: 'Дзеркало' },
+    target: { value: 'Передня фара ліва BMW' },
   })
+  fireEvent.click(await screen.findByRole('button', { name: 'Передні фари' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Картка деталі')).toBeVisible()
+  expect(partMocks.create.mock.calls[0]?.[0]).toMatchObject({ categoryId: 12 })
   expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
   expect(screen.queryByRole('region', { name: 'Нова деталь' })).toBeNull()
   expect(screen.getByRole('status')).toHaveTextContent('Деталь створено.')

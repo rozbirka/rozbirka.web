@@ -1,6 +1,7 @@
 import { hasPlacementStock } from '../warehouses/placement-availability'
 import { locationContentsMessages } from '../inventory/location-contents-messages'
 import { localizeApiError } from '@/api/error-localization'
+import { PartCategoryPicker } from './PartCategoryPicker'
 import { PartSourceFilter } from './PartSourceFilter'
 import { PartLocationCard } from './PartLocationCard'
 import { PartNotesCard } from './PartNotesCard'
@@ -2088,8 +2089,10 @@ function PartDetailScreen({
               <span className="text-app-muted">
                 {conditionPhrase(detail.condition, locale)}
               </span>
-              {detail.partType ? (
-                <span className="text-app-dim">· {detail.partType}</span>
+              {(detail.categoryName ?? detail.partType) ? (
+                <span className="text-app-dim">
+                  · {detail.categoryName ?? detail.partType}
+                </span>
               ) : null}
               <SourceChip
                 href={
@@ -2845,6 +2848,7 @@ interface PartFormValues {
   publicDescription: string
   oemCode: string
   partType: string
+  categoryId?: number | null
   desiredSalePrice: string
   placement?: PartPlacement
   olxDraft?: PartOlxDraft
@@ -3893,6 +3897,11 @@ function PartFields({
             value={values.name}
           />
         </Field>
+        <PartCategoryPicker
+          name={values.name}
+          value={values.categoryId}
+          onChange={(categoryId) => setValues({ ...values, categoryId })}
+        />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field hint={t('partTypeHint')} label={t('partType')}>
             <TextInput
@@ -4275,6 +4284,7 @@ function PartForm({
         : {}),
       ...(oemCode !== undefined ? { oemCode } : {}),
       ...(partType !== undefined ? { partType } : {}),
+      ...(values.categoryId != null ? { categoryId: values.categoryId } : {}),
       // No price without an accounting currency; the part itself still saves.
       ...(parsed.price !== undefined && !price.disabled
         ? { desiredSalePrice: parsed.price }
@@ -4672,6 +4682,7 @@ function PartEdit({
           publicDescription: part.publicDescription ?? '',
           oemCode: part.oemCode ?? '',
           partType: part.partType ?? '',
+          categoryId: part.categoryId ?? null,
           desiredSalePrice:
             part.desiredSalePrice == null ? '' : String(part.desiredSalePrice),
         })
@@ -4767,6 +4778,9 @@ function PartEdit({
             : {}),
           quantity: parsed.quantity,
           partType: optional(values.partType) ?? null,
+          ...(values.categoryId !== (detail?.categoryId ?? null)
+            ? { categoryId: values.categoryId ?? null }
+            : {}),
           unit: PIECES_UNIT,
           photoKeys: committedPhotoKeys(mediaItems),
           // Without an accounting currency the price is left as it is.
@@ -4816,6 +4830,7 @@ function PartEdit({
                 : '')) &&
           (fresh.condition ?? null) ===
             (optional(values.condition) ?? detail?.condition ?? null) &&
+          (fresh.categoryId ?? null) === (values.categoryId ?? null) &&
           (fresh.partType ?? null) ===
             (optional(values.partType) ?? detail?.partType ?? null) &&
           storedPhotoKeys.length === photoKeys.length &&
@@ -5001,6 +5016,15 @@ function PartEdit({
                       value={values.name}
                     />
                   </Field>
+                  <PartCategoryPicker
+                    name={values.name}
+                    value={values.categoryId}
+                    onChange={(categoryId) =>
+                      setValues((current) =>
+                        current ? { ...current, categoryId } : current,
+                      )
+                    }
+                  />
                   <Field label={t('partType')}>
                     <TextInput
                       name="partType"

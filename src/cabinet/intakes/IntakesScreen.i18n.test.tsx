@@ -12,7 +12,9 @@ vi.mock('@/api/intakes', () => ({
   isIntakeStatus: (value: unknown) => value === 'active' || value === 'closed',
   intakesApi: { list: vi.fn(), get: vi.fn() },
 }))
-vi.mock('@/api/parts', () => ({ partsApi: { update: vi.fn() } }))
+vi.mock('@/api/parts', () => ({
+  partsApi: { update: vi.fn(), categories: vi.fn().mockResolvedValue([]) },
+}))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 vi.mock('../module-registry', () => ({
   cabinetModules: {

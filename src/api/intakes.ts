@@ -87,6 +87,7 @@ export interface UpdateIntakeRequest {
 }
 
 export interface AddIntakePartRequest {
+  categoryId?: number
   name: string
   partType?: string | null | undefined
   oemCode?: string | null | undefined
@@ -203,6 +204,9 @@ export const intakesApi = {
   ): Promise<IntakePartCreateResult> {
     const safeRequest: AddIntakePartRequest = {
       name: request.name,
+      ...(request.categoryId === undefined
+        ? {}
+        : { categoryId: request.categoryId }),
       partType: request.partType,
       oemCode: request.oemCode,
       condition: request.condition,
