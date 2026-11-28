@@ -1,3 +1,4 @@
+import { trackFunnelEvent } from '@/lib/marketing-events'
 import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
@@ -37,6 +38,12 @@ export function TenantOnboardingScreen() {
     generation: number
     tenantId: string
   } | null>(null)
+  const viewed = useRef(false)
+  useEffect(() => {
+    if (viewed.current) return
+    viewed.current = true
+    trackFunnelEvent('tenant_setup_view')
+  }, [])
   const nameRef = useRef<HTMLInputElement>(null)
   const generationRef = useRef(0)
   const activeCreateRef = useRef<{
@@ -92,7 +99,9 @@ export function TenantOnboardingScreen() {
         activeCreateRef.current === operation &&
         generationRef.current === operation.generation &&
         !operation.controller.signal.aborted
+      let acknowledged = false
       try {
+        trackFunnelEvent('tenant_create_requested')
         const created = await tenantsApi.create(
           {
             tenantName: name.trim(),
@@ -101,6 +110,10 @@ export function TenantOnboardingScreen() {
           { signal: operation.controller.signal },
         )
         if (!isCurrent()) return
+        acknowledged = true
+        trackFunnelEvent('tenant_created')
+        if (created.isActive && created.plan === 'trial')
+          trackFunnelEvent('trial_started_web')
         tenantPreference.set(created.tenantId)
         await auth.hydrate()
         if (!isCurrent()) return
@@ -111,6 +124,9 @@ export function TenantOnboardingScreen() {
       } catch (failure) {
         // A superseded attempt (logout, unmount) is not a failure to report.
         if (!isCurrent()) return
+        trackFunnelEvent(
+          acknowledged ? 'tenant_setup_resume_failed' : 'tenant_create_failed',
+        )
         throw failure
       } finally {
         if (activeCreateRef.current === operation) {

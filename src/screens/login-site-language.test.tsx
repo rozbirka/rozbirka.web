@@ -141,3 +141,76 @@ it('uses the cabinet fallback for a direct login without a public-site choice', 
     screen.getByRole('heading', { name: 'Вхід за номером телефону' }),
   ).toBeInTheDocument()
 })
+
+it.each(['uk', 'en-GB', 'pl'] as const)(
+  'carries the actual %s landing into registration despite a different cabinet/browser language',
+  async (landingLocale) => {
+    localePreference.set('en-GB')
+    siteLocalePreference.set('en-GB')
+    const user = userEvent.setup()
+    render(
+      <LocaleProvider locale="en-GB">
+        <MemoryRouter>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <LocaleOverride locale={landingLocale}>
+                  <SiteHeader />
+                </LocaleOverride>
+              }
+            />
+            <Route path="/login" element={<LoginScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </LocaleProvider>,
+    )
+    const link = document.querySelector('a[href*="purpose=registration"]')
+    expect(link).not.toBeNull()
+    await user.click(link!)
+    expect(document.documentElement.lang).toBe(landingLocale)
+    expect(siteLocalePreference.get()).toBe(landingLocale)
+    expect(localePreference.get()).toBe('en-GB')
+    expect(screen.getByRole('combobox')).toHaveValue(
+      landingLocale === 'uk' ? 'UA' : landingLocale === 'pl' ? 'PL' : 'GB',
+    )
+  },
+)
+
+it('keeps the landing language when browser storage writes are blocked', async () => {
+  const user = userEvent.setup()
+  localePreference.set('en-GB')
+  siteLocalePreference.set(null)
+  const write = vi
+    .spyOn(Storage.prototype, 'setItem')
+    .mockImplementation(() => {
+      throw new Error('blocked')
+    })
+  try {
+    render(
+      <LocaleProvider locale="en-GB">
+        <MemoryRouter>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <LocaleOverride locale="uk">
+                  <SiteHeader />
+                </LocaleOverride>
+              }
+            />
+            <Route path="/login" element={<LoginScreen />} />
+          </Routes>
+        </MemoryRouter>
+      </LocaleProvider>,
+    )
+    await user.click(document.querySelector('a[href*="purpose=registration"]')!)
+    expect(
+      screen.getByRole('heading', { name: 'Створіть обліковий запис' }),
+    ).toBeVisible()
+    expect(screen.getByRole('combobox')).toHaveValue('UA')
+  } finally {
+    write.mockRestore()
+    siteLocalePreference.set(null)
+  }
+})

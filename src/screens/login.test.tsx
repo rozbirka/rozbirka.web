@@ -1,3 +1,4 @@
+import { trackFunnelEvent } from '@/lib/marketing-events'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
@@ -15,6 +16,7 @@ const challengeData = (seconds = 0) => ({
   resendAt: new Date(Date.now() + seconds * 1000).toISOString(),
 })
 
+vi.mock('@/lib/marketing-events', () => ({ trackFunnelEvent: vi.fn() }))
 vi.mock('@/api/auth', () => ({
   authApi: {
     otpSend: vi.fn(),
@@ -160,6 +162,16 @@ it('opens registration from a landing CTA and preserves the plan after registrat
     await screen.findByRole('link', { name: 'Продовжити' }),
   ).toHaveAttribute('href', '/account?section=plans&plan=pro_monthly')
   expect(registrationVerify).toHaveBeenCalled()
+  expect(vi.mocked(trackFunnelEvent).mock.calls.map(([name]) => name)).toEqual(
+    expect.arrayContaining([
+      'registration_view',
+      'registration_otp_requested',
+      'registration_otp_sent',
+      'registration_otp_verify_requested',
+      'registration_otp_verified',
+    ]),
+  )
+  expect(trackFunnelEvent).not.toHaveBeenCalledWith('trial_started_web')
   expect(otpVerify).not.toHaveBeenCalled()
 })
 

@@ -1,3 +1,4 @@
+import { trackFunnelEvent } from '@/lib/marketing-events'
 import {
   useCallback,
   useEffect,
@@ -187,6 +188,24 @@ function LoginFlow() {
       ? 'registration'
       : 'login',
   )
+  const viewedRegistration = useRef(false)
+  const viewedName = useRef(false)
+  const viewedOtp = useRef(false)
+  useEffect(() => {
+    if (purpose !== 'registration') return
+    if (!viewedRegistration.current) {
+      viewedRegistration.current = true
+      trackFunnelEvent('registration_view')
+    }
+    if (step === 'otp' && !viewedOtp.current) {
+      viewedOtp.current = true
+      trackFunnelEvent('registration_otp_view')
+    }
+    if (step === 'name' && !viewedName.current) {
+      viewedName.current = true
+      trackFunnelEvent('registration_name_view')
+    }
+  }, [purpose, step])
   const [challenge, setChallenge] = useState<SendOtpResponse | null>(null)
   const requestControllerRef = useRef<AbortController | null>(null)
   const cancellationRef = useRef<Promise<void> | null>(null)
@@ -301,6 +320,7 @@ function LoginFlow() {
     errorMessage: (error) => extractError(error, t('sendFailed'), t),
     onSuccess: (response) => {
       if (!response) return
+      if (purpose === 'registration') trackFunnelEvent('registration_otp_sent')
       storeOtpFlow({ purpose, phone, challenge: response })
       setChallenge(response)
       setOtp('')
@@ -310,6 +330,8 @@ function LoginFlow() {
       setResendIn(cooldownFrom(response))
     },
     onError: (error) => {
+      if (purpose === 'registration')
+        trackFunnelEvent('registration_otp_send_failed')
       const problem = normalizeApiProblem(error)
       if (problem.retryAfterSeconds !== undefined) {
         resendDeadlineRef.current =
@@ -340,6 +362,8 @@ function LoginFlow() {
           ? await authApi.registrationVerify(request, options)
           : await authApi.otpVerify(request, options)
       if (!isCurrentNavigationOperation(generation)) return null
+      if (purpose === 'registration')
+        trackFunnelEvent('registration_otp_verified')
       clearStoredOtpFlow()
       // A provisioned account still has its phone as display name until the
       // owner supplies a name. Ask for it even when the user row already exists.
@@ -360,6 +384,10 @@ function LoginFlow() {
     ]),
     {
       errorMessage: (error) => extractError(error, t('OTP_INVALID'), t),
+      onError: () => {
+        if (purpose === 'registration')
+          trackFunnelEvent('registration_otp_verify_failed')
+      },
       onSuccess: (outcome) => {
         if (outcome === null) return
         if (outcome.next === 'name') {
@@ -376,6 +404,8 @@ function LoginFlow() {
     errorMessage: (error) => extractError(error, t('sendFailed'), t),
     onSuccess: (response) => {
       if (!response) return
+      if (purpose === 'registration')
+        trackFunnelEvent('registration_otp_resent')
       storeOtpFlow({ purpose, phone, challenge: response })
       setChallenge(response)
       setOtp('')
@@ -383,6 +413,8 @@ function LoginFlow() {
       setResendIn(cooldownFrom(response))
     },
     onError: (error) => {
+      if (purpose === 'registration')
+        trackFunnelEvent('registration_otp_resend_failed')
       const problem = normalizeApiProblem(error)
       if (problem.retryAfterSeconds !== undefined) {
         resendDeadlineRef.current = Math.max(
@@ -412,8 +444,14 @@ function LoginFlow() {
     }, [auth, beginNavigationOperation, isCurrentNavigationOperation, name]),
     {
       errorMessage: (error) => extractError(error, t('nameFailed'), t),
+      onError: () => {
+        if (purpose === 'registration')
+          trackFunnelEvent('registration_name_failed')
+      },
       onSuccess: (generation) => {
         if (generation === null) return
+        if (purpose === 'registration')
+          trackFunnelEvent('registration_name_saved')
         setStep('success')
         scheduleNavigation(generation)
       },
@@ -431,6 +469,8 @@ function LoginFlow() {
     if (busy) return
     const e164 = toE164(phone)
     if (!isValidSignInPhone(e164)) {
+      if (purpose === 'registration')
+        trackFunnelEvent('registration_phone_invalid')
       const detected = phoneCountry(e164)
       setPhoneError(
         detected === null && e164.length > 4
@@ -444,6 +484,8 @@ function LoginFlow() {
       return
     }
     setPhoneError(null)
+    if (purpose === 'registration')
+      trackFunnelEvent('registration_otp_requested')
     sendOtp.run()
   }
 
@@ -451,11 +493,15 @@ function LoginFlow() {
     event.preventDefault()
     if (busy) return
     if (otp.length < OTP_LENGTH) {
+      if (purpose === 'registration')
+        trackFunnelEvent('registration_otp_invalid')
       setCodeError(t('codeIncomplete', { count: OTP_LENGTH }))
       return
     }
     setCodeError(null)
     resendOtp.reset()
+    if (purpose === 'registration')
+      trackFunnelEvent('registration_otp_verify_requested')
     verifyOtp.run()
   }
 
@@ -463,6 +509,8 @@ function LoginFlow() {
     if (resendIn > 0 || busy) return
     setCodeError(null)
     verifyOtp.reset()
+    if (purpose === 'registration')
+      trackFunnelEvent('registration_otp_resend_requested')
     resendOtp.run()
   }
 
@@ -470,10 +518,13 @@ function LoginFlow() {
     event.preventDefault()
     if (busy) return
     if (name.trim().length < 2) {
+      if (purpose === 'registration')
+        trackFunnelEvent('registration_name_invalid')
       setNameError(t('nameTooShort'))
       return
     }
     setNameError(null)
+    if (purpose === 'registration') trackFunnelEvent('registration_name_submit')
     saveName.run()
   }
 
