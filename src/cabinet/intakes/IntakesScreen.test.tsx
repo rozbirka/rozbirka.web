@@ -28,6 +28,7 @@ vi.mock('@/api/intakes', () => ({
 }))
 vi.mock('@/api/parts', () => ({
   partsApi: {
+    categories: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
     compatibilities: vi.fn(),
     replaceCompatibilities: vi.fn(),

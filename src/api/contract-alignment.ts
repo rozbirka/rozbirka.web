@@ -61,15 +61,27 @@ export type ContractAlignment = [
       never
     >
   >,
+  // The additive category field ships with the next Core contract publication.
   Check<
     Same<
-      Unknown<AddIntakePartRequest, Schemas['AddPartToIntakeRequest']>,
+      Unknown<
+        Omit<AddIntakePartRequest, 'categoryId'>,
+        Schemas['AddPartToIntakeRequest']
+      >,
       never
     >
   >,
   Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
   Check<Same<Unknown<ImportRule, Schemas['ImportFieldRule']>, never>>,
-  Check<Same<Unknown<CreatePartRequest, Schemas['CreatePartRequest']>, never>>,
+  Check<
+    Same<
+      Unknown<
+        Omit<CreatePartRequest, 'categoryId'>,
+        Schemas['CreatePartRequest']
+      >,
+      never
+    >
+  >,
   Check<Same<Unknown<ConfirmPayment, Schemas['ConfirmPaymentRequest']>, never>>,
   Check<
     Same<Unknown<UpdateBusinessRequest, Schemas['UpdateTenantRequest']>, never>

@@ -1,3 +1,4 @@
+import { PartCategoryPicker } from '../parts/PartCategoryPicker'
 import { CabinetLoadingContent } from '../loading-screen'
 import {
   useEffect,
@@ -1607,6 +1608,7 @@ function PartForm({
     Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
   const emptyPosition = {
     name: '',
+    categoryId: null as number | null,
     partType: '',
     oemCode: '',
     condition: 'good',
@@ -1707,6 +1709,7 @@ function PartForm({
     setProblem(null)
     const request: AddIntakePartRequest = {
       name: values.name.trim(),
+      ...(values.categoryId != null ? { categoryId: values.categoryId } : {}),
       partType: values.partType.trim() || null,
       oemCode: values.oemCode.trim() || null,
       condition: values.condition || null,
@@ -1800,6 +1803,7 @@ function PartForm({
       setValues((current) => ({
         ...current,
         name: '',
+        categoryId: null,
         partType: '',
         oemCode: '',
         quantity: 1,
@@ -1894,6 +1898,13 @@ function PartForm({
                 value={values.name}
               />
             </Field>
+            <PartCategoryPicker
+              name={values.name}
+              value={values.categoryId}
+              onChange={(categoryId) =>
+                setValues((current) => ({ ...current, categoryId }))
+              }
+            />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label={tf('partType')}>
                 <TextInput
